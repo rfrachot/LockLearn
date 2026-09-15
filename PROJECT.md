@@ -41,8 +41,10 @@ the maintainer is the only human developer and alternates mainly between Claude 
 Codex. Both may modify, test and commit locally. Push/PR/merge/tag/release only
 on explicit request.
 
-The uploaded `the maintainer's AI configuration` v1.0.0 was deployed into this repository and then
-adapted to LockLearn's mixed Python + TypeScript stack.
+The shared AI layer is based on `the maintainer's AI configuration` v1.2.0 semantics and adapted
+to LockLearn's mixed Python + TypeScript stack. Shared sub-agent roles live in
+`.ai/agents/`; Claude and Codex wrappers select explicit cheaper models for
+bounded delegated work.
 
 ## Commands
 
