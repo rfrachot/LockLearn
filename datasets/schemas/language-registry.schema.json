@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LockLearn language registry",
+  "type": "object",
+  "required": ["schema_version", "languages"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "languages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tag", "name", "scripts", "normalizer", "ui_v1", "learning_seed_v1"]
+      }
+    }
+  }
+}
