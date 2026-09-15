@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "languages": [
+    {"tag":"en","name":"English","scripts":["Latn"],"normalizer":"latin_default_v1","ui_v1":true,"learning_seed_v1":true},
+    {"tag":"fr","name":"Français","scripts":["Latn"],"normalizer":"latin_default_v1","ui_v1":true,"learning_seed_v1":true},
+    {"tag":"ja","name":"日本語","scripts":["Jpan","Hani","Hira","Kana"],"normalizer":"japanese_v1","ui_v1":false,"learning_seed_v1":true},
+    {"tag":"es","name":"Español","scripts":["Latn"],"normalizer":"latin_default_v1","ui_v1":false,"learning_seed_v1":true},
+    {"tag":"de","name":"Deutsch","scripts":["Latn"],"normalizer":"latin_default_v1","ui_v1":false,"learning_seed_v1":true}
+  ]
+}

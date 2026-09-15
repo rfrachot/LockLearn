@@ -1,0 +1,17 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Welcome to LockLearn",
+        "description": "Create the local LockLearn instance.",
+        "data": {
+          "create_personal_profile": "Create my personal profile",
+          "ui_language": "Interface language"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only one LockLearn instance is supported."
+    }
+  }
+}

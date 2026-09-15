@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "id": "edrdg:jmdict",
+      "name": "JMdict",
+      "provider": "EDRDG",
+      "homepage": "https://www.edrdg.org/jmdict/j_jmdict.html",
+      "license_id": "CC-BY-SA-4.0",
+      "status": "recommended",
+      "commercial_compatible": true,
+      "refresh_policy": "weekly-check_monthly-max-age",
+      "uses": ["ja_lexicon", "ja_readings", "en_glosses"],
+      "excluded_by_default": ["non_english_glosses_without_separate_audit"]
+    },
+    {
+      "id": "edrdg:kanjidic2",
+      "name": "KANJIDIC2",
+      "provider": "EDRDG",
+      "homepage": "https://www.edrdg.org/wiki/KANJIDIC_Project.html",
+      "license_id": "CC-BY-SA-4.0",
+      "status": "recommended_with_field_allowlist",
+      "commercial_compatible": true,
+      "refresh_policy": "weekly-check_monthly-max-age",
+      "uses": ["kanji_readings", "stroke_count", "selected_kanji_metadata"],
+      "excluded_by_default": ["third_party_descriptor_fields_not_allowlisted"]
+    },
+    {
+      "id": "wikimedia:wiktionary-kaikki",
+      "name": "Wiktionary via Wiktextract / Kaikki",
+      "provider": "Wikimedia contributors / Kaikki extraction",
+      "homepage": "https://kaikki.org/dictionary/",
+      "license_id": "CC-BY-SA-4.0",
+      "status": "recommended_text_only",
+      "commercial_compatible": true,
+      "refresh_policy": "weekly-check",
+      "uses": ["multilingual_glosses", "parts_of_speech", "lexical_forms"],
+      "excluded_by_default": ["media", "externally_licensed_material"]
+    },
+    {
+      "id": "tatoeba:text",
+      "name": "Tatoeba text corpus",
+      "provider": "Tatoeba contributors",
+      "homepage": "https://tatoeba.org/",
+      "license_id": "CC-BY-2.0-FR",
+      "status": "recommended",
+      "commercial_compatible": true,
+      "refresh_policy": "periodic",
+      "uses": ["example_sentences", "sentence_translations"],
+      "required_provenance": ["sentence_id", "author", "license"],
+      "excluded_by_default": ["audio"]
+    },
+    {
+      "id": "kanjivg:svg",
+      "name": "KanjiVG",
+      "provider": "KanjiVG contributors",
+      "homepage": "https://kanjivg.tagaini.net/",
+      "license_id": "CC-BY-SA-3.0",
+      "status": "recommended_secondary_v1",
+      "commercial_compatible": true,
+      "refresh_policy": "periodic",
+      "uses": ["stroke_order", "kanji_svg", "visual_components"],
+      "asset_boundary": "separate"
+    },
+    {
+      "id": "locklearn:original",
+      "name": "Original LockLearn learning content",
+      "provider": "LockLearn contributors",
+      "homepage": "https://github.com/rfrachot/locklearn",
+      "license_id": "CC-BY-SA-4.0",
+      "status": "required_for_official_curation",
+      "commercial_compatible": true,
+      "refresh_policy": "release-driven",
+      "uses": ["grammar", "mnemonics", "curation", "starter_pack"]
+    }
+  ]
+}

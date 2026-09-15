@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "licenses": [
+    {"id":"MIT","commercial_use_allowed":true,"derivatives_allowed":true,"share_alike":false,"attribution_required":true,"official_dataset_allowed":false},
+    {"id":"CC0-1.0","commercial_use_allowed":true,"derivatives_allowed":true,"share_alike":false,"attribution_required":false,"official_dataset_allowed":true},
+    {"id":"CC-BY-4.0","commercial_use_allowed":true,"derivatives_allowed":true,"share_alike":false,"attribution_required":true,"official_dataset_allowed":true},
+    {"id":"CC-BY-SA-4.0","commercial_use_allowed":true,"derivatives_allowed":true,"share_alike":true,"attribution_required":true,"official_dataset_allowed":true},
+    {"id":"CC-BY-2.0-FR","commercial_use_allowed":true,"derivatives_allowed":true,"share_alike":false,"attribution_required":true,"official_dataset_allowed":true},
+    {"id":"CC-BY-SA-3.0","commercial_use_allowed":true,"derivatives_allowed":true,"share_alike":true,"attribution_required":true,"official_dataset_allowed":true}
+  ],
+  "forbidden_markers": ["NC", "ND", "UNKNOWN"]
+}
