@@ -1,0 +1,11 @@
+{
+  "domain": "locklearn",
+  "name": "LockLearn",
+  "version": "0.0.1",
+  "codeowners": ["@rfrachot"],
+  "config_flow": true,
+  "single_config_entry": true,
+  "documentation": "https://github.com/rfrachot/locklearn",
+  "issue_tracker": "https://github.com/rfrachot/locklearn/issues",
+  "requirements": []
+}
