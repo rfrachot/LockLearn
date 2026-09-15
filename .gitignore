@@ -1,0 +1,36 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Build/runtime
+build/
+dist/
+*.egg-info/
+*.db
+*.db-wal
+*.db-shm
+
+# IDE / local agent settings
+.vscode/
+.idea/
+.claude/settings.local.json
+
+# Runtime datasets and downloaded artifacts
+content/
+datasets/cache/
+datasets/downloads/
+datasets/staging/
+
+# OS
+.DS_Store
+Thumbs.db
