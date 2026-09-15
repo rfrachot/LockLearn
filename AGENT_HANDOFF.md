@@ -2,43 +2,39 @@
 
 ## Current state
 
-LockLearn bootstrap is now published in the private GitHub repository
-`rfrachot/LockLearn`. The complete V1 specification is present as `SPEC_V1.md`.
-The shared Claude Code / Codex workflow is being completed from
-`Renaud_AIConfig` v1.0.0 and adapted to the Python + TypeScript stack.
+LockLearn bootstrap is published in the private GitHub repository `rfrachot/LockLearn`. `SPEC_V1.md` Draft v0.6 remains the normative product/architecture source of truth.
+
+A complete execution-planning pass has now been prepared on a documentation branch. The previous macro `MASTER_PLAN.md` was expanded into phase/work-package planning and a requirement traceability matrix covering all numbered spec sections/subsections plus the 32 explicit §133 architectural invariants.
 
 ## Branch / Git
 
-- Branch: `main`
-- Latest known remote commit before this bootstrap-sync commit:
-  `58676ca docs: add complete V1 specification`
+- Planning branch: `docs/detailed-v1-master-plan`
+- Base: `main` at `220cd19b85095f1fdf5e3476a862b34315853daf`
 - Repository: private, `rfrachot/LockLearn`
+- Branch is documentation/planning only; no runtime code was changed.
 
-## What exists
+## Planning artifacts on the branch
 
-- `SPEC_V1.md` as normative product/architecture source of truth.
-- project-specific `AGENTS.md`, `PROJECT.md`, `MASTER_PLAN.md`.
-- minimal Home Assistant integration/config-flow skeleton.
-- minimal Lit/Vite frontend seed.
-- language/license/source registries and validation.
-- licensing/source documentation and funding metadata.
-- P0 mission `missions/M-001-p0-skeleton.md`.
+- `MASTER_PLAN.md` — critical path, 71 work packages, cross-cutting gates and 1.0 release gate.
+- `docs/REQUIREMENTS_TRACEABILITY.md` — full spec-section coverage and invariant ownership.
+- `docs/plan/P0.md` … `docs/plan/P7.md` — detailed deliverables and exit criteria by phase.
+- Existing `missions/M-001-p0-skeleton.md` is preserved and mapped into P0.1/P0.2 rather than replaced.
 
-## Current bootstrap task
+## Scope decisions preserved
 
-Complete the AI-development layer from `Renaud_AIConfig`:
+- P0–P6 remain the 1.0 critical path.
+- P7 is explicitly non-blocking for 1.0.
+- Exam mode remains V1.1.
+- Image/audio are schema-ready in V1 but full renderers are non-blocking.
+- Optional HA sensors do not become an implicit 1.0 blocker.
+- `SPEC_V1.md` was not modified by the planning pass.
 
-- `CLAUDE.md`;
-- `.claude/` rules, commands, skills and sub-agents;
-- `.editorconfig`;
-- dataset schemas and source audit;
-- ChatGPT copilot project instructions.
+## Verification
+
+- Compared branch against `main`: branch is ahead only by planning/documentation changes.
+- No code tests were run because this pass changes no implementation/runtime files.
+- Do not claim HA runtime compatibility or frontend build success until P0 runs on the dev VM.
 
 ## Next action
 
-On the dev VM, pull `main`, generate/install the frontend dependency lockfile,
-run the repository bootstrap/quality baseline, then start
-`missions/M-001-p0-skeleton.md` on a short-lived branch.
-
-Do not claim Home Assistant runtime compatibility or frontend build success until
-those checks have actually been executed on the dev VM.
+Review/merge the planning branch, then on the dev VM pull `main`, establish the verified toolchain/CI baseline and execute `missions/M-001-p0-skeleton.md` as the first implementation slice. Create complementary P0 missions for the remaining P0 spikes instead of expanding M-001 into a monolith.
