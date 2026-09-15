@@ -141,3 +141,27 @@ backward compatibility
 Before switching agents or ending a substantial session, update
 `AGENT_HANDOFF.md` with current branch, mission, verified state, tests run,
 commit(s), remaining risks and the next concrete action. Keep it short.
+
+## 11. Delegation and model routing
+
+Claude Code and Codex share four bounded roles defined in `.ai/agents/`:
+`explore`, `tests`, `quality` and `review`. Use a sub-agent only when isolation
+reduces context or output noise; do not delegate trivial commands by habit.
+Never allow a sub-agent to spawn another sub-agent. Keep at most two children
+running concurrently.
+
+Model routing is intentional:
+
+```text
+Claude explore/tests/quality/review -> Haiku
+Codex tests/quality                -> gpt-5.6-luna, low effort
+Codex explore                      -> gpt-5.6-terra, medium effort
+Codex review                       -> gpt-5.6-terra, high effort
+```
+
+For Codex, prefer the matching custom agent from `.codex/agents/` and an
+isolated child context (`fork_turns="none"` or equivalent). Do **not** launch a
+generic child for routine exploration/tests/quality/review if that child can
+silently inherit the parent model (for example Astra). If the runtime cannot
+select or verify the intended cheaper model, keep the task in the parent and
+use `.ai/agents/<role>.md` as the checklist instead.
