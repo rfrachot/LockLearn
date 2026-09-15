@@ -12,13 +12,14 @@ d'entrée Claude très léger.
 
 ## Outils Claude disponibles
 
-- sous-agents : `explore`, `tests`, `quality`, `review` ;
+- sous-agents : `explore`, `tests`, `quality`, `review`, basés sur les rôles partagés de `.ai/agents/` ;
 - commandes : `/init-projet`, `/mission`, `/handoff`, `/reprise`, `/pr` ;
 - skills : `nouveau-projet`, `revue-pr`, `livraison`, `doc-technique`.
 
-Utilise les sous-agents pour isoler les explorations ou sorties volumineuses,
-mais garde les décisions et la modification principale dans la session qui
-porte la tâche.
+Les quatre sous-agents utilisent explicitement **Haiku**. Utilise-les pour isoler
+les explorations ou sorties volumineuses, mais garde les décisions et la
+modification principale dans la session qui porte la tâche. Ne délègue pas une
+commande triviale juste pour déléguer.
 
 Les règles Git d'`AGENTS.md` s'appliquent aussi ici : commits locaux autorisés ;
 push, PR distante, merge, tag et publication uniquement sur demande explicite.
