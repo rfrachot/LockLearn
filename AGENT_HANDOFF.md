@@ -2,43 +2,39 @@
 
 ## Current state
 
-LockLearn bootstrap is now published in the private GitHub repository
+LockLearn bootstrap is published in the private GitHub repository
 `rfrachot/LockLearn`. The complete V1 specification is present as `SPEC_V1.md`.
-The shared Claude Code / Codex workflow is being completed from
-`Renaud_AIConfig` v1.0.0 and adapted to the Python + TypeScript stack.
+The shared Claude Code / Codex workflow has now been aligned with the updated
+`Renaud_AIConfig` model-routing semantics.
 
 ## Branch / Git
 
-- Branch: `main`
-- Latest known remote commit before this bootstrap-sync commit:
-  `58676ca docs: add complete V1 specification`
+- Branch: `chore/ai-agent-model-routing`
+- Base: `main` at `220cd19 chore: complete Claude and Codex AI bootstrap`
 - Repository: private, `rfrachot/LockLearn`
 
-## What exists
+## AI routing added
 
-- `SPEC_V1.md` as normative product/architecture source of truth.
-- project-specific `AGENTS.md`, `PROJECT.md`, `MASTER_PLAN.md`.
-- minimal Home Assistant integration/config-flow skeleton.
-- minimal Lit/Vite frontend seed.
-- language/license/source registries and validation.
-- licensing/source documentation and funding metadata.
-- P0 mission `missions/M-001-p0-skeleton.md`.
+- shared roles under `.ai/agents/` for `explore`, `tests`, `quality`, `review`;
+- Claude wrappers explicitly use `model: haiku`;
+- Codex `tests` and `quality`: `gpt-5.6-luna`, low effort;
+- Codex `explore`: `gpt-5.6-terra`, medium effort;
+- Codex `review`: `gpt-5.6-terra`, high effort;
+- generic Codex children are discouraged when they could inherit the expensive
+  parent model (for example Astra);
+- maximum two concurrent sub-agents, no recursive delegation.
 
-## Current bootstrap task
+## Verification
 
-Complete the AI-development layer from `Renaud_AIConfig`:
-
-- `CLAUDE.md`;
-- `.claude/` rules, commands, skills and sub-agents;
-- `.editorconfig`;
-- dataset schemas and source audit;
-- ChatGPT copilot project instructions.
+- GitHub compare against `main`: branch is ahead only, no divergence.
+- Configuration files were created/updated directly on the branch.
+- Runtime execution of Claude/Codex custom-agent selection still needs to be
+  validated on the dev VM; do not claim the runtime consumed the intended model
+  until that smoke test is performed.
 
 ## Next action
 
-On the dev VM, pull `main`, generate/install the frontend dependency lockfile,
-run the repository bootstrap/quality baseline, then start
-`missions/M-001-p0-skeleton.md` on a short-lived branch.
-
-Do not claim Home Assistant runtime compatibility or frontend build success until
-those checks have actually been executed on the dev VM.
+On the dev VM, pull/switch to this branch and run a tiny delegation smoke test
+for one Claude role and one Codex role. Verify that Codex actually selects the
+custom agent/model rather than silently inheriting the parent model. Then run
+the repository bootstrap/quality baseline and continue `missions/M-001-p0-skeleton.md`.
