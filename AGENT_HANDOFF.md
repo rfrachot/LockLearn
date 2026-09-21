@@ -2,44 +2,72 @@
 
 ## Current state
 
-P0.1–P0.6 automated foundations are implemented on `feat/p0-foundation`.
-Evidence and explicit manual gaps are in `docs/P0_EVIDENCE.md`; P0.7 is not
-started and notification decisions are not frozen.
+P0.1–P0.7 are complete on `feat/p0-foundation`. All four real-instance gates
+are qualified and the P0 architecture gate is closed. The next planned phase is
+P1; no P1 implementation has started.
 
-## Branch / commit
+## Branch / releases
 
 - Branch: `feat/p0-foundation`
-- Implementation commit: `e01775c feat: implement P0 foundation spikes`
-- No push, PR, merge, tag or release was performed.
+- Released/tagged commit: `95cc173 chore(release): prepare 0.0.2`
+- GitHub releases: `v0.0.1`, `v0.0.2`
+- Repository: public after a history secret audit
+- HACS live instance: `v0.0.2` installed
+- Remote feature branch was not pushed; only release tags were pushed with
+  explicit authorization.
 
-## Delivered
+## P0.7 outcome
 
-- HA 2025.2/current CI matrix, real HA test harness, HACS/hassfest jobs;
-- single Config Entry, bundled/versioned panel, clean setup/unload/reload;
-- thread-confined SQLite, state/content split, merge benchmark and backup hooks;
-- capability-gated notifications, stable device target resolution, unattended audit;
-- persistent session CAS, cross-user denial, subscriptions and cancellable operations;
-- ADR-0003 through ADR-0005 and missions M-002 through M-004.
+- Gate A — HACS / Config Flow / panel: PASS
+- Gate B — Android Companion: PASS as a capability qualification; same-tag
+  replacement worked, but incomplete silent-replacement evidence keeps tested
+  targets on the conservative `exposure_only` path.
+- Gate C — HAOS/Supervisor backup/restore: PASS; pre-backup state restored,
+  post-backup state absent, integrity `ok`, writer/readers/panel/API healthy.
+- Gate D — iPadOS Companion: PASS as a capability qualification; missing tag
+  replacement and unreliable visibility require `exposure_only`.
+
+Exact sub-test statuses, devices, timings, limitations and backup scope are in
+`docs/P0_EVIDENCE.md`. ADR-0006 freezes notification fallbacks; ADR-0007 freezes
+HACS/panel serving. `SPEC_V1.md` now states that lockscreen visibility is not a
+security boundary.
+
+## Corrections and tooling
+
+- Actionable notifications resolve to data-capable `notify.mobile_app_*`
+  actions; generic notify entities are plain-message only.
+- Admin-only storage health reports SQLite integrity without private rows.
+- `scripts/p0_real_instance.py` reproduces Companion probes without secrets.
+- `scripts/p0_backup_restore.py` reproduces the controlled Supervisor
+  backup/restore markers and verification; it never triggers restore.
+- `.env` loaders accept only `LOCKLEARN_HA_*` and never print values.
 
 ## Verification
 
-- Ruff format/check: pass.
-- mypy (`custom_components datasets tests`, plus scripts): pass.
-- pytest current HA 2026.9.3/Python 3.14.4: 21 passed.
-- pytest HA 2025.2.5/Python 3.13.15 backend matrix: 20 passed.
+- Ruff format/check: pass (98 files).
+- mypy (`custom_components datasets tests scripts`): pass (44 source files).
+- pytest HA 2026.9.3 / Python 3.14.4: 30 passed.
+- pytest backend HA 2025.2.5 / Python 3.13.15: 24 passed.
 - dataset validation: pass.
-- frontend typecheck + 3 Vitest tests + build: pass; bundle 21.96 kB / 7.13 kB gzip.
+- frontend typecheck + 3 Vitest tests + production build: pass; bundle 21.96 kB
+  / 7.13 kB gzip.
 - npm audit: 0 vulnerabilities.
-- hassfest Docker validation: 1 integration, 0 invalid.
-- configured HA API inventory: reachable on 2026.7.4; two Android phones and one
-  Android watch found; no iOS target.
-- HACS validation is wired in CI; local Docker action was not claimed because it
-  requires a GitHub token.
+- hassfest: 1 integration, 0 invalid.
+- real post-restore system log: no LockLearn match; exactly one loaded Config
+  Entry; HACS `v0.0.2` installed.
 
 ## Remaining risks / next action
 
-Select an explicit Android device, add/select an iOS device, configure
-`LOCKLEARN_HA_*_DEVICE_ID` and run the Companion gesture/lockscreen/TTL matrix.
-Also configure `LOCKLEARN_HA_CONFIG_DIR` to install through HACS, verify the
-panel in a browser and perform a real Supervisor backup/restore. Record those
-results before P0.7 freezes notification, backup and panel ADRs.
+- Android channel importance is user-controlled and not observable through HA;
+  do not infer it.
+- Samsung produced a second vibration with `alert_once`; Pixel silence was not
+  isolable because its initial delivery did not vibrate.
+- iPadOS action events omitted device/tag, same-tag replacement failed, and
+  visibility values did not redact lockscreen content.
+- Persistent notification replay/single-use is intentionally P4 work;
+  Profile/shared-device ACL is intentionally P2 work.
+- HAOS included `ssl` in the partial test backup despite an empty requested
+  folder list; always show actual restore scope.
+
+Next concrete action: review the local P0 closure commits, then start a separate
+P1 mission/branch only when requested. Do not retag or mutate `v0.0.2`.

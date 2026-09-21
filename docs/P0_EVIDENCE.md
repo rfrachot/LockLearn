@@ -1,69 +1,67 @@
-# P0.1–P0.6 evidence record
+# P0.1–P0.7 evidence record
 
-Evidence date: 2026-09-21. The normative requirements remain in
-`SPEC_V1.md`; this file separates observed facts from pending manual evidence.
+Evidence date: 2026-09-21. `SPEC_V1.md` remains normative. Status values in
+the real-instance sections are exactly `PASS`, `FAIL`, `BLOCKED_EXTERNAL`, or
+`NOT_APPLICABLE` with a justification.
 
 ## Compatibility and toolchain (P0.1)
 
-| Surface | Minimum / CI floor | Latest tested | Local evidence |
-|---|---:|---:|---|
-| Home Assistant | 2025.2.5 | 2026.9.3 | Both backend suites pass |
-| Python | 3.13.15 | 3.14.4 | Both interpreters run the suite |
-| Node | 22 in CI | 24.20.0 local | typecheck/test/build pass |
-| LockLearn | 0.0.1 | 0.0.1 | development version |
-| state.db schema | 1 | 1 | schema/version tests |
-| content.db schema | 1 | 1 | merge/attach tests |
-| frontend protocol | 1 | 1 | WebSocket bootstrap contract |
+| Surface | Minimum / CI floor | Latest tested | Live qualification |
+|---|---:|---:|---:|
+| Home Assistant | 2025.2.5 | 2026.9.3 | 2026.7.4 |
+| Python | 3.13.15 | 3.14.4 | managed by HAOS |
+| Node | 22 in CI | 24.20.0 local | not applicable at runtime |
+| LockLearn | 0.0.2 | 0.0.2 | HACS release v0.0.2 |
+| state.db schema | 1 | 1 | 1, integrity checked |
+| content.db schema | 1 | 1 | 1 |
+| frontend protocol | 1 | 1 | 1 |
 
-The V1 compatibility floor is confirmed as **Home Assistant 2025.2**; CI pins
-the latest patch in that month (`2025.2.5`) and a separate current-stable job.
-As of the evidence date, current stable is `2026.9.3`. The configured live
-development instance answered successfully on `2026.7.4`; this was an API
-inventory check, not an integration installation claim.
+The V1 compatibility floor remains **Home Assistant 2025.2**. CI pins
+2025.2.5/Python 3.13 and 2026.9.3/Python 3.14. The real target was HAOS 18.2,
+Core 2026.7.4 and Supervisor 2026.09.2.
 
-The CI workflow runs Ruff, mypy, pytest, dataset validation, frontend
-typecheck/test/build, the two-version HA matrix, hassfest and HACS validation.
+## Gate A — HACS, Config Flow and panel (P0.2/P0.7)
 
-## Installable lifecycle (P0.2)
+Qualification window: 2026-09-21 20:00–21:46 UTC.
+
+| Sub-test | Status | Evidence |
+|---|---|---|
+| repository security audit before public transition | PASS | 164 reachable Git blobs scanned; no credential/private-key signature; `.env` ignored and never tracked |
+| public custom repository | PASS | `rfrachot/LockLearn` anonymously reachable |
+| HACS recognition | PASS | custom repository recognized as an integration with `config_flow=true` and HA floor 2025.2.0 |
+| HACS install | PASS | release `v0.0.1` installed through HACS, then real HACS update to `v0.0.2` |
+| Config Flow | PASS | form opened and created the entry with defaults |
+| single Config Entry | PASS | second flow aborted with `single_instance_allowed`; exactly one entry remains |
+| sidebar panel and real bundle | PASS | panel displayed; bundle returned JavaScript and matched the release artifact |
+| frontend/backend coherence | PASS | bootstrap protocol 1 and authenticated user present |
+| cache buster | PASS | module URL is `/locklearn_static/locklearn-panel.js?v=0.0.2` |
+| hard refresh | PASS | operator observed the LockLearn bootstrap panel after forced refresh |
+| unload/reload | PASS | disable removed panel/API without restart; enable restored both and preserved persistent state |
+| stale listeners / duplicate callback | PASS | pre-reload subscription received no post-reload event; no duplicate panel/service observed |
+| blocking JavaScript error | PASS | panel rendered after install, reload, update and hard refresh |
+
+Release `v0.0.1` qualifies the initial installation path. Release `v0.0.2`
+qualifies the real HACS update path and contains the P0.7 notification-route
+fix and privacy-safe storage diagnostic. The branch itself was not pushed;
+HACS consumed the released tags.
+
+## SQLite, content boundary and performance (P0.3)
 
 Automated evidence:
 
-- `single_config_entry` is declared and the second Config Flow aborts;
-- no YAML path exists or is required;
-- the built panel artifact is committed and served through HA's asynchronous
-  static-path API with a version cache-buster;
-- panel registration is removed on unload and can be registered again without
-  duplication;
-- session subscriptions, operations and SQLite executors are drained on
-  unload;
-- the same lifecycle suite passes on HA 2025.2.5 and 2026.9.3.
-
-Still requiring a real install/browser observation:
-
-- HACS custom-repository install on the live HA host;
-- visual panel load and full-browser cache behavior after an upgrade.
-
-`LOCKLEARN_HA_CONFIG_DIR` is not configured, so this checkout cannot install
-files into the live instance without inventing a deployment path.
-
-## SQLite, content boundary and backup (P0.3)
-
-Implemented and tested:
-
-- one state writer connection confined to `ThreadPoolExecutor(max_workers=1)`;
-- short-lived readers on a distinct executor with one read-only active
-  `content.db` attachment;
-- WAL, `synchronous=NORMAL`, `busy_timeout=5000` and foreign keys;
-- physically separate state and reconstructible content paths, both outside
+- one state writer connection is confined to a dedicated single-worker
+  executor;
+- readers use separate short-lived connections and attach only active
+  `content.db` read-only;
+- WAL, `synchronous=NORMAL`, `busy_timeout=5000` and foreign keys are enabled;
+- state and reconstructible content are physically separate and outside
   `custom_components/`;
-- package merge by attaching exactly one package at a time;
-- HA pre/post backup hooks pause writes, checkpoint WAL with a strict timeout,
-  then resume; explicit snapshots use `Connection.backup()`;
-- cancellation/progress primitives yield between chunks and never occupy the
-  state-writer executor.
+- HA pre/post backup hooks pause writes, checkpoint WAL, and always reopen the
+  gate; explicit snapshots use `Connection.backup()`;
+- the admin-only diagnostic reports health and aggregate counts without rows,
+  identifiers, paths, or learning content.
 
-Local representative benchmark (60,000 cards, 20,000 progress rows, 100 query
-and answer samples):
+Representative local benchmark (60,000 cards, 20,000 progress rows):
 
 | Measurement | Result | P0/V1 budget |
 |---|---:|---:|
@@ -72,86 +70,159 @@ and answer samples):
 | new anti-join p95 | 8.828–13.987 ms | selection < 150 ms |
 | session answer p95 | 0.468–0.500 ms | answer < 100 ms |
 
-Run with `python -m scripts.p0_benchmark`. Results are machine-specific and CI
-does not assert wall-clock timings.
+Run with `python -m scripts.p0_benchmark`. Timings are machine-specific.
 
-HA 2025.2 has global backup filters but no custom-integration API for adding a
-per-integration exclusion. Consequently `state.db` and reconstructible content
-inside the HA config directory are included by default. LockLearn must expose
-that fact and offer purge/re-download until a later supported HA floor provides
-a safe exclusion mechanism. A real Supervisor backup/restore remains a manual
-host test.
+## Gate B — Android Companion (P0.4/P0.5)
 
-## Companion capability matrix (P0.4)
+Targets were resolved from stable device-registry IDs on every send and then
+routed through the data-capable `notify.mobile_app_*` action. The generic
+`notify.send_message` entity action rejected Companion `data` on the live HA
+version; `v0.0.2` therefore uses it only as an explicit plain-message fallback.
 
-The runtime model is deliberately tri-state (`supported`, `unsupported`,
-`unknown`). Unknown never enables a feature. Two-step reveal requires proven
-same-tag replacement, proven silent replacement and at least two visible
-actions; otherwise the renderer selects `exposure_only`, which cannot promote
-an SRS box.
+The device-registry `sw_version` values were 36 (Samsung SM-S928B) and 37
+(Google Pixel 9 Pro). Semantic Companion app versions were not exposed by an
+enabled entity.
 
-Read-only inventory of the configured HA instance found two Android phones and
-one Android watch with stable device-registry IDs and notify entities. No iOS
-target is registered, and `.env` does not select an Android/iOS/shared target.
-The following facts therefore remain `unknown`, not assumed:
-
-| Capability | Android | iOS |
+| Sub-test | Samsung SM-S928B | Pixel 9 Pro |
 |---|---|---|
-| same-tag replacement and latency | pending device gesture | no target |
-| silent `alert_once` replacement | pending | no target |
-| visible action limit | pending visual check | no target |
-| cleared signal | pending dismissal | no target |
-| TTL/expiration | pending elapsed-time check | no target |
-| channel/importance | pending settings check | no target |
-| lockscreen public/private/secret | pending locked-device check | no target |
-| free-text input | pending | no target |
+| labelled notification physically received | PASS | PASS |
+| stable target resolution | PASS | PASS |
+| receipt confirmation event | PASS | PASS |
+| unique action event | PASS | PASS |
+| action/tag/device attribution | PASS | PASS |
+| `event.context.user_id` | PASS | PASS |
+| two Android devices not confused | PASS | PASS |
+| Reveal action | PASS | PASS |
+| same-tag replacement/no stacking | PASS | PASS |
+| action-to-replacement API latency | PASS — 233 ms | PASS — 213–230 ms |
+| silent replacement | FAIL — second vibration observed despite `alert_once` | BLOCKED_EXTERNAL — device did not vibrate initially, so the second vibration could not be isolated; operator accepted the visual result |
+| `I don't know` | PASS | PASS |
+| clear/swipe event | PASS | PASS |
+| expiration at 10 seconds | PASS | PASS |
+| four actions sent | PASS — 3 usable | PASS — 3 usable |
+| free-text `P07` | PASS | PASS |
+| lockscreen `public` | PASS — full content | PASS — full content |
+| lockscreen `private` | PASS — content masked | PASS — full content; OS setting does not redact it |
+| lockscreen `secret` | PASS — absent | PASS — absent |
+| named Android channel | PASS — received on `LockLearn P0 Learning` | PASS — received on `LockLearn P0 Learning` |
+| exact user-overridden channel importance | BLOCKED_EXTERNAL — not exposed to HA | BLOCKED_EXTERNAL — not exposed to HA |
+| persistent replay/single-use result | NOT_APPLICABLE — P4 `NotificationInteraction` consumer does not exist in the P0 skeleton; one physical tap produced one bus event and zero duplicates in the grace window | NOT_APPLICABLE — same justification |
+| shared-device physical signal quality | NOT_APPLICABLE — no configured shared Profile/device pair and P2 Profile ACL does not yet exist; automated reduced-signal policy tests pass |
 
-The opt-in probe is:
+Capability decision: both Android targets have `tag_replace=supported`. The
+Samsung has `silent_replace=unsupported`; the Pixel remains `unknown` for
+silent replacement. Unknown/unsupported therefore keeps two-step learning in
+`exposure_only` until a later per-target qualification proves the complete
+gate. This is a successful conservative qualification, not a claim that every
+platform feature works.
 
-```text
-python -m scripts.p0_ha_probe inventory
-python -m scripts.p0_ha_probe companion --device-id <id> --platform android
-```
+## Gate C — HAOS/Supervisor backup and restore (P0.3/P0.7)
 
-The second command sends a labelled notification to the explicit stable device
-ID and records action context, replacement request latency and cleared events.
-It is never run against an inferred service name.
+Safety backup observed through the HA API: `Pre-locklearn` (`94bbd79d`), on
+both `hassio.local` and `hassio.ha_backup`. This is the operator-announced
+`PRE_P0.7` safety point and was never restored.
 
-## Identity and unattended actions (P0.5)
+Test backup: `LockLearn P0.7 state restore BB54319ACAC1` (`c34f8392`), created
+2026-09-21 23:36:47 +02:00 on `hassio.local`.
 
-Implemented and tested:
+| Sub-test | Status | Evidence |
+|---|---|---|
+| smallest supported real scope | PASS | partial backup; Home Assistant included; Recorder/add-ons excluded |
+| exact archive scope | PASS | HAOS additionally included `ssl`; this was disclosed before restore |
+| WAL/recent state captured | PASS | session was committed to version 2 immediately before backup |
+| pre/post hooks and resumed writes | PASS | Supervisor backup completed; write gate inactive afterward; post-backup writes succeeded |
+| mandatory hard stop | PASS | exact name, ID, type, scope, expected state and safety backup displayed; no automated restore call |
+| manual restore | PASS | operator initiated the restore from Home Assistant |
+| HA/LockLearn restart | PASS | API returned on Core 2026.7.4; one LockLearn entry loaded; HACS v0.0.2 installed |
+| pre-backup state restored | PASS | marked session returned at version 2 rather than post-backup version 3 |
+| post-backup state absent | PASS | separately marked post-only session returned `locklearn/not_found` |
+| `PRAGMA integrity_check` | PASS | `ok` |
+| foreign-key integrity | PASS | zero violations |
+| schema/journal | PASS | schema 1, WAL |
+| readers/writer recreated | PASS | reader remained off the event loop; writer initialized and completed a controlled version 2→3 mutation |
+| panel/API after restore | PASS | bootstrap protocol 1; panel present at cache-buster v0.0.2 |
+| duplicate runtime/log error | PASS | exactly one loaded entry; no LockLearn system-log match after restore |
 
-- target identity is `device_registry_id`; a current notify entity or legacy
-  service is resolved on every send and a rename changes only the route;
-- unresolved/disabled targets fail closed;
-- shared devices default to `signal_quality=reduced` unless explicitly trusted;
-- HA admin state is not an input to profile membership;
-- actions without `context.user_id` are denied unless the profile explicitly
-  allows unattended actions and the action is in the narrow `send_now`,
-  `snooze`, `pause_track` allowlist;
-- read, export, delete and session-start actions are never unattended;
-- the audit storage accepts actor kind/user id without private content.
+HA 2025.2 cannot exclude reconstructible content per integration. Until a
+future supported floor supplies such an API, backup UX must disclose that the
+HA config archive contains both `.storage/locklearn/state.db` and any content
+cache located under the config directory.
 
-Real `event.context.user_id` observations for Companion actions still require
-running the explicit device probe. Profile owner/editor/viewer behavior remains
-backend-authoritative work in P2; no P0 endpoint exposes real profile data.
+## Gate D — iPadOS Companion (P0.4/P0.5)
 
-## WebSocket, CAS and operation streams (P0.6)
+Target: Apple iPad12,1, name `iPad de Tiffanie`, device-registry `sw_version`
+27.0. The semantic Companion app version entity was unavailable.
 
-The HA test harness proves command registration, two simultaneous clients,
-atomic version CAS, `locklearn/stale_session`, session subscriptions and
-disconnect cleanup on both supported HA versions. P0 sessions live in an
-isolated per-HA-user probe namespace; this provides backend authorization
-without pretending that a HA user is a product Profile.
+| Sub-test | Status | Evidence |
+|---|---|---|
+| physical receipt | PASS | operator received every labelled notification |
+| stable outbound device resolution | PASS | explicit registry target resolved uniquely to `notify.mobile_app_ipad_de_tiffanie` |
+| action access | PASS | appui long/expansion exposes actions without opening HA |
+| action event and unique ID | PASS | one matching event, zero duplicates |
+| `event.context.user_id` | PASS | present |
+| inbound `device_id`/`tag` attribution | FAIL | iPadOS action events contained only `action`, plus `reply_text` for text input |
+| Reveal | PASS | event received |
+| same-tag replacement | FAIL | replacement created a second notification instead of replacing the first |
+| silent replacement | NOT_APPLICABLE — no replacement primitive was available to qualify silence |
+| four actions sent | PASS — all 4 accessible after expansion |
+| `I don't know` | PASS | one action event with user context |
+| clear/swipe | NOT_APPLICABLE — no cleared event during a 30-second real swipe probe |
+| lockscreen visibility | FAIL | `public`, `private`, and `secret` contents were all visible |
+| free-text `P07` | PASS | `action` and exact `reply_text` received once |
+| persistent replay/single-use result | NOT_APPLICABLE — P4 interaction consumer does not yet exist; no duplicate bus event was observed |
 
-Long operations expose `operation_id`, phase, normalized progress,
-cancellability, safe error type and status. Cancellation and unload cancel
-tasks and detach subscriptions. The benchmark above establishes the initial
-answer-latency baseline.
+Tapping the notification body opens Home Assistant and loses the actionable
+surface; appui long/expansion is required. iPadOS therefore remains
+`exposure_only`: tag replacement and visibility are unsupported. Unique action
+IDs can correlate events, but inbound device identity must not be inferred from
+fields iOS does not send.
 
-## Remaining manual gates
+## Security and privacy observations
 
-P0.1–P0.6 code, automated tests and reproducible probes are present. The only
-unclosed evidence is intrinsically external: Android/iOS gestures and visual
-behavior, HACS/browser installation, and a real HA backup/restore. P0.7 must not
-freeze the notification protocol until Android **and** iOS results exist.
+- All test notifications used non-personal labels and random correlation IDs.
+- Harness output records only field names and boolean/value-match results; it
+  does not print free-text replies or credentials.
+- Only `LOCKLEARN_HA_*` variables are loaded from `.env`; values are never
+  logged.
+- No HA access token appeared in output, files, evidence, or commits.
+- A GitHub CLI auth check displayed only a masked token fragment in the local
+  terminal; no complete credential was exposed or committed.
+- The public-history scan found no secret signatures. GitHub repository secret
+  scanning was not enabled, so that setting is not claimed as evidence.
+- The storage diagnostic is administrator-only and returns health plus counts,
+  never stored rows or learning content.
+
+## Automated regression evidence
+
+Before the v0.0.2 release:
+
+- Ruff format/check: PASS;
+- mypy over `custom_components datasets tests`: PASS;
+- dataset registry validation: PASS;
+- pytest on HA 2026.9.3/Python 3.14.4: 28 passed;
+- frontend typecheck: PASS;
+- Vitest: 3 passed;
+- production frontend build: PASS (21.96 kB, 7.13 kB gzip);
+- npm audit: 0 vulnerabilities.
+
+After the evidence and backup harness were added:
+
+- pytest on HA 2026.9.3/Python 3.14.4: 30 passed;
+- pytest backend on HA 2025.2.5/Python 3.13.15: 24 passed;
+- hassfest: 1 integration, 0 invalid;
+- all other checks above remained PASS.
+
+## P0 disposition
+
+- Gate A — HACS / Config Flow / panel: **PASS**
+- Gate B — Android Companion: **PASS** (capabilities measured; conservative
+  fallback retained where unsupported/unknown)
+- Gate C — HAOS Supervisor backup/restore: **PASS**
+- Gate D — iOS/iPadOS Companion: **PASS** (platform limitations measured;
+  `exposure_only` selected)
+
+P0 is closed for architecture purposes. `NOT_APPLICABLE` replay/single-use and
+shared-Profile cases belong to their already planned P2/P4 implementations;
+they are not silently claimed as functional. The notification renderer in P4
+must consume the per-target capability decisions above rather than treating a
+platform family as uniformly capable.

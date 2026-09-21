@@ -4,6 +4,14 @@ All notable changes will be documented here.
 
 ## [Unreleased]
 
+### Added
+- Reproducible HAOS/Supervisor backup-and-restore qualification harness.
+- P0.7 real-instance evidence and platform-specific notification decisions.
+
+### Changed
+- Treat lockscreen visibility as an advisory OS rendering preference rather
+  than a confidentiality boundary.
+
 ## [0.0.2] - 2026-09-21
 
 ### Added

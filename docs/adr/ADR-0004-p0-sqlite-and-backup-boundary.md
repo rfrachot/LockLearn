@@ -34,3 +34,18 @@ the user until a safe supported exclusion exists.
   introduced.
 - A live Supervisor backup/restore remains a release gate in addition to the
   automated hook and restore tests.
+
+## P0.7 real-instance evidence
+
+On HAOS 18.2 / Core 2026.7.4 / Supervisor 2026.09.2, a partial Supervisor
+backup containing Home Assistant but excluding Recorder and add-ons restored a
+recent WAL-backed LockLearn session exactly to its pre-backup version. A
+post-backup mutation and a post-only session were absent after restore.
+
+After restore, `PRAGMA integrity_check` returned `ok`, `foreign_key_check`
+returned zero violations, WAL was active, reads ran outside the event loop and
+the recreated writer completed a controlled mutation. The panel and WebSocket
+API also returned. HAOS included the `ssl` folder even though an empty folder
+list was requested; backup/restore UI must report the actual archive scope.
+
+The independent safety backup remained available and was not restored.
