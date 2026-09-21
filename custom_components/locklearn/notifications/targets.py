@@ -23,6 +23,7 @@ class NotifyRoute:
     service: str
     target: dict[str, Any] | None
     config_entry_id: str
+    supports_platform_data: bool
 
 
 def legacy_mobile_app_service(device_name: str) -> str:
@@ -30,34 +31,22 @@ def legacy_mobile_app_service(device_name: str) -> str:
     return slugify(f"mobile_app_{device_name}")
 
 
-async def async_resolve_notify_route(hass: HomeAssistant, device_registry_id: str) -> NotifyRoute:
-    """Resolve on every send so renames never become target identity."""
+async def async_resolve_notify_route(
+    hass: HomeAssistant,
+    device_registry_id: str,
+    *,
+    require_platform_data: bool = True,
+) -> NotifyRoute:
+    """Resolve on every send so renames never become target identity.
+
+    Home Assistant's generic ``notify.send_message`` entity action does not
+    accept Companion-specific ``data`` such as actions, tags or confirmation.
+    LockLearn therefore requires the dynamic mobile_app action for actionable
+    notifications and uses an entity route only for explicitly plain messages.
+    """
     device = dr.async_get(hass).async_get(device_registry_id)
     if device is None or device.disabled:
         raise TargetUnavailableError(device_registry_id)
-
-    entity_registry = er.async_get(hass)
-    notify_entities = sorted(
-        (
-            entry
-            for entry in er.async_entries_for_device(
-                entity_registry, device_registry_id, include_disabled_entities=False
-            )
-            if entry.domain == "notify" and entry.platform == "mobile_app"
-        ),
-        key=lambda entry: entry.entity_id,
-    )
-    if notify_entities:
-        entry = notify_entities[0]
-        config_entry_id = entry.config_entry_id or next(iter(device.config_entries), None)
-        if config_entry_id is None:
-            raise TargetUnavailableError(device_registry_id)
-        return NotifyRoute(
-            device_registry_id=device_registry_id,
-            service="notify.send_message",
-            target={"entity_id": entry.entity_id},
-            config_entry_id=config_entry_id,
-        )
 
     for config_entry_id in sorted(device.config_entries):
         config_entry = hass.config_entries.async_get_entry(config_entry_id)
@@ -73,6 +62,34 @@ async def async_resolve_notify_route(hass: HomeAssistant, device_registry_id: st
                 service=f"notify.{service}",
                 target=None,
                 config_entry_id=config_entry_id,
+                supports_platform_data=True,
             )
+
+    if require_platform_data:
+        raise TargetUnavailableError(device_registry_id)
+
+    entity_registry = er.async_get(hass)
+    notify_entities = sorted(
+        (
+            entry
+            for entry in er.async_entries_for_device(
+                entity_registry, device_registry_id, include_disabled_entities=False
+            )
+            if entry.domain == "notify" and entry.platform == "mobile_app"
+        ),
+        key=lambda entry: entry.entity_id,
+    )
+    if notify_entities:
+        entry = notify_entities[0]
+        entity_config_entry_id = entry.config_entry_id or next(iter(device.config_entries), None)
+        if entity_config_entry_id is None:
+            raise TargetUnavailableError(device_registry_id)
+        return NotifyRoute(
+            device_registry_id=device_registry_id,
+            service="notify.send_message",
+            target={"entity_id": entry.entity_id},
+            config_entry_id=entity_config_entry_id,
+            supports_platform_data=False,
+        )
 
     raise TargetUnavailableError(device_registry_id)
