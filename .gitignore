@@ -20,6 +20,11 @@ dist/
 *.db-wal
 *.db-shm
 
+# Local environment / secrets
+.env
+.env.*
+!.env.example
+
 # IDE / local agent settings
 .vscode/
 .idea/
