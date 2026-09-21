@@ -2,39 +2,44 @@
 
 ## Current state
 
-LockLearn bootstrap is published in the private GitHub repository `rfrachot/LockLearn`. `SPEC_V1.md` Draft v0.6 remains the normative product/architecture source of truth.
+P0.1–P0.6 automated foundations are implemented on `feat/p0-foundation`.
+Evidence and explicit manual gaps are in `docs/P0_EVIDENCE.md`; P0.7 is not
+started and notification decisions are not frozen.
 
-A complete execution-planning pass has now been prepared on a documentation branch. The previous macro `MASTER_PLAN.md` was expanded into phase/work-package planning and a requirement traceability matrix covering all numbered spec sections/subsections plus the 32 explicit §133 architectural invariants.
+## Branch / commit
 
-## Branch / Git
+- Branch: `feat/p0-foundation`
+- Implementation commit: `e01775c feat: implement P0 foundation spikes`
+- No push, PR, merge, tag or release was performed.
 
-- Planning branch: `docs/detailed-v1-master-plan`
-- Base: `main` at `220cd19b85095f1fdf5e3476a862b34315853daf`
-- Repository: private, `rfrachot/LockLearn`
-- Branch is documentation/planning only; no runtime code was changed.
+## Delivered
 
-## Planning artifacts on the branch
-
-- `MASTER_PLAN.md` — critical path, 71 work packages, cross-cutting gates and 1.0 release gate.
-- `docs/REQUIREMENTS_TRACEABILITY.md` — full spec-section coverage and invariant ownership.
-- `docs/plan/P0.md` … `docs/plan/P7.md` — detailed deliverables and exit criteria by phase.
-- Existing `missions/M-001-p0-skeleton.md` is preserved and mapped into P0.1/P0.2 rather than replaced.
-
-## Scope decisions preserved
-
-- P0–P6 remain the 1.0 critical path.
-- P7 is explicitly non-blocking for 1.0.
-- Exam mode remains V1.1.
-- Image/audio are schema-ready in V1 but full renderers are non-blocking.
-- Optional HA sensors do not become an implicit 1.0 blocker.
-- `SPEC_V1.md` was not modified by the planning pass.
+- HA 2025.2/current CI matrix, real HA test harness, HACS/hassfest jobs;
+- single Config Entry, bundled/versioned panel, clean setup/unload/reload;
+- thread-confined SQLite, state/content split, merge benchmark and backup hooks;
+- capability-gated notifications, stable device target resolution, unattended audit;
+- persistent session CAS, cross-user denial, subscriptions and cancellable operations;
+- ADR-0003 through ADR-0005 and missions M-002 through M-004.
 
 ## Verification
 
-- Compared branch against `main`: branch is ahead only by planning/documentation changes.
-- No code tests were run because this pass changes no implementation/runtime files.
-- Do not claim HA runtime compatibility or frontend build success until P0 runs on the dev VM.
+- Ruff format/check: pass.
+- mypy (`custom_components datasets tests`, plus scripts): pass.
+- pytest current HA 2026.9.3/Python 3.14.4: 21 passed.
+- pytest HA 2025.2.5/Python 3.13.15 backend matrix: 20 passed.
+- dataset validation: pass.
+- frontend typecheck + 3 Vitest tests + build: pass; bundle 21.96 kB / 7.13 kB gzip.
+- npm audit: 0 vulnerabilities.
+- hassfest Docker validation: 1 integration, 0 invalid.
+- configured HA API inventory: reachable on 2026.7.4; two Android phones and one
+  Android watch found; no iOS target.
+- HACS validation is wired in CI; local Docker action was not claimed because it
+  requires a GitHub token.
 
-## Next action
+## Remaining risks / next action
 
-Review/merge the planning branch, then on the dev VM pull `main`, establish the verified toolchain/CI baseline and execute `missions/M-001-p0-skeleton.md` as the first implementation slice. Create complementary P0 missions for the remaining P0 spikes instead of expanding M-001 into a monolith.
+Select an explicit Android device, add/select an iOS device, configure
+`LOCKLEARN_HA_*_DEVICE_ID` and run the Companion gesture/lockscreen/TTL matrix.
+Also configure `LOCKLEARN_HA_CONFIG_DIR` to install through HACS, verify the
+panel in a browser and perform a real Supervisor backup/restore. Record those
+results before P0.7 freezes notification, backup and panel ADRs.
