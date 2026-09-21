@@ -4,6 +4,19 @@ All notable changes will be documented here.
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-09-21
+
+### Added
+- Secret-safe real-instance qualification harness for Companion notifications.
+- Administrator-only, privacy-safe SQLite health diagnostics for restore qualification.
+
+### Fixed
+- Resolve actionable Companion notifications through the data-capable
+  `notify.mobile_app_*` action instead of the generic notify entity action.
+- Parse both current and legacy Home Assistant WebSocket event envelopes in P0 probes.
+
+## [0.0.1] - 2026-09-21
+
 ### Added
 - Initial LockLearn repository bootstrap.
 - Home Assistant integration and frontend skeletons.
