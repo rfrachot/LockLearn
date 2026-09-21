@@ -81,6 +81,19 @@ async def ws_bootstrap(
     )
 
 
+@websocket_api.websocket_command({vol.Required("type"): "locklearn/admin/storage/status"})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_admin_storage_status(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return privacy-safe storage health metadata to administrators."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    connection.send_result(msg["id"], await runtime.storage.async_diagnostic_status())
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "locklearn/session/start",
@@ -242,6 +255,7 @@ async def ws_operation_cancel(
 
 COMMANDS = (
     ws_bootstrap,
+    ws_admin_storage_status,
     ws_session_start,
     ws_session_get,
     ws_session_answer,

@@ -79,6 +79,25 @@ async def test_state_and_content_are_separate_and_pragmas_enabled(storage: SQLit
         state.close()
 
 
+async def test_storage_diagnostic_is_private_and_off_event_loop(storage: SQLiteStorage) -> None:
+    """The diagnostic reports health/counts without returning stored rows."""
+    await storage.async_create_session("s1", "p1", None)
+
+    status = await storage.async_diagnostic_status()
+
+    assert status == {
+        "backup_active": False,
+        "foreign_key_violation_count": 0,
+        "integrity_check": ["ok"],
+        "journal_mode": "wal",
+        "reader_off_event_loop": True,
+        "schema_version": 1,
+        "session_answer_count": 0,
+        "session_count": 1,
+        "writer_initialized": True,
+    }
+
+
 async def test_session_cas_allows_only_one_client(storage: SQLiteStorage) -> None:
     """Two clients with the same expected version cannot both mutate."""
     await storage.async_create_session("s1", "p1", "t1")

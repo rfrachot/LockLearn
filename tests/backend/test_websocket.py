@@ -9,6 +9,34 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.locklearn.const import DOMAIN
 
 
+async def test_storage_status_is_admin_only_and_privacy_safe(
+    hass: HomeAssistant,
+    hass_ws_client: Any,
+    hass_read_only_access_token: str,
+) -> None:
+    """Only admins can retrieve aggregate SQLite health metadata."""
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+
+    admin = await hass_ws_client(hass)
+    await admin.send_json_auto_id({"type": "locklearn/admin/storage/status"})
+    result = await admin.receive_json()
+    assert result["success"] is True
+    assert result["result"]["integrity_check"] == ["ok"]
+    assert result["result"]["foreign_key_violation_count"] == 0
+    assert result["result"]["reader_off_event_loop"] is True
+    assert result["result"]["writer_initialized"] is True
+
+    non_admin = await hass_ws_client(hass, hass_read_only_access_token)
+    await non_admin.send_json_auto_id({"type": "locklearn/admin/storage/status"})
+    forbidden = await non_admin.receive_json()
+    assert forbidden["success"] is False
+    assert forbidden["error"]["code"] == "unauthorized"
+
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
 async def test_two_websocket_clients_get_cas_and_subscription(
     hass: HomeAssistant,
     hass_ws_client: Any,
