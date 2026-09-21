@@ -210,6 +210,32 @@ class SQLiteStorage:
 
         return await self._async_reader(read)
 
+    async def async_diagnostic_status(self) -> dict[str, Any]:
+        """Return privacy-safe SQLite health metadata from a reader worker."""
+        event_loop_thread_id = threading.get_ident()
+
+        def inspect(connection: sqlite3.Connection) -> dict[str, Any]:
+            integrity_rows = connection.execute("PRAGMA integrity_check").fetchall()
+            schema_row = connection.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
+            return {
+                "integrity_check": [str(row[0]) for row in integrity_rows],
+                "foreign_key_violation_count": len(
+                    connection.execute("PRAGMA foreign_key_check").fetchall()
+                ),
+                "schema_version": None if schema_row is None else schema_row[0],
+                "journal_mode": connection.execute("PRAGMA journal_mode").fetchone()[0],
+                "session_count": connection.execute("SELECT COUNT(*) FROM sessions").fetchone()[0],
+                "session_answer_count": connection.execute(
+                    "SELECT COUNT(*) FROM session_answers"
+                ).fetchone()[0],
+                "reader_off_event_loop": threading.get_ident() != event_loop_thread_id,
+            }
+
+        status = await self._async_reader(inspect)
+        status["writer_initialized"] = self._writer_thread_id is not None
+        status["backup_active"] = self._backup_active
+        return status
+
     async def async_answer_session(
         self,
         session_id: str,
