@@ -7,6 +7,7 @@ license = { text = "MIT" }
 
 [tool.ruff]
 line-length = 100
+target-version = "py313"
 exclude = [".git", ".venv", "build", "dist", "frontend/node_modules"]
 
 [tool.ruff.lint]
@@ -18,7 +19,7 @@ indent-style = "space"
 line-ending = "auto"
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 check_untyped_defs = true
 no_implicit_optional = true
 show_error_codes = true
@@ -29,6 +30,12 @@ warn_unused_configs = true
 warn_unused_ignores = true
 exclude = '(^|/)(\.venv|build|dist|frontend/node_modules)/'
 
+[[tool.mypy.overrides]]
+module = "pytest_homeassistant_custom_component.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 addopts = "-ra"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]

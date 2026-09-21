@@ -1,11 +1,15 @@
 {
   "domain": "locklearn",
   "name": "LockLearn",
-  "version": "0.0.1",
+  "after_dependencies": ["backup", "mobile_app", "notify"],
   "codeowners": ["@rfrachot"],
   "config_flow": true,
-  "single_config_entry": true,
+  "dependencies": ["frontend", "http", "panel_custom", "websocket_api"],
   "documentation": "https://github.com/rfrachot/locklearn",
+  "integration_type": "service",
+  "iot_class": "local_push",
   "issue_tracker": "https://github.com/rfrachot/locklearn/issues",
-  "requirements": []
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.0.1"
 }
