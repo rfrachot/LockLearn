@@ -2,8 +2,7 @@
 
 ## Status
 
-Accepted for P0 prototypes on 2026-09-21. Notification capabilities remain
-provisional until real Android and iOS evidence is complete.
+Accepted and qualified on real Android and iPadOS targets on 2026-09-21.
 
 ## Context
 
@@ -21,6 +20,9 @@ authority.
   unload.
 - Notification targets persist `device_registry_id`; notify entities/services
   are resolved at send time and are only ephemeral routes.
+- Actionable payloads require a data-capable `notify.mobile_app_*` action. The
+  generic notify entity route is only an explicit plain-message fallback
+  because HA 2026.7 rejects Companion `data` on that action.
 - Unknown notification capabilities fail closed to `exposure_only`.
 
 ## Consequences
@@ -28,5 +30,8 @@ authority.
 - `Profile != HA User` and `Profile != Device` remain true.
 - P2 replaces the synthetic P0 namespace with real profile membership checks
   at every command boundary.
-- P0.7 cannot accept two-step notification reveal without device evidence on
-  both platforms.
+- Android action events carried `device_id`, `tag` and user context on both
+  tested phones. iPadOS action events carried user context and the unique
+  action ID but no `device_id` or `tag`; inbound attribution must therefore use
+  the persisted interaction/action token and never invent missing fields.
+- Detailed renderer capabilities and fallbacks are fixed in ADR-0006.

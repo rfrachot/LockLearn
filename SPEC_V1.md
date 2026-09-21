@@ -2145,6 +2145,13 @@ secret
 
 La valeur par défaut d'un profil partagé/enfant est `private`.
 
+Cette valeur est une préférence de rendu transmise à l'OS, **pas une frontière
+de sécurité**. P0 a observé que `private` peut rester entièrement lisible selon
+le device/réglage Android et que les trois valeurs peuvent être ignorées par
+iPadOS. Le renderer reste donc spoiler-safe et privacy-minimal même pour
+`private`/`secret` ; aucun contenu privé ou réponse ne devient autorisé par ce
+seul réglage. Une capacité de masquage inconnue ou non fiable échoue fermée.
+
 Si une action mobile semble avoir été déclenchée mais n'est pas confirmée côté HA avant expiration, LockLearn expose dans le dashboard une surface :
 
 ```text
@@ -2174,12 +2181,23 @@ Le remplacement par `tag` et la latence action→notification de remplacement so
 
 Si la seconde étape ne peut pas être obtenue de manière fiable, fallback : affichage direct de la réponse et événement `exposure_only`, sans promotion de box.
 
+La gate est évaluée **par target**, et exige conjointement remplacement même
+tag, remplacement silencieux et nombre d'actions suffisant. Un résultat
+`unknown` sur un seul de ces points sélectionne aussi `exposure_only`. Les
+essais P0 ont notamment confirmé le remplacement sur deux Android, mais pas le
+silence sur tous les devices, et aucun remplacement même tag sur l'iPad testé.
+
 ### Quiz notification
 
 - Android : viser 2–3 actions visibles maximum ;
 - iOS : privilégier le binaire / reveal car les actions peuvent nécessiter une expansion ;
 - QCM complet : panel ;
 - saisie libre notification : spike P0 seulement.
+
+Le spike P0 a observé trois actions utilisables sur les deux Android et quatre
+sur iPadOS après expansion. La saisie libre a fonctionné sur les trois targets,
+mais iPadOS n'a renvoyé ni `device_id` ni `tag` : sa corrélation repose sur le
+token/action ID unique persistant, jamais sur un champ absent inventé.
 
 ### Consommation single-use
 
@@ -6169,4 +6187,3 @@ ruby_segments[]
 ```
 
 Ces champs font partie du schéma V1 même si certains renderers avancés arrivent plus tard.
-

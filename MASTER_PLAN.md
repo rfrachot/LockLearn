@@ -22,7 +22,7 @@
 
 | Phase | Goal | State | 1.0 blocker | Detail |
 |---|---|---|---|---|
-| P0 | Architecture spikes + installable HA skeleton | current | yes | `docs/plan/P0.md` |
+| P0 | Architecture spikes + installable HA skeleton | complete | yes | `docs/plan/P0.md` |
 | P1 | Content core + signed starter dataset | queued | yes | `docs/plan/P1.md` |
 | P2 | Profiles/tracks/ACL | queued | yes | `docs/plan/P2.md` |
 | P3 | Learning/SRS/sessions/stats | queued | yes | `docs/plan/P3.md` |
