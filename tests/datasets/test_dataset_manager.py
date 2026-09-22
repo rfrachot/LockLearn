@@ -126,13 +126,13 @@ def _artifact(tmp_path: Path, version: str) -> Path:
             sources=(
                 SourceInput(
                     source_id="locklearn:original",
-                    upstream_version=f"fixture-{version}",
+                    upstream_version="fixture-1",
                     upstream_date="2026-09-22",
                     retrieved_at=_BUILT_AT,
                     files=(
                         SourceFileInput(
                             raw,
-                            f"https://example.invalid/editorial-{version}.jsonl",
+                            "https://example.invalid/editorial.jsonl",
                         ),
                     ),
                 ),
@@ -218,9 +218,7 @@ async def test_signed_install_update_and_rollback_keep_pack_versions(tmp_path: P
 
         first_inventory = await storage.async_dataset_inventory()
         assert first_inventory[0]["version"] == "1.0.0"
-        assert first_inventory[0]["pack_version_ids"] == (
-            "locklearn:pack-version:manager-1.0.0",
-        )
+        assert first_inventory[0]["pack_version_ids"] == ("locklearn:pack-version:manager-1.0.0",)
 
         transport.catalogs["https://example.invalid/catalog.json"] = _catalog(
             {"1.0.0": v1, "1.1.0": v2}
@@ -251,9 +249,7 @@ async def test_checksum_failure_never_replaces_active_generation(tmp_path: Path)
     try:
         artifact = _artifact(tmp_path, "1.0.0")
         transport.artifacts["https://example.invalid/1.0.0.zip"] = artifact
-        transport.catalogs["https://example.invalid/catalog.json"] = _catalog(
-            {"1.0.0": artifact}
-        )
+        transport.catalogs["https://example.invalid/catalog.json"] = _catalog({"1.0.0": artifact})
         await manager.async_refresh()
         active_before = storage.content_generations.active_metadata.generation_id
         transport.override_sha256 = "0" * 64
@@ -274,9 +270,7 @@ async def test_removal_requires_confirmation_and_blocks_active_pack_usage(
     try:
         artifact = _artifact(tmp_path, "1.0.0")
         transport.artifacts["https://example.invalid/1.0.0.zip"] = artifact
-        transport.catalogs["https://example.invalid/catalog.json"] = _catalog(
-            {"1.0.0": artifact}
-        )
+        transport.catalogs["https://example.invalid/catalog.json"] = _catalog({"1.0.0": artifact})
         await manager.async_refresh()
         await manager.async_install(_DATASET_ID)
 
@@ -287,9 +281,7 @@ async def test_removal_requires_confirmation_and_blocks_active_pack_usage(
             await manager.async_remove(
                 _DATASET_ID,
                 confirmed=True,
-                active_pack_version_ids=frozenset(
-                    {"locklearn:pack-version:manager-1.0.0"}
-                ),
+                active_pack_version_ids=frozenset({"locklearn:pack-version:manager-1.0.0"}),
             )
 
         await manager.async_remove(_DATASET_ID, confirmed=True)
@@ -327,9 +319,7 @@ async def test_invalid_update_after_valid_install_preserves_installed_version(
         v2 = _artifact(tmp_path, "1.1.0")
         transport.artifacts["https://example.invalid/1.0.0.zip"] = v1
         transport.artifacts["https://example.invalid/1.1.0.zip"] = v2
-        transport.catalogs["https://example.invalid/catalog.json"] = _catalog(
-            {"1.0.0": v1}
-        )
+        transport.catalogs["https://example.invalid/catalog.json"] = _catalog({"1.0.0": v1})
         await manager.async_refresh()
         await manager.async_install(_DATASET_ID)
 
