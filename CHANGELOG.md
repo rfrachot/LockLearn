@@ -5,6 +5,9 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P1.7 normalized source snapshots and per-object provenance retained inside merged content generations, including author/language/modification attribution fields.
+- Version-2 source/license registries with explicit software/editorial/dataset/asset license scopes, source field allowlists and required provenance contracts.
+- ADR-0014 defining snapshot identity, provenance granularity and license boundaries.
 - P1.6 normalized `content.db` schema with stable content/card relationships,
   lifecycle tombstones and PackVersion pre-aggregates.
 - Validated immutable content generations built from one attached package at a
