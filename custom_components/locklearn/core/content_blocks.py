@@ -228,14 +228,25 @@ class ContentBlock:
             raise ContentBlockError(
                 f"{self.mask_strategy.value} is only valid for text/rich_text blocks"
             )
+        if self.mask_strategy is not MaskStrategy.NONE and not self.reveals_answer:
+            raise ContentBlockError(
+                "mask_strategy requires reveals_answer=true"
+            )
+        if self.role is ContentRole.ANSWER and not self.reveals_answer:
+            raise ContentBlockError("answer blocks must declare reveals_answer=true")
 
     @property
     def requires_reveal_action(self) -> bool:
-        """Return whether the block must stay gated before an unaided attempt."""
-        return self.reveals_answer or self.role in {
+        """Return whether the unmasked block must stay gated before retrieval."""
+        if self.role in {
             ContentRole.ANSWER,
             ContentRole.HINT,
             ContentRole.MNEMONIC,
+        }:
+            return True
+        return self.reveals_answer and self.mask_strategy in {
+            MaskStrategy.NONE,
+            MaskStrategy.HIDE_BLOCK,
         }
 
 
