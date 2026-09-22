@@ -117,7 +117,18 @@ def test_content_block_reveal_metadata_is_explicit_and_hint_roles_stay_gated() -
     assert prompt.requires_reveal_action is False
     assert masked_answer.reveals_answer is True
     assert masked_answer.mask_strategy is cb.MaskStrategy.BLANK_TERM
+    assert masked_answer.requires_reveal_action is False
     assert mnemonic.requires_reveal_action is True
+
+
+def test_masking_requires_declared_answer_revelation() -> None:
+    with pytest.raises(cb.ContentBlockError, match="reveals_answer=true"):
+        _text_block(mask_strategy=cb.MaskStrategy.BLANK_TERM)
+
+
+def test_answer_role_must_declare_answer_revelation() -> None:
+    with pytest.raises(cb.ContentBlockError, match="answer blocks"):
+        _text_block(role=cb.ContentRole.ANSWER)
 
 
 def test_content_block_payload_must_match_declared_kind() -> None:
