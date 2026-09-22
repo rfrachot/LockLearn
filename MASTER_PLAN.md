@@ -24,7 +24,7 @@
 |---|---|---|---|---|
 | P0 | Architecture spikes + installable HA skeleton | complete | yes | `docs/plan/P0.md` |
 | P1 | Content core + signed starter dataset | complete | yes | `docs/plan/P1.md` |
-| P2 | Profiles/tracks/ACL | in progress (P2.1 complete) | yes | `docs/plan/P2.md` |
+| P2 | Profiles/tracks/ACL | in progress (P2.1–P2.2 complete; P2.3 pending gate) | yes | `docs/plan/P2.md` |
 | P3 | Learning/SRS/sessions/stats | queued | yes | `docs/plan/P3.md` |
 | P4 | Scheduler/notifications/HA automation | queued | yes | `docs/plan/P4.md` |
 | P5 | Useful panel | queued | yes | `docs/plan/P5.md` |
@@ -60,8 +60,8 @@
 ### P2
 
 - **P2.1** — state.db foundation and application repositories (complete)
-- **P2.2** — Profiles, presets and HA-user mapping
-- **P2.3** — Backend ACL and privacy filtering
+- **P2.2** — Profiles, presets and HA-user mapping (complete)
+- **P2.3** — Backend ACL and privacy filtering (implemented; verification pending)
 - **P2.4** — Track configuration, pack pinning and card rules
 - **P2.5** — Learning quotas, goals and load forecast
 - **P2.6** — Profiles/tracks WebSocket CRUD and errors
