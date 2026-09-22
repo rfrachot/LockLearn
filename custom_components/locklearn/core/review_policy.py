@@ -186,23 +186,33 @@ class ReviewPolicyV1:
             effective_interval_days=interval,
         )
 
-    def review_failure(self, snapshot: dict[str, Any]) -> ReviewTransition:
-        """Demote a failed review card and enter same-day relearning."""
+    def review_failure(
+        self,
+        snapshot: dict[str, Any],
+        *,
+        verified: bool = True,
+        demote: bool = True,
+    ) -> ReviewTransition:
+        """Enter relearning, applying relapse penalties only to verified failures."""
         self._require_review(snapshot)
         now = self._clock.now()
         scheduled_interval = self._scheduled_interval_days(snapshot)
         elapsed = self._elapsed_days(snapshot, now)
-        difficulty = self._clamp_difficulty(self._difficulty(snapshot) * 0.85)
-        demoted_box = max(0, int(snapshot.get("box", 0)) - self._relapse_penalty)
+        difficulty = self._difficulty(snapshot)
+        if verified:
+            difficulty = self._clamp_difficulty(difficulty * 0.85)
+        demoted_box = int(snapshot.get("box", 0))
+        if verified and demote:
+            demoted_box = max(0, demoted_box - self._relapse_penalty)
 
         demoted = dict(snapshot)
         demoted.update(
             {
                 "box": demoted_box,
                 "seen_count": int(snapshot.get("seen_count", 0)) + 1,
-                "verified_wrong_count": int(snapshot.get("verified_wrong_count", 0)) + 1,
+                "verified_wrong_count": int(snapshot.get("verified_wrong_count", 0))
+                + int(verified),
                 "last_seen_at_utc": now.isoformat(),
-                "last_verified_at_utc": now.isoformat(),
                 "last_result": "wrong",
                 "streak_correct": 0,
                 "difficulty_factor": difficulty,
@@ -211,6 +221,8 @@ class ReviewPolicyV1:
                 "updated_at_utc": now.isoformat(),
             }
         )
+        if verified:
+            demoted["last_verified_at_utc"] = now.isoformat()
         relearning = self._learning.enter_relearning(demoted)
         post = dict(relearning.post_state)
         post["mastery"] = self.mastery(post, at=now)
