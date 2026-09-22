@@ -30,6 +30,7 @@ def validate() -> None:
     languages = _load("languages.json")
     licenses = _load("licenses.json")
     sources = _load("sources.json")
+    source_builds = _load("source_builds.json")
     normalization_policies = _load("normalization_policies.json")
     curation_policies = _load("curation_policies.json")
 
@@ -222,6 +223,42 @@ def validate() -> None:
         required_provenance = row.get("required_provenance", [])
         if len(required_provenance) != len(set(required_provenance)):
             raise ValueError(f"duplicate required provenance fields for source {row['id']}")
+
+    if source_builds.get("schema_version") != 1:
+        raise ValueError("source build registry schema_version must be 1")
+    build_rows = source_builds.get("sources", [])
+    if not isinstance(build_rows, list):
+        raise ValueError("source build registry sources must be an array")
+    build_ids = [row.get("source_id") for row in build_rows]
+    if len(build_ids) != len(set(build_ids)):
+        raise ValueError("duplicate source build IDs")
+    if set(build_ids) != set(source_ids):
+        raise ValueError("source build registry must cover every registered source exactly once")
+    allowed_fetch_modes = {"direct", "template", "recipe_url", "local"}
+    for row in build_rows:
+        source_id = row["source_id"]
+        mode = row.get("fetch_mode")
+        if mode not in allowed_fetch_modes:
+            raise ValueError(f"invalid fetch_mode for source {source_id}")
+        discovery_url = row.get("discovery_url")
+        if not isinstance(discovery_url, str) or not discovery_url:
+            raise ValueError(f"source build discovery_url is required for {source_id}")
+        download_url = row.get("download_url")
+        if mode in {"direct", "template"}:
+            if not isinstance(download_url, str) or not download_url:
+                raise ValueError(f"source build download_url is required for {source_id}")
+        elif download_url is not None:
+            raise ValueError(f"source build download_url must be null for {source_id}")
+        maximum_bytes = row.get("maximum_bytes")
+        if (
+            isinstance(maximum_bytes, bool)
+            or not isinstance(maximum_bytes, int)
+            or maximum_bytes < 1
+        ):
+            raise ValueError(f"invalid source build maximum_bytes for {source_id}")
+        notes = row.get("notes")
+        if not isinstance(notes, str) or not notes:
+            raise ValueError(f"source build notes are required for {source_id}")
 
 
 if __name__ == "__main__":
