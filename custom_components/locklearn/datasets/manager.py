@@ -142,6 +142,28 @@ class DatasetInstallResult:
     package_path: Path
 
 
+@dataclass(frozen=True, slots=True)
+class BundledDataset:
+    """One signed artifact physically shipped inside the HACS integration."""
+
+    dataset_id: str
+    version: str
+    path: Path
+    sha256: str
+    size: int
+
+    def __post_init__(self) -> None:
+        if not self.dataset_id or not self.version:
+            raise DatasetManagerError("bundled dataset identity fields must be non-empty")
+        if (
+            len(self.sha256) != 64
+            or any(character not in "0123456789abcdef" for character in self.sha256)
+        ):
+            raise DatasetManagerError("bundled dataset sha256 must be lowercase SHA-256")
+        if self.size <= 0:
+            raise DatasetManagerError("bundled dataset size must be positive")
+
+
 class DatasetTransport(Protocol):
     """Network boundary injected into DatasetManager for HA/runtime tests."""
 
@@ -315,10 +337,6 @@ class DatasetManager:
 
             self._downloads_root.mkdir(parents=True, exist_ok=True)
             download = self._downloads_root / f"{uuid.uuid4().hex}.zip"
-            extracted = self._downloads_root / f"{uuid.uuid4().hex}.db"
-            candidate = self._storage.paths.content_staging_dir / (
-                f"content-{uuid.uuid4().hex}.next.db"
-            )
             try:
                 actual_sha = await self._transport.async_download(
                     release.artifact_url,
@@ -329,52 +347,11 @@ class DatasetManager:
                     raise DatasetInstallError("downloaded dataset artifact checksum does not match")
                 if download.stat().st_size != release.artifact_size:
                     raise DatasetInstallError("downloaded dataset artifact size does not match")
-                validated = await asyncio.to_thread(
-                    validate_dataset_package,
+                result = await self._async_install_archive(
                     download,
-                    trust_store=self._trust_store,
-                    policy=self._policy,
-                    key_usage=KeyUsage.HISTORICAL,
+                    dataset_id=dataset_id,
+                    version=release.version,
                 )
-                self._validate_release_contract(validated, release)
-                if shutil.disk_usage(self._storage.paths.content_root).free < (
-                    validated.manifest.required_free_disk
-                ):
-                    raise DatasetInstallError("insufficient free disk for dataset installation")
-                await asyncio.to_thread(_extract_dataset_database, download, extracted)
-                package = await asyncio.to_thread(self._validator.validate_package, extracted)
-                _validate_package_matches_manifest(package, validated.manifest)
-                package_path = _package_cache_path(
-                    self._packages_root,
-                    dataset_id,
-                    validated.manifest.dataset_version,
-                )
-                await asyncio.to_thread(_store_package_atomically, extracted, package_path)
-
-                installed_rows = await self._storage.async_dataset_inventory()
-                current = next(
-                    (row for row in installed_rows if row["dataset_id"] == dataset_id),
-                    None,
-                )
-                if current is not None and str(current["version"]) == release.version:
-                    if str(current["canonical_content_hash"]) != package.canonical_content_hash:
-                        raise DatasetInstallError(
-                            "an installed dataset version cannot change canonical content"
-                        )
-                    raise DatasetInstallError("dataset version is already installed")
-                packages = await asyncio.to_thread(
-                    self._complete_package_set,
-                    installed_rows,
-                    dataset_id,
-                    package_path,
-                )
-                generation_id = f"dataset-update-{uuid.uuid4().hex}"
-                await self._storage.async_build_content_generation(
-                    packages,
-                    candidate,
-                    generation_id=generation_id,
-                )
-                metadata = await self._storage.async_activate_content_generation(candidate)
             except Exception as err:
                 self._errors[dataset_id] = str(err)
                 await self._report_issue(
@@ -385,18 +362,120 @@ class DatasetManager:
                 raise
             finally:
                 download.unlink(missing_ok=True)
-                extracted.unlink(missing_ok=True)
-                candidate.unlink(missing_ok=True)
 
             self._errors.pop(dataset_id, None)
             await self._clear_issue(f"dataset_install_{_issue_suffix(dataset_id)}")
+            return result
+
+    async def async_install_bundled(
+        self,
+        bundled: BundledDataset,
+    ) -> DatasetInstallResult | None:
+        """Install the signed first-run artifact without any network dependency."""
+        async with self._lock:
+            installed_rows = await self._storage.async_dataset_inventory()
+            if any(row["dataset_id"] == bundled.dataset_id for row in installed_rows):
+                return None
+            if not bundled.path.is_file():
+                raise DatasetInstallError("bundled dataset artifact is missing")
+            if bundled.path.stat().st_size != bundled.size:
+                raise DatasetInstallError("bundled dataset artifact size does not match")
+            actual_sha = await asyncio.to_thread(_sha256_file, bundled.path)
+            if actual_sha != bundled.sha256:
+                raise DatasetInstallError("bundled dataset artifact checksum does not match")
+            try:
+                result = await self._async_install_archive(
+                    bundled.path,
+                    dataset_id=bundled.dataset_id,
+                    version=bundled.version,
+                )
+            except Exception as err:
+                self._errors[bundled.dataset_id] = str(err)
+                await self._report_issue(
+                    f"dataset_install_{_issue_suffix(bundled.dataset_id)}",
+                    "dataset_install_failed",
+                    {"dataset_id": bundled.dataset_id},
+                )
+                raise
+            self._errors.pop(bundled.dataset_id, None)
+            await self._clear_issue(
+                f"dataset_install_{_issue_suffix(bundled.dataset_id)}"
+            )
+            return result
+
+    async def _async_install_archive(
+        self,
+        archive: Path,
+        *,
+        dataset_id: str,
+        version: str,
+    ) -> DatasetInstallResult:
+        extracted = self._downloads_root / f"{uuid.uuid4().hex}.db"
+        candidate = self._storage.paths.content_staging_dir / (
+            f"content-{uuid.uuid4().hex}.next.db"
+        )
+        self._downloads_root.mkdir(parents=True, exist_ok=True)
+        try:
+            validated = await asyncio.to_thread(
+                validate_dataset_package,
+                archive,
+                trust_store=self._trust_store,
+                policy=self._policy,
+                key_usage=KeyUsage.HISTORICAL,
+            )
+            self._validate_manifest_contract(
+                validated.manifest,
+                dataset_id=dataset_id,
+                version=version,
+            )
+            if shutil.disk_usage(self._storage.paths.content_root).free < (
+                validated.manifest.required_free_disk
+            ):
+                raise DatasetInstallError("insufficient free disk for dataset installation")
+            await asyncio.to_thread(_extract_dataset_database, archive, extracted)
+            package = await asyncio.to_thread(self._validator.validate_package, extracted)
+            _validate_package_matches_manifest(package, validated.manifest)
+            package_path = _package_cache_path(
+                self._packages_root,
+                dataset_id,
+                validated.manifest.dataset_version,
+            )
+            await asyncio.to_thread(_store_package_atomically, extracted, package_path)
+
+            installed_rows = await self._storage.async_dataset_inventory()
+            current = next(
+                (row for row in installed_rows if row["dataset_id"] == dataset_id),
+                None,
+            )
+            if current is not None and str(current["version"]) == version:
+                if str(current["canonical_content_hash"]) != package.canonical_content_hash:
+                    raise DatasetInstallError(
+                        "an installed dataset version cannot change canonical content"
+                    )
+                raise DatasetInstallError("dataset version is already installed")
+            packages = await asyncio.to_thread(
+                self._complete_package_set,
+                installed_rows,
+                dataset_id,
+                package_path,
+            )
+            generation_id = f"dataset-update-{uuid.uuid4().hex}"
+            await self._storage.async_build_content_generation(
+                packages,
+                candidate,
+                generation_id=generation_id,
+            )
+            metadata = await self._storage.async_activate_content_generation(candidate)
             return DatasetInstallResult(
                 dataset_id=dataset_id,
-                version=release.version,
+                version=version,
                 generation_id=metadata.generation_id,
                 previous_generation_id=metadata.parent_generation_id,
                 package_path=package_path,
             )
+        finally:
+            extracted.unlink(missing_ok=True)
+            candidate.unlink(missing_ok=True)
 
     async def async_rollback(self) -> str:
         """Reactivate the retained last-known-good content generation."""
@@ -467,16 +546,17 @@ class DatasetManager:
                 return release
         raise DatasetDiscoveryError(f"dataset version is not available: {version}")
 
-    def _validate_release_contract(
+    def _validate_manifest_contract(
         self,
-        validated: ValidatedDatasetPackage,
-        release: DatasetRelease,
+        manifest: DatasetManifest,
+        *,
+        dataset_id: str,
+        version: str,
     ) -> None:
-        manifest = validated.manifest
-        if manifest.dataset_id != release.dataset_id:
-            raise DatasetInstallError("signed manifest dataset_id does not match release")
-        if manifest.dataset_version != release.version:
-            raise DatasetInstallError("signed manifest dataset_version does not match release")
+        if manifest.dataset_id != dataset_id:
+            raise DatasetInstallError("signed manifest dataset_id does not match expected dataset")
+        if manifest.dataset_version != version:
+            raise DatasetInstallError("signed manifest dataset_version does not match expected version")
         if manifest.content_schema_version != CONTENT_SCHEMA_VERSION:
             raise DatasetInstallError("dataset content schema is not supported")
         if AwesomeVersion(manifest.minimum_locklearn_version) > AwesomeVersion(INTEGRATION_VERSION):
@@ -594,6 +674,43 @@ def load_runtime_dataset_definitions(
                 ),
             )
         )
+    return tuple(result)
+
+
+def load_runtime_bundled_datasets(
+    resources: Path | None = None,
+) -> tuple[BundledDataset, ...]:
+    """Load signed first-run artifacts physically bundled with the integration."""
+    root = resources or Path(__file__).resolve().parent / "resources"
+    document = _load_json_object(root / "bundled_datasets.json")
+    if document.get("schema_version") != 1:
+        raise DatasetManagerError("bundled dataset registry schema_version must be 1")
+    rows = document.get("datasets")
+    if not isinstance(rows, list):
+        raise DatasetManagerError("bundled dataset registry datasets must be an array")
+    integration_root = root.parent
+    result: list[BundledDataset] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise DatasetManagerError("bundled dataset definition must be an object")
+        relative = Path(_required_string(row, "path"))
+        if relative.is_absolute() or ".." in relative.parts:
+            raise DatasetManagerError("bundled dataset path must stay inside the integration")
+        artifact = (integration_root / relative).resolve()
+        if integration_root.resolve() not in artifact.parents:
+            raise DatasetManagerError("bundled dataset path escapes the integration")
+        result.append(
+            BundledDataset(
+                dataset_id=_required_string(row, "dataset_id"),
+                version=_required_string(row, "version"),
+                path=artifact,
+                sha256=_required_string(row, "sha256"),
+                size=_required_int(row, "size"),
+            )
+        )
+    dataset_ids = [item.dataset_id for item in result]
+    if len(dataset_ids) != len(set(dataset_ids)):
+        raise DatasetManagerError("duplicate bundled dataset_id")
     return tuple(result)
 
 
@@ -806,6 +923,14 @@ def _store_package_atomically(source: Path, destination: Path) -> None:
         os.fsync(handle.fileno())
     os.replace(temporary, destination)
     os.chmod(destination, 0o444)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while chunk := stream.read(_STREAM_CHUNK_SIZE):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _cached_dataset_size(root: Path, dataset_id: str) -> int:
