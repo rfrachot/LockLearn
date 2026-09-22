@@ -2,9 +2,9 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11 and P2.1–P2.5 are complete. P1 is closed PASS and P2
-is in progress on `feat/p1-content-core`. P2.6 — Profiles/tracks WebSocket CRUD
-and errors — is implemented and awaiting the final P2 local quality gate.
+P0.1–P0.7, P1.1–P1.11 and P2.1–P2.6 are complete. P1 and P2 are closed PASS.
+P3 is in progress on `feat/p1-content-core`. P3.1 — ReviewEvent audit log and
+progress projection — is implemented and awaiting the local quality gate.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -529,3 +529,58 @@ Next required local gate:
 
 If PASS, close P2.6 and the P2 exit gate, then begin P3.1 ReviewEvent audit log
 and progress projection.
+
+
+## P2.6 / P2 closure
+
+Renaud's final local P2 gate reported:
+- Ruff format: only mechanical formatting diffs in websocket.py, tracks.py and
+  test_websocket_crud.py.
+- Ruff lint: PASS.
+- mypy: PASS, 86 source files.
+- resource registries: PASS.
+- pytest: PASS, 224 tests in 5.41 s.
+
+The exact Ruff-recommended formatting changes were applied. No semantic P2 code
+changed after the passing lint/type/resource/test gate. P2.6 and the complete P2
+exit gate are closed PASS.
+
+## P3.1 implementation pending verification
+
+P3.1 establishes ReviewEvent as the canonical append-only learning audit source
+without pulling P3.2/P3.3 state-transition policy into scope.
+
+New ReviewEvent persistence records:
+- exact profile/track/LearningItem/prompt facet/answer facet/card_key identity;
+- mode, question type, result, hint/retrieval flags and signal quality;
+- policy_version, dataset_generation and normalization_version;
+- complete pre_state_snapshot and post_state_snapshot;
+- independent presentation_to_answer_ms and delivery_to_action_ms;
+- optional session/notification linkage;
+- created_at_utc plus historical local_date/timezone_name/utc_offset_minutes.
+
+ReviewEvent append and progress post-state materialization share one SQLite
+writer transaction. Snapshot identity must match the event before persistence.
+Progress remains keyed by Profile + Track + CardDefinition.
+
+Integrity rebuild can clear a selected progress scope and restore the latest
+historical post-state snapshot per card in stable created_at_utc/id order. This
+is a historical integrity rebuild, not an algorithmic recompute under a newer
+ReviewPolicy; that distinction remains P3.12 scope.
+
+The ReviewEvent service derives historical local date/offset from the Profile
+timezone at event time. Notification delivery latency is stored independently
+and never substituted for cognitive answer latency.
+
+ADR-0022 records the audit/projection boundary. New tests in
+tests/backend/test_review_events.py cover atomic materialization, latency
+separation, version metadata, historical timezone fields and progress rebuild.
+
+Next required local gate:
+- python3 -m ruff format --check .
+- python3 -m ruff check .
+- python3 -m mypy custom_components datasets tests
+- python3 datasets/tools/validate_resources.py
+- python3 -m pytest -q --tb=short
+
+If PASS, close P3.1 and begin P3.2 introduction and learning-step state machine.
