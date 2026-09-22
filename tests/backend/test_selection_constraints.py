@@ -61,6 +61,7 @@ class _FakeSelectionRepository:
 
 def _context() -> dict[str, Any]:
     return {
+        "selected": True,
         "prerequisite_card_keys": (),
         "unlock_conditions": (),
         "prerequisite_progress": {},
