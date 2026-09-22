@@ -310,12 +310,16 @@ class DatasetManager:
                 artifact_url.scheme != "https"
                 or artifact_url.hostname not in definition.artifact_hosts
             ):
-                raise DatasetInstallError("dataset artifact URL is outside the trusted host allowlist")
+                raise DatasetInstallError(
+                    "dataset artifact URL is outside the trusted host allowlist"
+                )
 
             self._downloads_root.mkdir(parents=True, exist_ok=True)
             download = self._downloads_root / f"{uuid.uuid4().hex}.zip"
             extracted = self._downloads_root / f"{uuid.uuid4().hex}.db"
-            candidate = self._storage.paths.content_staging_dir / f"content-{uuid.uuid4().hex}.next.db"
+            candidate = self._storage.paths.content_staging_dir / (
+                f"content-{uuid.uuid4().hex}.next.db"
+            )
             try:
                 actual_sha = await self._transport.async_download(
                     release.artifact_url,
