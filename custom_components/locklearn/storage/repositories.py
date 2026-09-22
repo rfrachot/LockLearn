@@ -228,9 +228,7 @@ class ProfilesRepository:
 
         return await self._storage._async_reader(read)
 
-    async def async_get_visible(
-        self, profile_id: str, ha_user_id: str
-    ) -> dict[str, Any] | None:
+    async def async_get_visible(self, profile_id: str, ha_user_id: str) -> dict[str, Any] | None:
         def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
             row = connection.execute(
                 """SELECT p.profile_id, p.name, p.preset, p.timezone, p.status,
@@ -246,9 +244,7 @@ class ProfilesRepository:
 
         return await self._storage._async_reader(read)
 
-    async def async_set_member_role_preserving_owner(
-        self, member: ProfileMemberRecord
-    ) -> bool:
+    async def async_set_member_role_preserving_owner(self, member: ProfileMemberRecord) -> bool:
         """Upsert a member and atomically refuse demotion of the final owner."""
 
         def write(connection: sqlite3.Connection) -> bool:
@@ -290,9 +286,7 @@ class ProfilesRepository:
 
         return await self._storage._async_writer(write)
 
-    async def async_delete_member_preserving_owner(
-        self, profile_id: str, ha_user_id: str
-    ) -> str:
+    async def async_delete_member_preserving_owner(self, profile_id: str, ha_user_id: str) -> str:
         """Delete a member atomically, returning deleted/missing/last_owner."""
 
         def write(connection: sqlite3.Connection) -> str:
