@@ -90,3 +90,21 @@ fallback license for LockLearn editorial content or third-party datasets.
 Exact source snapshots and per-object provenance retain the source record,
 author/language when required, whether LockLearn modified the source material,
 and attribution text needed for later Sources & Licences UI.
+
+
+## Public Asset license boundary
+
+P1.11 treats signed dataset media as its own license scope:
+
+```text
+license_scope = asset
+```
+
+Every public Asset carries an explicit `license_id`, attribution text and
+Asset-level provenance back to the exact source snapshot. The signed manifest
+binds the media bytes by path, size and SHA-256.
+
+Public dataset Assets are separate from future private user media and
+export/import attachments. Private/export media must not inherit an Asset
+license merely because it is served by LockLearn, and it must not be inserted
+into the signed public `assets_metadata` namespace.
