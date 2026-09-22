@@ -5,8 +5,8 @@ from __future__ import annotations
 import base64
 import sqlite3
 import zipfile
-from datetime import UTC, datetime, timedelta
 from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
