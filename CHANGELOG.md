@@ -5,6 +5,14 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P3.6 deterministic panel quiz engine with 4–6 option MCQ, grammar cloze-MCQ,
+  explicit IDK, answer-position balancing and deterministic example rotation.
+- Safe distractor filtering for same native concept, accepted normalized answers,
+  explicit synonyms, sibling answers and unstable confusables, with
+  presentation-index resampling instead of corpus-wide random SQL.
+- Immediate corrective/contrastive feedback outside exams plus reportable
+  question metadata.
+- ADR-0027 documenting the quiz/distractor boundary and indexed-pool contract.
 - P3.5 deterministic selection constraints for prerequisite unlocks, new/review
   sibling burial and PackVersion-owned confusable introduction spacing (PASS).
 - Track-scoped candidate validation plus machine-readable eligibility reasons and
