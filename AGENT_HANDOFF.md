@@ -2,9 +2,9 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.3 are complete. P1 and P2 are
-closed PASS. P3 is in progress on `feat/p1-content-core`. P3.4 — verified
-retrieval gate and signal weighting — is implemented and awaiting the local gate.
+P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.4 are complete. P1 and P2 are
+closed PASS. P3 is in progress on `feat/p1-content-core`. P3.5 — sibling burial,
+prerequisites and confusable introduction spacing — is implemented and awaiting the local gate.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -766,3 +766,65 @@ Next required local gate:
 
 If PASS, close P3.4 and begin P3.5 sibling burial, prerequisites and confusable
 introduction spacing.
+
+
+## P3.4 closure
+
+Renaud's local P3.4 gate reported:
+- Ruff format: only two mechanical formatting diffs in review_policy.py and
+  signals.py.
+- Ruff lint: PASS.
+- mypy: PASS, 94 source files.
+- resource registries: PASS.
+- pytest: PASS, 250 tests in 5.40 s.
+
+The exact Ruff-recommended formatting changes were applied. No semantic P3.4
+behavior changed after the passing lint/type/resource/test gate. P3.4 is closed
+PASS.
+
+## P3.5 implementation pending verification
+
+P3.5 introduces SelectionConstraintService as an eligibility layer before the
+later P3.9/P4 ranking schedulers.
+
+For new-card candidates, the service evaluates the Track-pinned PackVersion's
+prerequisite_card_keys and unlock_when thresholds against same-Profile/same-Track
+progress. Supported generic metrics are verified_correct_count, mastery and box.
+If a prerequisite is declared without unlock_when, the conservative default is
+one prior exposure (seen_count >= 1).
+
+Sibling CardDefinitions are identified by shared LearningItem identity. The
+latest sibling ReviewEvent controls configurable burial windows:
+- new sibling gap: 1440 minutes by default;
+- review sibling gap: 240 minutes by default.
+
+Learning/relearning short-step cards are deliberately exempt from sibling burial
+so P3.5 cannot starve P3.2 same-day obligations.
+
+ConfusableGroup metadata remains PackVersion-owned. A new LearningItem is blocked
+until min_intro_gap_days has elapsed since the latest first introduction of any
+other item in the same group. Confusable distractors are exposed as eligible only
+for review-state cards; P3.6 still owns actual distractor generation.
+
+The repository also verifies that the candidate card is enabled in the Track's
+card rules before evaluating constraints, preventing arbitrary Pack cards from
+being treated as selectable.
+
+Selection decisions expose deterministic machine-readable reasons and the latest
+blocked_until_utc timestamp. All time comparisons use the injected Clock.
+
+ADR-0026 records the eligibility/ranking boundary and the bare-prerequisite
+semantics. New tests in tests/backend/test_selection_constraints.py cover
+thresholds, bare prerequisites, sibling gaps, learning/relearning exemptions,
+Track overrides, confusable spacing, distractor stability, selected-card
+validation and content-backed repository reads.
+
+Next required local gate:
+- python3 -m ruff format --check .
+- python3 -m ruff check .
+- python3 -m mypy custom_components datasets tests
+- python3 datasets/tools/validate_resources.py
+- python3 -m pytest -q --tb=short
+
+If PASS, close P3.5 and begin P3.6 quiz engine, distractors and corrective
+feedback.
