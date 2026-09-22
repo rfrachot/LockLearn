@@ -231,11 +231,7 @@ class SignalPolicy:
         target_box = current_box + 1
         needs_verified_gate = target_box > self._verified_gate_box
         verified_since_box = int(snapshot.get("verified_success_since_box", 0)) > 0
-        gate_satisfied = (
-            not needs_verified_gate
-            or decision.gate_eligible
-            or verified_since_box
-        )
+        gate_satisfied = not needs_verified_gate or decision.gate_eligible or verified_since_box
         promote_box = gate_satisfied
 
         transition = self._review_policy.review_success(
