@@ -206,9 +206,7 @@ class ContentBlock:
             expected_type_name = "MediaReference"
 
         if not valid_payload:
-            raise ContentBlockError(
-                f"{self.kind.value} block payload must be {expected_type_name}"
-            )
+            raise ContentBlockError(f"{self.kind.value} block payload must be {expected_type_name}")
 
         if self.mask_strategy in {
             MaskStrategy.BLANK_TERM,
