@@ -338,7 +338,7 @@ def normalize_source(
     policy.validate_provenance_fields(source.source_id, set(adapter.provenance_fields))
 
     raw_sha = _aggregate_source_sha(source.files)
-    snapshot_id = make_stable_id("locklearn", "snapshot", source.source_id, raw_sha[:32])
+    snapshot_id = make_stable_id("locklearn", "snapshot", source.source_id, raw_sha)
     normalized_path = workspace / "normalized" / f"{_safe_name(source.source_id)}.jsonl"
     normalized_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -659,8 +659,10 @@ def _aggregate_source_sha(files: Iterable[SourceFileInput]) -> str:
     if len(ordered) == 1:
         return _sha256_file(ordered[0].path)
     digest = hashlib.sha256()
-    for item in ordered:
+    for item in sorted(ordered, key=lambda value: (value.source_url, value.path.name)):
         file_sha = _sha256_file(item.path)
+        digest.update(item.source_url.encode("utf-8"))
+        digest.update(b"\x1f")
         digest.update(item.path.name.encode("utf-8"))
         digest.update(b"\x1f")
         digest.update(file_sha.encode("ascii"))
