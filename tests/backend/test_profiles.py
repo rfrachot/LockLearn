@@ -51,6 +51,7 @@ async def test_personal_profile_maps_to_ha_user_without_using_ha_id_as_profile_i
         assert profile["profile_id"] == "profile-personal"
         assert profile["profile_id"] != "ha-user-1"
         assert profile["preset"] == "standard"
+        assert profile["role"] == "owner"
         assert profile["settings"]["max_new_per_day_cards"] == 8
         assert profile["settings"]["daily_push_budget"] == 6
 
@@ -70,6 +71,7 @@ async def test_personal_profile_maps_to_ha_user_without_using_ha_id_as_profile_i
             timezone="Europe/Paris",
         )
         assert second["profile_id"] == "profile-personal"
+        assert second["role"] == "owner"
     finally:
         await storage.async_close()
 
