@@ -8,6 +8,7 @@ import sqlite3
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -174,7 +175,7 @@ def _build(tmp_path: Path):
 
 
 def test_asset_model_rejects_unsafe_paths_mime_and_dimensions() -> None:
-    common = {
+    common: dict[str, Any] = {
         "asset_id": _ASSET_ID,
         "dataset_id": _DATASET_ID,
         "sha256": "0" * 64,
