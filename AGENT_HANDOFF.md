@@ -2,8 +2,8 @@
 
 ## Current state
 
-P0.1–P0.7 and P1.1–P1.10 are complete. P1 remains in progress on
-`feat/p1-content-core`; P1.11 is the next work package.
+P0.1–P0.7 and P1.1–P1.11 are complete. P1 is closed PASS on
+`feat/p1-content-core`. The next phase is P2 — Profiles, Tracks and ACL.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -112,8 +112,9 @@ ADR-0015 records the offline ETL/release boundary.
   tables belongs with the released `state.db` schema; P1.6 prevents incomplete
   item/facet mappings from activating.
 
-P1.6, P1.7, P1.8, P1.9 and P1.10 are closed PASS. The signed-starter P1 exit
-gate is satisfied. Next concrete action: implement P1.11 Asset schema.
+P1.6–P1.11 are closed PASS. The signed-starter P1 exit gate is satisfied and
+the full P1 content/data-supply-chain phase is complete. Next concrete action:
+begin P2.1 state.db foundation and application repositories.
 
 
 ## P1.9 closure
@@ -187,3 +188,48 @@ Final P1.10 verification:
 
 P1.10 is closed PASS and the signed-starter P1 exit gate is satisfied. Next
 concrete action: implement P1.11 Asset schema.
+
+
+## P1.11 closure
+
+P1.11 completes the media-ready Asset contract without pulling renderer work
+into the V1 critical path.
+
+Content schema v2 now represents signed public dataset media through
+`assets_metadata` and `facet_assets`. Asset metadata includes stable
+`asset_id`, dataset ownership, image/audio kind, normalized package-relative
+path, exact SHA-256 and byte size, MIME type, image dimensions where required,
+asset-scope license and attribution.
+
+The build pipeline accepts explicit BuildAssetInput records, derives hashes and
+sizes from the exact bytes, adds media members under `assets/`, records Asset
+provenance/license metadata in SQLite and includes every asset in the signed
+manifest. Package validation binds manifest Asset payloads back to
+`assets_metadata` exactly.
+
+Facet kinds and ContentBlock kinds reserve `image` and `audio` semantics now.
+Media ContentBlocks use the closed payload shape `{"asset_id": ...}`; validators
+require same-dataset, matching-kind Asset references. No renderer was added.
+
+Runtime DatasetManager extracts public media into a reconstructible content
+cache and `async_resolve_public_asset()` rechecks size and SHA-256 before
+returning a local path. This resolver only exposes assets present in the active
+signed public content generation. Private user uploads, annotations and
+export/import attachments remain a separate future state/private-storage and
+authenticated-serving boundary.
+
+Content schema v1 compatibility is retained for the already-signed asset-free
+Japanese Starter 1.0.0; new content builds use schema v2.
+
+Final P1.11 GitHub technical gate on head
+`4511d40d5c2318a9a177c5aa366316cca8c80da6`:
+
+- `python -m ruff format --check .`: pass, 145 files already formatted.
+- `python -m ruff check .`: pass.
+- `python -m mypy custom_components datasets tests`: pass, 75 source files.
+- `python datasets/tools/validate_resources.py`: pass.
+- `python -m pytest -q --tb=short`: pass, 202 tests in 10.24 s.
+
+ADR-0018 records the public dataset Asset/private-export media boundary.
+
+P1 is now complete. Next concrete action: P2.1.
