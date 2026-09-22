@@ -2,9 +2,9 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1 are complete. P1 and P2 are closed
-PASS. P3 is in progress on `feat/p1-content-core`. P3.2 — Introduction and
-learning-step state machine — is implemented and awaiting the local quality gate.
+P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.2 are complete. P1 and P2 are
+closed PASS. P3 is in progress on `feat/p1-content-core`. P3.3 — ReviewPolicy
+V1 core — is implemented and awaiting the local quality gate.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -626,3 +626,78 @@ Next required local gate:
 - python3 -m pytest -q --tb=short
 
 If PASS, close P3.2 and begin P3.3 ReviewPolicy V1 core.
+
+
+## P3.2 closure
+
+Renaud's local P3.2 gate reported:
+- Ruff format: only two mechanical formatting diffs in core/learning.py and
+  test_learning_state_machine.py.
+- Ruff lint: PASS.
+- mypy: PASS, 90 source files.
+- resource registries: PASS.
+- pytest: PASS, 231 tests in 5.48 s.
+
+The exact Ruff-recommended formatting changes were applied. No semantic P3.2
+behavior changed after the passing lint/type/resource/test gate. P3.2 is closed
+PASS.
+
+## P3.3 implementation pending verification
+
+P3.3 adds ReviewPolicyV1 as the deterministic long-review policy boundary.
+
+The policy uses V1 boxes and nominal intervals:
+- box 1: 8 h;
+- box 2: 1 day;
+- box 3: 3 days;
+- box 4: 7 days;
+- box 5: 14 days;
+- box 6: 30 days;
+- box 7: 60 days.
+
+Successful long reviews advance by at most one box. The next interval combines
+the target-box base interval, bounded difficulty_factor and deterministic
+SHA-256-derived jitter. The jitter seed uses card_key + policy_version +
+target_box + historical verified-attempt ordinal, so identical state/history
+produces the same due date.
+
+Elapsed review time is computed from the real last_verified_at_utc timestamp.
+For remembered overdue cards, the effective next interval has a hard floor at
+the demonstrated elapsed retention; deterministic jitter cannot shorten that
+floor.
+
+difficulty_factor is bounded to [0.6, 2.0] and follows the V1 factors:
+- verified failure: x0.85;
+- verified success without hint: x1.05;
+- success with hint: no increase.
+
+Long-review failure applies relapse_penalty=2 boxes, increments verified-wrong
+state, resets the long correct streak and enters the P3.2 relearning sequence
+rather than resetting every card to box zero.
+
+Completing P3.2 short steps is consumed through an explicit graduation method.
+Learning enters long review at box 1; relearning preserves its demoted box floor.
+The short-step streak is reset on graduation so it cannot leak into the long
+review streak.
+
+Mastery is a derived non-terminal label based on box, verified accuracy and time
+since last verified retrieval. It decays with time and never changes scheduling
+state by itself.
+
+All policy time comes from an injected Clock. ReviewPolicy contains no direct
+datetime.now() call. ReviewPolicyV1 is exposed from the runtime for later
+session/signal integration.
+
+ADR-0024 records this long-review policy boundary. New tests in
+tests/backend/test_review_policy.py cover deterministic scheduling, hint
+behavior, bounded difficulty, relapse/relearning, overdue-retention floors,
+mastery decay, short-step graduation and invalid policy/state input.
+
+Next required local gate:
+- python3 -m ruff format --check .
+- python3 -m ruff check .
+- python3 -m mypy custom_components datasets tests
+- python3 datasets/tools/validate_resources.py
+- python3 -m pytest -q --tb=short
+
+If PASS, close P3.3 and begin P3.4 verified-retrieval gate and signal weighting.
