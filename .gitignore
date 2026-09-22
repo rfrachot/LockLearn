@@ -39,3 +39,5 @@ datasets/staging/
 # OS
 .DS_Store
 Thumbs.db
+datasets/dist/
+datasets/work/
