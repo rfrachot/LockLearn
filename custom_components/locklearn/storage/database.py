@@ -531,14 +531,24 @@ class SQLiteStorage:
 
         def mutate(connection: sqlite3.Connection) -> None:
             completed_at = now if status == "completed" else None
+            allowed_source = {
+                "paused": ("active",),
+                "active": ("paused",),
+                "completed": ("active", "paused"),
+            }[status]
+            placeholders = ",".join("?" for _ in allowed_source)
             try:
                 connection.execute("BEGIN IMMEDIATE")
                 cursor = connection.execute(
-                    """UPDATE sessions
-                       SET status = ?, version = version + 1,
-                           last_activity_at_utc = ?,
-                           completed_at_utc = CASE WHEN ? = 'completed' THEN ? ELSE completed_at_utc END
-                       WHERE id = ? AND version = ? AND status <> 'completed'""",
+                    f"""UPDATE sessions
+                        SET status = ?, version = version + 1,
+                            last_activity_at_utc = ?,
+                            completed_at_utc = CASE
+                                WHEN ? = 'completed' THEN ?
+                                ELSE completed_at_utc
+                            END
+                        WHERE id = ? AND version = ?
+                          AND status IN ({placeholders})""",
                     (
                         status,
                         now,
@@ -546,6 +556,7 @@ class SQLiteStorage:
                         completed_at,
                         session_id,
                         expected_version,
+                        *allowed_source,
                     ),
                 )
                 if cursor.rowcount != 1:
