@@ -1839,7 +1839,7 @@ def _is_pre_p1_7_content_database(path: Path) -> bool:
         return False
 
     return (
-        schema_row == (CONTENT_SCHEMA_VERSION,)
+        schema_row == (1,)
         and generation_columns
         == [
             "singleton",
