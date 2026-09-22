@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 RESOURCES = ROOT / "datasets" / "resources"
+
+_SCRIPT_RE = re.compile(r"^[A-Z][a-z]{3}$")
+_POLICY_ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_ALLOWED_UNICODE_NORMALIZATION = {"none", "NFC", "NFKC"}
+_ALLOWED_CASE_MODES = {"preserve", "casefold"}
+_ALLOWED_WHITESPACE_MODES = {"preserve", "trim", "collapse"}
+_ALLOWED_PUNCTUATION_MODES = {"preserve", "remove"}
 
 
 def _load(name: str) -> dict[str, Any]:
@@ -22,6 +30,31 @@ def validate() -> None:
     languages = _load("languages.json")
     licenses = _load("licenses.json")
     sources = _load("sources.json")
+    normalization_policies = _load("normalization_policies.json")
+
+    policy_rows = normalization_policies.get("policies", [])
+    policy_ids = [row["id"] for row in policy_rows]
+    if len(policy_ids) != len(set(policy_ids)):
+        raise ValueError("duplicate normalization policy IDs")
+    for row in policy_rows:
+        policy_id = row["id"]
+        if not _POLICY_ID_RE.fullmatch(policy_id):
+            raise ValueError(f"invalid normalization policy ID: {policy_id}")
+        if row.get("normalization_version", 0) < 1:
+            raise ValueError(f"invalid normalization_version for {policy_id}")
+        if row.get("unicode_normalization") not in _ALLOWED_UNICODE_NORMALIZATION:
+            raise ValueError(f"invalid Unicode normalization for {policy_id}")
+        if row.get("case_mode") not in _ALLOWED_CASE_MODES:
+            raise ValueError(f"invalid case mode for {policy_id}")
+        if row.get("whitespace_mode") not in _ALLOWED_WHITESPACE_MODES:
+            raise ValueError(f"invalid whitespace mode for {policy_id}")
+        if row.get("punctuation_mode") not in _ALLOWED_PUNCTUATION_MODES:
+            raise ValueError(f"invalid punctuation mode for {policy_id}")
+        scripts = row.get("allowed_scripts", [])
+        if len(scripts) != len(set(scripts)):
+            raise ValueError(f"duplicate scripts for normalization policy {policy_id}")
+        if any(not _SCRIPT_RE.fullmatch(script) for script in scripts):
+            raise ValueError(f"invalid ISO 15924 script in normalization policy {policy_id}")
 
     language_rows = languages.get("languages", [])
     language_tags = [row["tag"] for row in language_rows]
@@ -31,6 +64,16 @@ def validate() -> None:
         raise ValueError("V1 UI must include en and fr")
     if "ja" not in language_tags:
         raise ValueError("Japanese showcase language metadata is required")
+    for row in language_rows:
+        if row["normalizer"] not in policy_ids:
+            raise ValueError(
+                f"unknown normalizer {row['normalizer']} for language {row['tag']}"
+            )
+        scripts = row.get("scripts", [])
+        if len(scripts) != len(set(scripts)):
+            raise ValueError(f"duplicate scripts for language {row['tag']}")
+        if any(not _SCRIPT_RE.fullmatch(script) for script in scripts):
+            raise ValueError(f"invalid ISO 15924 script for language {row['tag']}")
 
     license_rows = licenses.get("licenses", [])
     license_ids = {row["id"] for row in license_rows}
