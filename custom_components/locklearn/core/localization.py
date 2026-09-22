@@ -7,6 +7,7 @@ import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+
 _LANGUAGE_RE = re.compile(r"^[A-Za-z]{2,8}$")
 _EXTLANG_RE = re.compile(r"^[A-Za-z]{3}$")
 _SCRIPT_RE = re.compile(r"^[A-Za-z]{4}$")
