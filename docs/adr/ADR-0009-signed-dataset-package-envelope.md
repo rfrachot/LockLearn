@@ -21,7 +21,13 @@ ones actually distributed.
 
 ### Versioned signed envelope
 
-V1 is a ZIP with exactly one `manifest.json`, `dataset.db` and raw 64-byte
+The pre-release P1.2 envelope started as manifest version 1. P1.8 completes
+SourceSnapshot provenance before any public dataset artifact exists, so the
+first publishable contract is manifest version 2. Version 2 adds signed
+`upstream_date` and `adapter_version` fields to each source snapshot rather
+than relying on CI logs for those facts.
+
+V1 distribution is a ZIP with exactly one `manifest.json`, `dataset.db` and raw 64-byte
 `SIGNATURE.ed25519`, plus explicitly declared files below optional `assets/`
 and `LICENSES/`. `manifest_version`, `content_schema_version` and
 `dataset_version` are independent version domains.
@@ -97,8 +103,9 @@ offline P1.8 concern.
   checked for accidental corruption.
 - Key rotation preserves legitimate historical restore while revocation remains
   an unconditional kill switch.
-- Strict V1 parsing intentionally rejects unknown critical fields; format
-  expansion requires a new `manifest_version`.
+- Strict parsing intentionally rejects unknown critical fields; format expansion
+  requires a new `manifest_version`. Manifest v1 was never publicly released
+  and is not retained as a compatibility format.
 - The absolute archive ceilings are security controls, separate from the
   recommended 150 MiB official-dataset budget.
 - P1.2 validates but does not install, download, merge, activate or roll back a
