@@ -331,7 +331,6 @@ async def test_selection_constraint_validation_is_explicit() -> None:
         )
 
 
-
 @pytest.mark.asyncio
 async def test_repository_reads_pack_prerequisites_and_confusable_progress(
     tmp_path: Path,
