@@ -345,7 +345,9 @@ def normalize_source(
     normalized_digest = hashlib.sha256()
     record_count = 0
     with normalized_path.open("w", encoding="utf-8", newline="\n") as stream:
-        for raw_file in source.files:
+        for raw_file in sorted(
+            source.files, key=lambda item: (item.source_url, item.path.name)
+        ):
             if not raw_file.path.is_file():
                 raise DatasetBuildError(f"source input file does not exist: {raw_file.path}")
             for record in adapter.normalize(raw_file.path):
