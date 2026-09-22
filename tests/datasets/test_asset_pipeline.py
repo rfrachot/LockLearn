@@ -18,7 +18,6 @@ from custom_components.locklearn.core.assets import Asset, AssetKind, AssetModel
 from custom_components.locklearn.core.content import (
     derive_card_definition_id,
     derive_card_key,
-    make_stable_id,
 )
 from custom_components.locklearn.datasets import (
     KeyStatus,
@@ -231,7 +230,7 @@ def test_asset_model_enforces_media_shape_and_safe_paths() -> None:
     )
     assert asset.width == 320
 
-    with pytest.raises(AssetModelError, match="traversal|normalized"):
+    with pytest.raises(AssetModelError, match=r"traversal|normalized"):
         Asset(
             asset_id=_ASSET_ID,
             dataset_id=_DATASET_ID,
@@ -346,7 +345,7 @@ async def test_asset_install_extracts_cache_and_resolves_only_active_asset(
 
 
 def test_v2_validator_rejects_media_block_with_missing_asset(tmp_path: Path) -> None:
-    result, _image = _build_asset_package(tmp_path)
+    _result, _image = _build_asset_package(tmp_path)
     database = tmp_path / "workspace" / "dataset.db"
     with sqlite3.connect(database) as connection:
         connection.execute(
