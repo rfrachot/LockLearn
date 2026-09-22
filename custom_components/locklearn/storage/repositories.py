@@ -1202,9 +1202,10 @@ class TracksRepository:
                     "mastery": float(row[2]),
                     "box": int(row[3]),
                     "verified_correct_count": int(row[4]),
+                    "seen_count": int(row[5]),
                 }
                 for row in connection.execute(
-                    """SELECT card_key, state, mastery, box, verified_correct_count
+                    """SELECT card_key, state, mastery, box, verified_correct_count, seen_count
                        FROM progress
                        WHERE profile_id = ? AND track_id = ?
                          AND card_key IN (
