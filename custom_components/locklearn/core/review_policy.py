@@ -133,11 +133,7 @@ class ReviewPolicyV1:
             difficulty = self._clamp_difficulty(difficulty * 1.05)
 
         base_adjusted = DEFAULT_BOX_INTERVAL_DAYS[target_box] * difficulty
-        demonstrated_floor = (
-            base_adjusted
-            if elapsed is None
-            else min(max(base_adjusted, elapsed), base_adjusted * 2)
-        )
+        demonstrated_floor = base_adjusted if elapsed is None else max(base_adjusted, elapsed)
         jittered = self._jittered_interval(
             card_key=str(snapshot.get("card_key", "")),
             target_box=target_box,
