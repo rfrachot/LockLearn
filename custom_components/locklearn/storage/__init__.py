@@ -22,6 +22,7 @@ from .repositories import (
 )
 
 __all__ = [
+    "CardReference",
     "ContentActivationError",
     "ContentBuildResult",
     "ContentGenerationBuilder",
@@ -32,7 +33,6 @@ __all__ = [
     "ContentReferenceError",
     "ContentValidationError",
     "GenerationMetadata",
-    "CardReference",
     "ProfileRecord",
     "SQLiteStorage",
     "StateRepositories",
