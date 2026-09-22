@@ -107,7 +107,7 @@ def validate_dataset_package(
             _validate_membership(manifest, members)
             _verify_payloads(archive, manifest, members)
             policy.validate(manifest)
-            _verify_sqlite(archive, members[_DATABASE_PATH])
+            _verify_sqlite(archive, members[_DATABASE_PATH], manifest)
     except zipfile.BadZipFile as err:
         raise ArchiveStructureError("invalid or corrupt ZIP archive") from err
     except OSError as err:
@@ -265,7 +265,11 @@ def _stream_digest(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> tuple[str
     return digest.hexdigest(), size
 
 
-def _verify_sqlite(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> None:
+def _verify_sqlite(
+    archive: zipfile.ZipFile,
+    info: zipfile.ZipInfo,
+    manifest: DatasetManifest,
+) -> None:
     with tempfile.TemporaryDirectory(prefix="locklearn-dataset-") as temporary_directory:
         database_path = Path(temporary_directory) / _DATABASE_PATH
         try:
@@ -284,3 +288,26 @@ def _verify_sqlite(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> None:
             ) from err
         if rows != [("ok",)]:
             raise DatasetDatabaseError(f"dataset.db integrity_check failed: {rows!r}")
+
+        with sqlite3.connect(uri, uri=True) as connection:
+            version_row = connection.execute(
+                "SELECT version FROM schema_version WHERE singleton = 1"
+            ).fetchone()
+            if version_row is None:
+                raise DatasetDatabaseError("dataset.db has no content schema version")
+            if int(version_row[0]) >= 2:
+                declared_assets = {
+                    item.path: (item.size, item.sha256)
+                    for item in manifest.files
+                    if item.role.value == "asset"
+                }
+                database_assets = {
+                    str(path): (int(size), str(sha256))
+                    for path, size, sha256 in connection.execute(
+                        "SELECT path, byte_size, sha256 FROM assets_metadata"
+                    )
+                }
+                if database_assets != declared_assets:
+                    raise PayloadIntegrityError(
+                        "asset metadata does not match signed manifest asset payloads"
+                    )
