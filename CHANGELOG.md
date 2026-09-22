@@ -5,6 +5,12 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P3.8 persistent resumable sessions with stored strategy/settings, prepared
+  question state, immutable answer attempts and active content-generation pinning.
+- Optimistic session CAS across answer/pause/resume/complete/navigation-undo,
+  winner-only subscriptions and cross-client WebSocket resume under real Profile ACL.
+- ADR-0029 documenting the persistent-session source of truth, CAS token,
+  lifecycle transitions and the separation between navigation undo and P3.12 SRS undo.
 - P3.7 versioned panel free-text grading for exact, any_of and conservative
   script-gated fuzzy_normalized policies, with explicit correct/wrong/unrecognized
   outcomes and normalization-version propagation (PASS).
