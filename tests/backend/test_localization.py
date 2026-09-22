@@ -33,7 +33,7 @@ def test_bcp47_tags_are_canonicalized_without_losing_specificity() -> None:
         "fr_FR",
         "f",
         "fr-",
-        "fr-Latnn",
+        "fr-@bad",
         "en-US-u",
         "de-1901-1901",
     ],
