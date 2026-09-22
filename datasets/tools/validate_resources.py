@@ -34,6 +34,7 @@ def validate() -> None:
 
     policy_rows = normalization_policies.get("policies", [])
     policy_ids = [row["id"] for row in policy_rows]
+    policy_scripts: dict[str, set[str]] = {}
     if len(policy_ids) != len(set(policy_ids)):
         raise ValueError("duplicate normalization policy IDs")
     for row in policy_rows:
@@ -55,6 +56,7 @@ def validate() -> None:
             raise ValueError(f"duplicate scripts for normalization policy {policy_id}")
         if any(not _SCRIPT_RE.fullmatch(script) for script in scripts):
             raise ValueError(f"invalid ISO 15924 script in normalization policy {policy_id}")
+        policy_scripts[policy_id] = set(scripts)
 
     language_rows = languages.get("languages", [])
     language_tags = [row["tag"] for row in language_rows]
@@ -74,6 +76,11 @@ def validate() -> None:
             raise ValueError(f"duplicate scripts for language {row['tag']}")
         if any(not _SCRIPT_RE.fullmatch(script) for script in scripts):
             raise ValueError(f"invalid ISO 15924 script for language {row['tag']}")
+        allowed_scripts = policy_scripts[row["normalizer"]]
+        if allowed_scripts and not set(scripts).issubset(allowed_scripts):
+            raise ValueError(
+                f"language {row['tag']} declares scripts outside normalizer {row['normalizer']}"
+            )
 
     license_rows = licenses.get("licenses", [])
     license_ids = {row["id"] for row in license_rows}
