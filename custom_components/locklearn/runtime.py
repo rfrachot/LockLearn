@@ -16,6 +16,7 @@ from .core.planning import LearningPlanService
 from .core.profiles import ProfileService
 from .core.review_policy import ReviewPolicyV1
 from .core.reviews import ReviewEventService
+from .core.selection import SelectionConstraintService
 from .core.sessions import SessionService
 from .core.signals import SignalPolicy
 from .core.tracks import TrackService
@@ -44,6 +45,7 @@ class LockLearnRuntime:
     planning: LearningPlanService
     review_policy: ReviewPolicyV1
     signal_policy: SignalPolicy
+    selection: SelectionConstraintService
     reviews: ReviewEventService
     datasets: DatasetManager
 
@@ -107,6 +109,7 @@ class LockLearnRuntime:
                 ),
                 review_policy=review_policy,
                 signal_policy=SignalPolicy(review_policy),
+                selection=SelectionConstraintService(storage.repositories.tracks),
                 reviews=ReviewEventService(
                     storage.repositories.review_events,
                     storage.repositories.profiles,
