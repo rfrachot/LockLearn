@@ -634,6 +634,95 @@ class TracksRepository:
 
         return await self._storage._async_reader(read)
 
+    async def async_update_configured(
+        self,
+        *,
+        track: TrackRecord,
+        rules: tuple[TrackCardRuleRecord, ...],
+        weights: dict[str, float],
+    ) -> bool:
+        """Atomically replace mutable Track configuration."""
+        if any(rule.track_id != track.track_id for rule in rules):
+            raise ValueError("track card rule belongs to another track")
+        serialized = json.dumps(
+            track.settings or {},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> bool:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                cursor = connection.execute(
+                    """UPDATE tracks
+                       SET name = ?, source_language = ?, target_language = ?,
+                           status = ?, priority = ?, settings_json = ?,
+                           updated_at_utc = ?
+                       WHERE track_id = ?""",
+                    (
+                        track.name,
+                        track.source_language,
+                        track.target_language,
+                        track.status,
+                        track.priority,
+                        serialized,
+                        track.updated_at_utc,
+                        track.track_id,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    connection.rollback()
+                    return False
+                connection.execute(
+                    "DELETE FROM track_card_rules WHERE track_id = ?",
+                    (track.track_id,),
+                )
+                connection.executemany(
+                    """INSERT INTO track_card_rules(
+                           track_id, rule_id, rule_kind, card_key, prompt_facet_id,
+                           answer_facet_id, rule_json, enabled
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        (
+                            rule.track_id,
+                            rule.rule_id,
+                            rule.rule_kind,
+                            rule.card_key,
+                            rule.prompt_facet_id,
+                            rule.answer_facet_id,
+                            json.dumps(
+                                rule.rule or {},
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                                sort_keys=True,
+                            ),
+                            int(rule.enabled),
+                        )
+                        for rule in rules
+                    ),
+                )
+                connection.execute(
+                    "DELETE FROM track_content_weights WHERE track_id = ?",
+                    (track.track_id,),
+                )
+                connection.executemany(
+                    """INSERT INTO track_content_weights(track_id, content_type, weight)
+                       VALUES (?, ?, ?)""",
+                    (
+                        (track.track_id, content_type, weight)
+                        for content_type, weight in sorted(weights.items())
+                    ),
+                )
+                connection.commit()
+                return True
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        return await self._storage._async_writer(write)
+
     async def async_update_metadata(
         self,
         *,
