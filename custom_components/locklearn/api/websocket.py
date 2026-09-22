@@ -151,9 +151,7 @@ async def ws_bootstrap(
         return
     personal_profile: dict[str, Any] | None = None
     entries = hass.config_entries.async_entries(DOMAIN)
-    create_personal = bool(
-        entries and entries[0].data.get(CONF_CREATE_PERSONAL_PROFILE, False)
-    )
+    create_personal = bool(entries and entries[0].data.get(CONF_CREATE_PERSONAL_PROFILE, False))
     if create_personal:
         try:
             personal_profile = await runtime.profiles.async_ensure_personal_profile(
@@ -267,10 +265,8 @@ async def ws_profiles_update(
     except ProfileValidationError as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
-    profile["role"] = (
-        await runtime.storage.repositories.profiles.async_get_role(
-            profile_id, connection.user.id
-        )
+    profile["role"] = await runtime.storage.repositories.profiles.async_get_role(
+        profile_id, connection.user.id
     )
     connection.send_result(msg["id"], profile)
 
@@ -429,9 +425,7 @@ async def ws_tracks_create(
             priority=msg["priority"],
             content_weights=msg.get("content_weights"),
             explicit_card_keys=(
-                None
-                if "explicit_card_keys" not in msg
-                else tuple(msg["explicit_card_keys"])
+                None if "explicit_card_keys" not in msg else tuple(msg["explicit_card_keys"])
             ),
         )
     except ContentReferenceError as err:
@@ -484,9 +478,7 @@ async def ws_tracks_update(
             priority=msg.get("priority"),
             content_weights=msg.get("content_weights"),
             explicit_card_keys=(
-                None
-                if "explicit_card_keys" not in msg
-                else tuple(msg["explicit_card_keys"])
+                None if "explicit_card_keys" not in msg else tuple(msg["explicit_card_keys"])
             ),
         )
     except TrackValidationError as err:
