@@ -4,7 +4,7 @@
 
 P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.7 are complete. P1 and P2 are
 closed PASS. P3 is in progress on `feat/p3-sessions`; P3.8 — persistent sessions,
-CAS concurrency and cross-client resume — is implemented and awaiting the local gate.
+CAS concurrency and cross-client resume — has passed the local gate and now awaits a targeted real-HA qualification before P3.9.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -1034,3 +1034,18 @@ Next required local gate on feat/p3-sessions:
 - python3 -m mypy custom_components datasets tests
 - python3 datasets/tools/validate_resources.py
 - python3 -m pytest -q --tb=short
+
+
+## P3.8 local gate closure
+
+Renaud's local P3.8 gate is green after the final Ruff-only storage formatting fix:
+- Ruff format: one mechanical diff in storage/database.py, applied without semantic change.
+- Ruff lint: PASS.
+- mypy: PASS, 104 source files.
+- resource registries: PASS.
+- pytest: PASS, 280 tests in 7.24 s.
+
+P3.8 is considered LOCAL GATE PASS. Before beginning P3.9, run one targeted
+real-Home-Assistant qualification covering WebSocket reconnect/resume,
+same-version concurrent answer CAS, pause/resume/complete, subscription cleanup
+on disconnect and state persistence across integration reload.
