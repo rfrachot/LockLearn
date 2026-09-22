@@ -5,6 +5,12 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P3.3 deterministic ReviewPolicy V1 with explicit boxes/intervals, elapsed-time
+  adjustment, deterministic jitter, bounded difficulty_factor and relapse demotion.
+- Non-terminal time-decaying mastery plus explicit P3.2 short-step graduation
+  into the long review queue.
+- ADR-0024 documenting reproducibility, overdue-retention floors and the boundary
+  between long-review policy and later signal weighting.
 - P3.2 explicit introduction state for new cards plus deterministic V1 short
   learning/relearning steps (1/10/60 and 10/60 minutes).
 - Positive failure delays that prevent immediate working-memory retests, with
