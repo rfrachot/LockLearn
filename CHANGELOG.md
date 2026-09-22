@@ -5,6 +5,14 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P1.11 media-ready public Asset schema v2 with signed external image/audio
+  payloads, strict path/MIME/dimension checks, asset-scope licensing/provenance
+  and same-dataset Facet/ContentBlock references.
+- Runtime public-asset cache extraction and checksum revalidation without adding
+  an image/audio renderer or mixing private/export media into signed content.
+- Backward-compatible validation for the already-signed asset-free content
+  schema v1 starter package.
+- ADR-0018 defining the public-dataset Asset and private/export media boundary.
 - P1.10 bundled signed Japanese Starter dataset with 120 LearningItems and 240
   cards, original CC BY-SA 4.0 provenance and a 178478-byte offline artifact.
 - First-run offline starter bootstrap through the normal DatasetManager trust,
