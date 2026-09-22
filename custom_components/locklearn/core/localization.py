@@ -7,8 +7,6 @@ import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TypeVar
-
 _LANGUAGE_RE = re.compile(r"^[A-Za-z]{2,8}$")
 _EXTLANG_RE = re.compile(r"^[A-Za-z]{3}$")
 _SCRIPT_RE = re.compile(r"^[A-Za-z]{4}$")
@@ -18,8 +16,6 @@ _SINGLETON_RE = re.compile(r"^[A-WY-Za-wy-z0-9]$")
 _EXTENSION_RE = re.compile(r"^[A-Za-z0-9]{2,8}$")
 _PRIVATE_USE_RE = re.compile(r"^[A-Za-z0-9]{1,8}$")
 _POLICY_ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
-
-_T = TypeVar("_T")
 
 
 class LocalizationError(ValueError):
@@ -70,11 +66,7 @@ def parse_language_tag(value: str) -> LanguageTag:
 
     if len(primary) <= 3:
         extlang_count = 0
-        while (
-            index < len(parts)
-            and extlang_count < 3
-            and _EXTLANG_RE.fullmatch(parts[index])
-        ):
+        while index < len(parts) and extlang_count < 3 and _EXTLANG_RE.fullmatch(parts[index]):
             canonical_parts.append(parts[index].lower())
             extlang_count += 1
             index += 1
@@ -251,9 +243,7 @@ def normalize_text(
     canonical_script = canonicalize_script_code(script) if script is not None else None
     if policy.allowed_scripts:
         if canonical_script is None:
-            raise LocalizationError(
-                f"normalization policy {policy.policy_id!r} requires a script"
-            )
+            raise LocalizationError(f"normalization policy {policy.policy_id!r} requires a script")
         if canonical_script not in policy.allowed_scripts:
             raise LocalizationError(
                 f"script {canonical_script!r} is not allowed by policy {policy.policy_id!r}"
@@ -270,9 +260,7 @@ def normalize_text(
 
     if policy.punctuation_mode is PunctuationMode.REMOVE:
         result = "".join(
-            character
-            for character in result
-            if not unicodedata.category(character).startswith("P")
+            character for character in result if not unicodedata.category(character).startswith("P")
         )
 
     if policy.whitespace_mode is WhitespaceMode.TRIM:
@@ -307,21 +295,19 @@ def language_fallback_chain(
     return tuple(result)
 
 
-def resolve_localized_value(
-    values: Mapping[str, _T],
+def resolve_localized_value[T](
+    values: Mapping[str, T],
     requested_tag: str,
     *,
     default_tag: str | None = None,
     final_fallback_tag: str | None = None,
-) -> _T | None:
+) -> T | None:
     """Resolve an existing localized value without inventing a translation."""
-    canonical_values: dict[str, _T] = {}
+    canonical_values: dict[str, T] = {}
     for tag, value in values.items():
         canonical_tag = canonicalize_language_tag(tag)
         if canonical_tag in canonical_values:
-            raise LocalizationError(
-                f"multiple localized values canonicalize to {canonical_tag!r}"
-            )
+            raise LocalizationError(f"multiple localized values canonicalize to {canonical_tag!r}")
         canonical_values[canonical_tag] = value
 
     for candidate in language_fallback_chain(
