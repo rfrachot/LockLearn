@@ -2,9 +2,9 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.6 are complete. P1 and P2 are
-closed PASS. P3 is in progress on `feat/p1-content-core`. P3.7 — panel
-free-text grading and content-quality feedback — is implemented and awaiting the local gate.
+P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.7 are complete. P1 and P2 are
+closed PASS. P3 is in progress; P3.8 — persistent sessions, CAS concurrency and
+cross-client resume — is the next work package.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -961,3 +961,16 @@ Next required local gate:
 
 If PASS, close P3.7 and begin P3.8 persistent sessions, CAS concurrency and
 cross-client resume.
+
+
+## P3.7 closure
+
+Renaud's local P3.7 gate is fully green after the final typing/style remediation:
+- Ruff format: PASS, 185 files already formatted.
+- Ruff lint: PASS.
+- mypy: PASS, 102 source files.
+- resource registries: PASS.
+- pytest: PASS, 274 tests in 6.13 s.
+
+P3.7 is closed PASS. The long-lived feat/p1-content-core branch is ready to
+merge into main before P3.8 starts on a dedicated sessions branch.
