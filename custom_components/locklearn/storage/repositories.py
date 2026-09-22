@@ -1182,6 +1182,13 @@ class TracksRepository:
         """Load deterministic P3.5 selection constraints for one candidate card."""
 
         def read(connection: sqlite3.Connection) -> dict[str, Any]:
+            selected_row = connection.execute(
+                """SELECT 1
+                   FROM track_card_rules
+                   WHERE track_id = ? AND card_key = ? AND enabled = 1
+                   LIMIT 1""",
+                (track_id, card_key),
+            ).fetchone()
             prerequisite_rows = connection.execute(
                 """SELECT prerequisite_card_key
                    FROM content.pack_item_prerequisites
@@ -1249,6 +1256,7 @@ class TracksRepository:
                     None if row is None or row[0] is None else str(row[0])
                 )
             return {
+                "selected": selected_row is not None,
                 "prerequisite_card_keys": tuple(str(row[0]) for row in prerequisite_rows),
                 "unlock_conditions": tuple(
                     {"metric": str(row[0]), "minimum": float(row[1])}
