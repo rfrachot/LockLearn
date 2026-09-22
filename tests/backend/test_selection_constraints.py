@@ -308,3 +308,14 @@ async def test_selection_constraint_validation_is_explicit() -> None:
             _FakeSelectionRepository(),
             sibling_gap_new_minutes=-1,
         )
+
+    not_selected = _context()
+    not_selected["selected"] = False
+    with pytest.raises(SelectionConstraintError, match="not enabled"):
+        await _service(not_selected).async_evaluate(
+            profile_id="profile-1",
+            track_id="track-1",
+            card_key="card-1",
+            learning_item_id="item-1",
+            state="new",
+        )
