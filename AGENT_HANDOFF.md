@@ -3,7 +3,8 @@
 ## Current state
 
 P0.1–P0.7 and P1.1–P1.6 are complete. P1 remains in progress on
-`feat/p1-content-core`; P1.6 is PASS on the Ubuntu development checkout.
+`feat/p1-content-core`. P1.6 received a post-review hardening pass for
+cancellation-safe switching, stale-parent rejection and rollback crash recovery.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -18,11 +19,13 @@ only after schema, integrity, FK, stable-ID, P1.3 payload, migration-coverage an
 aggregate validation.
 
 `ContentGenerationManager` blocks new readers, drains real SQLite reader
-leases, atomically replaces the `current.db` hard link, fsyncs the switch,
-retains one validated previous generation and supports rollback. Activated
-generation files are read-only. Failed builds/activations preserve the
-last-known-good generation. The exact unreleased P0 cache schema is rebuilt
-out-of-place without touching `state.db`.
+leases, rejects candidates built from a stale parent generation, atomically
+replaces the `current.db` hard link, and keeps a fsynced switch-intent journal
+across the crash boundary. Cancellation and HA unload wait for the executor-side
+switch to finish before reopening/closing the gate. Activated generation files
+are read-only. Failed builds/activations preserve the last-known-good
+generation. The exact unreleased P0 cache schema is rebuilt out-of-place without
+touching `state.db`.
 
 Removed/superseded LearningItems, Facets and CardDefinitions retain their rows
 and current tombstones. Lifecycle history proves that
@@ -38,12 +41,13 @@ lease/drain, rollback, tombstones, crash behavior and the no-fan-out decision.
 - Branch: `feat/p1-content-core`
 - Remote P1.5 closure pulled at start: `9881cfd36b98d245e810b3ad69ceba04124dbaff`
 - P1.6 implementation/tests: `a5e2d11` (`feat(storage): add immutable content generations`).
-- P1.6 ADR/tracking/handoff: the documentation commit containing this file.
-- All P1.6 commits are local only; no push/PR/merge/tag.
+- P1.6 ADR/tracking/handoff: `adde1c9` (`docs(storage): close P1.6 generation design`).
+- Post-review P1.6 hardening: the commit containing this handoff.
+- Branch is pushed to GitHub; no PR/merge/tag has been created by this handoff.
 
 ## Verification
 
-Final P1.6 verification on the resulting worktree:
+Baseline P1.6 verification before the post-review hardening commit:
 
 - `python3 -m ruff format --check .`: pass, 122 files already formatted.
 - `python3 -m ruff check .`: pass.
@@ -57,6 +61,10 @@ Final P1.6 verification on the resulting worktree:
   subsequent full runs include the same tests.
 
 No frontend files changed. No frontend command was needed for P1.6.
+
+The post-review hardening commit adds regression tests but was authored through
+the GitHub connector rather than the Ubuntu checkout, so the baseline commands
+above must be rerun on the updated branch before merge.
 
 ## Remaining risks / next action
 

@@ -120,12 +120,23 @@ Activation follows this order:
 
 1. stop granting new content reader leases;
 2. wait for all leases and their real SQLite connections to close;
-3. validate the candidate again;
+3. validate the candidate again and require its `parent_generation_id` to
+   equal the currently active generation (generation-level CAS);
 4. rename it into `generations/`;
-5. create a temporary hard link to the candidate and atomically
+5. persist and fsync a small switch-intent journal containing the from/to
+   generation IDs;
+6. create a temporary hard link to the candidate and atomically
    `os.replace()` that link over `current.db`;
-6. fsync the relevant directories;
-7. reopen the reader gate and retain the old active generation as rollback.
+7. persist secondary catalog bookkeeping, clear the switch journal when that
+   bookkeeping succeeds, and fsync the relevant directories;
+8. reopen the reader gate and retain the old active generation as rollback.
+
+Cancellation of the asyncio caller does not reopen the reader gate while the
+executor-side filesystem switch is still running. The switch is allowed to
+finish, in-memory active-generation state is reconciled with the committed
+inode, and only then is cancellation propagated. HA unload similarly marks the
+manager closed and waits for any in-flight switch before shutting down storage
+executors.
 
 The reader lease pins the immutable generation path, not `current.db`. Existing
 readers therefore finish deterministically on their original file. Readers
@@ -138,19 +149,25 @@ hard-link switch. A failed or merely staged generation is never a rollback
 candidate.
 
 `catalog.json` records active/previous IDs for restart, but it is not the switch
-authority. The validated `current.db` inode is authoritative. If secondary
-catalog bookkeeping fails after the switch, startup reconstructs the previous
-pointer from `parent_generation_id`; an extra immutable file is safe to prune
-later.
+authority. The validated `current.db` inode is authoritative. A fsynced
+`switch-journal.json` exists only across the commit boundary: if the pointer
+swap commits but catalog persistence does not, startup accepts the journal only
+when its `to_generation_id` matches the generation actually referenced by
+`current.db`. This also preserves the rolled-away generation across a crash
+during rollback, where the reactivated generation's historical
+`parent_generation_id` cannot describe the reverse edge. A mismatched journal
+is ignored. Once matching catalog state is durable the journal is removed.
 
 ### Failure and crash boundaries
 
 - Failure during package validation/merge affects only the hidden work file.
 - Failure before `current.db` replacement leaves the last-known-good active.
 - A crash after the candidate enters `generations/` but before pointer replace
-  leaves an unreferenced valid file and the old active.
+  leaves an unreferenced valid file and the old active; a journal targeting a
+  different generation than `current.db` is ignored.
 - A crash after pointer replace leaves the new complete validated generation
-  active; secondary catalog state is reconstructible.
+  active; the matching switch journal reconstructs the exact previous
+  generation even when the committed operation was a rollback.
 - The exact unreleased P0 benchmark schema is recognized as reconstructible
   cache. It is held aside, a fresh P1.6 generation is activated, and it is
   deleted only after success. `state.db` is untouched.
