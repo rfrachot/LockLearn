@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Iterable
+from typing import ClassVar
 
 from .selection import SelectionConstraintService
 
@@ -103,7 +104,7 @@ class QuizConstructionError(ValueError):
 class QuizEngine:
     """Build deterministic MCQ/cloze questions from pre-indexed candidates."""
 
-    _STRATEGY_PRIORITY = {
+    _STRATEGY_PRIORITY: ClassVar[dict[DistractorStrategy, int]] = {
         DistractorStrategy.CONFUSABLE: 0,
         DistractorStrategy.SIMILAR_SEMANTICS: 1,
         DistractorStrategy.SAME_TYPE: 2,
@@ -123,7 +124,7 @@ class QuizEngine:
         example_rotation_index: int,
         quiz_format: QuizFormat = QuizFormat.MCQ,
     ) -> QuizQuestion:
-        """Create one 4–6 option panel question with deterministic resampling."""
+        """Create one 4-6 option panel question with deterministic resampling."""
         if option_count < 4 or option_count > 6:
             raise QuizConstructionError("panel MCQ must contain 4 to 6 answer options")
         if presentation_index < 0:
@@ -292,9 +293,7 @@ class QuizEngine:
             ),
             default=cls._STRATEGY_PRIORITY[DistractorStrategy.RANDOM_FALLBACK],
         )
-        seed = (
-            f"{prompt.card_key}|{presentation_index}|{candidate.answer_id}".encode("utf-8")
-        )
+        seed = f"{prompt.card_key}|{presentation_index}|{candidate.answer_id}".encode()
         stable = int.from_bytes(hashlib.sha256(seed).digest()[:8], "big")
         return priority, stable
 
