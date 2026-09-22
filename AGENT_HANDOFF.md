@@ -2,9 +2,9 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.5 are complete. P1 and P2 are
-closed PASS. P3 is in progress on `feat/p1-content-core`. P3.6 — quiz engine,
-distractors and corrective feedback — is implemented and awaiting the local gate.
+P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.6 are complete. P1 and P2 are
+closed PASS. P3 is in progress on `feat/p1-content-core`. P3.7 — panel
+free-text grading and content-quality feedback — is implemented and awaiting the local gate.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -895,3 +895,69 @@ Next required local gate:
 
 If PASS, close P3.6 and begin P3.7 panel free-text grading and content-quality
 feedback.
+
+
+## P3.6 closure
+
+Renaud's local P3.6 gate is fully green:
+- Ruff format: PASS, 180 files already formatted.
+- Ruff lint: PASS.
+- mypy: PASS, 98 source files.
+- resource registries: PASS.
+- pytest: PASS, 269 tests in 6.00 s.
+
+P3.6 is closed PASS.
+
+## P3.7 implementation pending verification
+
+P3.7 adds FreeTextGrader with explicit versioned exact, any_of and
+fuzzy_normalized policies.
+
+exact accepts one exact value. any_of accepts exact membership in an explicit
+accepted-answer set. fuzzy_normalized first runs the existing versioned
+NormalizationPolicy and is available only when the policy declares supported
+scripts. V1 fuzzy matching is deliberately conservative: normalized strings of
+length >= 4 may differ by one insertion/deletion/substitution. Diacritic-only
+differences are excluded from this typo tolerance so a normalization policy that
+preserves semantic accents cannot be silently weakened by fuzzy matching.
+
+Every FreeTextGradingResult carries grading_policy_version and
+normalization_version. P3.1 ReviewEvent already persists normalization_version;
+the ReviewEvent test now asserts that field survives round-trip persistence.
+
+A normal unmatched answer is wrong until the user explicitly chooses the
+"Ma réponse devrait être acceptée" recovery action. That conversion produces an
+unrecognized, reportable result whose is_definitive_failure is false.
+SignalPolicy already treats unrecognized as neutral, so no automatic SRS
+failure/demotion is implied.
+
+ContentReportService plus locklearn/content/report implement the feedback path.
+The WebSocket endpoint rechecks Profile ANSWER permission, validates Track
+ownership and the exact active CardDefinition, verifies the card is enabled in
+the Track, and persists a private audit_events content_report payload with the
+raw/normalized answer and grading/normalization versions. The response explicitly
+reports srs_penalized=false.
+
+The content generation stored on the report is backend-owned from the active
+ContentGenerationManager; clients cannot forge it. P3.8 will later persist
+generation identity per presented session question across concurrent content
+switches.
+
+No state schema migration was introduced: V1 requires append-only content
+feedback, not a moderator/status queue. A future moderation workflow can add a
+dedicated table through an explicit migration if needed.
+
+ADR-0028 records these boundaries. New tests cover exact/any_of,
+script-aware fuzzy normalization, semantic diacritics, recoverable unrecognized
+grading, no progress mutation from reports, report persistence, WebSocket ACL
+and normalization-version persistence.
+
+Next required local gate:
+- python3 -m ruff format --check .
+- python3 -m ruff check .
+- python3 -m mypy custom_components datasets tests
+- python3 datasets/tools/validate_resources.py
+- python3 -m pytest -q --tb=short
+
+If PASS, close P3.7 and begin P3.8 persistent sessions, CAS concurrency and
+cross-client resume.
