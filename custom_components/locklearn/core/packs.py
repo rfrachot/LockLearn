@@ -181,6 +181,78 @@ class ConfusableGroup:
 
 
 @dataclass(frozen=True, slots=True)
+class TrackPackPin:
+    """Immutable association pinning a Track identity to one PackVersion."""
+
+    track_id: str
+    pack_version_id: str
+
+    def __post_init__(self) -> None:
+        validate_stable_id(self.track_id, field="track_id")
+        validate_stable_id(self.pack_version_id, field="pack_version_id")
+
+
+class CurationRuleKind(StrEnum):
+    """Generic curation directives interpreted by pack builders/selectors."""
+
+    CARD_DIRECTION_DEFAULT = "card_direction_default"
+    PRODUCTION_COMPLETE_TERM = "production_complete_term"
+    MNEMONIC_KEYWORD_LABEL = "mnemonic_keyword_label"
+    AMBIGUOUS_PROMPT_CONTEXT_HINT = "ambiguous_prompt_context_hint"
+    PREFER_COVERED_EXAMPLE = "prefer_covered_example"
+    ALLOW_FURIGANA_FOR_UNCOVERED = "allow_furigana_for_uncovered"
+
+
+@dataclass(frozen=True, slots=True)
+class CurationRule:
+    """One versioned, data-owned pedagogical curation directive."""
+
+    rule_id: str
+    kind: CurationRuleKind
+    enabled: bool = True
+    prompt_facet_key: str | None = None
+    answer_facet_key: str | None = None
+    enabled_by_default: bool | None = None
+
+    def __post_init__(self) -> None:
+        validate_stable_id(self.rule_id, field="rule_id")
+        if self.kind is CurationRuleKind.CARD_DIRECTION_DEFAULT:
+            if not self.prompt_facet_key or not self.answer_facet_key:
+                raise PackModelError(
+                    "card_direction_default requires prompt_facet_key and answer_facet_key"
+                )
+            if self.enabled_by_default is None:
+                raise PackModelError("card_direction_default requires enabled_by_default")
+        elif (
+            self.prompt_facet_key is not None
+            or self.answer_facet_key is not None
+            or self.enabled_by_default is not None
+        ):
+            raise PackModelError(
+                "facet/default fields are only valid for card_direction_default rules"
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class CurationPolicy:
+    """Versioned pack-owned policy; language-specific choices remain data."""
+
+    curation_policy_id: str
+    version: int
+    rules: tuple[CurationRule, ...]
+
+    def __post_init__(self) -> None:
+        validate_stable_id(self.curation_policy_id, field="curation_policy_id")
+        if self.version < 1:
+            raise PackModelError("curation policy version must be >= 1")
+        if not self.rules:
+            raise PackModelError("curation policy requires at least one rule")
+        rule_ids = tuple(rule.rule_id for rule in self.rules)
+        if len(set(rule_ids)) != len(rule_ids):
+            raise PackModelError("curation rule IDs must be unique")
+
+
+@dataclass(frozen=True, slots=True)
 class PackVersionDiff:
     """Preview metadata for deliberate integration of a newer pack version."""
 
