@@ -111,7 +111,7 @@ class SignalPolicy:
         if resolved_mode is SignalMode.SELF_ASSESSMENT_AFTER_RETRIEVAL:
             positive = normalized_result in {"correct", "known", "knew", "easy", "hard"}
             negative = normalized_result in {"wrong", "review", "again", "idk"}
-            if positive and answer_visible_before_assessment:
+            if positive and (answer_visible_before_assessment or not retrieval_occurred):
                 return SignalDecision(
                     mode=resolved_mode,
                     outcome=SignalOutcome.NEUTRAL,
@@ -120,7 +120,11 @@ class SignalPolicy:
                     verified=False,
                     gate_eligible=False,
                     reward_difficulty=False,
-                    reason="answer_visible_before_self_assessment",
+                    reason=(
+                        "answer_visible_before_self_assessment"
+                        if answer_visible_before_assessment
+                        else "self_assessment_without_retrieval"
+                    ),
                 )
             if positive:
                 return SignalDecision(
@@ -145,6 +149,9 @@ class SignalPolicy:
                     reason="self_assessed_failure",
                 )
             raise ValueError(f"unsupported self-assessment result: {result}")
+
+        if not retrieval_occurred:
+            raise ValueError("verified retrieval mode requires retrieval_occurred")
 
         if normalized_result == "idk":
             quality = SignalQuality.MEDIUM
