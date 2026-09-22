@@ -44,47 +44,47 @@ class LockLearnDatasetUpdateEntity(UpdateEntity):
         self._attr_name = definition.name
         self._attr_title = definition.name
         self._status: DatasetStatus | None = None
+        self._apply_status(None)
 
-    @property
-    def installed_version(self) -> str | None:
-        """Return the currently active installed dataset version."""
-        return None if self._status is None or self._status.installed is None else (
-            self._status.installed.version
-        )
+    async def async_added_to_hass(self) -> None:
+        """Load installed state locally without making setup depend on the network."""
+        self._apply_status(await self._manager.async_status(self._definition.dataset_id))
 
-    @property
-    def latest_version(self) -> str | None:
-        """Return the latest discovered release version."""
-        return None if self._status is None or self._status.latest is None else (
-            self._status.latest.version
-        )
+    async def async_update(self) -> None:
+        """Refresh discovery while preserving installed state if the network fails."""
+        await self._manager.async_refresh(self._definition.dataset_id)
+        self._apply_status(await self._manager.async_status(self._definition.dataset_id))
 
-    @property
-    def release_summary(self) -> str | None:
-        """Return a short release summary from untrusted discovery metadata."""
+    async def async_install(
+        self,
+        version: str | None,
+        backup: bool,
+        **kwargs: Any,
+    ) -> None:
+        """Install a fully verified prebuilt dataset artifact."""
+        await self._manager.async_install(self._definition.dataset_id, version=version)
+        self._apply_status(await self._manager.async_status(self._definition.dataset_id))
+
+    async def async_release_notes(self) -> str | None:
+        """Return full release notes from the discovered release metadata."""
         if self._status is None or self._status.latest is None:
             return None
         return self._status.latest.changelog or None
 
-    @property
-    def release_url(self) -> str | None:
-        """Return the upstream release URL when supplied by discovery metadata."""
-        if self._status is None or self._status.latest is None:
-            return None
-        return self._status.latest.release_url
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose privacy-safe provenance and cache metadata."""
-        if self._status is None:
-            return {"dataset_id": self._definition.dataset_id}
-        installed = self._status.installed
-        return {
+    def _apply_status(self, status: DatasetStatus | None) -> None:
+        self._status = status
+        installed = None if status is None else status.installed
+        latest = None if status is None else status.latest
+        self._attr_installed_version = None if installed is None else installed.version
+        self._attr_latest_version = None if latest is None else latest.version
+        self._attr_release_summary = None if latest is None else latest.changelog or None
+        self._attr_release_url = None if latest is None else latest.release_url
+        self._attr_extra_state_attributes = {
             "dataset_id": self._definition.dataset_id,
-            "dataset_state": self._status.state,
-            "source_age_days": self._status.source_age_days,
-            "stale_sources": list(self._status.stale_sources),
-            "cache_bytes": self._status.cache_bytes,
+            "dataset_state": None if status is None else status.state,
+            "source_age_days": None if status is None else status.source_age_days,
+            "stale_sources": [] if status is None else list(status.stale_sources),
+            "cache_bytes": 0 if status is None else status.cache_bytes,
             "licenses": [] if installed is None else list(installed.licenses),
             "sources": []
             if installed is None
@@ -98,22 +98,3 @@ class LockLearnDatasetUpdateEntity(UpdateEntity):
                 for source in installed.sources
             ],
         }
-
-    async def async_update(self) -> None:
-        """Refresh discovery while preserving installed state if the network fails."""
-        await self._manager.async_refresh(self._definition.dataset_id)
-        self._status = await self._manager.async_status(self._definition.dataset_id)
-
-    async def async_install(
-        self,
-        version: str | None,
-        backup: bool,
-        **kwargs: Any,
-    ) -> None:
-        """Install a fully verified prebuilt dataset artifact."""
-        await self._manager.async_install(self._definition.dataset_id, version=version)
-        self._status = await self._manager.async_status(self._definition.dataset_id)
-
-    async def async_release_notes(self) -> str | None:
-        """Return full release notes from the discovered release metadata."""
-        return self.release_summary
