@@ -5,6 +5,12 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P3.5 deterministic selection constraints for prerequisite unlocks, new/review
+  sibling burial and PackVersion-owned confusable introduction spacing.
+- Track-scoped candidate validation plus machine-readable eligibility reasons and
+  blocked-until timestamps for later session/scheduler ranking.
+- ADR-0026 documenting the eligibility/ranking boundary, bare-prerequisite
+  exposure semantics and confusable-distractor stability rule.
 - P3.4 normalized signal policy separating exposure, weak post-retrieval
   self-assessment, verified MCQ/free-text/cloze/exam retrieval, IDK and
   unrecognized outcomes.
