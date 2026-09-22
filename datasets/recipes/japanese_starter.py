@@ -163,7 +163,9 @@ def _materialize_pair(
     left_term_id = make_stable_id("locklearn", "starter-term", record.source_record_id, left_key)
     right_term_id = make_stable_id("locklearn", "starter-term", record.source_record_id, right_key)
     left_facet_id = make_stable_id("locklearn", "starter-facet", record.source_record_id, left_key)
-    right_facet_id = make_stable_id("locklearn", "starter-facet", record.source_record_id, right_key)
+    right_facet_id = make_stable_id(
+        "locklearn", "starter-facet", record.source_record_id, right_key
+    )
 
     connection.execute(
         """INSERT INTO concepts(
