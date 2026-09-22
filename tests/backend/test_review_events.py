@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from custom_components.locklearn.core.profiles import ProfileService
 from custom_components.locklearn.core.reviews import ReviewEventService
@@ -67,7 +69,7 @@ def _snapshot(
     }
 
 
-async def _setup(tmp_path: Path) -> tuple[SQLiteStorage, ReviewEventService, dict[str, str]]:
+async def _setup(tmp_path: Path) -> tuple[SQLiteStorage, ReviewEventService, dict[str, Any]]:
     storage = SQLiteStorage(
         StoragePaths(tmp_path / "state" / "state.db", tmp_path / "content" / "current.db")
     )
@@ -253,7 +255,7 @@ async def test_progress_rebuild_uses_latest_event_snapshot(tmp_path: Path) -> No
             presentation_to_answer_ms=1_200,
         )
 
-        def corrupt(connection):
+        def corrupt(connection: sqlite3.Connection) -> None:
             connection.execute(
                 """UPDATE progress
                    SET state = 'new', box = 0, seen_count = 0,
