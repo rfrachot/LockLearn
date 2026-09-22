@@ -91,7 +91,7 @@ async def test_storage_diagnostic_is_private_and_off_event_loop(storage: SQLiteS
         "integrity_check": ["ok"],
         "journal_mode": "wal",
         "reader_off_event_loop": True,
-        "schema_version": 1,
+        "schema_version": 2,
         "session_answer_count": 0,
         "session_count": 1,
         "writer_initialized": True,
@@ -154,7 +154,9 @@ async def test_content_merge_and_hot_queries(storage: SQLiteStorage, tmp_path: P
 
     def seed(connection: sqlite3.Connection) -> None:
         connection.execute(
-            "INSERT INTO progress VALUES (?, ?, ?, 'review', ?)",
+            """INSERT INTO progress(
+                   profile_id, track_id, card_key, state, next_due_at_utc
+               ) VALUES (?, ?, ?, 'review', ?)""",
             ("p1", "t1", card_key, now),
         )
         connection.commit()
