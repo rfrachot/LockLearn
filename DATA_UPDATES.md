@@ -85,3 +85,46 @@ LOCKLEARN_DATASET_SIGNING_KEY_B64
 It contains exactly 32 raw Ed25519 private-key bytes encoded as base64. The
 private key is never stored in repository files or the Home Assistant
 integration.
+
+
+## P1.9 runtime update path
+
+Home Assistant consumes only prebuilt LockLearn artifacts:
+
+```text
+bundled official dataset definition
+        ↓
+untrusted release catalog
+        ↓
+bounded ZIP download
+        ↓
+external SHA-256 + size
+        ↓
+Ed25519 manifest trust
+        ↓
+source/license/schema/package validation
+        ↓
+cached normalized dataset.db
+        ↓
+full content.next.db generation
+        ↓
+reader drain + atomic switch
+        ↓
+one-generation rollback
+```
+
+The release catalog is discovery metadata, not trust material. Artifact URLs are
+restricted to HTTPS hosts bundled with the integration. Public verification keys
+are bundled; private signing keys are never runtime data.
+
+The package cache is reconstructible and validated against the active dataset
+identity before every full-generation rebuild.
+
+Dataset updates retain historical PackVersions. A Track remains pinned until an
+explicit later integration action. Destructive dataset removal requires
+confirmation and is rejected when persistent track state references one of its
+PackVersions.
+
+An UpdateEntity exists for each official dataset definition and exposes
+installed/latest version, source freshness, disk cache size, sources, licenses
+and release notes. Installed content remains usable when discovery is offline.
