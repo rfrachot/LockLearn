@@ -11,6 +11,8 @@ from homeassistant.helpers import issue_registry as ir
 
 from .const import DOMAIN
 from .core.acl import ProfileACLService
+from .core.content_reports import ContentReportService
+from .core.grading import FreeTextGrader
 from .core.operations import OperationRegistry
 from .core.planning import LearningPlanService
 from .core.profiles import ProfileService
@@ -44,6 +46,8 @@ class LockLearnRuntime:
     acl: ProfileACLService
     tracks: TrackService
     planning: LearningPlanService
+    grading: FreeTextGrader
+    content_reports: ContentReportService
     quiz: QuizEngine
     review_policy: ReviewPolicyV1
     signal_policy: SignalPolicy
@@ -108,6 +112,11 @@ class LockLearnRuntime:
                 planning=LearningPlanService(
                     storage.repositories.tracks,
                     storage.repositories.profiles,
+                ),
+                grading=FreeTextGrader(),
+                content_reports=ContentReportService(
+                    storage.repositories.content_reports,
+                    storage.repositories.tracks,
                 ),
                 quiz=QuizEngine(),
                 review_policy=review_policy,
