@@ -861,13 +861,9 @@ async def ws_session_pause(
         return
     try:
         if msg["paused"]:
-            state = await runtime.sessions.async_pause(
-                msg["session_id"], msg["expected_version"]
-            )
+            state = await runtime.sessions.async_pause(msg["session_id"], msg["expected_version"])
         else:
-            state = await runtime.sessions.async_resume(
-                msg["session_id"], msg["expected_version"]
-            )
+            state = await runtime.sessions.async_resume(msg["session_id"], msg["expected_version"])
     except SessionNotFoundError:
         connection.send_error(msg["id"], ERR_NOT_FOUND, "Session not found")
         return
@@ -904,9 +900,7 @@ async def ws_session_complete(
     ):
         return
     try:
-        state = await runtime.sessions.async_complete(
-            msg["session_id"], msg["expected_version"]
-        )
+        state = await runtime.sessions.async_complete(msg["session_id"], msg["expected_version"])
     except SessionNotFoundError:
         connection.send_error(msg["id"], ERR_NOT_FOUND, "Session not found")
         return
