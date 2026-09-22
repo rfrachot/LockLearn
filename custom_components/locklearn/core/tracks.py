@@ -161,17 +161,30 @@ class TrackService:
         *,
         track_id: str,
         name: str | None = None,
+        source_language: str | None = None,
+        target_language: str | None = None,
         status: str | None = None,
         priority: int | None = None,
         content_weights: Mapping[str, float] | None = None,
+        explicit_card_keys: tuple[str, ...] | None = None,
     ) -> dict[str, Any]:
-        """Update mutable Track metadata and optional content weights."""
+        """Atomically update mutable Track configuration."""
         current = await self._repository.async_get(track_id)
         if current is None:
             raise TrackValidationError("track does not exist")
         next_name = str(current["name"]) if name is None else name.strip()
         if not next_name:
             raise TrackValidationError("track name must not be empty")
+        next_source = (
+            str(current["source_language"]) if source_language is None else source_language.strip()
+        )
+        next_target = (
+            str(current["target_language"]) if target_language is None else target_language.strip()
+        )
+        if not next_source or not next_target:
+            raise TrackValidationError("source and target languages are required")
+        if next_source == next_target:
+            raise TrackValidationError("source and target languages must differ")
         next_status = str(current["status"]) if status is None else status
         if next_status not in {"active", "paused", "archived"}:
             raise TrackValidationError("invalid track status")
@@ -179,20 +192,75 @@ class TrackService:
         if next_priority < 1:
             raise TrackValidationError("track priority must be >= 1")
 
-        updated = await self._repository.async_update_metadata(
-            track_id=track_id,
-            name=next_name,
-            status=next_status,
-            priority=next_priority,
-            updated_at_utc=self._clock.now().isoformat(),
+        pack_version_id = current.get("pack_version_id")
+        if not isinstance(pack_version_id, str):
+            raise TrackValidationError("track has no pinned pack version")
+        settings = dict(current["settings"])
+        current_mode = str(settings.get("card_selection_mode", "direction"))
+        if explicit_card_keys is not None:
+            requested = tuple(dict.fromkeys(explicit_card_keys))
+            cards = await self._repository.async_cards_in_pack(
+                pack_version_id=pack_version_id,
+                card_keys=requested,
+            )
+            found = {card["card_key"] for card in cards}
+            missing = tuple(card_key for card_key in requested if card_key not in found)
+            if missing:
+                raise TrackValidationError(
+                    f"explicit cards are not active in pinned pack: {missing!r}"
+                )
+            mode = "explicit"
+            rule_kind = "explicit_card"
+        elif current_mode == "direction" or source_language is not None or target_language is not None:
+            cards = await self._repository.async_resolve_direction_cards(
+                pack_version_id=pack_version_id,
+                source_language=next_source,
+                target_language=next_target,
+            )
+            mode = "direction"
+            rule_kind = "direction_card"
+        else:
+            existing = await self._repository.async_get_card_rules(track_id)
+            keys = tuple(
+                str(rule["card_key"])
+                for rule in existing
+                if rule["card_key"] is not None and bool(rule["enabled"])
+            )
+            cards = await self._repository.async_cards_in_pack(
+                pack_version_id=pack_version_id,
+                card_keys=keys,
+            )
+            mode = "explicit"
+            rule_kind = "explicit_card"
+
+        if not cards:
+            raise TrackValidationError("track selection resolves to no active cards")
+        rules = self._rules_from_cards(track_id, cards, rule_kind=rule_kind)
+        weights = (
+            await self._repository.async_get_content_weights(track_id)
+            if content_weights is None
+            else self._validate_weights(content_weights)
+        )
+        settings["card_selection_mode"] = mode
+        now = self._clock.now().isoformat()
+        updated = await self._repository.async_update_configured(
+            track=TrackRecord(
+                track_id=track_id,
+                profile_id=str(current["profile_id"]),
+                name=next_name,
+                source_language=next_source,
+                target_language=next_target,
+                status=next_status,
+                priority=next_priority,
+                settings=settings,
+                created_at_utc=str(current["created_at_utc"]),
+                updated_at_utc=now,
+            ),
+            rules=rules,
+            weights=weights,
         )
         if not updated:
             raise TrackValidationError("track does not exist")
-        if content_weights is not None:
-            await self._repository.async_replace_content_weights(
-                track_id,
-                self._validate_weights(content_weights),
-            )
         result = await self._repository.async_get(track_id)
         if result is None:
             raise RuntimeError("updated track could not be reloaded")
