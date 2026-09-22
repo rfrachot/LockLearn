@@ -1665,6 +1665,104 @@ class ReviewEventsRepository:
         return await self._storage._async_writer(write)
 
 
+class ContentReportsRepository:
+    """Persist recoverable content-quality feedback in the private state audit log."""
+
+    def __init__(self, storage: RepositoryStorage) -> None:
+        self._storage = storage
+
+    async def async_create_unrecognized_answer_report(
+        self,
+        *,
+        actor_user_id: str,
+        profile_id: str,
+        track_id: str,
+        card: CardReference,
+        submitted_text: str,
+        normalized_submission: str | None,
+        grading_policy_kind: str,
+        grading_policy_version: int,
+        normalization_version: int,
+        dataset_generation: str,
+        created_at_utc: str,
+    ) -> int:
+        valid = await self._storage.async_validate_card_reference(
+            card_key=card.card_key,
+            learning_item_id=card.learning_item_id,
+            prompt_facet_id=card.prompt_facet_id,
+            answer_facet_id=card.answer_facet_id,
+        )
+        if not valid:
+            raise ContentReferenceError(f"unknown active card reference: {card.card_key}")
+
+        payload = json.dumps(
+            {
+                "report_kind": "answer_should_be_accepted",
+                "track_id": track_id,
+                "card_key": card.card_key,
+                "learning_item_id": card.learning_item_id,
+                "prompt_facet_id": card.prompt_facet_id,
+                "answer_facet_id": card.answer_facet_id,
+                "submitted_text": submitted_text,
+                "normalized_submission": normalized_submission,
+                "grading_result": "unrecognized",
+                "grading_policy_kind": grading_policy_kind,
+                "grading_policy_version": grading_policy_version,
+                "normalization_version": normalization_version,
+                "dataset_generation": dataset_generation,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> int:
+            track = connection.execute(
+                """SELECT profile_id FROM tracks WHERE track_id = ?""",
+                (track_id,),
+            ).fetchone()
+            if track is None or str(track[0]) != profile_id:
+                raise StateRepositoryError("track does not belong to profile")
+            selected = connection.execute(
+                """SELECT 1 FROM track_card_rules
+                   WHERE track_id = ? AND card_key = ? AND enabled = 1
+                   LIMIT 1""",
+                (track_id, card.card_key),
+            ).fetchone()
+            if selected is None:
+                raise StateRepositoryError("card is not enabled in track")
+            cursor = connection.execute(
+                """INSERT INTO audit_events(
+                       event_type, actor_user_id, profile_id, payload_json, created_at_utc
+                   ) VALUES ('content_report', ?, ?, ?, ?)""",
+                (actor_user_id, profile_id, payload, created_at_utc),
+            )
+            connection.commit()
+            return int(cursor.lastrowid)
+
+        return await self._storage._async_writer(write)
+
+    async def async_get(self, report_id: int) -> dict[str, Any] | None:
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT id, actor_user_id, profile_id, payload_json, created_at_utc
+                   FROM audit_events
+                   WHERE id = ? AND event_type = 'content_report'""",
+                (report_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            return {
+                "report_id": int(row[0]),
+                "actor_user_id": None if row[1] is None else str(row[1]),
+                "profile_id": None if row[2] is None else str(row[2]),
+                "payload": json.loads(str(row[3])),
+                "created_at_utc": str(row[4]),
+            }
+
+        return await self._storage._async_reader(read)
+
+
 class SettingsRepository:
     """Small JSON settings store with deterministic serialization."""
 
@@ -1706,6 +1804,7 @@ class StateRepositories:
     tracks: TracksRepository
     progress: ProgressRepository
     review_events: ReviewEventsRepository
+    content_reports: ContentReportsRepository
     settings: SettingsRepository
 
     @classmethod
@@ -1715,5 +1814,6 @@ class StateRepositories:
             tracks=TracksRepository(storage),
             progress=ProgressRepository(storage),
             review_events=ReviewEventsRepository(storage),
+            content_reports=ContentReportsRepository(storage),
             settings=SettingsRepository(storage),
         )
