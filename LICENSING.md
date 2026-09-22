@@ -63,3 +63,26 @@ constraint is that official LockLearn distributions must continue to respect
 each upstream license, especially attribution and ShareAlike obligations.
 
 Funding channels therefore remain separate from licensing rights.
+
+
+## Machine-enforced license scopes
+
+P1.7 gives license use an explicit scope:
+
+```text
+software
+editorial
+dataset
+asset
+```
+
+A license can be valid in more than one content scope, but a source must declare
+the scope in which it is actually reused. The official-package policy rejects a
+source when its declared scope is not allowed by the registry license.
+
+This prevents the repository's MIT software license from being treated as a
+fallback license for LockLearn editorial content or third-party datasets.
+
+Exact source snapshots and per-object provenance retain the source record,
+author/language when required, whether LockLearn modified the source material,
+and attribution text needed for later Sources & Licences UI.
