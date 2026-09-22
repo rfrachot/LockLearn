@@ -2,9 +2,8 @@
 
 ## Current state
 
-P0.1–P0.7 and P1.1–P1.7 are complete. P1 remains in progress on
-`feat/p1-content-core`. P1.8 is implemented on the branch and awaits the
-local Ruff/mypy/registry/pytest gate before PASS.
+P0.1–P0.7 and P1.1–P1.8 are complete. P1 remains in progress on
+`feat/p1-content-core`.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -80,7 +79,7 @@ Final Ubuntu verification after the compatibility remediation:
 
 ADR-0014 records the source/snapshot/provenance/license-scope decision.
 
-## P1.8 implementation awaiting verification
+## P1.8 closure
 
 P1.8 adds build-time-only streaming adapters for the recommended source set,
 canonical normalized JSONL, a DatasetRecipe boundary, bounded fetches, exact
@@ -95,6 +94,14 @@ gated by a changed `canonical_content_hash`.
 No production source corpus, signing private key, Japanese Starter recipe or
 production build config is committed. The latter recipe/config belongs to P1.10.
 
+Final Ubuntu verification after the P1.8 style/type remediation:
+
+- `python3 -m ruff format --check .`: pass, 133 files already formatted.
+- `python3 -m ruff check .`: pass.
+- `python3 -m mypy custom_components datasets tests`: pass, 65 source files.
+- `python3 datasets/tools/validate_resources.py`: pass.
+- `python3 -m pytest -q --tb=short`: pass, 181 tests in 2.79 s.
+
 ADR-0015 records the offline ETL/release boundary.
 
 ## Remaining risks / next action
@@ -107,6 +114,6 @@ ADR-0015 records the offline ETL/release boundary.
   tables belongs with the released `state.db` schema; P1.6 prevents incomplete
   item/facet mappings from activating.
 
-P1.6 and P1.7 are closed PASS. Next concrete action: run the full local quality
-suite on P1.8. If green, mark P1.8 PASS; otherwise remediate P1.8 only. Do not
-begin P1.9 DatasetManager/update UX before that gate closes.
+P1.6, P1.7 and P1.8 are closed PASS. Next concrete action: plan/implement
+P1.9 DatasetManager, update entity, staging and rollback without pulling P1.10
+starter-content curation into the same work package.
