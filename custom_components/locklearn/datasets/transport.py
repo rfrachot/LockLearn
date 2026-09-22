@@ -72,7 +72,7 @@ class HomeAssistantDatasetTransport:
             except ClientError as err:
                 raise DatasetInstallError("cannot download dataset artifact") from err
             await asyncio.to_thread(_finalize_download, temporary, destination)
-        except Exception:
+        except BaseException:
             temporary.unlink(missing_ok=True)
             raise
         return digest.hexdigest()
