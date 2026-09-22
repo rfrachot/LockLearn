@@ -107,6 +107,64 @@ async def test_unreleased_p0_content_cache_is_rebuilt_without_partial_switch(
         await storage.async_close()
 
 
+async def test_unreleased_p1_6_content_generation_is_rebuilt_for_p1_7(
+    tmp_path: Path,
+) -> None:
+    """The exact unreleased pre-provenance P1.6 schema is reconstructible input."""
+    paths = StoragePaths(tmp_path / "state" / "state.db", tmp_path / "content" / "current.db")
+    paths.content_db.parent.mkdir(parents=True)
+    with sqlite3.connect(paths.content_db) as connection:
+        connection.executescript(
+            """CREATE TABLE schema_version(
+                   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                   version INTEGER NOT NULL
+               );
+               INSERT INTO schema_version VALUES (1, 1);
+               CREATE TABLE generation_metadata(
+                   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                   generation_id TEXT NOT NULL UNIQUE,
+                   content_schema_version INTEGER NOT NULL,
+                   built_at_utc TEXT NOT NULL,
+                   parent_generation_id TEXT,
+                   package_count INTEGER NOT NULL,
+                   package_set_hash TEXT NOT NULL
+               );
+               INSERT INTO generation_metadata VALUES (
+                   1, 'pre-p1-7', 1, '2026-09-22T12:00:00+00:00', NULL, 0,
+                   'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+               );
+               CREATE TABLE licenses(license_id TEXT PRIMARY KEY);
+               CREATE TABLE sources(
+                   source_id TEXT PRIMARY KEY,
+                   name TEXT NOT NULL,
+                   provider TEXT NOT NULL,
+                   license_id TEXT NOT NULL REFERENCES licenses(license_id)
+               );
+               CREATE TABLE dataset_licenses(
+                   dataset_id TEXT NOT NULL,
+                   license_id TEXT NOT NULL,
+                   PRIMARY KEY(dataset_id, license_id)
+               );"""
+        )
+
+    storage = SQLiteStorage(paths)
+    await storage.async_open()
+    try:
+        with inspect_generation(paths.content_db) as connection:
+            assert connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='source_snapshots'"
+            ).fetchone() == (1,)
+            assert connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='provenance_records'"
+            ).fetchone() == (1,)
+            assert connection.execute(
+                "SELECT generation_id FROM generation_metadata"
+            ).fetchone()[0].startswith("bootstrap-")
+        assert list(paths.content_staging_dir.glob("legacy-p1-6-*.db")) == []
+    finally:
+        await storage.async_close()
+
+
 def test_content_schema_enforces_foreign_keys_and_semantic_uniqueness(tmp_path: Path) -> None:
     """Package builders cannot create dangling relations or duplicate facet keys."""
     package = create_package(tmp_path / "constraints.db", "constraints")
