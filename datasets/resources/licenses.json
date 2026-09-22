@@ -1,12 +1,113 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "licenses": [
-    {"id":"MIT","commercial_use_allowed":true,"derivatives_allowed":true,"share_alike":false,"attribution_required":true,"official_dataset_allowed":false},
-    {"id":"CC0-1.0","commercial_use_allowed":true,"derivatives_allowed":true,"share_alike":false,"attribution_required":false,"official_dataset_allowed":true},
-    {"id":"CC-BY-4.0","commercial_use_allowed":true,"derivatives_allowed":true,"share_alike":false,"attribution_required":true,"official_dataset_allowed":true},
-    {"id":"CC-BY-SA-4.0","commercial_use_allowed":true,"derivatives_allowed":true,"share_alike":true,"attribution_required":true,"official_dataset_allowed":true},
-    {"id":"CC-BY-2.0-FR","commercial_use_allowed":true,"derivatives_allowed":true,"share_alike":false,"attribution_required":true,"official_dataset_allowed":true},
-    {"id":"CC-BY-SA-3.0","commercial_use_allowed":true,"derivatives_allowed":true,"share_alike":true,"attribution_required":true,"official_dataset_allowed":true}
+    {
+      "id": "MIT",
+      "spdx_or_internal_id": "MIT",
+      "name": "MIT License",
+      "version": "",
+      "commercial_use_allowed": true,
+      "derivatives_allowed": true,
+      "share_alike": false,
+      "attribution_required": true,
+      "official_dataset_allowed": false,
+      "allowed_scopes": [
+        "software"
+      ],
+      "source_url": "https://spdx.org/licenses/MIT.html",
+      "notes": "LockLearn software/build tooling only; does not license datasets or editorial content."
+    },
+    {
+      "id": "CC0-1.0",
+      "spdx_or_internal_id": "CC0-1.0",
+      "name": "Creative Commons Zero v1.0 Universal",
+      "version": "1.0",
+      "commercial_use_allowed": true,
+      "derivatives_allowed": true,
+      "share_alike": false,
+      "attribution_required": false,
+      "official_dataset_allowed": true,
+      "allowed_scopes": [
+        "dataset",
+        "editorial",
+        "asset"
+      ],
+      "source_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "notes": "Public-domain dedication; provenance is still retained for reproducibility."
+    },
+    {
+      "id": "CC-BY-4.0",
+      "spdx_or_internal_id": "CC-BY-4.0",
+      "name": "Creative Commons Attribution 4.0 International",
+      "version": "4.0",
+      "commercial_use_allowed": true,
+      "derivatives_allowed": true,
+      "share_alike": false,
+      "attribution_required": true,
+      "official_dataset_allowed": true,
+      "allowed_scopes": [
+        "dataset",
+        "editorial",
+        "asset"
+      ],
+      "source_url": "https://creativecommons.org/licenses/by/4.0/",
+      "notes": "Attribution required."
+    },
+    {
+      "id": "CC-BY-SA-4.0",
+      "spdx_or_internal_id": "CC-BY-SA-4.0",
+      "name": "Creative Commons Attribution-ShareAlike 4.0 International",
+      "version": "4.0",
+      "commercial_use_allowed": true,
+      "derivatives_allowed": true,
+      "share_alike": true,
+      "attribution_required": true,
+      "official_dataset_allowed": true,
+      "allowed_scopes": [
+        "dataset",
+        "editorial",
+        "asset"
+      ],
+      "source_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "notes": "Attribution and ShareAlike boundary must be preserved."
+    },
+    {
+      "id": "CC-BY-2.0-FR",
+      "spdx_or_internal_id": "CC-BY-2.0-FR",
+      "name": "Creative Commons Attribution 2.0 France",
+      "version": "2.0",
+      "commercial_use_allowed": true,
+      "derivatives_allowed": true,
+      "share_alike": false,
+      "attribution_required": true,
+      "official_dataset_allowed": true,
+      "allowed_scopes": [
+        "dataset"
+      ],
+      "source_url": "https://creativecommons.org/licenses/by/2.0/fr/",
+      "notes": "Used for Tatoeba text; individual attribution is retained."
+    },
+    {
+      "id": "CC-BY-SA-3.0",
+      "spdx_or_internal_id": "CC-BY-SA-3.0",
+      "name": "Creative Commons Attribution-ShareAlike 3.0 Unported",
+      "version": "3.0",
+      "commercial_use_allowed": true,
+      "derivatives_allowed": true,
+      "share_alike": true,
+      "attribution_required": true,
+      "official_dataset_allowed": true,
+      "allowed_scopes": [
+        "dataset",
+        "asset"
+      ],
+      "source_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "notes": "Used for KanjiVG; keep as a separate attributed asset/dataset boundary."
+    }
   ],
-  "forbidden_markers": ["NC", "ND", "UNKNOWN"]
+  "forbidden_markers": [
+    "NC",
+    "ND",
+    "UNKNOWN"
+  ]
 }

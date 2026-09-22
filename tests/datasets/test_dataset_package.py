@@ -553,3 +553,42 @@ def test_trust_store_rejects_duplicate_keys() -> None:
 def test_validation_errors_are_package_or_contract_errors(tmp_path: Path) -> None:
     with pytest.raises((DatasetPackageError, ManifestError, TrustError, LicensePolicyError)):
         _validate(tmp_path / "not-a-zip")
+
+
+def test_registry_policy_enforces_source_field_allowlist() -> None:
+    policy = OfficialRegistryPolicy.from_repository()
+    policy.validate_import_fields("edrdg:kanjidic2", {"literal", "readings", "stroke_count"})
+    with pytest.raises(LicensePolicyError, match="not allowlisted"):
+        policy.validate_import_fields("edrdg:kanjidic2", {"literal", "search_codes"})
+
+
+def test_registry_policy_requires_tatoeba_sentence_attribution() -> None:
+    policy = OfficialRegistryPolicy.from_repository()
+    required = {"source_record_id", "author", "license_id", "language"}
+    policy.validate_provenance_fields("tatoeba:text", required)
+    with pytest.raises(LicensePolicyError, match="required provenance"):
+        policy.validate_provenance_fields("tatoeba:text", {"source_record_id", "language"})
+
+
+def test_registry_policy_keeps_software_and_content_license_scopes_separate() -> None:
+    policy = OfficialRegistryPolicy(
+        licenses=(
+            LicensePolicyRecord(
+                license_id="MIT",
+                commercial_use_allowed=True,
+                derivatives_allowed=True,
+                official_dataset_allowed=True,
+                allowed_scopes=frozenset({"software"}),
+            ),
+        ),
+        sources=(
+            SourcePolicyRecord(
+                source_id="locklearn:original",
+                license_id="MIT",
+                license_scope="editorial",
+            ),
+        ),
+    )
+    manifest = parse_manifest(_components(Path("."))[0])
+    with pytest.raises(LicensePolicyError, match="scope"):
+        policy.validate(manifest)
