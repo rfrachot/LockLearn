@@ -259,6 +259,14 @@ class DatasetManager:
             )
         return tuple(statuses)
 
+    async def async_status(self, dataset_id: str) -> DatasetStatus:
+        """Return one official dataset status without performing network I/O."""
+        self._definition(dataset_id)
+        for status in await self.async_statuses():
+            if status.definition.dataset_id == dataset_id:
+                return status
+        raise DatasetManagerError(f"dataset status is unavailable: {dataset_id}")
+
     async def async_install(
         self,
         dataset_id: str,
