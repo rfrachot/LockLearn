@@ -5,6 +5,10 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P2.6 authenticated WebSocket bootstrap plus Profile CRUD/share, Track CRUD,
+  explicit PackVersion integration and paginated Pack/Dataset catalog surfaces.
+- Server-side ACL rechecks for every profile-scoped P2 command, bounded
+  limit/cursor pagination and privacy-preserving not-found/forbidden semantics.
 - P2.5 learning-plan service with card-based new/review quotas, profile-preset
   new-card defaults, target date/coverage/retention goals and deterministic
   3-week/3-month workload forecasts.
