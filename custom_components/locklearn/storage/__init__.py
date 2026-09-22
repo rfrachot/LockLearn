@@ -19,6 +19,7 @@ from .repositories import (
     ProfileMemberRecord,
     ProfileRecord,
     StateRepositories,
+    TrackCardRuleRecord,
     TrackRecord,
 )
 
@@ -39,6 +40,7 @@ __all__ = [
     "SQLiteStorage",
     "StateRepositories",
     "StoragePaths",
+    "TrackCardRuleRecord",
     "TrackRecord",
     "initialize_content_database",
 ]
