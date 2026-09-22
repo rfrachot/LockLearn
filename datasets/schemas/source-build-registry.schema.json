@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LockLearn source build registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sources"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_id", "fetch_mode", "discovery_url", "download_url",
+          "maximum_bytes", "notes"
+        ],
+        "properties": {
+          "source_id": {"type": "string", "minLength": 1},
+          "fetch_mode": {"enum": ["direct", "template", "recipe_url", "local"]},
+          "discovery_url": {"type": "string", "format": "uri"},
+          "download_url": {"type": ["string", "null"]},
+          "maximum_bytes": {"type": "integer", "minimum": 1},
+          "notes": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}
