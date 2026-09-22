@@ -146,6 +146,59 @@ class ProfileService:
             raise RuntimeError("created profile could not be reloaded")
         return created
 
+    async def async_update_profile(
+        self,
+        *,
+        profile_id: str,
+        name: str | None = None,
+        timezone: str | None = None,
+        status: str | None = None,
+        settings_patch: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Update mutable Profile fields without changing Profile identity."""
+        current = await self._repository.async_get(profile_id)
+        if current is None:
+            raise ProfileValidationError("profile does not exist")
+
+        next_name = str(current["name"]) if name is None else name.strip()
+        if not next_name:
+            raise ProfileValidationError("profile name must not be empty")
+
+        next_timezone = str(current["timezone"]) if timezone is None else timezone.strip()
+        try:
+            ZoneInfo(next_timezone)
+        except (ValueError, ZoneInfoNotFoundError) as err:
+            raise ProfileValidationError(f"invalid timezone: {next_timezone}") from err
+
+        next_status = str(current["status"]) if status is None else status
+        if next_status not in {"active", "archived"}:
+            raise ProfileValidationError("invalid profile status")
+
+        settings = dict(current["settings"])
+        if settings_patch:
+            if any(key.startswith("_locklearn_") for key in settings_patch):
+                raise ProfileValidationError("settings_patch contains a reserved key")
+            settings.update(dict(settings_patch))
+
+        updated = await self._repository.async_update(
+            profile_id=profile_id,
+            name=next_name,
+            timezone=next_timezone,
+            status=next_status,
+            settings=settings,
+            updated_at_utc=self._clock.now().isoformat(),
+        )
+        if not updated:
+            raise ProfileValidationError("profile does not exist")
+        result = await self._repository.async_get(profile_id)
+        if result is None:
+            raise RuntimeError("updated profile could not be reloaded")
+        return result
+
+    async def async_delete_profile(self, profile_id: str) -> bool:
+        """Delete one Profile and its private user state."""
+        return await self._repository.async_delete(profile_id)
+
     async def async_ensure_personal_profile(
         self,
         *,
