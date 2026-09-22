@@ -1,4 +1,4 @@
-"""Validate the bootstrap language/license/source registries without extra deps."""
+"""Validate bootstrap language, normalization, curation, license and source registries."""
 
 from __future__ import annotations
 
