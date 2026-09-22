@@ -316,3 +316,81 @@ async def test_untrusted_catalog_cannot_redirect_artifact_download_to_other_host
             await manager.async_install(_DATASET_ID)
     finally:
         await storage.async_close()
+
+
+async def test_invalid_update_after_valid_install_preserves_installed_version(
+    tmp_path: Path,
+) -> None:
+    storage, manager, transport = await _manager(tmp_path)
+    try:
+        v1 = _artifact(tmp_path, "1.0.0")
+        v2 = _artifact(tmp_path, "1.1.0")
+        transport.artifacts["https://example.invalid/1.0.0.zip"] = v1
+        transport.artifacts["https://example.invalid/1.1.0.zip"] = v2
+        transport.catalogs["https://example.invalid/catalog.json"] = _catalog(
+            {"1.0.0": v1}
+        )
+        await manager.async_refresh()
+        await manager.async_install(_DATASET_ID)
+
+        transport.catalogs["https://example.invalid/catalog.json"] = _catalog(
+            {"1.0.0": v1, "1.1.0": v2}
+        )
+        await manager.async_refresh()
+        transport.override_sha256 = "0" * 64
+        with pytest.raises(DatasetInstallError, match="checksum"):
+            await manager.async_install(_DATASET_ID)
+
+        inventory = await storage.async_dataset_inventory()
+        assert inventory[0]["version"] == "1.0.0"
+    finally:
+        await storage.async_close()
+
+
+async def test_discovery_repair_hook_is_created_and_cleared(tmp_path: Path) -> None:
+    storage = SQLiteStorage(
+        StoragePaths(tmp_path / "state" / "state.db", tmp_path / "content" / "current.db")
+    )
+    await storage.async_open()
+    transport = FakeTransport()
+    created: list[tuple[str, str]] = []
+    cleared: list[str] = []
+
+    async def report(issue_id: str, translation_key: str, placeholders: Mapping[str, str]) -> None:
+        assert placeholders["dataset_id"] == _DATASET_ID
+        created.append((issue_id, translation_key))
+
+    async def clear(issue_id: str) -> None:
+        cleared.append(issue_id)
+
+    manager = DatasetManager(
+        storage=storage,
+        transport=transport,
+        definitions=(
+            DatasetDefinition(
+                dataset_id=_DATASET_ID,
+                name="Manager fixture",
+                catalog_url="https://example.invalid/catalog.json",
+                artifact_hosts=frozenset({"example.invalid"}),
+            ),
+        ),
+        trust_store=_trust_store(),
+        policy=OfficialRegistryPolicy.from_repository(ROOT),
+        issue_callback=report,
+        issue_clear_callback=clear,
+    )
+    try:
+        with pytest.raises(KeyError):
+            await transport.async_get_json("https://example.invalid/catalog.json", maximum_bytes=1)
+        await manager.async_refresh()
+        assert created[0][1] == "dataset_discovery_failed"
+
+        transport.catalogs["https://example.invalid/catalog.json"] = {
+            "schema_version": 1,
+            "dataset_id": _DATASET_ID,
+            "releases": [],
+        }
+        await manager.async_refresh()
+        assert created[0][0] in cleared
+    finally:
+        await storage.async_close()
