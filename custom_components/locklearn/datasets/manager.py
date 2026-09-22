@@ -555,7 +555,9 @@ class DatasetManager:
         if manifest.dataset_id != dataset_id:
             raise DatasetInstallError("signed manifest dataset_id does not match expected dataset")
         if manifest.dataset_version != version:
-            raise DatasetInstallError("signed manifest dataset_version does not match expected version")
+            raise DatasetInstallError(
+                "signed manifest dataset_version does not match expected version"
+            )
         if manifest.content_schema_version != CONTENT_SCHEMA_VERSION:
             raise DatasetInstallError("dataset content schema is not supported")
         if AwesomeVersion(manifest.minimum_locklearn_version) > AwesomeVersion(INTEGRATION_VERSION):
