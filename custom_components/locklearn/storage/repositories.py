@@ -373,6 +373,97 @@ class TracksRepository:
 
         await self._storage._async_writer(insert)
 
+    async def async_insert_configured(
+        self,
+        *,
+        track: TrackRecord,
+        pack_version_id: str,
+        dataset_generation: str,
+        integrated_at_utc: str,
+        rules: tuple[TrackCardRuleRecord, ...],
+        weights: dict[str, float],
+    ) -> None:
+        if any(rule.track_id != track.track_id for rule in rules):
+            raise ValueError("track card rule belongs to another track")
+        settings_json = json.dumps(
+            track.settings or {},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    """INSERT INTO tracks(
+                           track_id, profile_id, name, source_language, target_language,
+                           status, priority, settings_json, created_at_utc, updated_at_utc
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        track.track_id,
+                        track.profile_id,
+                        track.name,
+                        track.source_language,
+                        track.target_language,
+                        track.status,
+                        track.priority,
+                        settings_json,
+                        track.created_at_utc,
+                        track.updated_at_utc,
+                    ),
+                )
+                connection.execute(
+                    """INSERT INTO track_pack_versions(
+                           track_id, pack_version_id, dataset_generation, integrated_at_utc
+                       ) VALUES (?, ?, ?, ?)""",
+                    (
+                        track.track_id,
+                        pack_version_id,
+                        dataset_generation,
+                        integrated_at_utc,
+                    ),
+                )
+                connection.executemany(
+                    """INSERT INTO track_card_rules(
+                           track_id, rule_id, rule_kind, card_key, prompt_facet_id,
+                           answer_facet_id, rule_json, enabled
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        (
+                            rule.track_id,
+                            rule.rule_id,
+                            rule.rule_kind,
+                            rule.card_key,
+                            rule.prompt_facet_id,
+                            rule.answer_facet_id,
+                            json.dumps(
+                                rule.rule or {},
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                                sort_keys=True,
+                            ),
+                            int(rule.enabled),
+                        )
+                        for rule in rules
+                    ),
+                )
+                connection.executemany(
+                    """INSERT INTO track_content_weights(track_id, content_type, weight)
+                       VALUES (?, ?, ?)""",
+                    (
+                        (track.track_id, content_type, weight)
+                        for content_type, weight in sorted(weights.items())
+                    ),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+
     async def async_pin_pack_version(
         self,
         *,
@@ -542,6 +633,105 @@ class TracksRepository:
                 }
                 for row in rows
             )
+
+        return await self._storage._async_reader(read)
+
+    async def async_integrate_pack_version(
+        self,
+        *,
+        track_id: str,
+        pack_version_id: str,
+        dataset_generation: str,
+        integrated_at_utc: str,
+        rules: tuple[TrackCardRuleRecord, ...],
+    ) -> None:
+        if any(rule.track_id != track_id for rule in rules):
+            raise ValueError("track card rule belongs to another track")
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    """UPDATE track_pack_versions
+                       SET pack_version_id = ?, dataset_generation = ?, integrated_at_utc = ?
+                       WHERE track_id = ?""",
+                    (
+                        pack_version_id,
+                        dataset_generation,
+                        integrated_at_utc,
+                        track_id,
+                    ),
+                )
+                connection.execute("DELETE FROM track_card_rules WHERE track_id = ?", (track_id,))
+                connection.executemany(
+                    """INSERT INTO track_card_rules(
+                           track_id, rule_id, rule_kind, card_key, prompt_facet_id,
+                           answer_facet_id, rule_json, enabled
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        (
+                            rule.track_id,
+                            rule.rule_id,
+                            rule.rule_kind,
+                            rule.card_key,
+                            rule.prompt_facet_id,
+                            rule.answer_facet_id,
+                            json.dumps(
+                                rule.rule or {},
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                                sort_keys=True,
+                            ),
+                            int(rule.enabled),
+                        )
+                        for rule in rules
+                    ),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+
+    async def async_get_card_rules(self, track_id: str) -> tuple[dict[str, Any], ...]:
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT rule_id, rule_kind, card_key, prompt_facet_id,
+                          answer_facet_id, rule_json, enabled
+                   FROM track_card_rules
+                   WHERE track_id = ?
+                   ORDER BY rule_id""",
+                (track_id,),
+            ).fetchall()
+            return tuple(
+                {
+                    "rule_id": str(row[0]),
+                    "rule_kind": str(row[1]),
+                    "card_key": None if row[2] is None else str(row[2]),
+                    "prompt_facet_id": None if row[3] is None else str(row[3]),
+                    "answer_facet_id": None if row[4] is None else str(row[4]),
+                    "rule": json.loads(str(row[5])),
+                    "enabled": bool(row[6]),
+                }
+                for row in rows
+            )
+
+        return await self._storage._async_reader(read)
+
+    async def async_get_content_weights(self, track_id: str) -> dict[str, float]:
+        def read(connection: sqlite3.Connection) -> dict[str, float]:
+            return {
+                str(content_type): float(weight)
+                for content_type, weight in connection.execute(
+                    """SELECT content_type, weight
+                       FROM track_content_weights
+                       WHERE track_id = ?
+                       ORDER BY content_type""",
+                    (track_id,),
+                ).fetchall()
+            }
 
         return await self._storage._async_reader(read)
 
