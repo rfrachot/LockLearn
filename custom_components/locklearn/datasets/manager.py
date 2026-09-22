@@ -23,7 +23,7 @@ from awesomeversion import AwesomeVersion
 from ..const import CONTENT_SCHEMA_VERSION, INTEGRATION_VERSION
 from ..storage import ContentGenerationValidator, SQLiteStorage
 from .manifest import DatasetManifest
-from .package import ValidatedDatasetPackage, validate_dataset_package
+from .package import validate_dataset_package
 from .policy import OfficialRegistryPolicy
 from .trust import KeyStatus, KeyUsage, TrustedKey, TrustStore
 
@@ -376,14 +376,14 @@ class DatasetManager:
             installed_rows = await self._storage.async_dataset_inventory()
             if any(row["dataset_id"] == bundled.dataset_id for row in installed_rows):
                 return None
-            if not bundled.path.is_file():
-                raise DatasetInstallError("bundled dataset artifact is missing")
-            if bundled.path.stat().st_size != bundled.size:
-                raise DatasetInstallError("bundled dataset artifact size does not match")
-            actual_sha = await asyncio.to_thread(_sha256_file, bundled.path)
-            if actual_sha != bundled.sha256:
-                raise DatasetInstallError("bundled dataset artifact checksum does not match")
             try:
+                if not bundled.path.is_file():
+                    raise DatasetInstallError("bundled dataset artifact is missing")
+                if bundled.path.stat().st_size != bundled.size:
+                    raise DatasetInstallError("bundled dataset artifact size does not match")
+                actual_sha = await asyncio.to_thread(_sha256_file, bundled.path)
+                if actual_sha != bundled.sha256:
+                    raise DatasetInstallError("bundled dataset artifact checksum does not match")
                 result = await self._async_install_archive(
                     bundled.path,
                     dataset_id=bundled.dataset_id,
@@ -440,8 +440,6 @@ class DatasetManager:
                 dataset_id,
                 validated.manifest.dataset_version,
             )
-            await asyncio.to_thread(_store_package_atomically, extracted, package_path)
-
             installed_rows = await self._storage.async_dataset_inventory()
             current = next(
                 (row for row in installed_rows if row["dataset_id"] == dataset_id),
@@ -453,6 +451,7 @@ class DatasetManager:
                         "an installed dataset version cannot change canonical content"
                     )
                 raise DatasetInstallError("dataset version is already installed")
+            await asyncio.to_thread(_store_package_atomically, extracted, package_path)
             packages = await asyncio.to_thread(
                 self._complete_package_set,
                 installed_rows,
