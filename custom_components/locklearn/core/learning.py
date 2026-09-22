@@ -32,6 +32,8 @@ class LearningStepTransition:
     pre_state: dict[str, Any]
     post_state: dict[str, Any]
     action: LearningStepAction
+    mode: str
+    retrieval_occurred: bool
     next_due_in_minutes: int | None
     ready_for_long_review: bool = False
 
@@ -87,6 +89,8 @@ class LearningStateMachine:
             pre_state=dict(snapshot),
             post_state=post,
             action=LearningStepAction.INTRODUCTION,
+            mode="introduction",
+            retrieval_occurred=False,
             next_due_in_minutes=self._learning_steps[0],
         )
 
@@ -127,6 +131,8 @@ class LearningStateMachine:
             pre_state=dict(snapshot),
             post_state=post,
             action=LearningStepAction.FAILURE,
+            mode="relearning_step",
+            retrieval_occurred=True,
             next_due_in_minutes=self._relearning_steps[0],
         )
 
@@ -172,6 +178,8 @@ class LearningStateMachine:
                 pre_state=dict(snapshot),
                 post_state=post,
                 action=LearningStepAction.FAILURE,
+                mode=f"{failure_state}_step",
+                retrieval_occurred=True,
                 next_due_in_minutes=steps[0],
             )
 
@@ -191,6 +199,8 @@ class LearningStateMachine:
                 pre_state=dict(snapshot),
                 post_state=post,
                 action=LearningStepAction.SUCCESS,
+                mode=f"{failure_state}_step",
+                retrieval_occurred=True,
                 next_due_in_minutes=None,
                 ready_for_long_review=True,
             )
@@ -201,6 +211,8 @@ class LearningStateMachine:
             pre_state=dict(snapshot),
             post_state=post,
             action=LearningStepAction.SUCCESS,
+            mode=f"{failure_state}_step",
+            retrieval_occurred=True,
             next_due_in_minutes=next_delay,
         )
 
