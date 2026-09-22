@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "source_id": "edrdg:jmdict",
+      "fetch_mode": "direct",
+      "discovery_url": "https://www.edrdg.org/jmdict/j_jmdict.html",
+      "download_url": "https://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz",
+      "maximum_bytes": 250000000,
+      "notes": "Raw download is CI/workspace-only and must never be committed."
+    },
+    {
+      "source_id": "edrdg:kanjidic2",
+      "fetch_mode": "direct",
+      "discovery_url": "https://www.edrdg.org/wiki/KANJIDIC_Project.html",
+      "download_url": "https://ftp.edrdg.org/pub/Nihongo/kanjidic2.xml.gz",
+      "maximum_bytes": 100000000,
+      "notes": "Raw download is CI/workspace-only and must never be committed."
+    },
+    {
+      "source_id": "tatoeba:text",
+      "fetch_mode": "template",
+      "discovery_url": "https://downloads.tatoeba.org/exports/per_language/",
+      "download_url": "https://downloads.tatoeba.org/exports/per_language/{language}/{language}_sentences_detailed.tsv.bz2",
+      "maximum_bytes": 250000000,
+      "notes": "Recipes choose exact languages and record all files in one source snapshot."
+    },
+    {
+      "source_id": "wikimedia:wiktionary-kaikki",
+      "fetch_mode": "recipe_url",
+      "discovery_url": "https://kaikki.org/dictionary/rawdata.html",
+      "download_url": null,
+      "maximum_bytes": 4000000000,
+      "notes": "Recipe pins an exact raw/postprocessed JSONL URL; do not scrape a floating latest link."
+    },
+    {
+      "source_id": "kanjivg:svg",
+      "fetch_mode": "recipe_url",
+      "discovery_url": "https://github.com/KanjiVG/kanjivg/releases",
+      "download_url": null,
+      "maximum_bytes": 500000000,
+      "notes": "Recipe pins an exact release asset URL."
+    },
+    {
+      "source_id": "locklearn:original",
+      "fetch_mode": "local",
+      "discovery_url": "https://github.com/rfrachot/LockLearn",
+      "download_url": null,
+      "maximum_bytes": 50000000,
+      "notes": "Repository-authored JSONL input; no network fetch."
+    }
+  ]
+}
