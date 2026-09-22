@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 CURATION = ROOT / "datasets" / "resources" / "curation_policies.json"
 
 
-def _japanese_policy() -> dict[str, object]:
+def _japanese_policy() -> dict[str, Any]:
     with CURATION.open(encoding="utf-8") as handle:
         root = json.load(handle)
     policies = root["policies"]
