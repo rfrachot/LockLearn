@@ -23,7 +23,7 @@
 | Phase | Goal | State | 1.0 blocker | Detail |
 |---|---|---|---|---|
 | P0 | Architecture spikes + installable HA skeleton | complete | yes | `docs/plan/P0.md` |
-| P1 | Content core + signed starter dataset | in progress (P1.1–P1.3 complete) | yes | `docs/plan/P1.md` |
+| P1 | Content core + signed starter dataset | in progress (P1.1–P1.3 complete; P1.4 implemented, verification pending) | yes | `docs/plan/P1.md` |
 | P2 | Profiles/tracks/ACL | queued | yes | `docs/plan/P2.md` |
 | P3 | Learning/SRS/sessions/stats | queued | yes | `docs/plan/P3.md` |
 | P4 | Scheduler/notifications/HA automation | queued | yes | `docs/plan/P4.md` |
@@ -48,7 +48,7 @@
 - **P1.1** — Canonical content domain model (complete)
 - **P1.2** — Dataset package contract, signatures and hostile-archive handling (complete)
 - **P1.3** — Content blocks, grading metadata and safe rich text (complete)
-- **P1.4** — Multilingual normalization and locale primitives
+- **P1.4** — Multilingual normalization and locale primitives (implemented; verification pending)
 - **P1.5** — Tags, packs, prerequisites and Japanese curation primitives
 - **P1.6** — content.db schema, generations and stable merge
 - **P1.7** — Source/provenance/license registry
