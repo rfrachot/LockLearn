@@ -13,5 +13,15 @@
     "abort": {
       "single_instance_allowed": "Une seule instance LockLearn est prise en charge."
     }
+  },
+  "issues": {
+    "dataset_discovery_failed": {
+      "title": "Catalogue de dataset indisponible",
+      "description": "LockLearn n’a pas pu vérifier les versions disponibles pour {dataset_id}. Le contenu déjà installé reste utilisable hors ligne."
+    },
+    "dataset_install_failed": {
+      "title": "Échec de mise à jour du dataset",
+      "description": "La mise à jour de {dataset_id} a échoué pendant le téléchargement, la vérification ou l’activation. La dernière génération valide reste active."
+    }
   }
 }
