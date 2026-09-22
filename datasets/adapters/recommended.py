@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import bz2
 import gzip
+import hashlib
 import io
 import json
 import zipfile
@@ -159,11 +160,11 @@ class TatoebaTextAdapter:
             stream = io.TextIOWrapper(raw, encoding="utf-8", newline="")
             for line_number, line in enumerate(stream, start=1):
                 row = line.rstrip("\n").split("\t")
-                if len(row) != 6:
+                if len(row) < 4:
                     raise ValueError(
-                        f"Tatoeba detailed TSV line {line_number} must contain 6 columns"
+                        f"Tatoeba detailed TSV line {line_number} must contain at least 4 columns"
                     )
-                sentence_id, language, text, username, _added, _modified = row
+                sentence_id, language, text, username = row[:4]
                 if not sentence_id or not language or not text or not username:
                     raise ValueError(f"Tatoeba detailed TSV line {line_number} is incomplete")
                 yield NormalizedRecord(
@@ -210,7 +211,18 @@ class KaikkiAdapter:
                     continue
                 record_id = value.get("id")
                 if not isinstance(record_id, str) or not record_id:
-                    record_id = f"{language or 'und'}:{word}:{line_number}"
+                    identity = json.dumps(
+                        {
+                            "etymology_number": value.get("etymology_number"),
+                            "language": language,
+                            "part_of_speech": value.get("pos"),
+                            "word": word,
+                        },
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    )
+                    record_id = "derived:" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
                 senses = value.get("senses", [])
                 forms = value.get("forms", [])
                 translations = value.get("translations", [])
