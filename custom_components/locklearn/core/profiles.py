@@ -170,10 +170,12 @@ class ProfileService:
                 ):
                     return profile
 
-            return await self.async_create_profile(
+            created = await self.async_create_profile(
                 name=name,
                 preset=preset,
                 timezone=timezone,
                 owner_ha_user_ids=(normalized_user_id,),
                 personal_profile=True,
             )
+            created["role"] = "owner"
+            return created
