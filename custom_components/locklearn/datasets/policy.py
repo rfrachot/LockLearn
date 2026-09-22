@@ -79,9 +79,21 @@ class OfficialRegistryPolicy:
 
     @classmethod
     def from_repository(cls, root: Path | None = None) -> OfficialRegistryPolicy:
-        """Load the canonical build-time registries without copying their policy."""
+        """Load canonical build-time registries, falling back to bundled runtime copies."""
         repository_root = root or Path(__file__).resolve().parents[3]
         resources = repository_root / "datasets" / "resources"
+        if not resources.is_dir():
+            resources = Path(__file__).resolve().parent / "resources"
+        return cls.from_resource_directory(resources)
+
+    @classmethod
+    def from_runtime(cls) -> OfficialRegistryPolicy:
+        """Load source/license policy bundled with the installed integration."""
+        return cls.from_resource_directory(Path(__file__).resolve().parent / "resources")
+
+    @classmethod
+    def from_resource_directory(cls, resources: Path) -> OfficialRegistryPolicy:
+        """Load one canonical source/license registry directory."""
         licenses_document = _load_object(resources / "licenses.json")
         sources_document = _load_object(resources / "sources.json")
         licenses = tuple(
