@@ -252,9 +252,7 @@ class ContentGenerationValidator:
             raise ContentValidationError("content database has no schema version")
         schema_version = int(row[0])
         if schema_version not in SUPPORTED_CONTENT_SCHEMA_VERSIONS:
-            raise ContentValidationError(
-                f"unsupported content schema version: {schema_version!r}"
-            )
+            raise ContentValidationError(f"unsupported content schema version: {schema_version!r}")
         objects = connection.execute(
             "SELECT type, name FROM sqlite_master WHERE type IN ('table', 'index')"
         ).fetchall()
@@ -419,9 +417,7 @@ class ContentGenerationValidator:
                 )
 
     @staticmethod
-    def _validate_content_blocks(
-        connection: sqlite3.Connection, *, schema_version: int
-    ) -> None:
+    def _validate_content_blocks(connection: sqlite3.Connection, *, schema_version: int) -> None:
         rows = connection.execute(
             """SELECT content_block_id, learning_item_id, position, kind, role,
                       reveals_answer, mask_strategy, payload_json
@@ -502,9 +498,7 @@ class ContentGenerationValidator:
                 raise ContentValidationError(f"invalid content block payload: {block_id}") from err
 
     @staticmethod
-    def _validate_provenance(
-        connection: sqlite3.Connection, *, schema_version: int
-    ) -> None:
+    def _validate_provenance(connection: sqlite3.Connection, *, schema_version: int) -> None:
         """Require reproducible source snapshots and coherent provenance boundaries."""
         for snapshot_id, sha256 in connection.execute(
             "SELECT snapshot_id, sha256 FROM source_snapshots"
