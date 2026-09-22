@@ -183,8 +183,7 @@ def _migrate_state_database(path: Path, schema: str, current: int, target: int) 
         connection.close()
 
     os.replace(candidate, path)
-    _unlink_sqlite_files(Path(f"{candidate}-wal"))
-    Path(f"{candidate}-shm").unlink(missing_ok=True)
+    _unlink_sqlite_files(candidate)
 
 
 class SQLiteStorage:
