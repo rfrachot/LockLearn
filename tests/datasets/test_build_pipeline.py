@@ -258,3 +258,41 @@ def test_publish_gate_detects_real_canonical_content_change(tmp_path: Path) -> N
     )
     assert first.canonical_content_hash != second.canonical_content_hash
     assert should_publish(first.manifest, second.manifest) is True
+
+
+def test_multifile_snapshot_and_normalization_ignore_config_file_order(tmp_path: Path) -> None:
+    first_file = tmp_path / "a.jsonl"
+    second_file = tmp_path / "b.jsonl"
+    first_file.write_text(
+        '{"id":"a","kind":"fixture","payload":{"value":"a"}}\n',
+        encoding="utf-8",
+    )
+    second_file.write_text(
+        '{"id":"b","kind":"fixture","payload":{"value":"b"}}\n',
+        encoding="utf-8",
+    )
+    first_input = SourceInput(
+        source_id="locklearn:original",
+        upstream_version="fixture-multi",
+        upstream_date="2026-09-22",
+        retrieved_at=_BUILT_AT,
+        files=(
+            SourceFileInput(first_file, "https://example.invalid/a"),
+            SourceFileInput(second_file, "https://example.invalid/b"),
+        ),
+        snapshot_url="https://example.invalid/composite",
+    )
+    reversed_input = SourceInput(
+        source_id="locklearn:original",
+        upstream_version="fixture-multi",
+        upstream_date="2026-09-22",
+        retrieved_at=_BUILT_AT,
+        files=tuple(reversed(first_input.files)),
+        snapshot_url="https://example.invalid/composite",
+    )
+    first = normalize_source(first_input, tmp_path / "multi-one", repository_root=ROOT)
+    second = normalize_source(reversed_input, tmp_path / "multi-two", repository_root=ROOT)
+    assert first.snapshot_id == second.snapshot_id
+    assert first.raw_sha256 == second.raw_sha256
+    assert first.normalized_sha256 == second.normalized_sha256
+    assert first.normalized_path.read_bytes() == second.normalized_path.read_bytes()
