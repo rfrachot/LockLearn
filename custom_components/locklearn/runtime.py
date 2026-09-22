@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 
 from .const import DOMAIN
+from .core.acl import ProfileACLService
 from .core.operations import OperationRegistry
 from .core.profiles import ProfileService
 from .core.sessions import SessionService
@@ -33,6 +34,7 @@ class LockLearnRuntime:
     sessions: SessionService
     operations: OperationRegistry
     profiles: ProfileService
+    acl: ProfileACLService
     datasets: DatasetManager
 
     @classmethod
@@ -86,6 +88,7 @@ class LockLearnRuntime:
                 sessions=SessionService(storage),
                 operations=OperationRegistry(),
                 profiles=ProfileService(storage.repositories.profiles),
+                acl=ProfileACLService(storage.repositories.profiles),
                 datasets=datasets,
             )
         except Exception:
