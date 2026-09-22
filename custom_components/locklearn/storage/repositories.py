@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar
 
@@ -46,6 +46,14 @@ class ProfileRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class ProfileMemberRecord:
+    profile_id: str
+    ha_user_id: str
+    role: str
+    created_at_utc: str
+
+
+@dataclass(frozen=True, slots=True)
 class TrackRecord:
     track_id: str
     profile_id: str
@@ -67,38 +75,97 @@ class CardReference:
     answer_facet_id: str
 
 
+def _profile_dict(row: tuple[Any, ...], *, role: str | None = None) -> dict[str, Any]:
+    keys = (
+        "profile_id",
+        "name",
+        "preset",
+        "timezone",
+        "status",
+        "settings_json",
+        "created_at_utc",
+        "updated_at_utc",
+    )
+    result = dict(zip(keys, row, strict=True))
+    result["settings"] = json.loads(result.pop("settings_json"))
+    if role is not None:
+        result["role"] = role
+    return result
+
+
 class ProfilesRepository:
-    """Persistence primitives for profiles; policy belongs to P2.2/P2.3."""
+    """Persistence primitives for profiles; ACL policy belongs to P2.3."""
 
     def __init__(self, storage: RepositoryStorage) -> None:
         self._storage = storage
 
-    async def async_insert(self, profile: ProfileRecord) -> None:
-        settings_json = json.dumps(
+    @staticmethod
+    def _serialized_settings(profile: ProfileRecord) -> str:
+        return json.dumps(
             profile.settings or {},
             ensure_ascii=False,
             separators=(",", ":"),
             sort_keys=True,
         )
 
+    @classmethod
+    def _insert_profile(cls, connection: sqlite3.Connection, profile: ProfileRecord) -> None:
+        connection.execute(
+            """INSERT INTO profiles(
+                   profile_id, name, preset, timezone, status, settings_json,
+                   created_at_utc, updated_at_utc
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                profile.profile_id,
+                profile.name,
+                profile.preset,
+                profile.timezone,
+                profile.status,
+                cls._serialized_settings(profile),
+                profile.created_at_utc,
+                profile.updated_at_utc,
+            ),
+        )
+
+    async def async_insert(self, profile: ProfileRecord) -> None:
         def insert(connection: sqlite3.Connection) -> None:
-            connection.execute(
-                """INSERT INTO profiles(
-                       profile_id, name, preset, timezone, status, settings_json,
-                       created_at_utc, updated_at_utc
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    profile.profile_id,
-                    profile.name,
-                    profile.preset,
-                    profile.timezone,
-                    profile.status,
-                    settings_json,
-                    profile.created_at_utc,
-                    profile.updated_at_utc,
-                ),
-            )
+            self._insert_profile(connection, profile)
             connection.commit()
+
+        await self._storage._async_writer(insert)
+
+    async def async_insert_with_members(
+        self,
+        profile: ProfileRecord,
+        members: Iterable[ProfileMemberRecord],
+    ) -> None:
+        materialized_members = tuple(members)
+        if any(member.profile_id != profile.profile_id for member in materialized_members):
+            raise ValueError("profile member belongs to another profile")
+
+        def insert(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                self._insert_profile(connection, profile)
+                connection.executemany(
+                    """INSERT INTO profile_members(
+                           profile_id, ha_user_id, role, created_at_utc
+                       ) VALUES (?, ?, ?, ?)""",
+                    (
+                        (
+                            member.profile_id,
+                            member.ha_user_id,
+                            member.role,
+                            member.created_at_utc,
+                        )
+                        for member in materialized_members
+                    ),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
 
         await self._storage._async_writer(insert)
 
@@ -110,21 +177,42 @@ class ProfilesRepository:
                    FROM profiles WHERE profile_id = ?""",
                 (profile_id,),
             ).fetchone()
-            if row is None:
-                return None
-            keys = (
-                "profile_id",
-                "name",
-                "preset",
-                "timezone",
-                "status",
-                "settings_json",
-                "created_at_utc",
-                "updated_at_utc",
+            return None if row is None else _profile_dict(row)
+
+        return await self._storage._async_reader(read)
+
+    async def async_list_for_ha_user(self, ha_user_id: str) -> tuple[dict[str, Any], ...]:
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT p.profile_id, p.name, p.preset, p.timezone, p.status,
+                          p.settings_json, p.created_at_utc, p.updated_at_utc, m.role
+                   FROM profile_members AS m
+                   JOIN profiles AS p ON p.profile_id = m.profile_id
+                   WHERE m.ha_user_id = ?
+                   ORDER BY p.name COLLATE NOCASE, p.profile_id""",
+                (ha_user_id,),
+            ).fetchall()
+            return tuple(_profile_dict(row[:-1], role=str(row[-1])) for row in rows)
+
+        return await self._storage._async_reader(read)
+
+    async def async_list_members(self, profile_id: str) -> tuple[dict[str, str], ...]:
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, str], ...]:
+            rows = connection.execute(
+                """SELECT ha_user_id, role, created_at_utc
+                   FROM profile_members
+                   WHERE profile_id = ?
+                   ORDER BY ha_user_id""",
+                (profile_id,),
+            ).fetchall()
+            return tuple(
+                {
+                    "ha_user_id": str(row[0]),
+                    "role": str(row[1]),
+                    "created_at_utc": str(row[2]),
+                }
+                for row in rows
             )
-            result = dict(zip(keys, row, strict=True))
-            result["settings"] = json.loads(result.pop("settings_json"))
-            return result
 
         return await self._storage._async_reader(read)
 
