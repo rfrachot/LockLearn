@@ -120,12 +120,17 @@ def _initialize_state_database(path: Path, schema: str, version: int) -> None:
     _migrate_state_database(path, schema, current, version)
 
 
+def _unlink_sqlite_files(path: Path) -> None:
+    for candidate in (path, Path(f"{path}-wal"), Path(f"{path}-shm")):
+        candidate.unlink(missing_ok=True)
+
+
 def _migrate_state_database(path: Path, schema: str, current: int, target: int) -> None:
     if (current, target) != (1, 2):
         raise RuntimeError(f"No state migration path from {current} to {target}")
 
     candidate = path.with_name(f".{path.name}.v2-migration")
-    candidate.unlink(missing_ok=True)
+    _unlink_sqlite_files(candidate)
     connection = sqlite3.connect(candidate)
     try:
         _configure_state_connection(connection)
@@ -178,6 +183,8 @@ def _migrate_state_database(path: Path, schema: str, current: int, target: int) 
         connection.close()
 
     os.replace(candidate, path)
+    _unlink_sqlite_files(Path(f"{candidate}-wal"))
+    Path(f"{candidate}-shm").unlink(missing_ok=True)
 
 
 class SQLiteStorage:
