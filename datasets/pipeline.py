@@ -95,6 +95,7 @@ class SourceInput:
     retrieved_at: datetime
     files: tuple[SourceFileInput, ...]
     upstream_date: str | None = None
+    snapshot_url: str | None = None
 
     def __post_init__(self) -> None:
         if not self.source_id or not self.upstream_version:
@@ -103,6 +104,8 @@ class SourceInput:
             raise DatasetBuildError("source retrieved_at must be timezone-aware")
         if not self.files:
             raise DatasetBuildError("source input must contain at least one raw file")
+        if len(self.files) > 1 and not self.snapshot_url:
+            raise DatasetBuildError("multi-file source input requires snapshot_url")
 
 
 @dataclass(frozen=True, slots=True)
@@ -357,7 +360,7 @@ def normalize_source(
 
     if record_count == 0:
         raise DatasetBuildError(f"adapter emitted no records for source: {source.source_id}")
-    source_url = source.files[0].source_url if len(source.files) == 1 else _common_source_url(source)
+    source_url = source.snapshot_url or source.files[0].source_url
     return NormalizedSource(
         source_id=source.source_id,
         snapshot_id=snapshot_id,
@@ -648,8 +651,11 @@ def _canonical_record_line(record: NormalizedRecord) -> str:
 
 
 def _aggregate_source_sha(files: Iterable[SourceFileInput]) -> str:
+    ordered = sorted(files, key=lambda value: value.path.name)
+    if len(ordered) == 1:
+        return _sha256_file(ordered[0].path)
     digest = hashlib.sha256()
-    for item in sorted(files, key=lambda value: value.path.name):
+    for item in ordered:
         file_sha = _sha256_file(item.path)
         digest.update(item.path.name.encode("utf-8"))
         digest.update(b"\x1f")
@@ -867,13 +873,6 @@ def _zip_write(archive: zipfile.ZipFile, name: str, content: bytes) -> None:
     info.compress_type = zipfile.ZIP_DEFLATED
     info.external_attr = 0o100644 << 16
     archive.writestr(info, content)
-
-
-def _common_source_url(source: SourceInput) -> str:
-    urls = sorted({item.source_url for item in source.files})
-    if len(urls) == 1:
-        return urls[0]
-    return f"composite:{hashlib.sha256(chr(10).join(urls).encode()).hexdigest()}"
 
 
 def _safe_name(value: str) -> str:
