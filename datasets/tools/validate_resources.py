@@ -69,7 +69,9 @@ def validate() -> None:
                 field in rule
                 for field in ("prompt_facet_key", "answer_facet_key", "enabled_by_default")
             ):
-                raise ValueError(f"non-direction curation rule carries direction fields in {row['id']}")
+                raise ValueError(
+                    f"non-direction curation rule carries direction fields in {row['id']}"
+                )
 
     policy_rows = normalization_policies.get("policies", [])
     policy_ids = [row["id"] for row in policy_rows]
