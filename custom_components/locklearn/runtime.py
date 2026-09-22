@@ -11,6 +11,7 @@ from homeassistant.helpers import issue_registry as ir
 
 from .const import DOMAIN
 from .core.operations import OperationRegistry
+from .core.profiles import ProfileService
 from .core.sessions import SessionService
 from .datasets.manager import (
     DatasetManager,
@@ -31,6 +32,7 @@ class LockLearnRuntime:
     storage: SQLiteStorage
     sessions: SessionService
     operations: OperationRegistry
+    profiles: ProfileService
     datasets: DatasetManager
 
     @classmethod
@@ -83,6 +85,7 @@ class LockLearnRuntime:
                 storage=storage,
                 sessions=SessionService(storage),
                 operations=OperationRegistry(),
+                profiles=ProfileService(storage.repositories.profiles),
                 datasets=datasets,
             )
         except Exception:
