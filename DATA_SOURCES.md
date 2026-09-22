@@ -23,3 +23,28 @@ Japanese/English lexical structure plus French-language Wiktionary extraction
 or original curated French content where license/provenance is explicit.
 
 See `docs/data/SOURCE_AUDIT_2026-09-15.md` and `LICENSING.md`.
+
+
+## P1.7 registry contract
+
+The machine-readable registry is policy, not descriptive metadata. Each source
+now declares:
+
+```text
+license_scope
+attribution_template
+adapter_id
+required_provenance[]
+field_allowlist (when a mixed source needs one)
+excluded_by_default[]
+notes
+```
+
+Future P1.8 adapters must call the centralized registry policy before emitting
+official fields. Exact upstream material is represented by SourceSnapshot
+records and merged content retains provenance records rather than relying on CI
+logs or release-manifest availability.
+
+Tatoeba text is the reference case for sentence-level attribution. KANJIDIC2 is
+the reference case for a source that is acceptable only through an explicit
+field allowlist. KanjiVG is the reference case for an asset license boundary.
