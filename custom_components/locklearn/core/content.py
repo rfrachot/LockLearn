@@ -266,9 +266,7 @@ class Term:
             and canonical_script is not None
             and parsed_language.script != canonical_script
         ):
-            raise ContentModelError(
-                "Term.script must match the explicit script in language_tag"
-            )
+            raise ContentModelError("Term.script must match the explicit script in language_tag")
 
         object.__setattr__(self, "language_tag", parsed_language.value)
         object.__setattr__(self, "script", canonical_script)
