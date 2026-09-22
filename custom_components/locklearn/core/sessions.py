@@ -101,6 +101,15 @@ class SessionService:
                         f"unknown active card reference: {question.card_key}"
                     )
 
+        active_generation = self._storage.content_generations.active_metadata.generation_id
+        persisted_items: list[dict[str, Any]] = []
+        for question in questions:
+            item = question.as_storage_dict()
+            payload = dict(item["payload"])
+            payload["dataset_generation"] = active_generation
+            item["payload"] = payload
+            persisted_items.append(item)
+
         return await self._storage.async_create_session(
             uuid4().hex,
             profile_id,
@@ -108,7 +117,7 @@ class SessionService:
             session_type=session_type,
             strategy=strategy,
             settings=settings,
-            items=tuple(question.as_storage_dict() for question in questions),
+            items=tuple(persisted_items),
         )
 
     async def async_get(self, session_id: str) -> dict[str, Any] | None:
