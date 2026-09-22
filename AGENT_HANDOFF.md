@@ -3,7 +3,8 @@
 ## Current state
 
 P0.1–P0.7 and P1.1–P1.9 are complete. P1 remains in progress on
-`feat/p1-content-core`.
+`feat/p1-content-core`. P1.10 is implemented and awaits the full local
+Ruff/mypy/registry/pytest gate before PASS.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -112,9 +113,8 @@ ADR-0015 records the offline ETL/release boundary.
   tables belongs with the released `state.db` schema; P1.6 prevents incomplete
   item/facet mappings from activating.
 
-P1.6, P1.7, P1.8 and P1.9 are closed PASS. Next concrete action: implement
-P1.10 signed first-run mini dataset without pulling P1.11 Asset renderer scope
-into the same work package.
+P1.6, P1.7, P1.8 and P1.9 are closed PASS. P1.10 is implemented and awaits
+local verification. Do not begin P1.11 Asset schema until that gate closes.
 
 
 ## P1.9 closure
@@ -147,3 +147,38 @@ Final Ubuntu verification after the P1.9 fixture/style remediation:
 - `python3 -m pytest -q --tb=short`: pass, 188 tests in 3.10 s.
 
 ADR-0016 records the runtime trust/update boundary.
+
+
+## P1.10 implementation awaiting verification
+
+P1.10 adds the actual bundled `Japanese Starter 1.0.0` product required by
+the first-run spec. It contains 120 LockLearn-authored LearningItems and 240
+CardDefinitions covering basic hiragana, basic katakana, a small yōon sample
+and 20 complete Japanese words with contextualized readings. It deliberately
+contains no isolated ON/KUN cards.
+
+The source is `locklearn:original` first-party editorial content under
+CC BY-SA 4.0. Source JSONL, DatasetRecipe and build config remain in the
+repository. The signed ZIP is bundled under
+`custom_components/locklearn/datasets/bundled/` and is 178478 bytes.
+
+Fresh runtime setup installs the bundle without any network request. It goes
+through the same P1.9 checksum, Ed25519, manifest, source/license, SQLite,
+generation-build and atomic-activation path as downloaded official content.
+Existing installations are not downgraded. Corrupt bundle validation produces
+the normal persistent install Repair and preserves last-known-good content.
+
+The immutable 1.0.0 package was signed on an ephemeral GitHub Actions runner.
+Only public key `locklearn-starter-2026-01` remains and is marked deprecated;
+the private key and one-shot signing workflow were destroyed/removed after the
+artifact was committed. Future builds therefore require a new reviewed key and
+dataset version.
+
+Tests cover semantic recipe output, real bundled signature validation, first-run
+offline activation, query, idempotent bootstrap, rollback/reinstall, real HA
+setup bootstrap and corrupt-bundle Repair behavior.
+
+ADR-0017 records the bundled starter and signing lifecycle.
+
+Next concrete action: run the full local quality suite. If green, close P1.10
+PASS and mark the signed-starter P1 exit gate satisfied; then move to P1.11.
