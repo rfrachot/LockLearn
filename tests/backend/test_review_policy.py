@@ -132,7 +132,7 @@ def test_overdue_success_never_schedules_shorter_than_demonstrated_retention() -
     assert transition.scheduled_interval_days == pytest.approx(1.0)
     assert transition.elapsed_days == pytest.approx(10.0)
     assert transition.effective_interval_days is not None
-    assert transition.effective_interval_days >= DEFAULT_BOX_INTERVAL_DAYS[3]
+    assert transition.effective_interval_days >= 10.0
 
 
 def test_mastery_is_non_terminal_and_decays_with_time() -> None:
@@ -159,7 +159,7 @@ def test_completed_short_steps_graduate_to_review_without_recomputing_short_step
         "card_key": "card-learning",
         "verified_correct_count": 0,
         "verified_wrong_count": 0,
-        "streak_correct": 3,
+        "streak_correct": 2,
         "next_due_at_utc": None,
     }
     transition = learning.learning_result(snapshot, success=True)
