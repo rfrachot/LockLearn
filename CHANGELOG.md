@@ -6,7 +6,7 @@ All notable changes will be documented here.
 
 ### Added
 - P3.5 deterministic selection constraints for prerequisite unlocks, new/review
-  sibling burial and PackVersion-owned confusable introduction spacing.
+  sibling burial and PackVersion-owned confusable introduction spacing (PASS).
 - Track-scoped candidate validation plus machine-readable eligibility reasons and
   blocked-until timestamps for later session/scheduler ranking.
 - ADR-0026 documenting the eligibility/ranking boundary, bare-prerequisite
