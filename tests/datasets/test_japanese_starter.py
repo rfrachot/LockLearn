@@ -120,6 +120,7 @@ def test_bundled_starter_is_signed_by_runtime_key_and_small() -> None:
     )
     assert validated.manifest.dataset_id == DATASET_ID
     assert validated.manifest.dataset_version == "1.0.0"
+    assert validated.manifest.content_schema_version == 1
     assert validated.manifest.item_counts["learning_items"] == 120
     assert validated.manifest.item_counts["cards"] == 240
 
@@ -147,6 +148,7 @@ async def test_fresh_storage_bootstraps_starter_without_network(tmp_path: Path) 
         assert inventory[0]["dataset_id"] == DATASET_ID
         assert inventory[0]["version"] == "1.0.0"
         assert inventory[0]["pack_version_ids"] == (PACK_VERSION_ID,)
+        assert storage.content_generations.active_metadata.content_schema_version == 2
 
         # Re-running first-run bootstrap is idempotent and never downgrades.
         assert await manager.async_install_bundled(bundled[0]) is None
