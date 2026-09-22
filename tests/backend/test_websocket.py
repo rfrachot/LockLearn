@@ -1,12 +1,15 @@
 """Home Assistant WebSocket session protocol tests."""
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.locklearn.const import DOMAIN
+from custom_components.locklearn.core.sessions import SessionQuestion
+from tests.backend.content_db_helpers import ITEM_A, card_identity, create_package, facet_ids
 
 
 async def test_storage_status_is_admin_only_and_privacy_safe(
@@ -41,25 +44,84 @@ async def test_two_websocket_clients_get_cas_and_subscription(
     hass: HomeAssistant,
     hass_ws_client: Any,
     hass_read_only_access_token: str,
+    hass_read_only_user: Any,
+    tmp_path: Path,
 ) -> None:
     """Only one same-version answer wins and subscribers receive the mutation."""
     entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, data={})
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
+    runtime = hass.data[DOMAIN]["runtime"]
+
+    package = create_package(
+        tmp_path / "session-websocket-package.db",
+        "session-websocket",
+        active_item_ids=(ITEM_A,),
+    )
+    candidate = runtime.storage.paths.content_staging_dir / "generation-session-websocket.db"
+    await runtime.storage.async_build_content_generation(
+        (package,),
+        candidate,
+        generation_id="generation-session-websocket",
+    )
+    await runtime.storage.async_activate_content_generation(candidate)
+
     client_one = await hass_ws_client(hass)
+    await client_one.send_json_auto_id(
+        {
+            "type": "locklearn/profiles/create",
+            "name": "Session owner",
+            "preset": "standard",
+            "timezone": "Europe/Paris",
+        }
+    )
+    profile_response = await client_one.receive_json()
+    assert profile_response["success"] is True
+    profile_id = profile_response["result"]["profile_id"]
+
+    card_key = card_identity(ITEM_A)[1]
+    await client_one.send_json_auto_id(
+        {
+            "type": "locklearn/tracks/create",
+            "profile_id": profile_id,
+            "name": "Session Track",
+            "pack_version_id": "locklearn:pack-version:session-websocket",
+            "source_language": "en",
+            "target_language": "fr",
+            "explicit_card_keys": [card_key],
+        }
+    )
+    track_response = await client_one.receive_json()
+    assert track_response["success"] is True
+    track_id = track_response["result"]["track_id"]
+    prompt_id, answer_id = facet_ids(ITEM_A)
+
+    started = await runtime.sessions.async_start(
+        profile_id,
+        track_id,
+        session_type="bounded",
+        strategy="prepared-test",
+        settings={"requested_cards": 1},
+        questions=(
+            SessionQuestion(
+                question_id="question-1",
+                card_key=card_key,
+                learning_item_id=ITEM_A,
+                prompt_facet_id=prompt_id,
+                answer_facet_id=answer_id,
+                payload={"format": "mcq", "dataset_generation": "generation-session-websocket"},
+            ),
+        ),
+    )
+    session_id = started["id"]
+
     client_two = await hass_ws_client(hass)
-
-    await client_one.send_json_auto_id({"type": "locklearn/session/start"})
-    started = await client_one.receive_json()
-    assert started["success"] is True
-    session_id = started["result"]["id"]
-    assert started["result"]["version"] == 1
-
     await client_two.send_json_auto_id(
         {"type": "locklearn/session/subscribe", "session_id": session_id}
     )
     subscribed = await client_two.receive_json()
     assert subscribed["success"] is True
+    assert subscribed["result"]["current_question"]["question_id"] == "question-1"
 
     answer = {
         "type": "locklearn/session/answer",
@@ -72,6 +134,7 @@ async def test_two_websocket_clients_get_cas_and_subscription(
     winner = await client_one.receive_json()
     assert winner["success"] is True
     assert winner["result"]["version"] == 2
+    assert winner["result"]["current_position"] == 1
 
     event = await client_two.receive_json()
     assert event["type"] == "event"
@@ -82,13 +145,34 @@ async def test_two_websocket_clients_get_cas_and_subscription(
     assert stale["success"] is False
     assert stale["error"]["code"] == "locklearn/stale_session"
 
+    await client_one.send_json_auto_id(
+        {
+            "type": "locklearn/profiles/share",
+            "profile_id": profile_id,
+            "target_user_id": hass_read_only_user.id,
+            "role": "viewer",
+        }
+    )
+    assert (await client_one.receive_json())["success"] is True
+
     outsider = await hass_ws_client(hass, hass_read_only_access_token)
     await outsider.send_json_auto_id({"type": "locklearn/session/get", "session_id": session_id})
+    visible = await outsider.receive_json()
+    assert visible["success"] is True
+
+    await outsider.send_json_auto_id(
+        {
+            "type": "locklearn/session/answer",
+            "session_id": session_id,
+            "expected_version": 2,
+            "question_id": "question-1",
+            "answer": {"choice": "b"},
+        }
+    )
     forbidden = await outsider.receive_json()
     assert forbidden["success"] is False
     assert forbidden["error"]["code"] == "locklearn/forbidden"
 
-    runtime = hass.data[DOMAIN]["runtime"]
     assert runtime.sessions.subscriber_count == 1
     await client_two.close()
     await hass.async_block_till_done()
