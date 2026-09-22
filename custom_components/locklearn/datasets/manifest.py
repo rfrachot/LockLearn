@@ -1,4 +1,4 @@
-"""Strict version-1 manifest model for signed dataset packages."""
+"""Strict version-2 manifest model for signed dataset packages."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from typing import Any
 
 from ..core.content import ContentModelError, validate_license_id, validate_stable_id
 
-MANIFEST_VERSION = 1
+MANIFEST_VERSION = 2
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _VERSION_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._+-]*$")
 _KEY_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
@@ -50,9 +50,11 @@ class SourceReference:
     source_id: str
     snapshot_id: str
     upstream_version: str
+    upstream_date: str | None
     retrieved_at: datetime
     source_url: str
     sha256: str
+    adapter_version: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,7 +67,7 @@ class LicenseReference:
 
 @dataclass(frozen=True, slots=True)
 class DatasetManifest:
-    """Immutable parsed representation of a manifest-version-1 document."""
+    """Immutable parsed representation of a manifest-version-2 document."""
 
     manifest_version: int
     dataset_id: str
@@ -91,7 +93,16 @@ class DatasetManifest:
 _TOP_LEVEL_FIELDS = frozenset(DatasetManifest.__dataclass_fields__)
 _FILE_FIELDS = frozenset({"path", "size", "sha256", "role"})
 _SOURCE_FIELDS = frozenset(
-    {"source_id", "snapshot_id", "upstream_version", "retrieved_at", "source_url", "sha256"}
+    {
+        "source_id",
+        "snapshot_id",
+        "upstream_version",
+        "upstream_date",
+        "retrieved_at",
+        "source_url",
+        "sha256",
+        "adapter_version",
+    }
 )
 _LICENSE_FIELDS = frozenset({"license_id", "path"})
 
@@ -295,9 +306,17 @@ def _parse_source(value: object, index: int) -> SourceReference:
         upstream_version=_string(
             row["upstream_version"], field=f"sources[{index}].upstream_version"
         ),
+        upstream_date=(
+            None
+            if row["upstream_date"] is None
+            else _string(row["upstream_date"], field=f"sources[{index}].upstream_date")
+        ),
         retrieved_at=_timestamp(row["retrieved_at"], field=f"sources[{index}].retrieved_at"),
         source_url=_string(row["source_url"], field=f"sources[{index}].source_url"),
         sha256=_sha256(row["sha256"], field=f"sources[{index}].sha256"),
+        adapter_version=_version(
+            row["adapter_version"], field=f"sources[{index}].adapter_version"
+        ),
     )
 
 
@@ -343,9 +362,11 @@ def serialize_manifest(manifest: DatasetManifest) -> bytes:
                 "source_id": source.source_id,
                 "snapshot_id": source.snapshot_id,
                 "upstream_version": source.upstream_version,
+                "upstream_date": source.upstream_date,
                 "retrieved_at": source.retrieved_at.isoformat().replace("+00:00", "Z"),
                 "source_url": source.source_url,
                 "sha256": source.sha256,
+                "adapter_version": source.adapter_version,
             }
             for source in manifest.sources
         ],
