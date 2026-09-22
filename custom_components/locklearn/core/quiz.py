@@ -138,7 +138,12 @@ class QuizEngine:
             if not prompt.cloze_prompt:
                 raise QuizConstructionError("grammar cloze-MCQ requires cloze_prompt")
 
-        filtered = self._eligible_distractors(prompt, tuple(candidates))
+        candidate_pool = tuple(candidates)
+        if quiz_format is QuizFormat.CLOZE_MCQ:
+            candidate_pool = tuple(
+                candidate for candidate in candidate_pool if candidate.content_type == "grammar"
+            )
+        filtered = self._eligible_distractors(prompt, candidate_pool)
         if len(filtered) < option_count - 1:
             raise QuizConstructionError(
                 f"not enough safe distractors: need {option_count - 1}, got {len(filtered)}"
