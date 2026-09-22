@@ -132,9 +132,7 @@ class ReviewPolicyV1:
 
         current_box = max(1, int(snapshot.get("box", 1)))
         target_box = (
-            min(max(DEFAULT_BOX_INTERVAL_DAYS), current_box + 1)
-            if promote_box
-            else current_box
+            min(max(DEFAULT_BOX_INTERVAL_DAYS), current_box + 1) if promote_box else current_box
         )
         difficulty = self._difficulty(snapshot)
         if verified and reward_difficulty and not hint_used:
@@ -173,9 +171,9 @@ class ReviewPolicyV1:
         if target_box != current_box:
             post["verified_success_since_box"] = 0
         elif verified:
-            post["verified_success_since_box"] = int(
-                snapshot.get("verified_success_since_box", 0)
-            ) + 1
+            post["verified_success_since_box"] = (
+                int(snapshot.get("verified_success_since_box", 0)) + 1
+            )
         post["mastery"] = self.mastery(post, at=now)
         return ReviewTransition(
             pre_state=dict(snapshot),
