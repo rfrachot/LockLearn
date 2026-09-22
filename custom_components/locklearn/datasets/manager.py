@@ -15,8 +15,8 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from urllib.parse import urlparse
 from typing import Any, Protocol
+from urllib.parse import urlparse
 
 from awesomeversion import AwesomeVersion
 
@@ -66,8 +66,14 @@ class DatasetDefinition:
             raise DatasetManagerError("dataset catalog_url must use HTTPS")
         if not self.artifact_hosts:
             raise DatasetManagerError("dataset definition requires artifact_hosts")
-        if any(not host or "/" in host or ":" in host for host in self.artifact_hosts):
-            raise DatasetManagerError("artifact_hosts must contain plain hostnames")
+        if any(
+            not host
+            or host != host.lower()
+            or "/" in host
+            or ":" in host
+            for host in self.artifact_hosts
+        ):
+            raise DatasetManagerError("artifact_hosts must contain lowercase plain hostnames")
         if self.artifact_max_bytes <= 0:
             raise DatasetManagerError("artifact_max_bytes must be positive")
 
@@ -94,6 +100,10 @@ class DatasetRelease:
             raise DatasetDiscoveryError("release artifact_sha256 must be lowercase SHA-256")
         if self.artifact_size <= 0:
             raise DatasetDiscoveryError("release artifact_size must be positive")
+        if self.release_url is not None:
+            parsed_release_url = urlparse(self.release_url)
+            if parsed_release_url.scheme != "https" or not parsed_release_url.hostname:
+                raise DatasetDiscoveryError("release_url must use HTTPS")
 
 
 @dataclass(frozen=True, slots=True)
