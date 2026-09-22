@@ -109,12 +109,12 @@ enabled entity.
 | persistent replay/single-use result | NOT_APPLICABLE — P4 `NotificationInteraction` consumer does not exist in the P0 skeleton; one physical tap produced one bus event and zero duplicates in the grace window | NOT_APPLICABLE — same justification |
 | shared-device physical signal quality | NOT_APPLICABLE — no configured shared Profile/device pair and P2 Profile ACL does not yet exist; automated reduced-signal policy tests pass |
 
-Capability decision: both Android targets have `tag_replace=supported`. The
-Samsung has `silent_replace=unsupported`; the Pixel remains `unknown` for
-silent replacement. Unknown/unsupported therefore keeps two-step learning in
-`exposure_only` until a later per-target qualification proves the complete
-gate. This is a successful conservative qualification, not a claim that every
-platform feature works.
+Capability decision: both Android targets have `replace_by_tag=supported`,
+`action_data=supported` and three usable visible actions. The Samsung has
+`silent_replace=unsupported`; the Pixel remains `unknown` for silent
+replacement. Those last two facts are UX limitations only: both targets still
+preserved an answer-free prompt followed by a real Reveal action. A second
+vibration therefore does not change that interaction into `exposure_only`.
 
 ## Gate C — HAOS/Supervisor backup and restore (P0.3/P0.7)
 
@@ -172,10 +172,12 @@ Target: Apple iPad12,1, name `iPad de Tiffanie`, device-registry `sw_version`
 | persistent replay/single-use result | NOT_APPLICABLE — P4 interaction consumer does not yet exist; no duplicate bus event was observed |
 
 Tapping the notification body opens Home Assistant and loses the actionable
-surface; appui long/expansion is required. iPadOS therefore remains
-`exposure_only`: tag replacement and visibility are unsupported. Unique action
-IDs can correlate events, but inbound device identity must not be inferred from
-fields iOS does not send.
+surface; appui long/expansion is required. iPadOS nevertheless preserved the
+prompt→Reveal→answer order: failed tag replacement stacked the second
+notification but did not expose the answer before the retrieval action. That
+is a degraded technical renderer, not `exposure_only`. Unique action IDs can
+correlate events, but inbound device identity must not be inferred from fields
+iOS does not send.
 
 ## Security and privacy observations
 
@@ -207,7 +209,8 @@ Before the v0.0.2 release:
 
 After the evidence and backup harness were added:
 
-- pytest on HA 2026.9.3/Python 3.14.4: 30 passed;
+- pytest on HA 2026.9.3/Python 3.14.4: 32 passed after the final semantic
+  separation regression tests;
 - pytest backend on HA 2025.2.5/Python 3.13.15: 24 passed;
 - hassfest: 1 integration, 0 invalid;
 - all other checks above remained PASS.
@@ -215,14 +218,16 @@ After the evidence and backup harness were added:
 ## P0 disposition
 
 - Gate A — HACS / Config Flow / panel: **PASS**
-- Gate B — Android Companion: **PASS** (capabilities measured; conservative
-  fallback retained where unsupported/unknown)
+- Gate B — Android Companion: **PASS** (capabilities measured; second-vibration
+  behavior kept separate from pedagogical signal)
 - Gate C — HAOS Supervisor backup/restore: **PASS**
 - Gate D — iOS/iPadOS Companion: **PASS** (platform limitations measured;
-  `exposure_only` selected)
+  stacked post-action reveal preserves prompt-first semantics)
 
 P0 is closed for architecture purposes. `NOT_APPLICABLE` replay/single-use and
 shared-Profile cases belong to their already planned P2/P4 implementations;
 they are not silently claimed as functional. The notification renderer in P4
 must consume the per-target capability decisions above rather than treating a
-platform family as uniformly capable.
+platform family as uniformly capable. It must classify `exposure_only` from
+what was actually shown and whether retrieval was usable, never from a
+technical capability flag alone.

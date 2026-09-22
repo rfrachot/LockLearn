@@ -16,10 +16,29 @@ class Capability(StrEnum):
 
 
 class LearningNotificationMode(StrEnum):
-    """Safe rendering modes for passive learning."""
+    """Technical rendering modes for passive learning."""
 
     TWO_STEP_REVEAL = "two_step_reveal"
+    DIRECT_EXPOSURE = "direct_exposure"
+
+
+class LearningSignal(StrEnum):
+    """Pedagogical result derived from what the learner actually experienced."""
+
+    NO_RESULT = "no_result"
     EXPOSURE_ONLY = "exposure_only"
+    SELF_ASSESSMENT_AFTER_RETRIEVAL = "self_assessment_after_retrieval"
+
+
+def classify_learning_signal(
+    *, answer_exposed_before_retrieval: bool, retrieval_was_usable: bool
+) -> LearningSignal:
+    """Classify actual presentation/retrieval facts, never device capabilities."""
+    if answer_exposed_before_retrieval:
+        return LearningSignal.EXPOSURE_ONLY
+    if retrieval_was_usable:
+        return LearningSignal.SELF_ASSESSMENT_AFTER_RETRIEVAL
+    return LearningSignal.NO_RESULT
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,29 +47,31 @@ class TargetCapabilities:
 
     device_registry_id: str
     platform: str
-    tag_replace: Capability = Capability.UNKNOWN
+    replace_by_tag: Capability = Capability.UNKNOWN
     silent_replace: Capability = Capability.UNKNOWN
-    clear_notification: Capability = Capability.UNKNOWN
-    cleared_signal: Capability = Capability.UNKNOWN
+    action_data: Capability = Capability.UNKNOWN
+    text_input: Capability = Capability.UNKNOWN
+    clear_event: Capability = Capability.UNKNOWN
+    device_attribution: Capability = Capability.UNKNOWN
+    lockscreen_privacy: Capability = Capability.UNKNOWN
+    visible_actions: int = 0
     expiration: Capability = Capability.UNKNOWN
     channel_importance: Capability = Capability.UNKNOWN
-    text_input: Capability = Capability.UNKNOWN
-    lockscreen_visibility: Capability = Capability.UNKNOWN
     media: Capability = Capability.UNKNOWN
-    visible_action_count: int = 0
     shared_device: bool = False
     tested_app_version: str | None = None
     tested_at_utc: str | None = None
 
     def learning_mode(self) -> LearningNotificationMode:
-        """Select two-step reveal only when both replacement gates are proven."""
-        if (
-            self.tag_replace is Capability.SUPPORTED
-            and self.silent_replace is Capability.SUPPORTED
-            and self.visible_action_count >= 2
-        ):
+        """Select a prompt-first flow when actionable delivery is proven.
+
+        Replacement, sound, attribution and privacy capabilities affect UX,
+        routing and security choices. They do not retroactively determine
+        whether a learner had a usable retrieval attempt.
+        """
+        if self.action_data is Capability.SUPPORTED and self.visible_actions >= 2:
             return LearningNotificationMode.TWO_STEP_REVEAL
-        return LearningNotificationMode.EXPOSURE_ONLY
+        return LearningNotificationMode.DIRECT_EXPOSURE
 
     def as_dict(self) -> dict[str, Any]:
         """Serialize the evidence without guessing unknown features."""
