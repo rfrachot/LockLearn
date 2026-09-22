@@ -1,6 +1,7 @@
 """Signed, prebuilt LockLearn dataset package contract."""
 
 from .manager import (
+    BundledDataset,
     DatasetDefinition,
     DatasetDiscoveryError,
     DatasetInstallError,
@@ -41,6 +42,7 @@ __all__ = [
     "MANIFEST_VERSION",
     "ArchiveLimits",
     "ArchiveStructureError",
+    "BundledDataset",
     "DatasetDatabaseError",
     "DatasetDefinition",
     "DatasetDiscoveryError",
