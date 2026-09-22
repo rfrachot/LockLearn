@@ -3,8 +3,7 @@
 ## Current state
 
 P0.1–P0.7 remain complete. P1 is in progress on `feat/p1-content-core`.
-P1.1–P1.4 are complete. P1.5 implementation is complete and awaits repository
-verification on the Ubuntu development checkout.
+P1.1–P1.5 are complete. P1.5 is verified on the Ubuntu development checkout.
 
 P1.3 adds the generic content presentation/grading contract without changing
 progression identity. `CardDefinition` now carries mutable
@@ -102,17 +101,19 @@ ADR-0012 records the pack/version/prerequisite/curation boundaries. P1.5 does
 not implement progress-based unlock evaluation, scheduler enforcement,
 `content.db` persistence/indexes, full Track CRUD or grading execution.
 
-## P1.5 verification pending
+## P1.5 verification
 
-Required before changing P1.5 to PASS:
+P1.5 PASS on the Ubuntu development checkout:
 
-```text
-python3 -m ruff format --check .
-python3 -m ruff check .
-python3 -m mypy custom_components datasets tests
-python3 datasets/tools/validate_resources.py
-python3 -m pytest -q --tb=short
-```
+- Ruff format: pass (118 files already formatted on final head).
+- Ruff check: pass.
+- mypy (`custom_components datasets tests`): pass (54 source files).
+- dataset resource registries: pass.
+- pytest full suite: 139 passed in 1.48 s.
+
+The final branch-only delta after the full mypy/registry/pytest run was Ruff
+line wrapping in the resource validator; Ruff format was then re-run on the
+resulting head and passed.
 
 ## Remaining risks / next action
 
@@ -127,6 +128,5 @@ python3 -m pytest -q --tb=short
 - The future Lit renderer must map the rich-text AST node-by-node and must never
   route dataset strings through `unsafeHTML`.
 
-Next concrete action: verify and close P1.5 PASS. Only after that, start P1.6
-content.db schema/generations/stable merge. Do not begin P1.7+ or grading-engine
-work as part of P1.5.
+Next concrete action: start P1.6 content.db schema, generations and stable
+merge only. Do not begin P1.7+ or grading-engine work as part of P1.6.
