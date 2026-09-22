@@ -2,131 +2,73 @@
 
 ## Current state
 
-P0.1–P0.7 remain complete. P1 is in progress on `feat/p1-content-core`.
-P1.1–P1.5 are complete. P1.5 is verified on the Ubuntu development checkout.
+P0.1–P0.7 and P1.1–P1.6 are complete. P1 remains in progress on
+`feat/p1-content-core`; P1.6 is PASS on the Ubuntu development checkout.
 
-P1.3 adds the generic content presentation/grading contract without changing
-progression identity. `CardDefinition` now carries mutable
-`answer_semantics`, versioned grading metadata and context-hint facet IDs,
-while `card_key` and `card_definition_id` still derive only from LearningItem
-+ ordered prompt/answer facet IDs.
+P1.6 replaces the provisional P0 content table with normalized content schema
+v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
+LearningItems, Facets, CardDefinitions, safe ContentBlocks, Tags, Packs,
+PackVersions, prerequisites, confusable groups, explicit ID migrations,
+lifecycle tombstones/history and PackVersion pre-aggregates.
 
-Content blocks model semantic role, explicit answer revelation, masking strategy
-and typed text/rich-text/media references. Text supports structured
-reading/furigana/ruby segments without Unicode offsets. Rich text is a closed,
-bounded AST; arbitrary HTML, links, remote media, event attributes and unknown
-nodes/fields fail closed. `unrecognized` grading remains distinct from
-`wrong` and is explicitly non-definitive for downstream SRS handling.
+`ContentGenerationBuilder` copies the previous immutable generation, merges
+validated packages one at a time (`main` + one attached package maximum),
+preserves stable rows, rebuilds tombstones/aggregates, and exposes a candidate
+only after schema, integrity, FK, stable-ID, P1.3 payload, migration-coverage and
+aggregate validation.
 
-ADR-0010 records the safe AST, reveal/mask, ruby and grading-identity decisions.
-P1.3 does not implement the frontend renderer, normalization engine, grading
-engine, SRS behavior, full Asset schema, `content.db` schema or cloze
-generator.
+`ContentGenerationManager` blocks new readers, drains real SQLite reader
+leases, atomically replaces the `current.db` hard link, fsyncs the switch,
+retains one validated previous generation and supports rollback. Activated
+generation files are read-only. Failed builds/activations preserve the
+last-known-good generation. The exact unreleased P0 cache schema is rebuilt
+out-of-place without touching `state.db`.
+
+Removed/superseded LearningItems, Facets and CardDefinitions retain their rows
+and current tombstones. Lifecycle history proves that
+`active → removed → active` restores the exact LearningItem ID, Facet IDs,
+`card_definition_id` and `card_key`; user progress remains exclusively in
+`state.db`.
+
+ADR-0013 records schema/version boundaries, bounded merge, activation,
+lease/drain, rollback, tombstones, crash behavior and the no-fan-out decision.
 
 ## Branch / commits
 
 - Branch: `feat/p1-content-core`
-- P1.1 closure: `e931bb52e569e9a6f57536623b9d95602589b396`
-- P1.2 closure: `8ee51f17bdb5e61d2d4c50b9327b33d990a90c9c`
-- P1.3 implementation commits begin at `d62a317540297486028e295dc63be131d7661666`
-  and continue through the current branch head.
-- ADR-0010: `docs/adr/ADR-0010-safe-content-blocks-and-grading.md`
+- Remote P1.5 closure pulled at start: `9881cfd36b98d245e810b3ad69ceba04124dbaff`
+- P1.6 implementation/tests: `a5e2d11` (`feat(storage): add immutable content generations`).
+- P1.6 ADR/tracking/handoff: the documentation commit containing this file.
+- All P1.6 commits are local only; no push/PR/merge/tag.
 
 ## Verification
 
-P1.3 PASS on the Ubuntu development checkout:
+Final P1.6 verification on the resulting worktree:
 
-- Ruff format: pass (111 files already formatted on final head).
-- Ruff check: pass.
-- mypy (`custom_components datasets tests`): pass (49 source files).
-- dataset resource registries: pass.
-- pytest full suite: 102 passed in 1.19 s.
+- `python3 -m ruff format --check .`: pass, 122 files already formatted.
+- `python3 -m ruff check .`: pass.
+- `python3 -m mypy custom_components datasets tests`: pass, 57 source files.
+- `python3 datasets/tools/validate_resources.py`: pass.
+- `python3 -m pytest -q --tb=short`: pass, 151 tests in 2.11 s.
+- HA current 2026.9.3 / Python 3.14 backend: included above; 97 backend tests
+  also pass when run after the final additions as part of the full 151-test run.
+- HA minimum 2025.2.5 / Python 3.13.15 backend: pass, 97 tests in 2.52 s.
+- Targeted content/storage suite immediately before final full runs: pass;
+  subsequent full runs include the same tests.
 
-The mypy/registry/pytest run was performed immediately before the final
-format-only commit; that last commit changed only Ruff line wrapping. Ruff
-format was then re-run on the resulting head and passed. No frontend files
-changed in P1.3.
-
-## P1.4 implementation
-
-P1.4 adds `core/localization.py` with modern BCP 47 parsing/canonicalization,
-structural ISO 15924 script validation, deterministic locale fallback and
-versioned generic normalization policies. The normalization engine has no
-language-specific branches.
-
-`Term` now canonicalizes language/script metadata and may carry the atomic
-`normalized_text` + `normalization_version` pair. Applying a policy preserves
-`term_id`. A changed policy behavior without a higher normalization version is
-rejected so later persisted indexes can be rebuilt safely.
-
-The bootstrap language registry now references a validated
-`normalization_policies.json`; `latin_default_v1` and `japanese_v1` are
-data-driven policies rather than core conditionals. ADR-0011 records these
-boundaries and the exact -> base -> explicit default/final fallback contract.
-
-## P1.4 verification
-
-P1.4 PASS on the Ubuntu development checkout:
-
-- Ruff format: pass (114 files already formatted on final head).
-- Ruff check: pass.
-- mypy (`custom_components datasets tests`): pass (51 source files).
-- dataset resource registries: pass.
-- pytest full suite: 124 passed in 1.37 s.
-
-The final branch-only delta after the full mypy/registry/pytest run was import
-spacing required by Ruff; Ruff format and Ruff check were then re-run on the
-resulting head and both passed.
-
-## P1.5 implementation
-
-P1.5 adds `core/packs.py` with stable Tags, Pack/PackVersion identities,
-Track-to-PackVersion pinning, ordered PackItems, prerequisite card keys,
-declarative unlock conditions, card defaults, confusable groups and pack-version
-diff metadata.
-
-LearningItems now carry non-identifying curation metadata: queryable `tag_ids`,
-optional `register` and `required_item_ids`. The same LearningItem identity can
-be referenced by multiple PackVersions.
-
-Japanese official defaults are not hard-coded in the core. They live in
-`datasets/resources/curation_policies.json` as a versioned policy and are
-validated/tested as data. The policy disables isolated glyph->ON/KUN directions
-by default, prefers contextualized readings and complete-term production,
-requires stronger production grading, labels mnemonic keyword use, requires
-context hints for ambiguity, prefers covered examples and permits furigana for
-indispensable uncovered vocabulary.
-
-ADR-0012 records the pack/version/prerequisite/curation boundaries. P1.5 does
-not implement progress-based unlock evaluation, scheduler enforcement,
-`content.db` persistence/indexes, full Track CRUD or grading execution.
-
-## P1.5 verification
-
-P1.5 PASS on the Ubuntu development checkout:
-
-- Ruff format: pass (118 files already formatted on final head).
-- Ruff check: pass.
-- mypy (`custom_components datasets tests`): pass (54 source files).
-- dataset resource registries: pass.
-- pytest full suite: 139 passed in 1.48 s.
-
-The final branch-only delta after the full mypy/registry/pytest run was Ruff
-line wrapping in the resource validator; Ruff format was then re-run on the
-resulting head and passed.
+No frontend files changed. No frontend command was needed for P1.6.
 
 ## Remaining risks / next action
 
-- P1.4 is complete: BCP 47/ISO 15924 validation, `normalized_text`,
-  `normalization_version`, script-aware policies and locale fallback are closed.
-- P3.7 owns actual exact/any_of/fuzzy grading execution and the
-  “Ma réponse devrait être acceptée” quality workflow.
-- P1.6 owns the complete `content.db` schema, persistence/generation activation
-  and stable-ID migration execution.
-- P1.11 owns full Asset metadata and serving; P1.3 only carries stable media
-  references.
-- The future Lit renderer must map the rich-text AST node-by-node and must never
-  route dataset strings through `unsafeHTML`.
+- P1.7 owns the detailed source/snapshot/provenance/license registry; P1.6 only
+  persists the existing minimal Source/Dataset contract.
+- P1.9 owns download orchestration, update entities, Repairs and user-facing
+  install/rollback policy; P1.6 supplies the storage primitives.
+- P1.11 owns full Asset metadata and serving; P1.6 stores only P1.3 stable media
+  references in validated payload JSON.
+- Applying validated stable-ID mappings transactionally to future user-state
+  tables belongs with the released `state.db` schema; P1.6 prevents incomplete
+  item/facet mappings from activating.
 
-Next concrete action: start P1.6 content.db schema, generations and stable
-merge only. Do not begin P1.7+ or grading-engine work as part of P1.6.
+Next concrete action: review/merge P1.6, then plan P1.7 separately. Do not begin
+P1.7 as part of this handoff.
