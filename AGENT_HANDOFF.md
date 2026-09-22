@@ -2,9 +2,9 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.2 are complete. P1 and P2 are
-closed PASS. P3 is in progress on `feat/p1-content-core`. P3.3 — ReviewPolicy
-V1 core — is implemented and awaiting the local quality gate.
+P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.3 are complete. P1 and P2 are
+closed PASS. P3 is in progress on `feat/p1-content-core`. P3.4 — verified
+retrieval gate and signal weighting — is implemented and awaiting the local gate.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -701,3 +701,68 @@ Next required local gate:
 - python3 -m pytest -q --tb=short
 
 If PASS, close P3.3 and begin P3.4 verified-retrieval gate and signal weighting.
+
+
+## P3.3 closure
+
+Renaud's local P3.3 gate is fully green after the typing/style remediation:
+- Ruff format: PASS, 171 files already formatted.
+- Ruff lint: PASS.
+- mypy: PASS, 92 source files.
+- resource registries: PASS.
+- pytest: PASS, 239 tests in 5.50 s.
+
+P3.3 is closed PASS.
+
+## P3.4 implementation pending verification
+
+P3.4 adds SignalPolicy as the normalization boundary between UI/channel
+interactions and ReviewPolicy.
+
+Signals now distinguish:
+- exposure: neutral, no retrieval;
+- post-retrieval self-assessment: weak, non-verified evidence;
+- verified MCQ: medium verified evidence;
+- verified free-text/cloze/exam retrieval: strong verified evidence;
+- hinted correct retrieval: verified but weak and no difficulty reward;
+- IDK: explicit retrieval failure;
+- unrecognized free-text: neutral, never automatic SRS failure.
+
+A positive self-assessment after the answer was already visible is forced to a
+neutral signal and cannot mutate long-box promotion.
+
+The default verified_gate_box is 2. A promotion targeting a box above that gate
+requires either gate-eligible verified evidence in the current interaction or a
+verified success already accumulated in the current box. Promotion consumes
+that evidence by resetting verified_success_since_box, forcing periodic verified
+retrieval above the gate instead of allowing indefinite weak self-assessment
+promotion.
+
+ReviewPolicy success/failure APIs now accept signal confidence explicitly.
+Non-verified success can support weak scheduling without incrementing verified
+counters. Non-verified negative self-assessment may enter relearning but does
+not apply verified relapse demotion, difficulty penalty or verified-wrong
+counters.
+
+Untrusted shared-device responses are signal_quality=reduced, are not considered
+verified/gate-eligible, and cannot cross the gate alone. Explicitly trusted
+shared-device responses may count as verified evidence.
+
+SignalPolicy has no delivery_to_action_ms input. Notification responsiveness
+therefore cannot influence SRS strength by construction. presentation latency
+also remains outside automatic V1 SRS weighting.
+
+ADR-0025 records this boundary. New tests in tests/backend/test_signal_policy.py
+cover visible-answer blocking, weak progression up to the gate, periodic
+verified refresh, shared-device trust, hint reduction, IDK, unrecognized
+answers and the notification-latency boundary.
+
+Next required local gate:
+- python3 -m ruff format --check .
+- python3 -m ruff check .
+- python3 -m mypy custom_components datasets tests
+- python3 datasets/tools/validate_resources.py
+- python3 -m pytest -q --tb=short
+
+If PASS, close P3.4 and begin P3.5 sibling burial, prerequisites and confusable
+introduction spacing.
