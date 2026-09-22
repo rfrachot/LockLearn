@@ -22,6 +22,10 @@
     "dataset_install_failed": {
       "title": "Échec de mise à jour du dataset",
       "description": "La mise à jour de {dataset_id} a échoué pendant le téléchargement, la vérification ou l’activation. La dernière génération valide reste active."
+    },
+    "dataset_sources_stale": {
+      "title": "Sources de dataset obsolètes",
+      "description": "Les sources {sources} utilisées par {dataset_id} dépassent leur objectif de fraîcheur. Le dataset installé reste utilisable, mais une mise à jour est recommandée."
     }
   }
 }
