@@ -5,6 +5,13 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P2.5 learning-plan service with card-based new/review quotas, profile-preset
+  new-card defaults, target date/coverage/retention goals and deterministic
+  3-week/3-month workload forecasts.
+- Machine-readable structural planning warnings plus notification-versus-active
+  session capacity estimates bounded by the profile push budget.
+- ADR-0021 documenting the explainable success-only forecast model and the
+  decision not to invent unspecified review-preset defaults.
 - P2.4 Track configuration service with explicit immutable PackVersion pinning,
   direction-to-CardDefinition resolution, explicit card selection, relative
   content weights, deterministic update previews and deliberate pack integration.
