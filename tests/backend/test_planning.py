@@ -185,8 +185,7 @@ async def test_notification_and_active_session_split_is_bounded_by_push_budget(
             horizon_days=21,
         )
         assert (
-            forecast.notification_deliverable_in_3_weeks
-            + forecast.active_session_cards_in_3_weeks
+            forecast.notification_deliverable_in_3_weeks + forecast.active_session_cards_in_3_weeks
             == horizon_new + forecast.reviews_per_day_in_3_weeks
         )
         assert forecast.review_capacity_feasible_in_3_weeks is (
