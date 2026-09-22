@@ -13,5 +13,15 @@
     "abort": {
       "single_instance_allowed": "Only one LockLearn instance is supported."
     }
+  },
+  "issues": {
+    "dataset_discovery_failed": {
+      "title": "Dataset catalog unavailable",
+      "description": "LockLearn could not check available versions for {dataset_id}. Already installed content remains usable offline."
+    },
+    "dataset_install_failed": {
+      "title": "Dataset update failed",
+      "description": "The update of {dataset_id} failed during download, verification, or activation. The last valid generation remains active."
+    }
   }
 }
