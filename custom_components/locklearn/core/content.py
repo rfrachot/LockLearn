@@ -302,6 +302,9 @@ class LearningItem:
     dataset_id: str
     content_type: ContentType
     concept_ids: tuple[str, ...]
+    tag_ids: tuple[str, ...] = ()
+    register: str | None = None
+    required_item_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         validate_stable_id(self.learning_item_id, field="learning_item_id")
@@ -312,6 +315,21 @@ class LearningItem:
             raise ContentModelError("learning-item concept_ids must be unique")
         for concept_id in self.concept_ids:
             validate_stable_id(concept_id, field="concept_id")
+
+        if len(set(self.tag_ids)) != len(self.tag_ids):
+            raise ContentModelError("learning-item tag_ids must be unique")
+        for tag_id in self.tag_ids:
+            validate_stable_id(tag_id, field="tag_id")
+
+        if self.register == "":
+            raise ContentModelError("learning-item register must be None or non-empty")
+
+        if len(set(self.required_item_ids)) != len(self.required_item_ids):
+            raise ContentModelError("required_item_ids must be unique")
+        for required_item_id in self.required_item_ids:
+            validate_stable_id(required_item_id, field="required_item_id")
+            if required_item_id == self.learning_item_id:
+                raise ContentModelError("learning item cannot require itself")
 
 
 @dataclass(frozen=True, slots=True)
