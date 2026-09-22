@@ -2,9 +2,9 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11 and P2.1–P2.3 are complete. P1 is closed PASS and P2
-is in progress on `feat/p1-content-core`. P2.4 — Track configuration, pack
-pinning and card rules — is implemented and awaiting the local quality gate.
+P0.1–P0.7, P1.1–P1.11 and P2.1–P2.4 are complete. P1 is closed PASS and P2
+is in progress on `feat/p1-content-core`. P2.5 — Learning quotas, goals and
+load forecast — is implemented and awaiting the local quality gate.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -408,3 +408,57 @@ Next required local gate:
 - python3 -m pytest -q --tb=short
 
 If PASS, close P2.4 and begin P2.5 learning quotas, goals and load forecast.
+
+
+## P2.4 closure
+
+Renaud's local P2.4 gate reported:
+- Ruff format: only two mechanical formatting diffs in repositories.py and
+  test_tracks.py.
+- Ruff lint: PASS.
+- mypy: PASS, 83 source files.
+- resource registries: PASS.
+- pytest: PASS, 218 tests in 4.46 s.
+
+The exact Ruff-recommended formatting changes were applied. No semantic Track
+code changed after the passing type/resource/test gate. P2.4 is closed PASS.
+
+## P2.5 implementation pending verification
+
+P2.5 adds LearningPlanService. Track planning now persists card-based new/review
+quotas plus optional target_date, target_coverage and target_retention. The
+standard profile preset's max_new_per_day_cards value is consumed directly;
+child/standard/intensive therefore keep the spec-defined 3/8/15 new-card
+defaults.
+
+The spec does not define numeric preset defaults for max_reviews_per_day_cards.
+P2.5 deliberately requires an explicit review ceiling instead of inventing one.
+
+Forecasting counts selected CardDefinitions rather than LearningItems and
+reports:
+- selected/introduced/remaining target cards;
+- required and planned new cards/day;
+- review load/day around 3 weeks and 3 months;
+- current due backlog;
+- notification-deliverable versus active-session card load;
+- goal/review-capacity feasibility and machine-readable warnings.
+
+The review forecast is deterministic and explainable: it uses the V1 base
+long-review intervals 1/3/7/14/30/60 days, accumulated in sequence, and reports
+a seven-day average ending at each horizon. It assumes successful reviews and
+does not pretend to predict future lapses, leeches, difficulty changes or
+jitter. target_retention is persisted as goal metadata; actual retention policy
+belongs to P3.
+
+ADR-0021 records this boundary. New tests in tests/backend/test_planning.py
+cover CardDefinition counting, profile-preset new quotas, target infeasibility,
+review forecast horizons, notification capacity splitting and warnings.
+
+Next required local gate:
+- python3 -m ruff format --check .
+- python3 -m ruff check .
+- python3 -m mypy custom_components datasets tests
+- python3 datasets/tools/validate_resources.py
+- python3 -m pytest -q --tb=short
+
+If PASS, close P2.5 and begin P2.6 Profiles/tracks WebSocket CRUD and errors.
