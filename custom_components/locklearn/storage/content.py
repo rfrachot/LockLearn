@@ -139,7 +139,7 @@ class ContentGenerationValidator:
                 raise ContentValidationError(
                     "a package database must contain exactly its declared dataset"
                 )
-            dataset_scoped_tables = (
+            dataset_scoped_tables: tuple[str, ...] = (
                 "dataset_sources",
                 "dataset_licenses",
                 "dataset_versions",
@@ -299,7 +299,7 @@ class ContentGenerationValidator:
 
     @staticmethod
     def _validate_stable_ids(connection: sqlite3.Connection) -> None:
-        fields = (
+        fields: tuple[tuple[str, str], ...] = (
             ("sources", "source_id"),
             ("datasets", "dataset_id"),
             ("dataset_versions", "dataset_version_id"),
