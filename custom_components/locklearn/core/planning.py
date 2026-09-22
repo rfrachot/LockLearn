@@ -83,6 +83,35 @@ class LearningPlanService:
         self._profiles = profiles
         self._clock = clock or SystemClock()
 
+    async def async_set_plan_from_profile_defaults(
+        self,
+        *,
+        track_id: str,
+        max_reviews_per_day_cards: int,
+        target_date: date | None = None,
+        target_coverage: float = 1.0,
+        target_retention: float = 0.9,
+    ) -> LoadForecast:
+        """Apply profile preset defaults while requiring an explicit review ceiling."""
+        track = await self._tracks.async_get(track_id)
+        if track is None:
+            raise LearningPlanValidationError("track does not exist")
+        profile = await self._profiles.async_get(str(track["profile_id"]))
+        if profile is None:
+            raise LearningPlanValidationError("track profile does not exist")
+        max_new = int(profile["settings"].get("max_new_per_day_cards", 0))
+        return await self.async_set_plan(
+            track_id=track_id,
+            plan=LearningPlan(
+                max_new_per_day_cards=max_new,
+                max_reviews_per_day_cards=max_reviews_per_day_cards,
+                max_notification_new_teasers=min(2, max_new),
+                target_date=target_date,
+                target_coverage=target_coverage,
+                target_retention=target_retention,
+            ),
+        )
+
     async def async_set_plan(
         self,
         *,
@@ -187,7 +216,8 @@ class LearningPlanService:
             review_capacity_feasible_in_3_months=reviews_90 <= plan.max_reviews_per_day_cards,
             assumptions=(
                 "Forecast counts CardDefinitions, never LearningItems.",
-                "Future reviews use the V1 base day offsets 1/3/7/14/30/60.",
+                "Future reviews use the V1 base intervals 1/3/7/14/30/60 days.",
+                "3-week and 3-month values are 7-day average daily loads ending at the horizon.",
                 "The estimate assumes successful reviews and excludes future lapses/leeches.",
                 "Existing due backlog is reported separately as due_now.",
             ),
@@ -232,11 +262,23 @@ class LearningPlanService:
             remaining -= introduced
             if remaining == 0:
                 break
-        return sum(
-            introduced_by_day.get(horizon_days - offset, 0)
-            for offset in _BASE_REVIEW_OFFSETS_DAYS
-            if horizon_days - offset >= 1
-        )
+
+        cumulative_offsets: list[int] = []
+        elapsed = 0
+        for interval in _BASE_REVIEW_OFFSETS_DAYS:
+            elapsed += interval
+            cumulative_offsets.append(elapsed)
+
+        window_start = max(1, horizon_days - 6)
+        window_reviews = 0
+        for review_day in range(window_start, horizon_days + 1):
+            window_reviews += sum(
+                introduced_by_day.get(review_day - offset, 0)
+                for offset in cumulative_offsets
+                if review_day - offset >= 1
+            )
+        window_days = horizon_days - window_start + 1
+        return ceil(window_reviews / window_days)
 
     @staticmethod
     def _delivery_split(
