@@ -5,6 +5,13 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P3.1 canonical ReviewEvent audit service with exact CardDefinition identity,
+  policy/dataset/normalization versioning, complete pre/post progress snapshots,
+  historical local timezone fields and separate cognitive/delivery latency.
+- Atomic ReviewEvent append plus progress materialization, and integrity rebuild
+  of progress from historical post-state snapshots.
+- ADR-0022 documenting the append-only audit source, rebuild semantics and the
+  rule that notification latency never influences cognitive/SRS strength.
 - P2.6 authenticated WebSocket bootstrap plus Profile CRUD/share, Track CRUD,
   explicit PackVersion integration and paginated Pack/Dataset catalog surfaces.
 - Server-side ACL rechecks for every profile-scoped P2 command, bounded
