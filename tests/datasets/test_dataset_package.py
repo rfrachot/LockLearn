@@ -570,7 +570,9 @@ def test_registry_policy_requires_tatoeba_sentence_attribution() -> None:
         policy.validate_provenance_fields("tatoeba:text", {"source_record_id", "language"})
 
 
-def test_registry_policy_keeps_software_and_content_license_scopes_separate() -> None:
+def test_registry_policy_keeps_software_and_content_license_scopes_separate(
+    tmp_path: Path,
+) -> None:
     policy = OfficialRegistryPolicy(
         licenses=(
             LicensePolicyRecord(
@@ -589,6 +591,10 @@ def test_registry_policy_keeps_software_and_content_license_scopes_separate() ->
             ),
         ),
     )
-    manifest = parse_manifest(_components(Path("."))[0])
+
+    def use_mit(document: dict[str, Any]) -> None:
+        document["licenses"][0]["license_id"] = "MIT"
+
+    manifest = parse_manifest(_components(tmp_path, mutate_manifest=use_mit)[0])
     with pytest.raises(LicensePolicyError, match="scope"):
         policy.validate(manifest)
