@@ -28,11 +28,7 @@ def check() -> list[dict[str, Any]]:
         if row["fetch_mode"] == "local":
             results.append({"source_id": row["source_id"], "status": "local"})
             continue
-        url = (
-            row["download_url"]
-            if row["fetch_mode"] == "direct"
-            else row["discovery_url"]
-        )
+        url = row["download_url"] if row["fetch_mode"] == "direct" else row["discovery_url"]
         try:
             _probe(url)
         except (OSError, urllib.error.URLError) as err:
