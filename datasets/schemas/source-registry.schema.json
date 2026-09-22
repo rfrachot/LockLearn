@@ -13,7 +13,8 @@
         "required": [
           "id", "name", "provider", "homepage", "license_id", "license_scope",
           "attribution_template", "adapter_id", "status", "commercial_compatible",
-          "refresh_policy", "uses", "required_provenance", "excluded_by_default", "notes"
+          "refresh_policy", "check_interval_days", "target_refresh_days",
+          "uses", "required_provenance", "excluded_by_default", "notes"
         ],
         "properties": {
           "id": {"type": "string", "minLength": 1},
@@ -27,6 +28,12 @@
           "status": {"type": "string", "minLength": 1},
           "commercial_compatible": {"type": "boolean"},
           "refresh_policy": {"type": "string", "minLength": 1},
+          "check_interval_days": {
+            "oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]
+          },
+          "target_refresh_days": {
+            "oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]
+          },
           "uses": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
           "required_provenance": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
           "field_allowlist": {
