@@ -1259,22 +1259,17 @@ class TracksRepository:
                 "selected": selected_row is not None,
                 "prerequisite_card_keys": tuple(str(row[0]) for row in prerequisite_rows),
                 "unlock_conditions": tuple(
-                    {"metric": str(row[0]), "minimum": float(row[1])}
-                    for row in unlock_rows
+                    {"metric": str(row[0]), "minimum": float(row[1])} for row in unlock_rows
                 ),
                 "prerequisite_progress": prerequisite_progress,
                 "sibling_last_interaction_at_utc": (
-                    None
-                    if sibling_row is None or sibling_row[0] is None
-                    else str(sibling_row[0])
+                    None if sibling_row is None or sibling_row[0] is None else str(sibling_row[0])
                 ),
                 "confusable_groups": tuple(
                     {
                         "confusable_group_id": str(group_id),
                         "min_intro_gap_days": int(gap),
-                        "other_item_last_introduced_at_utc": confusable_last_seen[
-                            str(group_id)
-                        ],
+                        "other_item_last_introduced_at_utc": confusable_last_seen[str(group_id)],
                     }
                     for group_id, gap in confusable_rows
                 ),
