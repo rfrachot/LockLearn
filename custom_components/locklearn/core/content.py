@@ -8,6 +8,13 @@ from dataclasses import dataclass
 from enum import StrEnum
 from urllib.parse import quote
 
+from .localization import (
+    NormalizationPolicy,
+    canonicalize_language_tag,
+    canonicalize_script_code,
+    normalize_text,
+)
+
 _STABLE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._~-]*(?::[A-Za-z0-9._~%+-]+)+$")
 _CARD_SEPARATOR = "\x1f"
 _LICENSE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+-]*$")
@@ -228,19 +235,54 @@ class Concept:
 
 @dataclass(frozen=True, slots=True)
 class Term:
-    """A linguistic representation; normalization details are P1.4 policy."""
+    """A linguistic representation with versioned, non-identifying normalization."""
 
     term_id: str
     dataset_id: str
     language_tag: str
     text: str
     script: str | None = None
+    normalized_text: str | None = None
+    normalization_version: int | None = None
 
     def __post_init__(self) -> None:
         validate_stable_id(self.term_id, field="term_id")
         validate_stable_id(self.dataset_id, field="dataset_id")
-        if not self.language_tag or not self.text:
-            raise ContentModelError("term language_tag and text are required")
+        if not self.text:
+            raise ContentModelError("term text is required")
+
+        try:
+            canonical_language = canonicalize_language_tag(self.language_tag)
+            canonical_script = (
+                canonicalize_script_code(self.script) if self.script is not None else None
+            )
+        except ValueError as err:
+            raise ContentModelError(str(err)) from err
+
+        object.__setattr__(self, "language_tag", canonical_language)
+        object.__setattr__(self, "script", canonical_script)
+
+        if (self.normalized_text is None) != (self.normalization_version is None):
+            raise ContentModelError(
+                "normalized_text and normalization_version must be set together"
+            )
+        if self.normalized_text == "":
+            raise ContentModelError("normalized_text must be None or non-empty")
+        if self.normalization_version is not None and self.normalization_version < 1:
+            raise ContentModelError("normalization_version must be >= 1")
+
+    def with_normalization(self, policy: NormalizationPolicy) -> Term:
+        """Return the same stable Term identity with policy-derived normalized text."""
+        normalized = normalize_text(self.text, policy, script=self.script)
+        return Term(
+            term_id=self.term_id,
+            dataset_id=self.dataset_id,
+            language_tag=self.language_tag,
+            text=self.text,
+            script=self.script,
+            normalized_text=normalized,
+            normalization_version=policy.normalization_version,
+        )
 
 
 @dataclass(frozen=True, slots=True)
