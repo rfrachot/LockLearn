@@ -3,8 +3,8 @@
 ## Current state
 
 P0.1–P0.7 remain complete. P1 is in progress on `feat/p1-content-core`.
-P1.1, P1.2 and P1.3 are complete. P1.4 implementation is complete and awaits
-repository verification on the Ubuntu development checkout.
+P1.1, P1.2, P1.3 and P1.4 are complete. P1.4 is verified on the Ubuntu
+development checkout.
 
 P1.3 adds the generic content presentation/grading contract without changing
 progression identity. `CardDefinition` now carries mutable
@@ -65,22 +65,24 @@ The bootstrap language registry now references a validated
 data-driven policies rather than core conditionals. ADR-0011 records these
 boundaries and the exact -> base -> explicit default/final fallback contract.
 
-## P1.4 verification pending
+## P1.4 verification
 
-Required before changing P1.4 to PASS:
+P1.4 PASS on the Ubuntu development checkout:
 
-```text
-python3 -m ruff format --check .
-python3 -m ruff check .
-python3 -m mypy custom_components datasets tests
-python3 datasets/tools/validate_resources.py
-python3 -m pytest -q --tb=short
-```
+- Ruff format: pass (114 files already formatted on final head).
+- Ruff check: pass.
+- mypy (`custom_components datasets tests`): pass (51 source files).
+- dataset resource registries: pass.
+- pytest full suite: 124 passed in 1.37 s.
+
+The final branch-only delta after the full mypy/registry/pytest run was import
+spacing required by Ruff; Ruff format and Ruff check were then re-run on the
+resulting head and both passed.
 
 ## Remaining risks / next action
 
-- P1.4 owns BCP 47/ISO 15924 validation, `normalized_text`,
-  `normalization_version`, script-aware policies and locale fallback.
+- P1.4 is complete: BCP 47/ISO 15924 validation, `normalized_text`,
+  `normalization_version`, script-aware policies and locale fallback are closed.
 - P3.7 owns actual exact/any_of/fuzzy grading execution and the
   “Ma réponse devrait être acceptée” quality workflow.
 - P1.6 owns the complete `content.db` schema, persistence/generation activation
@@ -90,6 +92,5 @@ python3 -m pytest -q --tb=short
 - The future Lit renderer must map the rich-text AST node-by-node and must never
   route dataset strings through `unsafeHTML`.
 
-Next concrete action: verify and close P1.4 PASS. Only after that, start P1.5
-tags/packs/prerequisites and Japanese curation primitives. Do not begin P1.6 or
-grading-engine work as part of P1.4.
+Next concrete action: start P1.5 tags/packs/prerequisites and Japanese curation
+primitives only. Do not begin P1.6 or grading-engine work as part of P1.5.
