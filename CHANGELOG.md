@@ -5,6 +5,13 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P3.4 normalized signal policy separating exposure, weak post-retrieval
+  self-assessment, verified MCQ/free-text/cloze/exam retrieval, IDK and
+  unrecognized outcomes.
+- Configurable verified-gate enforcement with periodic verified evidence,
+  conservative shared-device handling and hint-reduced confidence.
+- ADR-0025 documenting the signal/gate boundary and the rule that notification
+  response latency never affects SRS strength.
 - P3.3 deterministic ReviewPolicy V1 with explicit boxes/intervals, elapsed-time
   adjustment, deterministic jitter, bounded difficulty_factor and relapse demotion.
 - Non-terminal time-decaying mastery plus explicit P3.2 short-step graduation
