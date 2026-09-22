@@ -5,6 +5,14 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P1.9 local DatasetManager for signed prebuilt artifacts, with bounded staging,
+  checksum/signature/schema/license/package validation, full-generation activation and rollback.
+- Home Assistant UpdateEntity support per official dataset plus privacy-safe
+  source age, provenance, license and cache metadata.
+- Dataset Repairs for discovery/install failures and stale upstream snapshots.
+- Bundled runtime source/license/trust policy and artifact-host allowlists for
+  HACS installs, with explicit pack-version removal guards.
+- ADR-0016 defining the runtime dataset trust and update boundary.
 - P1.8 build-time dataset pipeline separating upstream adapters from pedagogical
   recipes, with bounded fetching, canonical JSONL normalization, semantic
   validation, Ed25519 signing, deterministic package layout and external checksums.
