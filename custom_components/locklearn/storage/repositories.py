@@ -735,6 +735,78 @@ class TracksRepository:
 
         return await self._storage._async_reader(read)
 
+    async def async_planning_snapshot(
+        self,
+        *,
+        track_id: str,
+        now_utc: str,
+    ) -> dict[str, int]:
+        def read(connection: sqlite3.Connection) -> dict[str, int]:
+            selected = connection.execute(
+                """SELECT COUNT(DISTINCT card_key)
+                   FROM track_card_rules
+                   WHERE track_id = ? AND enabled = 1 AND card_key IS NOT NULL""",
+                (track_id,),
+            ).fetchone()
+            introduced = connection.execute(
+                """SELECT COUNT(DISTINCT progress.card_key)
+                   FROM progress
+                   JOIN track_card_rules AS rule
+                     ON rule.track_id = progress.track_id
+                    AND rule.card_key = progress.card_key
+                    AND rule.enabled = 1
+                   WHERE progress.track_id = ?""",
+                (track_id,),
+            ).fetchone()
+            due = connection.execute(
+                """SELECT COUNT(*)
+                   FROM progress
+                   JOIN track_card_rules AS rule
+                     ON rule.track_id = progress.track_id
+                    AND rule.card_key = progress.card_key
+                    AND rule.enabled = 1
+                   WHERE progress.track_id = ?
+                     AND progress.state IN ('review', 'relearning')
+                     AND progress.next_due_at_utc IS NOT NULL
+                     AND progress.next_due_at_utc <= ?""",
+                (track_id, now_utc),
+            ).fetchone()
+            return {
+                "selected_cards": 0 if selected is None else int(selected[0]),
+                "introduced_cards": 0 if introduced is None else int(introduced[0]),
+                "due_now": 0 if due is None else int(due[0]),
+            }
+
+        return await self._storage._async_reader(read)
+
+    async def async_update_settings(
+        self,
+        *,
+        track_id: str,
+        settings: dict[str, Any],
+        updated_at_utc: str,
+    ) -> None:
+        serialized = json.dumps(
+            settings,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> None:
+            cursor = connection.execute(
+                """UPDATE tracks
+                   SET settings_json = ?, updated_at_utc = ?
+                   WHERE track_id = ?""",
+                (serialized, updated_at_utc, track_id),
+            )
+            if cursor.rowcount != 1:
+                connection.rollback()
+                raise StateRepositoryError(f"unknown track_id: {track_id}")
+            connection.commit()
+
+        await self._storage._async_writer(write)
+
     async def async_replace_card_rules(
         self,
         track_id: str,
