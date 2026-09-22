@@ -16,6 +16,7 @@ from .database import SQLiteStorage, StoragePaths
 from .repositories import (
     CardReference,
     ContentReferenceError,
+    ProfileMemberRecord,
     ProfileRecord,
     StateRepositories,
     TrackRecord,
@@ -33,6 +34,7 @@ __all__ = [
     "ContentReferenceError",
     "ContentValidationError",
     "GenerationMetadata",
+    "ProfileMemberRecord",
     "ProfileRecord",
     "SQLiteStorage",
     "StateRepositories",
