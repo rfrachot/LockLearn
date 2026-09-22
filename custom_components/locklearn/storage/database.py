@@ -320,6 +320,90 @@ class SQLiteStorage:
 
         await self._async_writer(append)
 
+    async def async_dataset_inventory(self) -> list[dict[str, Any]]:
+        """Return privacy-safe installed dataset metadata from the active generation."""
+
+        def query(connection: sqlite3.Connection) -> list[dict[str, Any]]:
+            package_rows = connection.execute(
+                """SELECT package.dataset_id, version.version,
+                          package.dataset_version_id,
+                          package.canonical_content_hash,
+                          package.built_at_utc
+                   FROM content.dataset_packages AS package
+                   JOIN content.dataset_versions AS version
+                     ON version.dataset_version_id = package.dataset_version_id
+                   ORDER BY package.dataset_id"""
+            ).fetchall()
+            result: list[dict[str, Any]] = []
+            for (
+                raw_dataset_id,
+                raw_version,
+                raw_version_id,
+                raw_hash,
+                raw_built_at,
+            ) in package_rows:
+                dataset_id = str(raw_dataset_id)
+                source_rows = connection.execute(
+                    """SELECT DISTINCT source.source_id, snapshot.upstream_version,
+                              snapshot.upstream_date, snapshot.retrieved_at,
+                              snapshot.source_url, snapshot.adapter_version
+                       FROM content.provenance_records AS provenance
+                       JOIN content.source_snapshots AS snapshot
+                         ON snapshot.snapshot_id = provenance.source_snapshot_id
+                       JOIN content.sources AS source
+                         ON source.source_id = snapshot.source_id
+                       WHERE provenance.dataset_id = ?
+                       ORDER BY source.source_id, snapshot.snapshot_id""",
+                    (dataset_id,),
+                ).fetchall()
+                licenses = [
+                    str(row[0])
+                    for row in connection.execute(
+                        """SELECT DISTINCT license_id
+                           FROM content.dataset_licenses
+                           WHERE dataset_id = ?
+                           ORDER BY license_id""",
+                        (dataset_id,),
+                    ).fetchall()
+                ]
+                pack_versions = [
+                    str(row[0])
+                    for row in connection.execute(
+                        """SELECT version.pack_version_id
+                           FROM content.packs AS pack
+                           JOIN content.pack_versions AS version
+                             ON version.pack_id = pack.pack_id
+                           WHERE pack.dataset_id = ?
+                           ORDER BY version.pack_version_id""",
+                        (dataset_id,),
+                    ).fetchall()
+                ]
+                result.append(
+                    {
+                        "dataset_id": dataset_id,
+                        "version": str(raw_version),
+                        "dataset_version_id": str(raw_version_id),
+                        "canonical_content_hash": str(raw_hash),
+                        "built_at_utc": str(raw_built_at),
+                        "sources": tuple(
+                            {
+                                "source_id": str(row[0]),
+                                "upstream_version": str(row[1]),
+                                "upstream_date": None if row[2] is None else str(row[2]),
+                                "retrieved_at": str(row[3]),
+                                "source_url": str(row[4]),
+                                "adapter_version": str(row[5]),
+                            }
+                            for row in source_rows
+                        ),
+                        "licenses": tuple(licenses),
+                        "pack_version_ids": tuple(pack_versions),
+                    }
+                )
+            return result
+
+        return await self._async_reader(query)
+
     async def async_due_cards(
         self, profile_id: str, track_id: str, before_utc: str, limit: int
     ) -> list[str]:
