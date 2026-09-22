@@ -137,9 +137,7 @@ async def test_prerequisites_block_new_card_until_all_thresholds_pass() -> None:
         "prerequisite_threshold:pre-b:mastery",
     )
 
-    context["prerequisite_progress"]["pre-b"].update(
-        {"mastery": 0.75, "verified_correct_count": 2}
-    )
+    context["prerequisite_progress"]["pre-b"].update({"mastery": 0.75, "verified_correct_count": 2})
     passed = await service.async_evaluate(
         profile_id="profile-1",
         track_id="track-1",
@@ -453,9 +451,9 @@ async def test_repository_reads_pack_prerequisites_and_confusable_progress(
         assert context["unlock_conditions"] == (
             {"metric": "verified_correct_count", "minimum": 2.0},
         )
-        assert context["prerequisite_progress"][prerequisite_card_key][
-            "verified_correct_count"
-        ] == 2
+        assert (
+            context["prerequisite_progress"][prerequisite_card_key]["verified_correct_count"] == 2
+        )
         assert context["confusable_groups"] == (
             {
                 "confusable_group_id": "locklearn:confusable:test",
