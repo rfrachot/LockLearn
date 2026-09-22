@@ -61,19 +61,63 @@ def _previous_manifest(path: Path | None):
         return parse_manifest(archive.read("manifest.json"))
 
 
+def _source_build_rows(repository_root: Path) -> dict[str, dict[str, object]]:
+    document = json.loads(
+        (repository_root / "datasets" / "resources" / "source_builds.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    rows = document.get("sources")
+    if not isinstance(rows, list):
+        raise ValueError("source build registry sources must be an array")
+    result: dict[str, dict[str, object]] = {}
+    for raw in rows:
+        if not isinstance(raw, dict) or not isinstance(raw.get("source_id"), str):
+            raise ValueError("invalid source build registry row")
+        result[str(raw["source_id"])] = dict(raw)
+    return result
+
+
+def _validate_fetch_url(row: dict[str, object], fetch_url: str) -> int:
+    mode = row.get("fetch_mode")
+    registered_url = row.get("download_url")
+    if mode == "local":
+        raise ValueError("local source cannot be fetched from the network")
+    if mode == "direct" and fetch_url != registered_url:
+        raise ValueError("direct source fetch_url must match the registered download_url")
+    if mode == "template":
+        if not isinstance(registered_url, str) or "{language}" not in registered_url:
+            raise ValueError("template source has an invalid registered download_url")
+        prefix, suffix = registered_url.split("{language}", 1)
+        if not fetch_url.startswith(prefix) or not fetch_url.endswith(suffix):
+            raise ValueError("template source fetch_url does not match its registered pattern")
+    if mode == "recipe_url" and not fetch_url.startswith("https://"):
+        raise ValueError("recipe_url sources require an explicit HTTPS fetch_url")
+    maximum = row.get("maximum_bytes")
+    if isinstance(maximum, bool) or not isinstance(maximum, int) or maximum < 1:
+        raise ValueError("source build registry has an invalid maximum_bytes")
+    return maximum
+
+
 def _load_config(
     path: Path,
     *,
     workspace: Path,
+    repository_root: Path,
 ) -> tuple[DatasetBuildSpec, DatasetRecipe]:
     document = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(document, dict):
         raise ValueError("build config root must be an object")
     sources: list[SourceInput] = []
+    source_build_rows = _source_build_rows(repository_root)
     for raw_source in document.get("sources", []):
         if not isinstance(raw_source, dict):
             raise ValueError("source config must be an object")
         source_id = str(raw_source["source_id"])
+        try:
+            source_build_row = source_build_rows[source_id]
+        except KeyError as err:
+            raise ValueError(f"unknown source build ID: {source_id}") from err
         files: list[SourceFileInput] = []
         for index, raw_file in enumerate(raw_source.get("files", [])):
             if not isinstance(raw_file, dict):
@@ -84,13 +128,20 @@ def _load_config(
             if local_path_value is None:
                 if not isinstance(fetch_url, str) or not fetch_url:
                     raise ValueError("source file requires path or fetch_url")
+                registered_maximum = _validate_fetch_url(source_build_row, fetch_url)
+                requested_maximum = raw_file.get("maximum_bytes", registered_maximum)
+                if (
+                    isinstance(requested_maximum, bool)
+                    or not isinstance(requested_maximum, int)
+                    or requested_maximum < 1
+                    or requested_maximum > registered_maximum
+                ):
+                    raise ValueError(
+                        f"source file maximum_bytes exceeds registry limit for {source_id}"
+                    )
                 filename = str(raw_file.get("filename") or f"{source_id}-{index}.raw")
                 local_path = workspace / "downloads" / filename
-                fetch_snapshot(
-                    fetch_url,
-                    local_path,
-                    maximum_bytes=int(raw_file["maximum_bytes"]),
-                )
+                fetch_snapshot(fetch_url, local_path, maximum_bytes=requested_maximum)
             else:
                 local_path = (path.parent / str(local_path_value)).resolve()
             files.append(SourceFileInput(local_path, source_url))
@@ -138,13 +189,18 @@ def main() -> int:
     args = parser.parse_args()
 
     args.workspace.mkdir(parents=True, exist_ok=True)
-    spec, recipe = _load_config(args.config.resolve(), workspace=args.workspace.resolve())
+    repository_root = args.repository_root.resolve()
+    spec, recipe = _load_config(
+        args.config.resolve(),
+        workspace=args.workspace.resolve(),
+        repository_root=repository_root,
+    )
     result = build_dataset(
         spec,
         recipe,
         private_key=_private_key(),
         output_directory=args.output.resolve(),
-        repository_root=args.repository_root.resolve(),
+        repository_root=repository_root,
         workspace=args.workspace.resolve(),
     )
     publish = should_publish(_previous_manifest(args.previous), result.manifest)
