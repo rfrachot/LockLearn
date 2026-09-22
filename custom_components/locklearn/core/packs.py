@@ -196,7 +196,9 @@ class CurationRuleKind(StrEnum):
     """Generic curation directives interpreted by pack builders/selectors."""
 
     CARD_DIRECTION_DEFAULT = "card_direction_default"
+    PREFER_CONTEXTUALIZED_READING = "prefer_contextualized_reading"
     PRODUCTION_COMPLETE_TERM = "production_complete_term"
+    PRODUCTION_REQUIRES_STRONG_GRADING = "production_requires_strong_grading"
     MNEMONIC_KEYWORD_LABEL = "mnemonic_keyword_label"
     AMBIGUOUS_PROMPT_CONTEXT_HINT = "ambiguous_prompt_context_hint"
     PREFER_COVERED_EXAMPLE = "prefer_covered_example"
