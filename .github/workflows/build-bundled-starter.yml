@@ -67,7 +67,7 @@ jobs:
         shell: bash
         run: |
           export LOCKLEARN_DATASET_SIGNING_KEY_B64="$(cat /tmp/starter-private.b64)"
-          python datasets/tools/build_dataset.py             datasets/manifests/japanese-starter-1.0.0.json             --output /tmp/starter-dist             --workspace /tmp/starter-work             --repository-root .
+          python -m datasets.tools.build_dataset datasets/manifests/japanese-starter-1.0.0.json --output /tmp/starter-dist --workspace /tmp/starter-work --repository-root .
           unset LOCKLEARN_DATASET_SIGNING_KEY_B64
           rm -f /tmp/starter-private.b64
           mkdir -p custom_components/locklearn/datasets/bundled
@@ -150,7 +150,7 @@ jobs:
       - name: Validate generated starter
         run: |
           python datasets/tools/validate_resources.py
-          python -m pytest -q --tb=short             tests/datasets/test_dataset_package.py             tests/datasets/test_build_pipeline.py             tests/datasets/test_dataset_manager.py
+          python -m pytest -q --tb=short tests/datasets/test_dataset_package.py tests/datasets/test_build_pipeline.py tests/datasets/test_dataset_manager.py tests/datasets/test_japanese_starter.py
       - name: Commit bundled signed artifact
         shell: bash
         run: |
