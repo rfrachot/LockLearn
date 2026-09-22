@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "policies": [
+    {
+      "id": "locklearn:curation:japanese-default",
+      "version": 1,
+      "rules": [
+        {
+          "id": "locklearn:curation-rule:ja-disable-isolated-on",
+          "kind": "card_direction_default",
+          "prompt_facet_key": "glyph",
+          "answer_facet_key": "reading_on",
+          "enabled_by_default": false
+        },
+        {
+          "id": "locklearn:curation-rule:ja-disable-isolated-kun",
+          "kind": "card_direction_default",
+          "prompt_facet_key": "glyph",
+          "answer_facet_key": "reading_kun",
+          "enabled_by_default": false
+        },
+        {
+          "id": "locklearn:curation-rule:ja-contextualized-reading",
+          "kind": "prefer_contextualized_reading"
+        },
+        {
+          "id": "locklearn:curation-rule:ja-complete-production-term",
+          "kind": "production_complete_term"
+        },
+        {
+          "id": "locklearn:curation-rule:ja-mnemonic-keyword-label",
+          "kind": "mnemonic_keyword_label"
+        },
+        {
+          "id": "locklearn:curation-rule:ja-strong-production-grading",
+          "kind": "production_requires_strong_grading"
+        },
+        {
+          "id": "locklearn:curation-rule:ja-context-hint",
+          "kind": "ambiguous_prompt_context_hint"
+        },
+        {
+          "id": "locklearn:curation-rule:ja-covered-example",
+          "kind": "prefer_covered_example"
+        },
+        {
+          "id": "locklearn:curation-rule:ja-furigana-uncovered",
+          "kind": "allow_furigana_for_uncovered"
+        }
+      ]
+    }
+  ]
+}
