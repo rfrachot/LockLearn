@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import suppress
 from dataclasses import dataclass
 
 from homeassistant.core import HomeAssistant
@@ -74,12 +75,10 @@ class LockLearnRuntime:
                 issue_clear_callback=clear_issue,
             )
             for bundled in load_runtime_bundled_datasets():
-                try:
+                # DatasetManager already raises a persistent Repair. Keep HA usable
+                # and preserve the empty/last-known-good generation.
+                with suppress(Exception):
                     await datasets.async_install_bundled(bundled)
-                except Exception:
-                    # DatasetManager already raises a persistent Repair. Keep HA
-                    # usable and preserve the empty/last-known-good generation.
-                    pass
             return cls(
                 storage=storage,
                 sessions=SessionService(storage),
