@@ -89,7 +89,7 @@ def _manifest_document(payloads: dict[str, bytes], *, key_id: str = "test-2026")
         for path, value in sorted(payloads.items())
     ]
     return {
-        "manifest_version": 1,
+        "manifest_version": 2,
         "dataset_id": "locklearn:dataset:synthetic",
         "dataset_version": "1.0.0",
         "built_at": "2026-09-22T12:00:00Z",
@@ -102,9 +102,11 @@ def _manifest_document(payloads: dict[str, bytes], *, key_id: str = "test-2026")
                 "source_id": "locklearn:original",
                 "snapshot_id": "locklearn:snapshot:synthetic-1",
                 "upstream_version": "fixture-1",
+                "upstream_date": "2026-09-22",
                 "retrieved_at": "2026-09-22T10:00:00Z",
                 "source_url": "https://example.invalid/fixture",
                 "sha256": "0" * 64,
+                "adapter_version": "fixture-adapter-1",
             }
         ],
         "licenses": [
@@ -397,7 +399,7 @@ def test_wrong_declared_sha256_fails(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("mutation", "match"),
     [
-        (lambda document: document.update(manifest_version=2), "manifest_version"),
+        (lambda document: document.update(manifest_version=1), "manifest_version"),
         (lambda document: document.update(built_at="not-a-time"), "built_at"),
         (lambda document: document.update(dataset_id="invalid"), "dataset_id"),
         (lambda document: document.update(dataset_version=""), "dataset_version"),
