@@ -239,14 +239,10 @@ def parse_manifest(raw: bytes) -> DatasetManifest:
     database_files = [item for item in files if item.role is FileRole.DATABASE]
     if len(database_files) != 1 or database_files[0].path != "dataset.db":
         raise ManifestError("files[] must declare dataset.db as its single database")
-    if any(
-        item.role is FileRole.ASSET and not item.path.startswith("assets/")
-        for item in files
-    ):
+    if any(item.role is FileRole.ASSET and not item.path.startswith("assets/") for item in files):
         raise ManifestError("asset-role files must live below assets/")
     if any(
-        item.role is FileRole.LICENSE and not item.path.startswith("LICENSES/")
-        for item in files
+        item.role is FileRole.LICENSE and not item.path.startswith("LICENSES/") for item in files
     ):
         raise ManifestError("license-role files must live below LICENSES/")
 
