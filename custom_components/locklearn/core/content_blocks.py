@@ -121,26 +121,14 @@ class RichTextNode:
     def __post_init__(self) -> None:
         if self.node_type in _CONTAINER_NODE_TYPES:
             if self.text is not None or self.reading is not None or not self.children:
-                raise ContentBlockError(
-                    f"{self.node_type.value} nodes require children only"
-                )
-            if any(
-                child.node_type is RichTextNodeType.PARAGRAPH
-                for child in self.children
-            ):
+                raise ContentBlockError(f"{self.node_type.value} nodes require children only")
+            if any(child.node_type is RichTextNodeType.PARAGRAPH for child in self.children):
                 raise ContentBlockError("paragraph nodes are top-level only")
             return
 
         if self.node_type in _TEXT_NODE_TYPES:
-            if (
-                self.text is None
-                or self.text == ""
-                or self.reading is not None
-                or self.children
-            ):
-                raise ContentBlockError(
-                    f"{self.node_type.value} nodes require non-empty text only"
-                )
+            if self.text is None or self.text == "" or self.reading is not None or self.children:
+                raise ContentBlockError(f"{self.node_type.value} nodes require non-empty text only")
             return
 
         if self.node_type is RichTextNodeType.LINE_BREAK:
@@ -171,9 +159,7 @@ class RichTextDocument:
     def __post_init__(self) -> None:
         if not self.children:
             raise ContentBlockError("rich-text document must contain at least one paragraph")
-        if any(
-            node.node_type is not RichTextNodeType.PARAGRAPH for node in self.children
-        ):
+        if any(node.node_type is not RichTextNodeType.PARAGRAPH for node in self.children):
             raise ContentBlockError("rich-text document children must be paragraphs")
 
 
@@ -221,17 +207,15 @@ class ContentBlock:
                 f"{self.kind.value} block payload must be {expected_type.__name__}"
             )
 
-        if (
-            self.mask_strategy in {MaskStrategy.BLANK_TERM, MaskStrategy.BLANK_SPAN}
-            and self.kind not in {ContentBlockKind.TEXT, ContentBlockKind.RICH_TEXT}
-        ):
+        if self.mask_strategy in {
+            MaskStrategy.BLANK_TERM,
+            MaskStrategy.BLANK_SPAN,
+        } and self.kind not in {ContentBlockKind.TEXT, ContentBlockKind.RICH_TEXT}:
             raise ContentBlockError(
                 f"{self.mask_strategy.value} is only valid for text/rich_text blocks"
             )
         if self.mask_strategy is not MaskStrategy.NONE and not self.reveals_answer:
-            raise ContentBlockError(
-                "mask_strategy requires reveals_answer=true"
-            )
+            raise ContentBlockError("mask_strategy requires reveals_answer=true")
         if self.role is ContentRole.ANSWER and not self.reveals_answer:
             raise ContentBlockError("answer blocks must declare reveals_answer=true")
 
@@ -265,9 +249,7 @@ def parse_rich_text_ast(value: object) -> RichTextDocument:
     return RichTextDocument(children)
 
 
-def _parse_rich_text_node(
-    value: object, *, depth: int, counter: list[int]
-) -> RichTextNode:
+def _parse_rich_text_node(value: object, *, depth: int, counter: list[int]) -> RichTextNode:
     if depth > MAX_RICH_TEXT_DEPTH:
         raise ContentBlockError("rich-text AST exceeds maximum depth")
     counter[0] += 1
@@ -284,12 +266,9 @@ def _parse_rich_text_node(
 
     if node_type in _CONTAINER_NODE_TYPES:
         _require_exact_keys(value, {"type", "children"}, node_type.value)
-        raw_children = _require_sequence(
-            value.get("children"), f"{node_type.value}.children"
-        )
+        raw_children = _require_sequence(value.get("children"), f"{node_type.value}.children")
         children = tuple(
-            _parse_rich_text_node(child, depth=depth + 1, counter=counter)
-            for child in raw_children
+            _parse_rich_text_node(child, depth=depth + 1, counter=counter) for child in raw_children
         )
         return RichTextNode(node_type=node_type, children=children)
 
@@ -309,14 +288,11 @@ def _parse_rich_text_node(
     )
 
 
-def _require_exact_keys(
-    value: Mapping[Any, Any], expected: set[str], label: str
-) -> None:
+def _require_exact_keys(value: Mapping[Any, Any], expected: set[str], label: str) -> None:
     keys = set(value)
     if keys != expected:
         raise ContentBlockError(
-            f"{label} keys must be exactly {sorted(expected)!r}; "
-            f"got {sorted(map(str, keys))!r}"
+            f"{label} keys must be exactly {sorted(expected)!r}; got {sorted(map(str, keys))!r}"
         )
 
 
