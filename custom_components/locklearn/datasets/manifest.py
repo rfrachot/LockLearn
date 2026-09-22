@@ -314,9 +314,7 @@ def _parse_source(value: object, index: int) -> SourceReference:
         retrieved_at=_timestamp(row["retrieved_at"], field=f"sources[{index}].retrieved_at"),
         source_url=_string(row["source_url"], field=f"sources[{index}].source_url"),
         sha256=_sha256(row["sha256"], field=f"sources[{index}].sha256"),
-        adapter_version=_version(
-            row["adapter_version"], field=f"sources[{index}].adapter_version"
-        ),
+        adapter_version=_version(row["adapter_version"], field=f"sources[{index}].adapter_version"),
     )
 
 
