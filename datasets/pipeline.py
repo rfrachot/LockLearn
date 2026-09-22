@@ -530,9 +530,7 @@ def build_dataset(
                 asset = prepared.metadata
                 license_row = registry_licenses.get(asset.license_id)
                 if license_row is None:
-                    raise DatasetBuildError(
-                        f"asset references unknown license: {asset.license_id}"
-                    )
+                    raise DatasetBuildError(f"asset references unknown license: {asset.license_id}")
                 _insert_license(connection, license_row)
                 connection.execute(
                     """INSERT OR IGNORE INTO dataset_licenses(
@@ -748,15 +746,10 @@ def _prepare_assets(
         if license_row is None:
             raise DatasetBuildError(f"asset license is not registered: {license_id}")
         allowed_scopes = license_row.get("allowed_scopes")
-        if (
-            not isinstance(allowed_scopes, list)
-            or "asset" not in allowed_scopes
-        ):
+        if not isinstance(allowed_scopes, list) or "asset" not in allowed_scopes:
             raise DatasetBuildError(f"license is not approved for assets: {license_id}")
         if _required_bool(license_row, "attribution_required") and not item.attribution:
-            raise DatasetBuildError(
-                f"asset attribution is required by license: {license_id}"
-            )
+            raise DatasetBuildError(f"asset attribution is required by license: {license_id}")
         metadata = Asset(
             asset_id=item.asset_id,
             dataset_id=spec.dataset_id,
