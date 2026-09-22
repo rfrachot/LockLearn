@@ -819,9 +819,11 @@ def _build_manifest(
             source_id=item.source_id,
             snapshot_id=item.snapshot_id,
             upstream_version=item.upstream_version,
+            upstream_date=item.upstream_date,
             retrieved_at=item.retrieved_at,
             source_url=item.source_url,
             sha256=item.raw_sha256,
+            adapter_version=item.adapter_version,
         )
         for item in normalized
     )
