@@ -5,6 +5,16 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P2.3 centralized backend profile ACL authority with owner/editor/viewer roles,
+  privacy-filtered profile visibility, explicit non-bypass for HA admins, and
+  transactional protection against removing or demoting the final owner.
+- P2.3 permission/privacy documentation covering backend ACL, HA entity/event
+  caveats, shared profiles and local private learning state.
+- P2.2 profile service with independent LockLearn profile identity, persistent
+  Home Assistant user membership, idempotent personal-profile onboarding and
+  child/shared profiles without dedicated HA accounts.
+- Mutable child/standard/intensive/custom profile presets with protected internal
+  settings markers.
 - P2.1 state.db schema v2 covering the V1 profile/track/ACL-ready persistence
   skeleton, progress/review events, sessions, scheduler, notifications,
   annotations, stats and settings with required hot-query indexes.
