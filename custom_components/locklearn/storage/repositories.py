@@ -216,6 +216,77 @@ class ProfilesRepository:
 
         return await self._storage._async_reader(read)
 
+    async def async_get_role(self, profile_id: str, ha_user_id: str) -> str | None:
+        def read(connection: sqlite3.Connection) -> str | None:
+            row = connection.execute(
+                """SELECT role
+                   FROM profile_members
+                   WHERE profile_id = ? AND ha_user_id = ?""",
+                (profile_id, ha_user_id),
+            ).fetchone()
+            return None if row is None else str(row[0])
+
+        return await self._storage._async_reader(read)
+
+    async def async_get_visible(
+        self, profile_id: str, ha_user_id: str
+    ) -> dict[str, Any] | None:
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT p.profile_id, p.name, p.preset, p.timezone, p.status,
+                          p.settings_json, p.created_at_utc, p.updated_at_utc, m.role
+                   FROM profile_members AS m
+                   JOIN profiles AS p ON p.profile_id = m.profile_id
+                   WHERE p.profile_id = ? AND m.ha_user_id = ?""",
+                (profile_id, ha_user_id),
+            ).fetchone()
+            if row is None:
+                return None
+            return _profile_dict(row[:-1], role=str(row[-1]))
+
+        return await self._storage._async_reader(read)
+
+    async def async_upsert_member(self, member: ProfileMemberRecord) -> None:
+        def write(connection: sqlite3.Connection) -> None:
+            connection.execute(
+                """INSERT INTO profile_members(profile_id, ha_user_id, role, created_at_utc)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(profile_id, ha_user_id) DO UPDATE SET
+                       role = excluded.role""",
+                (
+                    member.profile_id,
+                    member.ha_user_id,
+                    member.role,
+                    member.created_at_utc,
+                ),
+            )
+            connection.commit()
+
+        await self._storage._async_writer(write)
+
+    async def async_delete_member(self, profile_id: str, ha_user_id: str) -> bool:
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                "DELETE FROM profile_members WHERE profile_id = ? AND ha_user_id = ?",
+                (profile_id, ha_user_id),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(write)
+
+    async def async_count_owners(self, profile_id: str) -> int:
+        def read(connection: sqlite3.Connection) -> int:
+            row = connection.execute(
+                """SELECT COUNT(*)
+                   FROM profile_members
+                   WHERE profile_id = ? AND role = 'owner'""",
+                (profile_id,),
+            ).fetchone()
+            return 0 if row is None else int(row[0])
+
+        return await self._storage._async_reader(read)
+
 
 class TracksRepository:
     """Persistence primitives for tracks and explicit PackVersion pinning."""
