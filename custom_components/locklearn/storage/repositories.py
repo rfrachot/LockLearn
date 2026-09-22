@@ -1737,8 +1737,11 @@ class ContentReportsRepository:
                    ) VALUES ('content_report', ?, ?, ?, ?)""",
                 (actor_user_id, profile_id, payload, created_at_utc),
             )
+            report_id = cursor.lastrowid
+            if report_id is None:
+                raise StateRepositoryError("content report insert returned no row id")
             connection.commit()
-            return int(cursor.lastrowid)
+            return report_id
 
         return await self._storage._async_writer(write)
 
