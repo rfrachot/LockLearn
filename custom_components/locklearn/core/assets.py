@@ -55,9 +55,7 @@ class Asset:
         if not self.mime_type or "/" not in self.mime_type:
             raise AssetModelError("asset mime_type must be a non-empty media type")
         allowed_mime_types = (
-            _ALLOWED_IMAGE_MIME_TYPES
-            if self.kind is AssetKind.IMAGE
-            else _ALLOWED_AUDIO_MIME_TYPES
+            _ALLOWED_IMAGE_MIME_TYPES if self.kind is AssetKind.IMAGE else _ALLOWED_AUDIO_MIME_TYPES
         )
         if self.mime_type not in allowed_mime_types:
             raise AssetModelError(
