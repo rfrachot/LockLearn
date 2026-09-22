@@ -106,7 +106,7 @@ def create_package(
                    NULL, NULL, NULL, 1, 'Synthetic dataset provenance'
                )""",
             (
-                f"locklearn:provenance:{version}",
+                "locklearn:provenance:test-dataset-source",
                 DATASET_ID,
                 DATASET_ID,
                 f"locklearn:snapshot:{version}",
