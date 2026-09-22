@@ -14,6 +14,7 @@ from datasets.adapters import (
     KanjiVGAdapter,
     LockLearnEditorialAdapter,
     TatoebaTextAdapter,
+    adapter_for_id,
 )
 
 
@@ -112,3 +113,13 @@ def test_locklearn_editorial_adapter_keeps_repository_authored_payload(tmp_path:
     assert record.source_record_id == "grammar:teiru"
     assert record.modified_from_source is True
     assert record.payload == {"title": "〜ている"}
+
+
+def test_every_registered_source_resolves_to_matching_adapter() -> None:
+    root = Path(__file__).resolve().parents[2]
+    document = json.loads(
+        (root / "datasets" / "resources" / "sources.json").read_text(encoding="utf-8")
+    )
+    for row in document["sources"]:
+        adapter = adapter_for_id(row["adapter_id"])
+        assert adapter.source_id == row["id"]
