@@ -32,7 +32,9 @@
       "excluded_by_default": [
         "non_english_glosses"
       ],
-      "notes": "Non-English translation equivalents require a separate rights audit before official import."
+      "notes": "Non-English translation equivalents require a separate rights audit before official import.",
+      "check_interval_days": 7,
+      "target_refresh_days": 30
     },
     {
       "id": "edrdg:kanjidic2",
@@ -67,7 +69,9 @@
         "third_party_descriptor_fields",
         "search_codes"
       ],
-      "notes": "Only explicitly allowlisted fields may enter official datasets."
+      "notes": "Only explicitly allowlisted fields may enter official datasets.",
+      "check_interval_days": 7,
+      "target_refresh_days": 30
     },
     {
       "id": "wikimedia:wiktionary-kaikki",
@@ -102,7 +106,9 @@
         "media",
         "externally_licensed_material"
       ],
-      "notes": "Text only by default; media and externally licensed fragments require separate audit."
+      "notes": "Text only by default; media and externally licensed fragments require separate audit.",
+      "check_interval_days": 7,
+      "target_refresh_days": 30
     },
     {
       "id": "tatoeba:text",
@@ -138,7 +144,9 @@
         "audio",
         "license_problem"
       ],
-      "notes": "Sentence-level author and license attribution is mandatory; audio is excluded."
+      "notes": "Sentence-level author and license attribution is mandatory; audio is excluded.",
+      "check_interval_days": 7,
+      "target_refresh_days": 30
     },
     {
       "id": "kanjivg:svg",
@@ -168,7 +176,9 @@
       ],
       "excluded_by_default": [],
       "asset_boundary": "separate",
-      "notes": "Remain a separately attributed asset/dataset boundary."
+      "notes": "Remain a separately attributed asset/dataset boundary.",
+      "check_interval_days": 30,
+      "target_refresh_days": 90
     },
     {
       "id": "locklearn:original",
@@ -191,7 +201,9 @@
       "required_provenance": [],
       "field_allowlist": null,
       "excluded_by_default": [],
-      "notes": "Original editorial learning content; deliberately separate from the MIT software license."
+      "notes": "Original editorial learning content; deliberately separate from the MIT software license.",
+      "check_interval_days": null,
+      "target_refresh_days": null
     }
   ]
 }
