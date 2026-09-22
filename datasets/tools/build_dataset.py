@@ -184,23 +184,11 @@ def _load_config(
                 mime_type=str(raw_asset["mime_type"]),
                 attribution=str(raw_asset.get("attribution", "")),
                 license_id=(
-                    None
-                    if raw_asset.get("license_id") is None
-                    else str(raw_asset["license_id"])
+                    None if raw_asset.get("license_id") is None else str(raw_asset["license_id"])
                 ),
-                width=(
-                    None
-                    if raw_asset.get("width") is None
-                    else int(raw_asset["width"])
-                ),
-                height=(
-                    None
-                    if raw_asset.get("height") is None
-                    else int(raw_asset["height"])
-                ),
-                author=(
-                    None if raw_asset.get("author") is None else str(raw_asset["author"])
-                ),
+                width=(None if raw_asset.get("width") is None else int(raw_asset["width"])),
+                height=(None if raw_asset.get("height") is None else int(raw_asset["height"])),
+                author=(None if raw_asset.get("author") is None else str(raw_asset["author"])),
                 modified_from_source=bool(raw_asset.get("modified_from_source", False)),
             )
         )
