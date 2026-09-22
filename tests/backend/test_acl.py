@@ -66,6 +66,7 @@ async def test_permission_matrix_matches_v1_roles(tmp_path: Path) -> None:
         expected = {
             "owner": {
                 ProfilePermission.READ,
+                ProfilePermission.EDIT_PROFILE,
                 ProfilePermission.EDIT_TRACK,
                 ProfilePermission.ANSWER,
                 ProfilePermission.SHARE,
