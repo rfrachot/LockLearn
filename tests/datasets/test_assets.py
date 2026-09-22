@@ -325,7 +325,7 @@ async def test_dataset_manager_extracts_and_revalidates_public_asset_cache(
 
         resolved.path.chmod(0o644)
         resolved.path.write_bytes(b"tampered")
-        with pytest.raises(DatasetInstallError, match="size mismatch|checksum mismatch"):
+        with pytest.raises(DatasetInstallError, match=r"size mismatch|checksum mismatch"):
             await manager.async_resolve_public_asset(_ASSET_ID)
     finally:
         await storage.async_close()
