@@ -42,29 +42,26 @@ lease/drain, rollback, tombstones, crash behavior and the no-fan-out decision.
 - Remote P1.5 closure pulled at start: `9881cfd36b98d245e810b3ad69ceba04124dbaff`
 - P1.6 implementation/tests: `a5e2d11` (`feat(storage): add immutable content generations`).
 - P1.6 ADR/tracking/handoff: `adde1c9` (`docs(storage): close P1.6 generation design`).
-- Post-review P1.6 hardening: the commit containing this handoff.
+- P1.6 post-review hardening: `f5c2fe7` and verification fix `9ba254d`.
+- P1.6 final verification/handoff closure: the commit containing this handoff.
 - Branch is pushed to GitHub; no PR/merge/tag has been created by this handoff.
 
 ## Verification
 
-Baseline P1.6 verification before the post-review hardening commit:
+Final P1.6 verification after post-review hardening on the Ubuntu development checkout:
 
 - `python3 -m ruff format --check .`: pass, 122 files already formatted.
 - `python3 -m ruff check .`: pass.
 - `python3 -m mypy custom_components datasets tests`: pass, 57 source files.
 - `python3 datasets/tools/validate_resources.py`: pass.
-- `python3 -m pytest -q --tb=short`: pass, 151 tests in 2.11 s.
-- HA current 2026.9.3 / Python 3.14 backend: included above; 97 backend tests
-  also pass when run after the final additions as part of the full 151-test run.
-- HA minimum 2025.2.5 / Python 3.13.15 backend: pass, 97 tests in 2.52 s.
-- Targeted content/storage suite immediately before final full runs: pass;
-  subsequent full runs include the same tests.
+- `python3 -m pytest -q --tb=short`: pass, 157 tests in 2.38 s.
+- Post-review cancellation, stale-parent, rollback-recovery, dataset-ownership
+  and semantic migration regression tests are included in that 157-test run.
+- Earlier HA minimum 2025.2.5 / Python 3.13.15 backend qualification remains
+  recorded from the P1.6 baseline and must be rerun when the compatibility
+  matrix is next exercised.
 
 No frontend files changed. No frontend command was needed for P1.6.
-
-The post-review hardening commit adds regression tests but was authored through
-the GitHub connector rather than the Ubuntu checkout, so the baseline commands
-above must be rerun on the updated branch before merge.
 
 ## Remaining risks / next action
 
@@ -78,5 +75,5 @@ above must be rerun on the updated branch before merge.
   tables belongs with the released `state.db` schema; P1.6 prevents incomplete
   item/facet mappings from activating.
 
-Next concrete action: review/merge P1.6, then plan P1.7 separately. Do not begin
-P1.7 as part of this handoff.
+P1.6 is closed PASS. Next concrete action: implement P1.7 source/snapshot/
+provenance/license normalization without entering the P1.8 adapter/build-pipeline scope.
