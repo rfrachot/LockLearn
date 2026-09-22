@@ -226,9 +226,7 @@ def validate() -> None:
             raise ValueError(f"duplicate required provenance fields for source {row['id']}")
 
     runtime_sources = json.loads((RUNTIME_RESOURCES / "sources.json").read_text(encoding="utf-8"))
-    runtime_licenses = json.loads(
-        (RUNTIME_RESOURCES / "licenses.json").read_text(encoding="utf-8")
-    )
+    runtime_licenses = json.loads((RUNTIME_RESOURCES / "licenses.json").read_text(encoding="utf-8"))
     if runtime_sources != sources or runtime_licenses != licenses:
         raise ValueError("runtime source/license registries must match build registries")
 
@@ -238,11 +236,7 @@ def validate() -> None:
     if official.get("schema_version") != 1:
         raise ValueError("official dataset registry schema_version must be 1")
     warning_bytes = official.get("cumulative_installed_warning_bytes")
-    if (
-        isinstance(warning_bytes, bool)
-        or not isinstance(warning_bytes, int)
-        or warning_bytes < 1
-    ):
+    if isinstance(warning_bytes, bool) or not isinstance(warning_bytes, int) or warning_bytes < 1:
         raise ValueError("official dataset cumulative warning bytes must be positive")
     official_rows = official.get("datasets")
     if not isinstance(official_rows, list):
@@ -264,18 +258,13 @@ def validate() -> None:
             or not hosts
             or len(hosts) != len(set(hosts))
             or any(
-                not isinstance(host, str)
-                or not host
-                or "/" in host
-                or ":" in host
+                not isinstance(host, str) or not host or "/" in host or ":" in host
                 for host in hosts
             )
         ):
             raise ValueError(f"invalid artifact host allowlist for {dataset_id}")
 
-    signing = json.loads(
-        (RUNTIME_RESOURCES / "signing_keys.json").read_text(encoding="utf-8")
-    )
+    signing = json.loads((RUNTIME_RESOURCES / "signing_keys.json").read_text(encoding="utf-8"))
     if signing.get("schema_version") != 1 or not isinstance(signing.get("keys"), list):
         raise ValueError("runtime signing key registry is invalid")
     key_ids = [row.get("key_id") for row in signing["keys"] if isinstance(row, dict)]
