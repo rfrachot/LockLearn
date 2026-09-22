@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 
 from awesomeversion import AwesomeVersion
 
-from ..const import CONTENT_SCHEMA_VERSION, INTEGRATION_VERSION
+from ..const import INTEGRATION_VERSION, SUPPORTED_CONTENT_SCHEMA_VERSIONS
 from ..storage import ContentGenerationValidator, SQLiteStorage
 from .manifest import DatasetManifest
 from .package import validate_dataset_package
@@ -555,7 +555,7 @@ class DatasetManager:
             raise DatasetInstallError(
                 "signed manifest dataset_version does not match expected version"
             )
-        if manifest.content_schema_version != CONTENT_SCHEMA_VERSION:
+        if manifest.content_schema_version not in SUPPORTED_CONTENT_SCHEMA_VERSIONS:
             raise DatasetInstallError("dataset content schema is not supported")
         if AwesomeVersion(manifest.minimum_locklearn_version) > AwesomeVersion(INTEGRATION_VERSION):
             raise DatasetInstallError("dataset requires a newer LockLearn integration")
