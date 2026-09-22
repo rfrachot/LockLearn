@@ -151,3 +151,39 @@ def test_concept_and_term_are_distinct_source_domain_objects() -> None:
 def test_source_accepts_existing_license_registry_ids() -> None:
     source = m.Source("edrdg:jmdict", "JMdict", "EDRDG", "CC-BY-SA-4.0")
     assert source.license_id == "CC-BY-SA-4.0"
+
+
+def test_source_snapshot_and_provenance_are_typed_and_bounded() -> None:
+    snapshot = m.SourceSnapshot(
+        "locklearn:snapshot:jmdict-2026-09-22",
+        "edrdg:jmdict",
+        "2026-09-22",
+        "2026-09-22",
+        "2026-09-22T10:00:00+00:00",
+        "https://example.invalid/jmdict.xml.gz",
+        "0" * 64,
+        "jmdict-ng-1",
+    )
+    provenance = m.ProvenanceRecord(
+        "locklearn:provenance:entry-123",
+        "locklearn:dataset:starter",
+        m.ProvenanceObjectType.CONCEPT,
+        "edrdg:concept:123",
+        snapshot.snapshot_id,
+        "CC-BY-SA-4.0",
+        m.LicenseScope.DATASET,
+        source_record_id="123",
+        modified_from_source=True,
+    )
+
+    assert provenance.source_snapshot_id == snapshot.snapshot_id
+    with pytest.raises(m.ContentModelError, match="software license scope"):
+        m.ProvenanceRecord(
+            "locklearn:provenance:bad",
+            "locklearn:dataset:starter",
+            m.ProvenanceObjectType.DATASET,
+            "locklearn:dataset:starter",
+            snapshot.snapshot_id,
+            "MIT",
+            m.LicenseScope.SOFTWARE,
+        )
