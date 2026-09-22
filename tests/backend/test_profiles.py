@@ -165,5 +165,14 @@ async def test_profile_creation_rejects_invalid_identity_inputs(tmp_path: Path) 
                 timezone="Europe/Paris",
                 owner_ha_user_ids=("owner",),
             )
+
+        with pytest.raises(ProfileValidationError, match="reserved key"):
+            await service.async_create_profile(
+                name="Learner",
+                preset="standard",
+                timezone="Europe/Paris",
+                owner_ha_user_ids=("owner",),
+                settings_override={"_locklearn_personal_profile": True},
+            )
     finally:
         await storage.async_close()
