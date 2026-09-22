@@ -2,9 +2,9 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11 and P2.1 are complete. P1 is closed PASS and P2 is
-in progress on `feat/p1-content-core`. P2.2 — Profiles, presets and HA-user
-mapping — is implemented and awaiting the local quality gate before closure.
+P0.1–P0.7, P1.1–P1.11 and P2.1–P2.2 are complete. P1 is closed PASS and P2
+is in progress on `feat/p1-content-core`. P2.3 — Backend ACL and privacy
+filtering — is implemented and awaiting the combined local quality gate.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -280,7 +280,7 @@ P2.1 is closed PASS. Next concrete action: P2.2 Profiles, presets and HA-user
 mapping.
 
 
-## P2.2 implementation pending verification
+## P2.2 closure
 
 P2.2 adds a ProfileService over the P2.1 repositories. Profile identity is a
 LockLearn UUID/string generated independently from Home Assistant user IDs.
@@ -306,12 +306,53 @@ New tests in tests/backend/test_profiles.py cover personal mapping/idempotence,
 child profiles with two owners, mutable preset defaults, invalid identity input,
 and protection of internal settings markers.
 
-Verification still required before marking P2.2 PASS:
-- python -m ruff format --check .
-- python -m ruff check .
-- python -m mypy custom_components datasets tests
-- python datasets/tools/validate_resources.py
-- python -m pytest -q --tb=short
+Renaud's local gate after pulling `80825c9` reported:
+- `python3 -m ruff format --check .`: only two formatting diffs, in
+  `core/profiles.py` and `test_profiles.py`.
+- `python3 -m ruff check .`: PASS.
+- `python3 -m mypy custom_components datasets tests`: PASS, 79 source files.
+- `python3 datasets/tools/validate_resources.py`: PASS.
+- `python3 -m pytest -q --tb=short`: PASS, 210 tests in 4.12 s.
 
-No PR, merge or tag has been created. After the gate, close P2.2 in
-docs/plan/P2.md / MASTER_PLAN.md and move to P2.3 backend ACL.
+The exact Ruff-recommended formatting changes were then applied. P2.2 is closed
+PASS; the next combined gate will revalidate those formatting-only edits together
+with P2.3.
+
+No PR, merge or tag has been created.
+
+
+## P2.3 implementation pending verification
+
+P2.3 adds `ProfileACLService` as the single backend profile authorization
+authority. The V1 role matrix is encoded as owner/editor/viewer permissions:
+owners have full profile rights; editors can read, edit tracks/planning, answer
+and manage progress; viewers are read-only; outsiders have no profile access.
+
+Normal profile listings and direct profile visibility are membership-filtered.
+Direct visibility returns the same absence result for nonexistent and
+unauthorized profiles. Home Assistant admin state is deliberately not accepted
+as an ACL bypass input.
+
+ACL membership mutations are owner-only. Repository writes protect the final
+owner transactionally inside the single SQLite writer, preventing concurrent
+remove/demote races from orphaning a profile.
+
+`PERMISSIONS.md`, `PRIVACY.md`, and `SECURITY.md` now document the role
+matrix, backend-authority rule, HA-admin separation, HA entity/event privacy
+caveat, shared-child profiles, Companion boundary and backup/export privacy.
+
+New tests in `tests/backend/test_acl.py` cover the complete role matrix,
+negative outsider access, non-bypass by an HA-admin identity, owner-only ACL
+mutation, and final-owner preservation. Profile CRUD/WebSocket endpoint-specific
+negative authorization tests remain P2.6 scope because those endpoints do not
+exist yet.
+
+Next required local gate:
+- python3 -m ruff format --check .
+- python3 -m ruff check .
+- python3 -m mypy custom_components datasets tests
+- python3 datasets/tools/validate_resources.py
+- python3 -m pytest -q --tb=short
+
+If PASS, close P2.3 and begin P2.4 Track configuration, pack pinning and card
+rules.
