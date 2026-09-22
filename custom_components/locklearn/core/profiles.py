@@ -101,9 +101,7 @@ class ProfileService:
             raise ProfileValidationError(f"invalid timezone: {timezone}") from err
 
         owners = tuple(
-            dict.fromkeys(
-                user_id.strip() for user_id in owner_ha_user_ids if user_id.strip()
-            )
+            dict.fromkeys(user_id.strip() for user_id in owner_ha_user_ids if user_id.strip())
         )
         if not owners:
             raise ProfileValidationError("a profile must start with at least one owner")
