@@ -143,6 +143,7 @@ class DatasetTransport(Protocol):
 
 
 IssueCallback = Callable[[str, str, Mapping[str, str]], Awaitable[None] | None]
+IssueClearCallback = Callable[[str], Awaitable[None] | None]
 
 
 class DatasetManager:
@@ -157,6 +158,7 @@ class DatasetManager:
         trust_store: TrustStore,
         policy: OfficialRegistryPolicy,
         issue_callback: IssueCallback | None = None,
+        issue_clear_callback: IssueClearCallback | None = None,
     ) -> None:
         self._storage = storage
         self._transport = transport
@@ -166,6 +168,7 @@ class DatasetManager:
         self._trust_store = trust_store
         self._policy = policy
         self._issue_callback = issue_callback
+        self._issue_clear_callback = issue_clear_callback
         self._available: dict[str, tuple[DatasetRelease, ...]] = {}
         self._errors: dict[str, str] = {}
         self._lock = asyncio.Lock()
@@ -202,6 +205,9 @@ class DatasetManager:
                 continue
             self._available[definition.dataset_id] = releases
             self._errors.pop(definition.dataset_id, None)
+            await self._clear_issue(
+                f"dataset_discovery_{_issue_suffix(definition.dataset_id)}"
+            )
         return await self.async_statuses()
 
     async def async_statuses(self) -> tuple[DatasetStatus, ...]:
@@ -328,6 +334,7 @@ class DatasetManager:
                 candidate.unlink(missing_ok=True)
 
             self._errors.pop(dataset_id, None)
+            await self._clear_issue(f"dataset_install_{_issue_suffix(dataset_id)}")
             return DatasetInstallResult(
                 dataset_id=dataset_id,
                 version=release.version,
@@ -478,6 +485,13 @@ class DatasetManager:
         if self._issue_callback is None:
             return
         result = self._issue_callback(issue_id, translation_key, placeholders)
+        if result is not None:
+            await result
+
+    async def _clear_issue(self, issue_id: str) -> None:
+        if self._issue_clear_callback is None:
+            return
+        result = self._issue_clear_callback(issue_id)
         if result is not None:
             await result
 
@@ -648,8 +662,6 @@ def _package_cache_path(root: Path, dataset_id: str, version: str) -> Path:
 
 def _store_package_atomically(source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists():
-        return
     temporary = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.part")
     shutil.copyfile(source, temporary)
     with temporary.open("rb") as handle:
