@@ -106,9 +106,9 @@ class OfficialRegistryPolicy:
                 commercial_compatible=_required_bool(row, "commercial_compatible"),
                 required_provenance=tuple(_optional_string_list(row, "required_provenance")),
                 field_allowlist=(
-                    frozenset(_optional_string_list(row, "field_allowlist"))
-                    if "field_allowlist" in row
-                    else None
+                    None
+                    if row.get("field_allowlist") is None
+                    else frozenset(_optional_string_list(row, "field_allowlist"))
                 ),
                 excluded_fields=frozenset(_optional_string_list(row, "excluded_by_default")),
             )
