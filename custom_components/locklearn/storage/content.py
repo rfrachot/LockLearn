@@ -1182,6 +1182,14 @@ class ContentGenerationBuilder:
             raise ContentValidationError("attached package does not declare its dataset")
         dataset_id = str(dataset_row[0])
         connection.execute("DELETE FROM provenance_records WHERE dataset_id = ?", (dataset_id,))
+        connection.execute(
+            """DELETE FROM facet_assets
+               WHERE asset_id IN (
+                   SELECT asset_id FROM assets_metadata WHERE dataset_id = ?
+               )""",
+            (dataset_id,),
+        )
+        connection.execute("DELETE FROM assets_metadata WHERE dataset_id = ?", (dataset_id,))
         connection.execute("DELETE FROM dataset_sources WHERE dataset_id = ?", (dataset_id,))
         connection.execute("DELETE FROM dataset_licenses WHERE dataset_id = ?", (dataset_id,))
 
