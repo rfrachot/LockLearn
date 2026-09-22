@@ -1,0 +1,27 @@
+{
+  "dataset_id": "locklearn:dataset:japanese-starter",
+  "dataset_version": "1.0.0",
+  "built_at": "2026-09-22T20:00:00Z",
+  "minimum_locklearn_version": "0.0.2",
+  "build_tool_version": "1.0.0",
+  "signing_key_id": "locklearn-starter-2026-01",
+  "recipe": "datasets.recipes.japanese_starter:JapaneseStarterRecipe",
+  "added_count": 120,
+  "changed_count": 0,
+  "removed_count": 0,
+  "required_free_disk": 10485760,
+  "sources": [
+    {
+      "source_id": "locklearn:original",
+      "upstream_version": "japanese-starter-source-1.0.0",
+      "upstream_date": "2026-09-22",
+      "retrieved_at": "2026-09-22T20:00:00Z",
+      "files": [
+        {
+          "source_url": "https://github.com/rfrachot/LockLearn/blob/main/datasets/src/japanese_starter.jsonl",
+          "path": "../src/japanese_starter.jsonl"
+        }
+      ]
+    }
+  ]
+}
