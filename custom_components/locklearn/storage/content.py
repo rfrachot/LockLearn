@@ -473,9 +473,7 @@ class ContentGenerationValidator:
             "SELECT snapshot_id, sha256 FROM source_snapshots"
         ):
             if not re.fullmatch(r"[0-9a-f]{64}", str(sha256)):
-                raise ContentValidationError(
-                    f"source snapshot has invalid SHA-256: {snapshot_id}"
-                )
+                raise ContentValidationError(f"source snapshot has invalid SHA-256: {snapshot_id}")
 
         missing_snapshot = connection.execute(
             """SELECT dataset_source.dataset_id, dataset_source.source_id
@@ -492,8 +490,7 @@ class ContentGenerationValidator:
         ).fetchone()
         if missing_snapshot is not None:
             raise ContentValidationError(
-                "dataset source has no provenance-backed source snapshot: "
-                f"{missing_snapshot[1]}"
+                f"dataset source has no provenance-backed source snapshot: {missing_snapshot[1]}"
             )
 
         undeclared_source = connection.execute(
@@ -1317,8 +1314,14 @@ class ContentGenerationManager:
     def _open_sync(self, built_at_utc: str) -> tuple[GenerationMetadata, Path, str | None]:
         self.generations_dir.mkdir(parents=True, exist_ok=True)
         self.staging_dir.mkdir(parents=True, exist_ok=True)
-        if self.current_path.exists() and _is_p0_content_database(self.current_path):
-            legacy = self.staging_dir / f"legacy-p0-{uuid.uuid4().hex}.db"
+        legacy_kind: str | None = None
+        if self.current_path.exists():
+            if _is_p0_content_database(self.current_path):
+                legacy_kind = "p0"
+            elif _is_pre_p1_7_content_database(self.current_path):
+                legacy_kind = "p1-6"
+        if legacy_kind is not None:
+            legacy = self.staging_dir / f"legacy-{legacy_kind}-{uuid.uuid4().hex}.db"
             os.replace(self.current_path, legacy)
             try:
                 active = self._create_bootstrap_sync(built_at_utc)
@@ -1642,6 +1645,54 @@ def _is_p0_content_database(path: Path) -> bool:
         schema_columns == ["version"]
         and card_columns == ["card_key", "pack_version_id", "ordinal"]
         and generation_table is None
+    )
+
+
+def _is_pre_p1_7_content_database(path: Path) -> bool:
+    """Recognize the unreleased P1.6 schema that predates provenance tables."""
+    try:
+        with sqlite3.connect(_read_only_uri(path, immutable=True), uri=True) as connection:
+            schema_row = connection.execute(
+                "SELECT version FROM schema_version WHERE singleton = 1"
+            ).fetchone()
+            generation_columns = [
+                str(row[1]) for row in connection.execute("PRAGMA table_info(generation_metadata)")
+            ]
+            license_columns = [
+                str(row[1]) for row in connection.execute("PRAGMA table_info(licenses)")
+            ]
+            source_columns = [
+                str(row[1]) for row in connection.execute("PRAGMA table_info(sources)")
+            ]
+            dataset_license_columns = [
+                str(row[1]) for row in connection.execute("PRAGMA table_info(dataset_licenses)")
+            ]
+            source_snapshots = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'source_snapshots'"
+            ).fetchone()
+            provenance_records = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'provenance_records'"
+            ).fetchone()
+    except sqlite3.DatabaseError:
+        return False
+
+    return (
+        schema_row == (CONTENT_SCHEMA_VERSION,)
+        and generation_columns
+        == [
+            "singleton",
+            "generation_id",
+            "content_schema_version",
+            "built_at_utc",
+            "parent_generation_id",
+            "package_count",
+            "package_set_hash",
+        ]
+        and license_columns == ["license_id"]
+        and source_columns == ["source_id", "name", "provider", "license_id"]
+        and dataset_license_columns == ["dataset_id", "license_id"]
+        and source_snapshots is None
+        and provenance_records is None
     )
 
 
