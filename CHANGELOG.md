@@ -5,6 +5,11 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P2.4 Track configuration service with explicit immutable PackVersion pinning,
+  direction-to-CardDefinition resolution, explicit card selection, relative
+  content weights, deterministic update previews and deliberate pack integration.
+- ADR-0020 documenting Track/Pack separation, materialized card rules and the
+  no-silent-pack-update contract.
 - P2.3 centralized backend profile ACL authority with owner/editor/viewer roles,
   privacy-filtered profile visibility, explicit non-bypass for HA admins, and
   transactional protection against removing or demoting the final owner.
