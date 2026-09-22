@@ -1,0 +1,209 @@
+{
+  "schema_version": 2,
+  "sources": [
+    {
+      "id": "edrdg:jmdict",
+      "name": "JMdict",
+      "provider": "EDRDG",
+      "homepage": "https://www.edrdg.org/jmdict/j_jmdict.html",
+      "license_id": "CC-BY-SA-4.0",
+      "license_scope": "dataset",
+      "attribution_template": "JMdict/EDRDG contributors — CC BY-SA 4.0",
+      "adapter_id": "jmdict_ng",
+      "status": "recommended",
+      "commercial_compatible": true,
+      "refresh_policy": "weekly-check_monthly-max-age",
+      "uses": [
+        "ja_lexicon",
+        "ja_readings",
+        "en_glosses"
+      ],
+      "required_provenance": [
+        "source_record_id"
+      ],
+      "field_allowlist": [
+        "japanese_forms",
+        "readings",
+        "english_glosses",
+        "parts_of_speech",
+        "restrictions",
+        "sense_metadata"
+      ],
+      "excluded_by_default": [
+        "non_english_glosses"
+      ],
+      "notes": "Non-English translation equivalents require a separate rights audit before official import.",
+      "check_interval_days": 7,
+      "target_refresh_days": 30
+    },
+    {
+      "id": "edrdg:kanjidic2",
+      "name": "KANJIDIC2",
+      "provider": "EDRDG",
+      "homepage": "https://www.edrdg.org/wiki/KANJIDIC_Project.html",
+      "license_id": "CC-BY-SA-4.0",
+      "license_scope": "dataset",
+      "attribution_template": "KANJIDIC2/EDRDG contributors — CC BY-SA 4.0",
+      "adapter_id": "kanjidic2",
+      "status": "recommended_with_field_allowlist",
+      "commercial_compatible": true,
+      "refresh_policy": "weekly-check_monthly-max-age",
+      "uses": [
+        "kanji_readings",
+        "stroke_count",
+        "selected_kanji_metadata"
+      ],
+      "required_provenance": [
+        "source_record_id"
+      ],
+      "field_allowlist": [
+        "literal",
+        "readings",
+        "meanings",
+        "stroke_count",
+        "grade",
+        "frequency",
+        "jlpt_legacy"
+      ],
+      "excluded_by_default": [
+        "third_party_descriptor_fields",
+        "search_codes"
+      ],
+      "notes": "Only explicitly allowlisted fields may enter official datasets.",
+      "check_interval_days": 7,
+      "target_refresh_days": 30
+    },
+    {
+      "id": "wikimedia:wiktionary-kaikki",
+      "name": "Wiktionary via Wiktextract / Kaikki",
+      "provider": "Wikimedia contributors / Kaikki extraction",
+      "homepage": "https://kaikki.org/dictionary/",
+      "license_id": "CC-BY-SA-4.0",
+      "license_scope": "dataset",
+      "attribution_template": "Wiktionary contributors via Wiktextract/Kaikki — CC BY-SA 4.0",
+      "adapter_id": "wiktextract_kaikki",
+      "status": "recommended_text_only",
+      "commercial_compatible": true,
+      "refresh_policy": "weekly-check",
+      "uses": [
+        "multilingual_glosses",
+        "parts_of_speech",
+        "lexical_forms"
+      ],
+      "required_provenance": [
+        "source_record_id"
+      ],
+      "field_allowlist": [
+        "word",
+        "language",
+        "part_of_speech",
+        "senses",
+        "forms",
+        "translations",
+        "examples_text"
+      ],
+      "excluded_by_default": [
+        "media",
+        "externally_licensed_material"
+      ],
+      "notes": "Text only by default; media and externally licensed fragments require separate audit.",
+      "check_interval_days": 7,
+      "target_refresh_days": 30
+    },
+    {
+      "id": "tatoeba:text",
+      "name": "Tatoeba text corpus",
+      "provider": "Tatoeba contributors",
+      "homepage": "https://tatoeba.org/",
+      "license_id": "CC-BY-2.0-FR",
+      "license_scope": "dataset",
+      "attribution_template": "Tatoeba sentence {source_record_id} by {author} — {license_id}",
+      "adapter_id": "tatoeba_text",
+      "status": "recommended",
+      "commercial_compatible": true,
+      "refresh_policy": "periodic",
+      "uses": [
+        "example_sentences",
+        "sentence_translations"
+      ],
+      "required_provenance": [
+        "source_record_id",
+        "author",
+        "license_id",
+        "language"
+      ],
+      "field_allowlist": [
+        "sentence_id",
+        "text",
+        "language",
+        "author",
+        "license",
+        "translation_links"
+      ],
+      "excluded_by_default": [
+        "audio",
+        "license_problem"
+      ],
+      "notes": "Sentence-level author and license attribution is mandatory; audio is excluded.",
+      "check_interval_days": 7,
+      "target_refresh_days": 30
+    },
+    {
+      "id": "kanjivg:svg",
+      "name": "KanjiVG",
+      "provider": "KanjiVG contributors",
+      "homepage": "https://kanjivg.tagaini.net/",
+      "license_id": "CC-BY-SA-3.0",
+      "license_scope": "asset",
+      "attribution_template": "KanjiVG contributors — CC BY-SA 3.0",
+      "adapter_id": "kanjivg_svg",
+      "status": "recommended_secondary_v1",
+      "commercial_compatible": true,
+      "refresh_policy": "periodic",
+      "uses": [
+        "stroke_order",
+        "kanji_svg",
+        "visual_components"
+      ],
+      "required_provenance": [
+        "source_record_id"
+      ],
+      "field_allowlist": [
+        "character",
+        "svg",
+        "stroke_paths",
+        "components"
+      ],
+      "excluded_by_default": [],
+      "asset_boundary": "separate",
+      "notes": "Remain a separately attributed asset/dataset boundary.",
+      "check_interval_days": 30,
+      "target_refresh_days": 90
+    },
+    {
+      "id": "locklearn:original",
+      "name": "Original LockLearn learning content",
+      "provider": "LockLearn contributors",
+      "homepage": "https://github.com/rfrachot/LockLearn",
+      "license_id": "CC-BY-SA-4.0",
+      "license_scope": "editorial",
+      "attribution_template": "LockLearn contributors — CC BY-SA 4.0",
+      "adapter_id": "locklearn_editorial",
+      "status": "required_for_official_curation",
+      "commercial_compatible": true,
+      "refresh_policy": "release-driven",
+      "uses": [
+        "grammar",
+        "mnemonics",
+        "curation",
+        "starter_pack"
+      ],
+      "required_provenance": [],
+      "field_allowlist": null,
+      "excluded_by_default": [],
+      "notes": "Original editorial learning content; deliberately separate from the MIT software license.",
+      "check_interval_days": null,
+      "target_refresh_days": null
+    }
+  ]
+}
