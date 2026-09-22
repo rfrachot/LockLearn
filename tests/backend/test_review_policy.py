@@ -169,6 +169,8 @@ def test_completed_short_steps_graduate_to_review_without_recomputing_short_step
 
     assert graduated.post_state["state"] == "review"
     assert graduated.post_state["box"] == 1
+    assert graduated.post_state["streak_correct"] == 0
+    assert graduated.post_state["mastery"] > 0
     assert graduated.effective_interval_days is not None
     assert graduated.post_state["next_due_at_utc"] is not None
 
