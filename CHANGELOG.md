@@ -5,6 +5,12 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P3.2 explicit introduction state for new cards plus deterministic V1 short
+  learning/relearning steps (1/10/60 and 10/60 minutes).
+- Positive failure delays that prevent immediate working-memory retests, with
+  an explicit graduation handoff to the future long-review policy.
+- ADR-0023 documenting the boundary between short-step learning, P3.3 long
+  review policy, P3.4 signal weighting and P3.9 interleaving.
 - P3.1 canonical ReviewEvent audit service with exact CardDefinition identity,
   policy/dataset/normalization versioning, complete pre/post progress snapshots,
   historical local timezone fields and separate cognitive/delivery latency.
