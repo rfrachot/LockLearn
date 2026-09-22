@@ -117,6 +117,8 @@ class ProfileService:
 
         settings = profile_preset_defaults(resolved_preset)
         if settings_override:
+            if any(key.startswith("_locklearn_") for key in settings_override):
+                raise ProfileValidationError("settings_override contains a reserved key")
             settings.update(dict(settings_override))
         if personal_profile:
             settings[_PERSONAL_PROFILE_MARKER] = True
