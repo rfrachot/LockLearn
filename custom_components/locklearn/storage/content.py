@@ -14,7 +14,7 @@ from concurrent.futures import Executor
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from ..const import CONTENT_SCHEMA_VERSION
 from ..core.content import derive_card_definition_id, derive_card_key, validate_stable_id
@@ -36,6 +36,7 @@ from .schema import (
 )
 
 _GENERATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_T = TypeVar("_T")
 
 
 class ContentGenerationError(RuntimeError):
@@ -347,6 +348,7 @@ class ContentGenerationValidator:
 
         if not require_card_coverage:
             return
+
         def resolve(object_type: str, stable_id: str) -> str:
             current = stable_id
             while (object_type, current) in edges:
@@ -376,15 +378,13 @@ class ContentGenerationValidator:
             expected_card_id = derive_card_definition_id(
                 resolved_item, resolved_prompt, resolved_answer
             )
-            expected_card_key = derive_card_key(
-                resolved_item, resolved_prompt, resolved_answer
-            )
+            expected_card_key = derive_card_key(resolved_item, resolved_prompt, resolved_answer)
             if (
                 resolve("card_definition", card_id) != expected_card_id
                 or resolve("card_key", card_key) != expected_card_key
             ):
                 raise ContentValidationError(
-                    "LearningItem/Facet ID migrations must map affected cards "
+                    "LearningItem/Facet ID migrations must map every affected card "
                     "to the card identity derived from their migrated tuple"
                 )
 
@@ -1231,7 +1231,7 @@ class ContentGenerationManager:
             self._condition.notify_all()
 
     @staticmethod
-    async def _await_switch_future(future: asyncio.Future[Any]) -> tuple[Any, bool]:
+    async def _await_switch_future(future: asyncio.Future[_T]) -> tuple[_T, bool]:
         """Finish an atomic filesystem switch before propagating task cancellation."""
         cancelled = False
         while True:
