@@ -173,6 +173,8 @@ def validate() -> None:
             "status",
             "commercial_compatible",
             "refresh_policy",
+            "check_interval_days",
+            "target_refresh_days",
             "uses",
             "required_provenance",
             "excluded_by_default",
@@ -197,6 +199,26 @@ def validate() -> None:
                 raise ValueError(f"duplicate field allowlist entries for source {row['id']}")
             if set(allowlist) & set(excluded):
                 raise ValueError(f"source allowlist overlaps excluded fields for {row['id']}")
+        check_interval = row.get("check_interval_days")
+        target_refresh = row.get("target_refresh_days")
+        if check_interval is not None and (
+            isinstance(check_interval, bool)
+            or not isinstance(check_interval, int)
+            or check_interval < 1
+        ):
+            raise ValueError(f"invalid check_interval_days for source {row['id']}")
+        if target_refresh is not None and (
+            isinstance(target_refresh, bool)
+            or not isinstance(target_refresh, int)
+            or target_refresh < 1
+        ):
+            raise ValueError(f"invalid target_refresh_days for source {row['id']}")
+        if (
+            check_interval is not None
+            and target_refresh is not None
+            and check_interval > target_refresh
+        ):
+            raise ValueError(f"source check interval exceeds refresh target for {row['id']}")
         required_provenance = row.get("required_provenance", [])
         if len(required_provenance) != len(set(required_provenance)):
             raise ValueError(f"duplicate required provenance fields for source {row['id']}")
