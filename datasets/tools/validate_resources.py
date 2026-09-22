@@ -265,9 +265,7 @@ def validate() -> None:
         ):
             raise ValueError(f"invalid artifact host allowlist for {dataset_id}")
 
-    bundled = json.loads(
-        (RUNTIME_RESOURCES / "bundled_datasets.json").read_text(encoding="utf-8")
-    )
+    bundled = json.loads((RUNTIME_RESOURCES / "bundled_datasets.json").read_text(encoding="utf-8"))
     if bundled.get("schema_version") != 1:
         raise ValueError("bundled dataset registry schema_version must be 1")
     bundled_rows = bundled.get("datasets")
@@ -291,10 +289,7 @@ def validate() -> None:
         if relative.is_absolute() or ".." in relative.parts:
             raise ValueError(f"bundled dataset path must be relative: {dataset_id}")
         sha256 = row.get("sha256")
-        if (
-            not isinstance(sha256, str)
-            or not re.fullmatch(r"[0-9a-f]{64}", sha256)
-        ):
+        if not isinstance(sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", sha256):
             raise ValueError(f"invalid bundled dataset SHA-256: {dataset_id}")
         size = row.get("size")
         if isinstance(size, bool) or not isinstance(size, int) or size < 1:
