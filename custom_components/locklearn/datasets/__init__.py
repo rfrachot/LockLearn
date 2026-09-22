@@ -12,6 +12,7 @@ from .manager import (
     DatasetRemovalError,
     DatasetStatus,
     InstalledDataset,
+    ResolvedPublicAsset,
 )
 from .manifest import (
     MANIFEST_VERSION,
@@ -65,6 +66,7 @@ __all__ = [
     "ManifestFile",
     "OfficialRegistryPolicy",
     "PayloadIntegrityError",
+    "ResolvedPublicAsset",
     "SourceReference",
     "TrustError",
     "TrustStore",
