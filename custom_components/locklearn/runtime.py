@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from homeassistant.core import HomeAssistant
@@ -9,6 +10,7 @@ from homeassistant.helpers import issue_registry as ir
 
 from .const import DOMAIN
 from .core.operations import OperationRegistry
+from .core.sessions import SessionService
 from .datasets.manager import (
     DatasetManager,
     load_runtime_dataset_definitions,
@@ -17,7 +19,6 @@ from .datasets.manager import (
 )
 from .datasets.policy import OfficialRegistryPolicy
 from .datasets.transport import HomeAssistantDatasetTransport
-from .core.sessions import SessionService
 from .storage import SQLiteStorage, StoragePaths
 
 
@@ -39,7 +40,7 @@ class LockLearnRuntime:
         async def report_issue(
             issue_id: str,
             translation_key: str,
-            placeholders: dict[str, str],
+            placeholders: Mapping[str, str],
         ) -> None:
             severity = (
                 ir.IssueSeverity.WARNING
@@ -54,7 +55,7 @@ class LockLearnRuntime:
                 is_persistent=True,
                 severity=severity,
                 translation_key=translation_key,
-                translation_placeholders=placeholders,
+                translation_placeholders=dict(placeholders),
             )
 
         async def clear_issue(issue_id: str) -> None:
