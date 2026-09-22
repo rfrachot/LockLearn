@@ -184,6 +184,7 @@ async def test_event_append_materializes_progress_and_preserves_latency_semantic
         assert len(events) == 1
         assert events[0]["presentation_to_answer_ms"] is None
         assert events[0]["delivery_to_action_ms"] == 48_000
+        assert events[0]["normalization_version"] == 1
         assert events[0]["post_state_snapshot"]["state"] == "learning"
     finally:
         await storage.async_close()
