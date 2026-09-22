@@ -709,3 +709,27 @@ def test_package_rejects_invalid_source_snapshot_hash(tmp_path: Path) -> None:
         connection.commit()
     with pytest.raises(ContentValidationError, match="invalid SHA-256"):
         ContentGenerationValidator().validate_package(package)
+
+
+async def test_dataset_update_replaces_active_provenance_snapshot(
+    content_storage: SQLiteStorage, tmp_path: Path
+) -> None:
+    """A newer package replaces active provenance instead of retaining a stale snapshot."""
+    first_package = create_package(tmp_path / "prov-v1.db", "prov-v1")
+    first_candidate = await build_candidate(content_storage, first_package, "prov-generation-one")
+    await content_storage.async_activate_content_generation(first_candidate)
+
+    second_package = create_package(tmp_path / "prov-v2.db", "prov-v2")
+    second_candidate = await build_candidate(
+        content_storage, second_package, "prov-generation-two"
+    )
+    await content_storage.async_activate_content_generation(second_candidate)
+
+    with inspect_generation(content_storage.paths.content_db) as connection:
+        assert connection.execute(
+            """SELECT source_snapshot_id FROM provenance_records
+               WHERE provenance_id = 'locklearn:provenance:test-dataset-source'"""
+        ).fetchall() == [("locklearn:snapshot:prov-v2",)]
+        assert connection.execute(
+            "SELECT snapshot_id FROM source_snapshots ORDER BY snapshot_id"
+        ).fetchall() == [("locklearn:snapshot:prov-v2",)]
