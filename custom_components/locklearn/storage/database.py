@@ -546,6 +546,38 @@ class SQLiteStorage:
 
         return await self._async_reader(query)
 
+    async def async_pack_inventory(self) -> tuple[dict[str, Any], ...]:
+        """Return active Pack/PackVersion metadata from the content generation."""
+
+        def query(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT pack.pack_id, pack.name, version.pack_version_id,
+                          version.version, version.curation_policy_id,
+                          metadata.generation_id,
+                          stats.total_items, stats.total_cards
+                   FROM content.packs AS pack
+                   JOIN content.pack_versions AS version ON version.pack_id = pack.pack_id
+                   JOIN content.generation_metadata AS metadata
+                   LEFT JOIN content.pack_version_stats AS stats
+                     ON stats.pack_version_id = version.pack_version_id
+                   ORDER BY pack.name COLLATE NOCASE, pack.pack_id, version.version"""
+            ).fetchall()
+            return tuple(
+                {
+                    "pack_id": str(row[0]),
+                    "name": str(row[1]),
+                    "pack_version_id": str(row[2]),
+                    "version": str(row[3]),
+                    "curation_policy_id": None if row[4] is None else str(row[4]),
+                    "generation_id": str(row[5]),
+                    "total_items": 0 if row[6] is None else int(row[6]),
+                    "total_cards": 0 if row[7] is None else int(row[7]),
+                }
+                for row in rows
+            )
+
+        return await self._async_reader(query)
+
     async def async_validate_pack_version_reference(self, pack_version_id: str) -> bool:
         """Validate a state -> content PackVersion reference against active content."""
 
