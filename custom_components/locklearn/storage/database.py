@@ -435,9 +435,7 @@ class SQLiteStorage:
 
         def inspect(connection: sqlite3.Connection) -> dict[str, Any]:
             integrity_rows = connection.execute("PRAGMA integrity_check").fetchall()
-            schema_row = connection.execute(
-                "SELECT version FROM schema_version LIMIT 1"
-            ).fetchone()
+            schema_row = connection.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
             return {
                 "integrity_check": [str(row[0]) for row in integrity_rows],
                 "foreign_key_violation_count": len(
@@ -445,9 +443,7 @@ class SQLiteStorage:
                 ),
                 "schema_version": None if schema_row is None else schema_row[0],
                 "journal_mode": connection.execute("PRAGMA journal_mode").fetchone()[0],
-                "session_count": connection.execute(
-                    "SELECT COUNT(*) FROM sessions"
-                ).fetchone()[0],
+                "session_count": connection.execute("SELECT COUNT(*) FROM sessions").fetchone()[0],
                 "session_answer_count": connection.execute(
                     "SELECT COUNT(*) FROM session_answers"
                 ).fetchone()[0],
