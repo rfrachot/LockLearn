@@ -10,8 +10,8 @@ from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .clock import Clock, SystemClock
 from ..storage.repositories import ProfileMemberRecord, ProfileRecord, ProfilesRepository
+from .clock import Clock, SystemClock
 
 
 class ProfilePreset(StrEnum):
@@ -100,7 +100,11 @@ class ProfileService:
         except (ValueError, ZoneInfoNotFoundError) as err:
             raise ProfileValidationError(f"invalid timezone: {timezone}") from err
 
-        owners = tuple(dict.fromkeys(user_id.strip() for user_id in owner_ha_user_ids if user_id.strip()))
+        owners = tuple(
+            dict.fromkeys(
+                user_id.strip() for user_id in owner_ha_user_ids if user_id.strip()
+            )
+        )
         if not owners:
             raise ProfileValidationError("a profile must start with at least one owner")
         if personal_profile and len(owners) != 1:
