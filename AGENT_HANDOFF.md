@@ -2,9 +2,8 @@
 
 ## Current state
 
-P0.1–P0.7 and P1.1–P1.8 are complete. P1 remains in progress on
-`feat/p1-content-core`. P1.9 DatasetManager/update-entity implementation is
-on the branch and awaits local Ruff/mypy/registry/pytest verification before PASS.
+P0.1–P0.7 and P1.1–P1.9 are complete. P1 remains in progress on
+`feat/p1-content-core`.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -107,20 +106,18 @@ ADR-0015 records the offline ETL/release boundary.
 
 ## Remaining risks / next action
 
-- P1.9 owns download orchestration, update entities, Repairs and user-facing
-  install/rollback policy; P1.6 supplies the storage primitives.
 - P1.11 owns full Asset metadata and serving; P1.6 stores only P1.3 stable media
   references in validated payload JSON.
 - Applying validated stable-ID mappings transactionally to future user-state
   tables belongs with the released `state.db` schema; P1.6 prevents incomplete
   item/facet mappings from activating.
 
-P1.6, P1.7 and P1.8 are closed PASS. Next concrete action: plan/implement
-P1.9 DatasetManager, update entity, staging and rollback without pulling P1.10
-starter-content curation into the same work package.
+P1.6, P1.7, P1.8 and P1.9 are closed PASS. Next concrete action: implement
+P1.10 signed first-run mini dataset without pulling P1.11 Asset renderer scope
+into the same work package.
 
 
-## P1.9 implementation awaiting verification
+## P1.9 closure
 
 P1.9 adds a local DatasetManager for official prebuilt artifacts. Remote release
 catalogs are discovery-only and cannot authorize content: installation requires
@@ -141,7 +138,12 @@ Synthetic P1.9 tests cover signed install, v1→v2 update, pack-version retentio
 rollback, checksum failure, failure after a valid install, explicit removal
 guards, repair recovery and artifact-host allowlisting.
 
-ADR-0016 records the runtime trust/update boundary.
+Final Ubuntu verification after the P1.9 fixture/style remediation:
 
-Next concrete action: run the full local quality suite. If green, close P1.9
-PASS. Do not begin P1.10 starter content before that gate.
+- `python3 -m ruff format --check .`: pass, 138 files already formatted.
+- `python3 -m ruff check .`: pass.
+- `python3 -m mypy custom_components datasets tests`: pass, 69 source files.
+- `python3 datasets/tools/validate_resources.py`: pass.
+- `python3 -m pytest -q --tb=short`: pass, 188 tests in 3.10 s.
+
+ADR-0016 records the runtime trust/update boundary.
