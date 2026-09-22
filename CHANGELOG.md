@@ -7,7 +7,7 @@ All notable changes will be documented here.
 ### Added
 - P3.7 versioned panel free-text grading for exact, any_of and conservative
   script-gated fuzzy_normalized policies, with explicit correct/wrong/unrecognized
-  outcomes and normalization-version propagation.
+  outcomes and normalization-version propagation (PASS).
 - Recoverable "answer should be accepted" content reports persisted as private
   state audit feedback through the authenticated locklearn/content/report API.
 - ADR-0028 documenting the grading/report boundary, semantic-diacritic protection
