@@ -11,6 +11,7 @@ from custom_components.locklearn.core.content import (
     derive_card_key,
     make_stable_id,
 )
+from datasets.adapters import NormalizedRecord
 from datasets.pipeline import BuildContext, DatasetBuildError
 
 DATASET_ID = "locklearn:dataset:japanese-starter"
@@ -86,7 +87,7 @@ class JapaneseStarterRecipe:
 def _materialize_kana(
     connection: sqlite3.Connection,
     context: BuildContext,
-    record,
+    record: NormalizedRecord,
     position: int,
 ) -> int:
     glyph = _payload_string(record.payload, "glyph")
@@ -115,7 +116,7 @@ def _materialize_kana(
 def _materialize_word(
     connection: sqlite3.Connection,
     context: BuildContext,
-    record,
+    record: NormalizedRecord,
     position: int,
 ) -> int:
     written = _payload_string(record.payload, "written")
@@ -143,7 +144,7 @@ def _materialize_pair(
     connection: sqlite3.Connection,
     context: BuildContext,
     *,
-    record,
+    record: NormalizedRecord,
     position: int,
     left_text: str,
     left_key: str,
