@@ -165,7 +165,7 @@ class RichTextDocument:
 
 @dataclass(frozen=True, slots=True)
 class MediaReference:
-    """Minimal content reference; full Asset metadata remains P1.11 scope."""
+    """Stable reference to public Asset metadata stored in content schema v2."""
 
     asset_id: str
 
