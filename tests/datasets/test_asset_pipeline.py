@@ -245,6 +245,19 @@ def test_asset_model_enforces_media_shape_and_safe_paths() -> None:
             height=240,
         )
 
+    audio = Asset(
+        asset_id="locklearn:asset:audio-valid",
+        dataset_id=_DATASET_ID,
+        kind=AssetKind.AUDIO,
+        path="assets/audio/voice.ogg",
+        sha256="b" * 64,
+        byte_size=10,
+        mime_type="audio/ogg",
+        license_id="CC0-1.0",
+        attribution="",
+    )
+    assert audio.width is None and audio.height is None
+
     with pytest.raises(AssetModelError, match="dimensions"):
         Asset(
             asset_id="locklearn:asset:audio",
@@ -257,6 +270,21 @@ def test_asset_model_enforces_media_shape_and_safe_paths() -> None:
             license_id="CC0-1.0",
             attribution="",
             width=1,
+        )
+
+    with pytest.raises(AssetModelError, match="unsupported image"):
+        Asset(
+            asset_id="locklearn:asset:svg",
+            dataset_id=_DATASET_ID,
+            kind=AssetKind.IMAGE,
+            path="assets/vector/example.svg",
+            sha256="c" * 64,
+            byte_size=10,
+            mime_type="image/svg+xml",
+            license_id="CC0-1.0",
+            attribution="",
+            width=10,
+            height=10,
         )
 
 
