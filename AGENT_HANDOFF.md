@@ -3,9 +3,8 @@
 ## Current state
 
 P0.1–P0.7 remain complete. P1 is in progress on `feat/p1-content-core`.
-P1.1, P1.2 and P1.3 are complete. P1.3 was verified on the Ubuntu development
-checkout after the final code changes; the final branch-only delta before
-closure was Ruff formatting with no semantic behavior change.
+P1.1, P1.2 and P1.3 are complete. P1.4 implementation is complete and awaits
+repository verification on the Ubuntu development checkout.
 
 P1.3 adds the generic content presentation/grading contract without changing
 progression identity. `CardDefinition` now carries mutable
@@ -49,6 +48,35 @@ format-only commit; that last commit changed only Ruff line wrapping. Ruff
 format was then re-run on the resulting head and passed. No frontend files
 changed in P1.3.
 
+## P1.4 implementation
+
+P1.4 adds `core/localization.py` with modern BCP 47 parsing/canonicalization,
+structural ISO 15924 script validation, deterministic locale fallback and
+versioned generic normalization policies. The normalization engine has no
+language-specific branches.
+
+`Term` now canonicalizes language/script metadata and may carry the atomic
+`normalized_text` + `normalization_version` pair. Applying a policy preserves
+`term_id`. A changed policy behavior without a higher normalization version is
+rejected so later persisted indexes can be rebuilt safely.
+
+The bootstrap language registry now references a validated
+`normalization_policies.json`; `latin_default_v1` and `japanese_v1` are
+data-driven policies rather than core conditionals. ADR-0011 records these
+boundaries and the exact -> base -> explicit default/final fallback contract.
+
+## P1.4 verification pending
+
+Required before changing P1.4 to PASS:
+
+```text
+python3 -m ruff format --check .
+python3 -m ruff check .
+python3 -m mypy custom_components datasets tests
+python3 datasets/tools/validate_resources.py
+python3 -m pytest -q --tb=short
+```
+
 ## Remaining risks / next action
 
 - P1.4 owns BCP 47/ISO 15924 validation, `normalized_text`,
@@ -62,5 +90,6 @@ changed in P1.3.
 - The future Lit renderer must map the rich-text AST node-by-node and must never
   route dataset strings through `unsafeHTML`.
 
-Next concrete action: start P1.4 multilingual normalization and locale
-primitives only. Do not begin P1.5/P1.6 or grading-engine work as part of P1.4.
+Next concrete action: verify and close P1.4 PASS. Only after that, start P1.5
+tags/packs/prerequisites and Japanese curation primitives. Do not begin P1.6 or
+grading-engine work as part of P1.4.
