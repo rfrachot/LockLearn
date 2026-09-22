@@ -338,9 +338,7 @@ class CardDefinition:
             raise ContentModelError("context hint facets must be unique")
         for hint in context_hints:
             if hint.learning_item_id != learning_item.learning_item_id:
-                raise ContentModelError(
-                    "context hint facet belongs to a different LearningItem"
-                )
+                raise ContentModelError("context hint facet belongs to a different LearningItem")
             if hint.facet_id == answer.facet_id:
                 raise ContentModelError("answer facet cannot also be a context hint")
         card_key = derive_card_key(
