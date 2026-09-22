@@ -932,9 +932,7 @@ def _extract_dataset_database(archive_path: Path, destination: Path) -> None:
 
 def _validate_package_matches_manifest(package: Any, manifest: DatasetManifest) -> None:
     if package.content_schema_version != manifest.content_schema_version:
-        raise DatasetInstallError(
-            "package database schema version does not match signed manifest"
-        )
+        raise DatasetInstallError("package database schema version does not match signed manifest")
     if package.dataset_id != manifest.dataset_id:
         raise DatasetInstallError("package database dataset_id does not match signed manifest")
     if package.canonical_content_hash != manifest.canonical_content_hash:
