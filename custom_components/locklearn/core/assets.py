@@ -10,6 +10,10 @@ from pathlib import PurePosixPath
 from .content import validate_license_id, validate_stable_id
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_ALLOWED_IMAGE_MIME_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
+_ALLOWED_AUDIO_MIME_TYPES = frozenset(
+    {"audio/mp4", "audio/mpeg", "audio/ogg", "audio/wav", "audio/webm"}
+)
 
 
 class AssetModelError(ValueError):
@@ -50,10 +54,14 @@ class Asset:
             raise AssetModelError("asset byte_size must be positive")
         if not self.mime_type or "/" not in self.mime_type:
             raise AssetModelError("asset mime_type must be a non-empty media type")
-        expected_prefix = f"{self.kind.value}/"
-        if not self.mime_type.startswith(expected_prefix):
+        allowed_mime_types = (
+            _ALLOWED_IMAGE_MIME_TYPES
+            if self.kind is AssetKind.IMAGE
+            else _ALLOWED_AUDIO_MIME_TYPES
+        )
+        if self.mime_type not in allowed_mime_types:
             raise AssetModelError(
-                f"{self.kind.value} asset MIME type must start with {expected_prefix!r}"
+                f"unsupported {self.kind.value} asset MIME type: {self.mime_type}"
             )
         if self.kind is AssetKind.IMAGE:
             if self.width is None or self.height is None:
