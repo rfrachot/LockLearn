@@ -58,9 +58,7 @@ class JMdictAdapter:
                     continue
                 writings = _texts(element, "k_ele", "keb")
                 readings = _texts(element, "r_ele", "reb")
-                senses = [
-                    child for child in element if child.tag.rsplit("}", 1)[-1] == "sense"
-                ]
+                senses = [child for child in element if child.tag.rsplit("}", 1)[-1] == "sense"]
                 for index, sense in enumerate(senses, start=1):
                     glosses = []
                     for gloss in _children(sense, "gloss"):
@@ -74,9 +72,7 @@ class JMdictAdapter:
                     if not glosses:
                         continue
                     restrictions = [
-                        value
-                        for name in ("stagk", "stagr")
-                        for value in _child_texts(sense, name)
+                        value for name in ("stagk", "stagr") for value in _child_texts(sense, name)
                     ]
                     yield NormalizedRecord(
                         source_id=self.source_id,
@@ -304,8 +300,8 @@ class LockLearnEditorialAdapter:
     source_id = "locklearn:original"
     adapter_id = "locklearn_editorial"
     adapter_version = "1"
-    emitted_fields = frozenset()
-    provenance_fields = frozenset()
+    emitted_fields: frozenset[str] = frozenset()
+    provenance_fields: frozenset[str] = frozenset()
 
     def normalize(self, path: Path) -> Iterator[NormalizedRecord]:
         with path.open("r", encoding="utf-8") as stream:
