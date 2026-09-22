@@ -83,9 +83,7 @@ async def test_bootstrap_profile_crud_privacy_share_and_pagination(
     assert created["success"] is True
     second_id = created["result"]["profile_id"]
 
-    await owner.send_json_auto_id(
-        {"type": "locklearn/profiles/list", "limit": 1}
-    )
+    await owner.send_json_auto_id({"type": "locklearn/profiles/list", "limit": 1})
     first_page = await owner.receive_json()
     assert first_page["success"] is True
     assert len(first_page["result"]["items"]) == 1
@@ -101,7 +99,10 @@ async def test_bootstrap_profile_crud_privacy_share_and_pagination(
     second_page = await owner.receive_json()
     assert second_page["success"] is True
     assert len(second_page["result"]["items"]) == 1
-    assert {first_page["result"]["items"][0]["profile_id"], second_page["result"]["items"][0]["profile_id"]} == {
+    assert {
+        first_page["result"]["items"][0]["profile_id"],
+        second_page["result"]["items"][0]["profile_id"],
+    } == {
         personal_id,
         second_id,
     }
@@ -176,16 +177,12 @@ async def test_bootstrap_profile_crud_privacy_share_and_pagination(
     assert updated["success"] is True
     assert updated["result"]["name"] == "Renamed"
 
-    await owner.send_json_auto_id(
-        {"type": "locklearn/profiles/list", "cursor": "not-an-offset"}
-    )
+    await owner.send_json_auto_id({"type": "locklearn/profiles/list", "cursor": "not-an-offset"})
     invalid_cursor = await owner.receive_json()
     assert invalid_cursor["success"] is False
     assert invalid_cursor["error"]["code"] == "locklearn/invalid_request"
 
-    await owner.send_json_auto_id(
-        {"type": "locklearn/profiles/delete", "profile_id": personal_id}
-    )
+    await owner.send_json_auto_id({"type": "locklearn/profiles/delete", "profile_id": personal_id})
     deleted = await owner.receive_json()
     assert deleted["success"] is True
 
@@ -226,8 +223,7 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
     packs = await client.receive_json()
     assert packs["success"] is True
     assert any(
-        item["pack_version_id"] == "locklearn:pack-version:v1"
-        for item in packs["result"]["items"]
+        item["pack_version_id"] == "locklearn:pack-version:v1" for item in packs["result"]["items"]
     )
 
     await client.send_json_auto_id({"type": "locklearn/datasets/list", "limit": 10})
@@ -252,9 +248,7 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
     assert created["result"]["pack_version_id"] == "locklearn:pack-version:v1"
 
     outsider = await hass_ws_client(hass, hass_read_only_access_token)
-    await outsider.send_json_auto_id(
-        {"type": "locklearn/tracks/list", "profile_id": profile_id}
-    )
+    await outsider.send_json_auto_id({"type": "locklearn/tracks/list", "profile_id": profile_id})
     hidden_tracks = await outsider.receive_json()
     assert hidden_tracks["success"] is False
     assert hidden_tracks["error"]["code"] == "locklearn/not_found"
@@ -344,9 +338,7 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
     assert integrated["success"] is True
     assert integrated["result"]["added_learning_item_ids"] == [ITEM_B]
 
-    await client.send_json_auto_id(
-        {"type": "locklearn/tracks/delete", "track_id": track_id}
-    )
+    await client.send_json_auto_id({"type": "locklearn/tracks/delete", "track_id": track_id})
     deleted = await client.receive_json()
     assert deleted["success"] is True
 
