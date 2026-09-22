@@ -144,9 +144,7 @@ def test_relearning_uses_ten_then_sixty_minute_steps_and_resets_on_failure() -> 
 
 
 def test_short_step_machine_rejects_wrong_state_and_invalid_step_config() -> None:
-    machine = LearningStateMachine(
-        clock=_MutableClock(datetime(2026, 9, 22, 20, 0, tzinfo=UTC))
-    )
+    machine = LearningStateMachine(clock=_MutableClock(datetime(2026, 9, 22, 20, 0, tzinfo=UTC)))
 
     with pytest.raises(LearningStateError, match="expected state 'new'"):
         machine.introduce(_snapshot("learning"))
