@@ -69,9 +69,7 @@ class OfficialRegistryPolicy:
                 )
         for source in sources:
             if source.license_scope not in _ALLOWED_LICENSE_SCOPES - {"software"}:
-                raise LicensePolicyError(
-                    f"source has invalid license scope: {source.source_id}"
-                )
+                raise LicensePolicyError(f"source has invalid license scope: {source.source_id}")
             if source.field_allowlist is not None and (
                 source.field_allowlist & source.excluded_fields
             ):
