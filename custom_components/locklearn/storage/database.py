@@ -404,6 +404,49 @@ class SQLiteStorage:
 
         return await self._async_reader(query)
 
+    async def async_asset_metadata(self, asset_id: str) -> dict[str, Any] | None:
+        """Resolve one public dataset asset from the active content generation."""
+
+        def query(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            table = connection.execute(
+                """SELECT 1 FROM content.sqlite_master
+                   WHERE type = 'table' AND name = 'assets_metadata'"""
+            ).fetchone()
+            if table is None:
+                return None
+            row = connection.execute(
+                """SELECT asset.asset_id, asset.dataset_id, version.version,
+                          asset.kind, asset.path, asset.sha256, asset.byte_size,
+                          asset.mime_type, asset.width, asset.height,
+                          asset.license_id, asset.attribution
+                   FROM content.assets_metadata AS asset
+                   JOIN content.dataset_packages AS package
+                     ON package.dataset_id = asset.dataset_id
+                   JOIN content.dataset_versions AS version
+                     ON version.dataset_version_id = package.dataset_version_id
+                   WHERE asset.asset_id = ?""",
+                (asset_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            keys = (
+                "asset_id",
+                "dataset_id",
+                "dataset_version",
+                "kind",
+                "path",
+                "sha256",
+                "byte_size",
+                "mime_type",
+                "width",
+                "height",
+                "license_id",
+                "attribution",
+            )
+            return dict(zip(keys, row, strict=True))
+
+        return await self._async_reader(query)
+
     async def async_referenced_pack_version_ids(self) -> frozenset[str]:
         """Return every pack version referenced by persistent track state, when present."""
 
