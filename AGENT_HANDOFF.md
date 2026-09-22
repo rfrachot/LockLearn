@@ -3,7 +3,8 @@
 ## Current state
 
 P0.1–P0.7 and P1.1–P1.8 are complete. P1 remains in progress on
-`feat/p1-content-core`.
+`feat/p1-content-core`. P1.9 DatasetManager/update-entity implementation is
+on the branch and awaits local Ruff/mypy/registry/pytest verification before PASS.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -117,3 +118,30 @@ ADR-0015 records the offline ETL/release boundary.
 P1.6, P1.7 and P1.8 are closed PASS. Next concrete action: plan/implement
 P1.9 DatasetManager, update entity, staging and rollback without pulling P1.10
 starter-content curation into the same work package.
+
+
+## P1.9 implementation awaiting verification
+
+P1.9 adds a local DatasetManager for official prebuilt artifacts. Remote release
+catalogs are discovery-only and cannot authorize content: installation requires
+bounded download, external SHA/size match, bundled-host allowlist, Ed25519
+signature, compatibility, source/license policy, SQLite/package validation and
+a validated full-generation build before P1.6 atomic activation.
+
+The HACS integration bundles runtime copies of source/license policy plus empty
+official dataset/public-key registries. P1.10 owns the first production dataset
+definition and public signing key; no private key or raw corpus is bundled.
+
+One UpdateEntity is supported per official dataset. Installed state loads
+without network access. Repairs cover catalog failure, install/verification
+failure and stale sources. PackVersions are retained across updates; explicit
+dataset removal refuses PackVersions referenced by persistent track state.
+
+Synthetic P1.9 tests cover signed install, v1→v2 update, pack-version retention,
+rollback, checksum failure, failure after a valid install, explicit removal
+guards, repair recovery and artifact-host allowlisting.
+
+ADR-0016 records the runtime trust/update boundary.
+
+Next concrete action: run the full local quality suite. If green, close P1.9
+PASS. Do not begin P1.10 starter content before that gate.
