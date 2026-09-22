@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "dataset_id": "locklearn:dataset:japanese-starter",
+  "releases": [
+    {
+      "version": "1.0.0",
+      "artifact_url": "https://raw.githubusercontent.com/rfrachot/LockLearn/main/custom_components/locklearn/datasets/bundled/japanese-starter-1.0.0.zip",
+      "artifact_sha256": "88cdf55a054c28e837e1dc693fc907ee32885d52b3e25f4cb93842b8b0d0e40a",
+      "artifact_size": 178478,
+      "changelog": "Initial bundled Japanese Starter dataset.",
+      "release_url": "https://github.com/rfrachot/LockLearn/blob/main/DATA_UPDATES.md"
+    }
+  ]
+}

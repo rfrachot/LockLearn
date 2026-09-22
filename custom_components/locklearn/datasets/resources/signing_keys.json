@@ -1,4 +1,12 @@
 {
   "schema_version": 1,
-  "keys": []
+  "keys": [
+    {
+      "key_id": "locklearn-starter-2026-01",
+      "public_key_b64": "EeS9VF4cq2mCWM2ciVxDWVwup1f9Nsg7dp2HsUPQy1Y=",
+      "valid_from": "2026-09-22T00:00:00Z",
+      "valid_until": "2036-01-01T00:00:00Z",
+      "status": "deprecated"
+    }
+  ]
 }

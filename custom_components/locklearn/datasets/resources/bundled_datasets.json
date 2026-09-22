@@ -1,4 +1,12 @@
 {
   "schema_version": 1,
-  "datasets": []
+  "datasets": [
+    {
+      "dataset_id": "locklearn:dataset:japanese-starter",
+      "version": "1.0.0",
+      "path": "bundled/japanese-starter-1.0.0.zip",
+      "sha256": "88cdf55a054c28e837e1dc693fc907ee32885d52b3e25f4cb93842b8b0d0e40a",
+      "size": 178478
+    }
+  ]
 }
