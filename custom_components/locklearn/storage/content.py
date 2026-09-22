@@ -16,7 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
-from ..const import CONTENT_SCHEMA_VERSION
+from ..const import CONTENT_SCHEMA_VERSION, SUPPORTED_CONTENT_SCHEMA_VERSIONS
+from ..core.assets import Asset, AssetKind
 from ..core.content import derive_card_definition_id, derive_card_key, validate_stable_id
 from ..core.content_blocks import (
     ContentBlock,
@@ -31,7 +32,9 @@ from ..core.content_blocks import (
 )
 from .schema import (
     CONTENT_REQUIRED_INDEXES,
+    CONTENT_REQUIRED_INDEXES_V1,
     CONTENT_REQUIRED_TABLES,
+    CONTENT_REQUIRED_TABLES_V1,
     CONTENT_SCHEMA,
 )
 
@@ -72,6 +75,7 @@ class PackageMetadata:
     dataset_version_id: str
     built_at_utc: str
     canonical_content_hash: str
+    content_schema_version: int
     path: Path
 
 
@@ -115,7 +119,7 @@ class ContentGenerationValidator:
     def validate_package(self, path: Path) -> PackageMetadata:
         """Validate one normalized prebuilt dataset package."""
         with sqlite3.connect(_read_only_uri(path, immutable=True), uri=True) as connection:
-            self._validate_common(connection, path)
+            schema_version = self._validate_common(connection, path)
             if connection.execute("SELECT COUNT(*) FROM generation_metadata").fetchone()[0] != 0:
                 raise ContentValidationError("a dataset package cannot declare generation metadata")
             rows = connection.execute(
@@ -147,6 +151,8 @@ class ContentGenerationValidator:
                 "stable_id_migrations",
                 "tombstones",
             )
+            if schema_version >= 2:
+                dataset_scoped_tables += ("assets_metadata",)
             for table in dataset_scoped_tables:
                 mismatched = connection.execute(
                     f"SELECT COUNT(*) FROM {table} WHERE dataset_id != ?",
@@ -159,8 +165,9 @@ class ContentGenerationValidator:
             self._validate_cards(connection)
             self._validate_stable_ids(connection)
             self._validate_id_migrations(connection, require_card_coverage=False)
-            self._validate_content_blocks(connection)
-            self._validate_provenance(connection)
+            self._validate_content_blocks(connection, schema_version=schema_version)
+            self._validate_assets(connection, schema_version=schema_version)
+            self._validate_provenance(connection, schema_version=schema_version)
             self._validate_tombstones(connection)
             return PackageMetadata(
                 package_id=str(row[0]),
@@ -168,6 +175,7 @@ class ContentGenerationValidator:
                 dataset_version_id=str(row[2]),
                 built_at_utc=str(row[3]),
                 canonical_content_hash=str(row[4]),
+                content_schema_version=schema_version,
                 path=path,
             )
 
@@ -176,7 +184,7 @@ class ContentGenerationValidator:
     ) -> GenerationMetadata:
         """Validate a complete candidate before it may become active."""
         with sqlite3.connect(_read_only_uri(path, immutable=True), uri=True) as connection:
-            self._validate_common(connection, path)
+            schema_version = self._validate_common(connection, path)
             rows = connection.execute(
                 """SELECT generation_id, content_schema_version, built_at_utc,
                           parent_generation_id, package_count, package_set_hash
@@ -199,9 +207,9 @@ class ContentGenerationValidator:
                 and metadata.generation_id != expected_generation_id
             ):
                 raise ContentValidationError("candidate generation_id does not match its target")
-            if metadata.content_schema_version != CONTENT_SCHEMA_VERSION:
+            if metadata.content_schema_version != schema_version:
                 raise ContentValidationError(
-                    "generation metadata has an unsupported schema version"
+                    "generation metadata schema version does not match its database"
                 )
             package_count = connection.execute("SELECT COUNT(*) FROM dataset_packages").fetchone()[
                 0
@@ -219,14 +227,15 @@ class ContentGenerationValidator:
             self._validate_cards(connection)
             self._validate_stable_ids(connection)
             self._validate_id_migrations(connection, require_card_coverage=True)
-            self._validate_content_blocks(connection)
-            self._validate_provenance(connection)
+            self._validate_content_blocks(connection, schema_version=schema_version)
+            self._validate_assets(connection, schema_version=schema_version)
+            self._validate_provenance(connection, schema_version=schema_version)
             self._validate_tombstones(connection)
             self._validate_preaggregates(connection)
             return metadata
 
     @staticmethod
-    def _validate_common(connection: sqlite3.Connection, path: Path) -> None:
+    def _validate_common(connection: sqlite3.Connection, path: Path) -> int:
         try:
             integrity = [str(row[0]) for row in connection.execute("PRAGMA integrity_check")]
         except sqlite3.DatabaseError as err:
@@ -239,20 +248,31 @@ class ContentGenerationValidator:
         row = connection.execute(
             "SELECT version FROM schema_version WHERE singleton = 1"
         ).fetchone()
-        if row is None or int(row[0]) != CONTENT_SCHEMA_VERSION:
-            found = None if row is None else row[0]
-            raise ContentValidationError(f"unsupported content schema version: {found!r}")
+        if row is None:
+            raise ContentValidationError("content database has no schema version")
+        schema_version = int(row[0])
+        if schema_version not in SUPPORTED_CONTENT_SCHEMA_VERSIONS:
+            raise ContentValidationError(
+                f"unsupported content schema version: {schema_version!r}"
+            )
         objects = connection.execute(
             "SELECT type, name FROM sqlite_master WHERE type IN ('table', 'index')"
         ).fetchall()
         tables = {str(name) for object_type, name in objects if object_type == "table"}
         indexes = {str(name) for object_type, name in objects if object_type == "index"}
-        if missing := CONTENT_REQUIRED_TABLES - tables:
+        required_tables = (
+            CONTENT_REQUIRED_TABLES if schema_version >= 2 else CONTENT_REQUIRED_TABLES_V1
+        )
+        required_indexes = (
+            CONTENT_REQUIRED_INDEXES if schema_version >= 2 else CONTENT_REQUIRED_INDEXES_V1
+        )
+        if missing := required_tables - tables:
             raise ContentValidationError(f"content database is missing tables: {sorted(missing)!r}")
-        if missing := CONTENT_REQUIRED_INDEXES - indexes:
+        if missing := required_indexes - indexes:
             raise ContentValidationError(
                 f"content database is missing indexes: {sorted(missing)!r}"
             )
+        return schema_version
 
     @staticmethod
     def _validate_cards(connection: sqlite3.Connection) -> None:
@@ -303,6 +323,10 @@ class ContentGenerationValidator:
             ("stable_id_migrations", "old_id"),
             ("stable_id_migrations", "new_id"),
         )
+        if connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'assets_metadata'"
+        ).fetchone():
+            fields += (("assets_metadata", "asset_id"),)
         for table, column in fields:
             for (value,) in connection.execute(f"SELECT {column} FROM {table}"):
                 try:
@@ -395,7 +419,9 @@ class ContentGenerationValidator:
                 )
 
     @staticmethod
-    def _validate_content_blocks(connection: sqlite3.Connection) -> None:
+    def _validate_content_blocks(
+        connection: sqlite3.Connection, *, schema_version: int
+    ) -> None:
         rows = connection.execute(
             """SELECT content_block_id, learning_item_id, position, kind, role,
                       reveals_answer, mask_strategy, payload_json
@@ -453,6 +479,15 @@ class ContentGenerationValidator:
                     ):
                         raise ValueError("media payload must contain only asset_id")
                     payload = MediaReference(payload_data["asset_id"])
+                    if schema_version >= 2:
+                        asset = connection.execute(
+                            "SELECT kind FROM assets_metadata WHERE asset_id = ?",
+                            (payload.asset_id,),
+                        ).fetchone()
+                        if asset is None or str(asset[0]) != kind.value:
+                            raise ValueError(
+                                "media content block must reference an asset of matching kind"
+                            )
                 ContentBlock(
                     content_block_id=str(block_id),
                     learning_item_id=str(item_id),
@@ -467,7 +502,9 @@ class ContentGenerationValidator:
                 raise ContentValidationError(f"invalid content block payload: {block_id}") from err
 
     @staticmethod
-    def _validate_provenance(connection: sqlite3.Connection) -> None:
+    def _validate_provenance(
+        connection: sqlite3.Connection, *, schema_version: int
+    ) -> None:
         """Require reproducible source snapshots and coherent provenance boundaries."""
         for snapshot_id, sha256 in connection.execute(
             "SELECT snapshot_id, sha256 FROM source_snapshots"
@@ -527,8 +564,14 @@ class ContentGenerationValidator:
             object_type = str(raw_type)
             object_id = str(raw_object_id)
             if object_type == "asset":
-                continue
-            if object_type == "content_block":
+                if schema_version < 2:
+                    continue
+                match = connection.execute(
+                    """SELECT 1 FROM assets_metadata
+                       WHERE asset_id = ? AND dataset_id = ?""",
+                    (object_id, dataset_id),
+                ).fetchone()
+            elif object_type == "content_block":
                 match = connection.execute(
                     """SELECT 1
                        FROM content_blocks AS block
@@ -547,6 +590,66 @@ class ContentGenerationValidator:
                 raise ContentValidationError(
                     f"provenance target does not exist in its dataset: {provenance_id}"
                 )
+
+    @staticmethod
+    def _validate_assets(connection: sqlite3.Connection, *, schema_version: int) -> None:
+        if schema_version < 2:
+            return
+        rows = connection.execute(
+            """SELECT asset_id, dataset_id, kind, path, sha256, byte_size,
+                      mime_type, license_id, attribution, width, height
+               FROM assets_metadata"""
+        ).fetchall()
+        for row in rows:
+            try:
+                Asset(
+                    asset_id=str(row[0]),
+                    dataset_id=str(row[1]),
+                    kind=AssetKind(str(row[2])),
+                    path=str(row[3]),
+                    sha256=str(row[4]),
+                    byte_size=int(row[5]),
+                    mime_type=str(row[6]),
+                    license_id=str(row[7]),
+                    attribution=str(row[8]),
+                    width=None if row[9] is None else int(row[9]),
+                    height=None if row[10] is None else int(row[10]),
+                )
+            except (TypeError, ValueError) as err:
+                raise ContentValidationError(f"invalid asset metadata: {row[0]}") from err
+
+        invalid_facets = connection.execute(
+            """SELECT facet.facet_id
+               FROM facets AS facet
+               LEFT JOIN facet_assets AS link ON link.facet_id = facet.facet_id
+               LEFT JOIN assets_metadata AS asset ON asset.asset_id = link.asset_id
+               WHERE (facet.kind IN ('image', 'audio')
+                      AND (asset.asset_id IS NULL OR asset.kind != facet.kind))
+                  OR (facet.kind NOT IN ('image', 'audio') AND link.asset_id IS NOT NULL)
+               LIMIT 1"""
+        ).fetchone()
+        if invalid_facets is not None:
+            raise ContentValidationError(
+                f"facet asset reference is missing or has wrong kind: {invalid_facets[0]}"
+            )
+
+        missing_provenance = connection.execute(
+            """SELECT asset.asset_id
+               FROM assets_metadata AS asset
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM provenance_records AS provenance
+                   WHERE provenance.object_type = 'asset'
+                     AND provenance.object_id = asset.asset_id
+                     AND provenance.dataset_id = asset.dataset_id
+                     AND provenance.license_id = asset.license_id
+                     AND provenance.license_scope = 'asset'
+               )
+               LIMIT 1"""
+        ).fetchone()
+        if missing_provenance is not None:
+            raise ContentValidationError(
+                f"asset is missing asset-scope provenance: {missing_provenance[0]}"
+            )
 
     @staticmethod
     def _validate_tombstones(connection: sqlite3.Connection) -> None:
@@ -768,6 +871,24 @@ _MERGES = (
         ),
     ),
     _TableMerge(
+        "assets_metadata",
+        ("asset_id",),
+        (
+            "dataset_id",
+            "kind",
+            "path",
+            "sha256",
+            "byte_size",
+            "mime_type",
+            "width",
+            "height",
+            "license_id",
+            "license_scope",
+            "attribution",
+        ),
+    ),
+    _TableMerge("facet_assets", ("facet_id",), ("asset_id",)),
+    _TableMerge(
         "card_definitions",
         ("card_definition_id",),
         (
@@ -859,6 +980,12 @@ class ContentGenerationBuilder:
             # query parameters on later ATTACH statements to be honored.
             with sqlite3.connect(work, uri=True) as connection:
                 connection.execute("PRAGMA foreign_keys = ON")
+                if package_metadata or previous_generation is not None:
+                    connection.executescript(CONTENT_SCHEMA)
+                    connection.execute(
+                        "INSERT OR REPLACE INTO schema_version(singleton, version) VALUES (1, ?)",
+                        (CONTENT_SCHEMA_VERSION,),
+                    )
                 self._prepare_previous_lifecycle(connection)
                 connection.execute("DELETE FROM generation_metadata")
                 connection.execute("DELETE FROM dataset_packages")
@@ -1011,6 +1138,11 @@ class ContentGenerationBuilder:
             ("learning_items", "learning_item_id", ("dataset_id",)),
             ("facets", "facet_id", ("learning_item_id",)),
             (
+                "assets_metadata",
+                "asset_id",
+                ("dataset_id", "kind", "path", "sha256", "license_id"),
+            ),
+            (
                 "card_definitions",
                 "card_definition_id",
                 ("card_key", "learning_item_id", "prompt_facet_id", "answer_facet_id"),
@@ -1024,6 +1156,12 @@ class ContentGenerationBuilder:
             ),
         )
         for table, key, immutable_columns in checks:
+            package_has_table = connection.execute(
+                "SELECT 1 FROM package.sqlite_master WHERE type = 'table' AND name = ?",
+                (table,),
+            ).fetchone()
+            if package_has_table is None:
+                continue
             differences = " OR ".join(
                 f"target.{column} IS NOT incoming.{column}" for column in immutable_columns
             )
@@ -1048,6 +1186,12 @@ class ContentGenerationBuilder:
         connection.execute("DELETE FROM dataset_licenses WHERE dataset_id = ?", (dataset_id,))
 
         for merge in _MERGES:
+            package_has_table = connection.execute(
+                "SELECT 1 FROM package.sqlite_master WHERE type = 'table' AND name = ?",
+                (merge.name,),
+            ).fetchone()
+            if package_has_table is None:
+                continue
             columns = tuple(
                 str(row[1]) for row in connection.execute(f"PRAGMA main.table_info({merge.name})")
             )
