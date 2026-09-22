@@ -744,8 +744,19 @@ def _prepare_assets(
         if source is None or item.source_id not in normalized_map:
             raise DatasetBuildError(f"asset source is not declared: {item.source_id}")
         license_id = item.license_id or _required_string(source, "license_id")
-        if license_id not in registry_licenses:
+        license_row = registry_licenses.get(license_id)
+        if license_row is None:
             raise DatasetBuildError(f"asset license is not registered: {license_id}")
+        allowed_scopes = license_row.get("allowed_scopes")
+        if (
+            not isinstance(allowed_scopes, list)
+            or "asset" not in allowed_scopes
+        ):
+            raise DatasetBuildError(f"license is not approved for assets: {license_id}")
+        if _required_bool(license_row, "attribution_required") and not item.attribution:
+            raise DatasetBuildError(
+                f"asset attribution is required by license: {license_id}"
+            )
         metadata = Asset(
             asset_id=item.asset_id,
             dataset_id=spec.dataset_id,
