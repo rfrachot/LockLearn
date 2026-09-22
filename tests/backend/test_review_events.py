@@ -54,9 +54,7 @@ def _snapshot(
         "streak_correct": verified_correct_count,
         "leech_score": 0.0,
         "difficulty_factor": 1.0,
-        "last_verified_at_utc": (
-            "2026-09-22T21:30:00+00:00" if verified_correct_count else None
-        ),
+        "last_verified_at_utc": ("2026-09-22T21:30:00+00:00" if verified_correct_count else None),
         "verified_success_since_box": verified_correct_count,
         "user_state": "active",
         "suspend_until_utc": None,
