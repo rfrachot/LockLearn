@@ -402,6 +402,7 @@ def build_dataset(
         )
         normalized_map = MappingProxyType({item.source_id: item for item in normalized})
         database_path = workspace_path / "dataset.db"
+        database_path.unlink(missing_ok=True)
         initialize_content_database(database_path)
         registry_sources = _source_registry(repository_root)
         registry_licenses = _license_registry(repository_root)
@@ -519,7 +520,9 @@ def build_dataset(
             )
             foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
             if foreign_keys:
-                raise DatasetBuildError(f"recipe created foreign-key violations: {foreign_keys[:3]}")
+                raise DatasetBuildError(
+                    f"recipe created foreign-key violations: {foreign_keys[:3]}"
+                )
             connection.commit()
 
         ContentGenerationValidator().validate_package(database_path)
@@ -879,7 +882,10 @@ def _zip_write(archive: zipfile.ZipFile, name: str, content: bytes) -> None:
 
 
 def _safe_name(value: str) -> str:
-    return "".join(character if character.isalnum() or character in "._-" else "-" for character in value)
+    return "".join(
+        character if character.isalnum() or character in "._-" else "-"
+        for character in value
+    )
 
 
 def _optional_string(value: object) -> str | None:
