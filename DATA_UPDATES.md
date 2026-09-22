@@ -161,3 +161,43 @@ datasets/src/japanese_starter.jsonl
 datasets/recipes/japanese_starter.py
 datasets/manifests/japanese-starter-1.0.0.json
 ```
+
+
+## P1.11 signed public media assets
+
+Content schema v2 can package public image/audio assets without storing large
+binary payloads as SQLite BLOBs.
+
+The signed package keeps bytes under `assets/`, while `dataset.db` stores
+only immutable metadata:
+
+```text
+asset_id
+dataset_id
+kind
+path
+sha256
+byte_size
+mime_type
+width / height
+license_id
+attribution
+```
+
+The build pipeline derives byte size and SHA-256 from the exact media bytes,
+adds each file to the signed manifest with `role=asset`, writes Asset-level
+provenance and enforces `license_scope=asset`.
+
+Package validation requires the signed manifest Asset payload set to match the
+SQLite Asset metadata exactly. Image/audio Facets and ContentBlocks reference
+stable `asset_id` values and must resolve to a same-dataset Asset of matching
+media kind.
+
+At install time Asset payloads are extracted into the reconstructible public
+content cache. Runtime resolution rechecks size and SHA-256 before returning a
+local path.
+
+This is explicitly a **public signed dataset** boundary. Private user uploads,
+annotations and export/import attachments remain future state/private-storage
+concerns and are not exposed through the public Asset resolver. P1.11 adds no
+image/audio renderer; that remains later scope.
