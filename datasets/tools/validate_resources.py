@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -304,7 +305,7 @@ def validate() -> None:
         data = artifact.read_bytes()
         if len(data) != size:
             raise ValueError(f"bundled dataset size does not match artifact: {dataset_id}")
-        if __import__("hashlib").sha256(data).hexdigest() != sha256:
+        if hashlib.sha256(data).hexdigest() != sha256:
             raise ValueError(f"bundled dataset SHA-256 does not match artifact: {dataset_id}")
 
     signing = json.loads((RUNTIME_RESOURCES / "signing_keys.json").read_text(encoding="utf-8"))
