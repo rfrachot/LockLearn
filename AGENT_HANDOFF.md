@@ -2,8 +2,9 @@
 
 ## Current state
 
-P0.1–P0.7 and P1.1–P1.11 are complete. P1 is closed PASS on
-`feat/p1-content-core`. The next phase is P2 — Profiles, Tracks and ACL.
+P0.1–P0.7, P1.1–P1.11 and P2.1 are complete. P1 is closed PASS and P2 is
+in progress on `feat/p1-content-core`. The next work package is P2.2 —
+Profiles, presets and HA-user mapping.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -233,3 +234,47 @@ Final P1.11 GitHub technical gate on head
 ADR-0018 records the public dataset Asset/private-export media boundary.
 
 P1 is now complete. Next concrete action: P2.1.
+
+
+## P2.1 closure
+
+P2.1 upgrades persistent user state from the P0 spike schema to state schema v2.
+The schema now reserves the complete V1 state surface for profiles/members,
+tracks and PackVersion pins, card/content rules, notification targets, lazy
+progress, review events, annotations, sessions/items/answers, exam attempts,
+scheduler config/materialized slots, notification interactions, stats and
+settings.
+
+No SQL FK crosses into content.db. New PackVersion and card references are
+validated against the active content generation in repository code, and
+`async_cross_domain_integrity_issues()` audits PackVersion/card references
+already stored in state. Progress remains lazy: Profile/Track creation never
+pre-populates card rows.
+
+The v1→v2 migration checkpoints WAL, creates a coherent
+`state.db.pre-migration-v1.bak`, builds a complete v2 candidate out-of-place,
+copies the existing P0 session/session-answer/progress/audit rows inside one
+transaction, validates integrity/FKs, checkpoints the candidate and atomically
+switches state.db. A migration failure preserves the original DB and backup.
+
+Application repositories now expose persistence primitives for Profile, Track
+and explicit PackVersion pinning, lazy Progress creation and deterministic JSON
+settings. P2.2/P2.3 retain ownership of onboarding and ACL policy; P2.4 owns the
+full Track configuration behavior.
+
+P0 WebSocket session probes remain compatible with their temporary
+`p0-probe:*` identity until P2.2 replaces that boundary with real Profile/HA
+user mapping.
+
+Final P2.1 GitHub verification:
+
+- `python -m ruff format --check .`: pass, 148 files already formatted.
+- `python -m ruff check .`: pass.
+- `python -m mypy custom_components datasets tests`: pass, 77 source files.
+- `python datasets/tools/validate_resources.py`: pass.
+- `python -m pytest -q --tb=short`: pass, 206 tests in 13.70 s.
+
+ADR-0019 records the state.db v2 and migration boundary.
+
+P2.1 is closed PASS. Next concrete action: P2.2 Profiles, presets and HA-user
+mapping.
