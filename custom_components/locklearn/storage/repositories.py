@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeVar
+
+
+T = TypeVar("T")
 
 
 class StateRepositoryError(RuntimeError):
@@ -17,8 +21,8 @@ class ContentReferenceError(StateRepositoryError):
 
 
 class RepositoryStorage(Protocol):
-    async def _async_writer(self, operation): ...
-    async def _async_reader(self, operation): ...
+    async def _async_writer(self, operation: Callable[[sqlite3.Connection], T]) -> T: ...
+    async def _async_reader(self, operation: Callable[[sqlite3.Connection], T]) -> T: ...
     async def async_validate_card_reference(
         self,
         *,
