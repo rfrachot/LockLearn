@@ -758,6 +758,7 @@ class TracksRepository:
                     connection.rollback()
                     return False
                 for table in (
+                    "notification_interactions",
                     "scheduled_slots",
                     "stats_daily",
                     "exam_attempts",
