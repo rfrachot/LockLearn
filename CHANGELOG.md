@@ -5,6 +5,13 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P1.10 bundled signed Japanese Starter dataset with 120 LearningItems and 240
+  cards, original CC BY-SA 4.0 provenance and a 178478-byte offline artifact.
+- First-run offline starter bootstrap through the normal DatasetManager trust,
+  validation, immutable-generation activation and rollback path.
+- One-purpose deprecated Ed25519 public key for immutable starter 1.0.0
+  verification; the ephemeral private key and signing workflow are not retained.
+- ADR-0017 defining bundled first-run content and its signing lifecycle.
 - P1.9 local DatasetManager for signed prebuilt artifacts, with bounded staging,
   checksum/signature/schema/license/package validation, full-generation activation and rollback.
 - Home Assistant UpdateEntity support per official dataset plus privacy-safe
