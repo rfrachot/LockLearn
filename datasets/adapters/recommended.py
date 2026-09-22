@@ -12,7 +12,7 @@ import hashlib
 import io
 import json
 import zipfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import BinaryIO, cast
 from xml.etree import ElementTree
@@ -335,7 +335,7 @@ class LockLearnEditorialAdapter:
                 )
 
 
-_ADAPTERS: dict[str, type[SourceAdapter]] = {
+_ADAPTERS: dict[str, Callable[[], SourceAdapter]] = {
     "jmdict_ng": JMdictAdapter,
     "kanjidic2": Kanjidic2Adapter,
     "tatoeba_text": TatoebaTextAdapter,
@@ -348,10 +348,10 @@ _ADAPTERS: dict[str, type[SourceAdapter]] = {
 def adapter_for_id(adapter_id: str) -> SourceAdapter:
     """Instantiate a known build-time adapter by registry adapter_id."""
     try:
-        adapter_type = _ADAPTERS[adapter_id]
+        factory = _ADAPTERS[adapter_id]
     except KeyError as err:
         raise ValueError(f"unknown dataset adapter_id: {adapter_id}") from err
-    return adapter_type()
+    return factory()
 
 
 def _children(element: ElementTree.Element, local_name: str) -> list[ElementTree.Element]:
