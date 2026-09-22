@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LockLearn license registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "licenses", "forbidden_markers"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "licenses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id", "spdx_or_internal_id", "name", "version",
+          "commercial_use_allowed", "derivatives_allowed", "share_alike",
+          "attribution_required", "official_dataset_allowed", "allowed_scopes",
+          "source_url", "notes"
+        ],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "spdx_or_internal_id": {"type": "string", "minLength": 1},
+          "name": {"type": "string", "minLength": 1},
+          "version": {"type": "string"},
+          "commercial_use_allowed": {"type": "boolean"},
+          "derivatives_allowed": {"type": "boolean"},
+          "share_alike": {"type": "boolean"},
+          "attribution_required": {"type": "boolean"},
+          "official_dataset_allowed": {"type": "boolean"},
+          "allowed_scopes": {
+            "type": "array",
+            "items": {"enum": ["software", "editorial", "dataset", "asset"]},
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "source_url": {"type": "string", "format": "uri"},
+          "notes": {"type": "string"}
+        }
+      }
+    },
+    "forbidden_markers": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  }
+}
