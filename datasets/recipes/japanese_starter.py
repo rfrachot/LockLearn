@@ -213,12 +213,8 @@ def _materialize_pair(
         _insert_card(connection, item_id, left_facet_id, right_facet_id),
         _insert_card(connection, item_id, right_facet_id, left_facet_id),
     )
-    left_block_id = make_stable_id(
-        "locklearn", "starter-block", record.source_record_id, "prompt"
-    )
-    right_block_id = make_stable_id(
-        "locklearn", "starter-block", record.source_record_id, "answer"
-    )
+    left_block_id = make_stable_id("locklearn", "starter-block", record.source_record_id, "prompt")
+    right_block_id = make_stable_id("locklearn", "starter-block", record.source_record_id, "answer")
     connection.executemany(
         """INSERT INTO content_blocks(
                content_block_id, learning_item_id, position, kind, role,
