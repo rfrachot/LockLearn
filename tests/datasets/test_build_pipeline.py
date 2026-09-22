@@ -76,7 +76,12 @@ def _source(path: Path, retrieved_at: datetime = _BUILT_AT) -> SourceInput:
     )
 
 
-def _spec(path: Path, *, version: str = "1.0.0", built_at: datetime = _BUILT_AT) -> DatasetBuildSpec:
+def _spec(
+    path: Path,
+    *,
+    version: str = "1.0.0",
+    built_at: datetime = _BUILT_AT,
+) -> DatasetBuildSpec:
     return DatasetBuildSpec(
         dataset_id="locklearn:dataset:pipeline-test",
         dataset_version=version,
@@ -213,7 +218,11 @@ def test_source_freshness_is_policy_data_not_network_availability() -> None:
         target_refresh_days=30,
         now=now,
     )
-    assert not source_is_stale(retrieved_at=now - timedelta(days=999), target_refresh_days=None, now=now)
+    assert not source_is_stale(
+        retrieved_at=now - timedelta(days=999),
+        target_refresh_days=None,
+        now=now,
+    )
 
 
 def test_private_signing_key_fixture_never_needs_repository_secret() -> None:
