@@ -183,7 +183,7 @@ def test_asset_model_rejects_unsafe_paths_mime_and_dimensions() -> None:
         "license_id": "CC-BY-SA-4.0",
         "attribution": "fixture",
     }
-    with pytest.raises(AssetModelError, match="assets/"):
+    with pytest.raises(AssetModelError, match=r"traversal|normalized"):
         Asset(
             **common,
             kind=AssetKind.IMAGE,
