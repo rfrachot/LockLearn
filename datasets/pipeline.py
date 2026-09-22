@@ -256,6 +256,7 @@ class BuildContext:
             record.source_id,
             object_type,
             object_id,
+            record.source_record_id,
         )
         connection.execute(
             """INSERT INTO provenance_records(
