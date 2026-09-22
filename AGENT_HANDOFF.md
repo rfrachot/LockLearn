@@ -3,7 +3,8 @@
 ## Current state
 
 P0.1–P0.7 and P1.1–P1.7 are complete. P1 remains in progress on
-`feat/p1-content-core`.
+`feat/p1-content-core`. P1.8 is implemented on the branch and awaits the
+local Ruff/mypy/registry/pytest gate before PASS.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -79,6 +80,23 @@ Final Ubuntu verification after the compatibility remediation:
 
 ADR-0014 records the source/snapshot/provenance/license-scope decision.
 
+## P1.8 implementation awaiting verification
+
+P1.8 adds build-time-only streaming adapters for the recommended source set,
+canonical normalized JSONL, a DatasetRecipe boundary, bounded fetches, exact
+SourceSnapshot hashing, complete signed manifest v2 provenance, deterministic
+semantic content hashing, Ed25519 package signing and external ZIP checksums.
+
+`.github/workflows/datasets.yml` performs weekly lightweight source checks and
+manual builds. Raw upstream downloads remain under ignored/temporary paths and
+are never committed or uploaded as release assets. GitHub Release creation is
+gated by a changed `canonical_content_hash`.
+
+No production source corpus, signing private key, Japanese Starter recipe or
+production build config is committed. The latter recipe/config belongs to P1.10.
+
+ADR-0015 records the offline ETL/release boundary.
+
 ## Remaining risks / next action
 
 - P1.9 owns download orchestration, update entities, Repairs and user-facing
@@ -89,5 +107,6 @@ ADR-0014 records the source/snapshot/provenance/license-scope decision.
   tables belongs with the released `state.db` schema; P1.6 prevents incomplete
   item/facet mappings from activating.
 
-P1.6 and P1.7 are closed PASS. Next concrete action: plan/implement P1.8
-dataset build pipeline and source adapters without pulling P1.9 update UX into scope.
+P1.6 and P1.7 are closed PASS. Next concrete action: run the full local quality
+suite on P1.8. If green, mark P1.8 PASS; otherwise remediate P1.8 only. Do not
+begin P1.9 DatasetManager/update UX before that gate closes.
