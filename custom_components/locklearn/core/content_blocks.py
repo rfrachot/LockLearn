@@ -196,15 +196,18 @@ class ContentBlock:
             raise ContentBlockError("content block position must be >= 0")
 
         if self.kind is ContentBlockKind.TEXT:
-            expected_type = TextContent
+            valid_payload = isinstance(self.payload, TextContent)
+            expected_type_name = "TextContent"
         elif self.kind is ContentBlockKind.RICH_TEXT:
-            expected_type = RichTextDocument
+            valid_payload = isinstance(self.payload, RichTextDocument)
+            expected_type_name = "RichTextDocument"
         else:
-            expected_type = MediaReference
+            valid_payload = isinstance(self.payload, MediaReference)
+            expected_type_name = "MediaReference"
 
-        if not isinstance(self.payload, expected_type):
+        if not valid_payload:
             raise ContentBlockError(
-                f"{self.kind.value} block payload must be {expected_type.__name__}"
+                f"{self.kind.value} block payload must be {expected_type_name}"
             )
 
         if self.mask_strategy in {
@@ -259,9 +262,11 @@ def _parse_rich_text_node(value: object, *, depth: int, counter: list[int]) -> R
         raise ContentBlockError("rich-text node must be an object")
 
     raw_type = value.get("type")
+    if not isinstance(raw_type, str):
+        raise ContentBlockError("rich-text node type must be a string")
     try:
         node_type = RichTextNodeType(raw_type)
-    except (TypeError, ValueError) as err:
+    except ValueError as err:
         raise ContentBlockError(f"unsupported rich-text node type: {raw_type!r}") from err
 
     if node_type in _CONTAINER_NODE_TYPES:
