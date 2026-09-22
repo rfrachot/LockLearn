@@ -14,6 +14,7 @@ from .core.acl import ProfileACLService
 from .core.operations import OperationRegistry
 from .core.planning import LearningPlanService
 from .core.profiles import ProfileService
+from .core.quiz import QuizEngine
 from .core.review_policy import ReviewPolicyV1
 from .core.reviews import ReviewEventService
 from .core.selection import SelectionConstraintService
@@ -43,6 +44,7 @@ class LockLearnRuntime:
     acl: ProfileACLService
     tracks: TrackService
     planning: LearningPlanService
+    quiz: QuizEngine
     review_policy: ReviewPolicyV1
     signal_policy: SignalPolicy
     selection: SelectionConstraintService
@@ -107,6 +109,7 @@ class LockLearnRuntime:
                     storage.repositories.tracks,
                     storage.repositories.profiles,
                 ),
+                quiz=QuizEngine(),
                 review_policy=review_policy,
                 signal_policy=SignalPolicy(review_policy),
                 selection=SelectionConstraintService(storage.repositories.tracks),
