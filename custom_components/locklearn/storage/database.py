@@ -135,9 +135,9 @@ def _migrate_state_database(path: Path, schema: str, current: int, target: int) 
     try:
         _configure_state_connection(connection)
         connection.executescript(schema)
-        connection.execute("INSERT INTO schema_version(version) VALUES (2)")
         connection.execute("ATTACH DATABASE ? AS legacy", (str(path),))
         connection.execute("BEGIN IMMEDIATE")
+        connection.execute("INSERT INTO schema_version(version) VALUES (2)")
         connection.execute(
             """INSERT INTO sessions(
                    id, profile_id, track_id, status, version, current_position,
