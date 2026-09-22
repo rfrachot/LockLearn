@@ -3,8 +3,8 @@
 ## Current state
 
 P0.1–P0.7, P1.1–P1.11 and P2.1 are complete. P1 is closed PASS and P2 is
-in progress on `feat/p1-content-core`. The next work package is P2.2 —
-Profiles, presets and HA-user mapping.
+in progress on `feat/p1-content-core`. P2.2 — Profiles, presets and HA-user
+mapping — is implemented and awaiting the local quality gate before closure.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -278,3 +278,40 @@ ADR-0019 records the state.db v2 and migration boundary.
 
 P2.1 is closed PASS. Next concrete action: P2.2 Profiles, presets and HA-user
 mapping.
+
+
+## P2.2 implementation pending verification
+
+P2.2 adds a ProfileService over the P2.1 repositories. Profile identity is a
+LockLearn UUID/string generated independently from Home Assistant user IDs.
+Initial ownership is stored in profile_members and profile + initial owners are
+inserted in one writer transaction.
+
+Presets child/standard/intensive/custom now provide mutable initial settings.
+The V1 card-introduction defaults remain 3/8/15 for child/standard/intensive;
+session length, daily push budget and quiet hours are initial values only and
+can be overridden. Reserved _locklearn_* keys cannot be injected through user
+settings.
+
+Personal-profile onboarding is idempotent for one HA user and never reuses the
+HA user ID as profile_id. Child/shared profiles can have multiple HA owners and
+need no dedicated HA account.
+
+Home Assistant ConfigFlowContext has no authenticated user identity. Therefore
+the existing "create personal profile" config-flow value remains a preference;
+P2.6 authenticated bootstrap will call the idempotent ProfileService rather than
+guessing an owner during config-entry setup.
+
+New tests in tests/backend/test_profiles.py cover personal mapping/idempotence,
+child profiles with two owners, mutable preset defaults, invalid identity input,
+and protection of internal settings markers.
+
+Verification still required before marking P2.2 PASS:
+- python -m ruff format --check .
+- python -m ruff check .
+- python -m mypy custom_components datasets tests
+- python datasets/tools/validate_resources.py
+- python -m pytest -q --tb=short
+
+No PR, merge or tag has been created. After the gate, close P2.2 in
+docs/plan/P2.md / MASTER_PLAN.md and move to P2.3 backend ACL.
