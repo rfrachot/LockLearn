@@ -5,6 +5,14 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P1.3 content-block contract with semantic roles, explicit reveal/mask metadata,
+  structured reading/furigana/ruby segments and media references.
+- Strict bounded rich-text AST that rejects arbitrary HTML, links, remote media
+  and unknown attributes/nodes.
+- Versioned CardDefinition grading metadata with explicit `unrecognized`
+  outcome that is distinct from a definitive wrong answer.
+- ADR-0010 defining safe rich text, reveal/mask semantics, structured readings
+  and the non-identifying grading contract.
 - Strict P1.2 signed dataset package contract with exact-byte Ed25519
   verification, public-key lifecycle policy, transitively hashed payloads,
   registry-backed official licensing, hostile-ZIP defenses and read-only SQLite
