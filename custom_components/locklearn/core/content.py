@@ -10,9 +10,9 @@ from urllib.parse import quote
 
 from .localization import (
     NormalizationPolicy,
-    canonicalize_language_tag,
     canonicalize_script_code,
     normalize_text,
+    parse_language_tag,
 )
 
 _STABLE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._~-]*(?::[A-Za-z0-9._~%+-]+)+$")
@@ -252,14 +252,25 @@ class Term:
             raise ContentModelError("term text is required")
 
         try:
-            canonical_language = canonicalize_language_tag(self.language_tag)
+            parsed_language = parse_language_tag(self.language_tag)
             canonical_script = (
-                canonicalize_script_code(self.script) if self.script is not None else None
+                canonicalize_script_code(self.script)
+                if self.script is not None
+                else parsed_language.script
             )
         except ValueError as err:
             raise ContentModelError(str(err)) from err
 
-        object.__setattr__(self, "language_tag", canonical_language)
+        if (
+            parsed_language.script is not None
+            and canonical_script is not None
+            and parsed_language.script != canonical_script
+        ):
+            raise ContentModelError(
+                "Term.script must match the explicit script in language_tag"
+            )
+
+        object.__setattr__(self, "language_tag", parsed_language.value)
         object.__setattr__(self, "script", canonical_script)
 
         if (self.normalized_text is None) != (self.normalization_version is None):
