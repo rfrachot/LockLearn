@@ -61,22 +61,26 @@ class LockLearnRuntime:
         async def clear_issue(issue_id: str) -> None:
             ir.async_delete_issue(hass, DOMAIN, issue_id)
 
-        datasets = DatasetManager(
-            storage=storage,
-            transport=HomeAssistantDatasetTransport(hass),
-            definitions=load_runtime_dataset_definitions(),
-            trust_store=load_runtime_trust_store(),
-            policy=OfficialRegistryPolicy.from_runtime(),
-            freshness_targets=load_runtime_source_freshness(),
-            issue_callback=report_issue,
-            issue_clear_callback=clear_issue,
-        )
-        return cls(
-            storage=storage,
-            sessions=SessionService(storage),
-            operations=OperationRegistry(),
-            datasets=datasets,
-        )
+        try:
+            datasets = DatasetManager(
+                storage=storage,
+                transport=HomeAssistantDatasetTransport(hass),
+                definitions=load_runtime_dataset_definitions(),
+                trust_store=load_runtime_trust_store(),
+                policy=OfficialRegistryPolicy.from_runtime(),
+                freshness_targets=load_runtime_source_freshness(),
+                issue_callback=report_issue,
+                issue_clear_callback=clear_issue,
+            )
+            return cls(
+                storage=storage,
+                sessions=SessionService(storage),
+                operations=OperationRegistry(),
+                datasets=datasets,
+            )
+        except Exception:
+            await storage.async_close()
+            raise
 
     async def async_close(self) -> None:
         """Cancel callbacks/operations, then drain and close SQLite."""
