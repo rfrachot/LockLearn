@@ -143,6 +143,7 @@ async def test_target_date_feasibility_uses_card_count_not_learning_items(tmp_pa
         assert forecast.selected_cards == 3
         assert forecast.required_new_per_day == 3
         assert forecast.target_date_feasible is False
+        assert "target_date_requires_more_new_cards_than_daily_quota" in forecast.warnings
     finally:
         await storage.async_close()
 
@@ -178,10 +179,15 @@ async def test_notification_and_active_session_split_is_bounded_by_push_budget(
         )
 
         assert forecast.notification_deliverable_in_3_weeks <= 6
+        horizon_new = LearningPlanService._projected_new_load(
+            remaining_target_cards=forecast.remaining_target_cards,
+            max_new_per_day=3,
+            horizon_days=21,
+        )
         assert (
             forecast.notification_deliverable_in_3_weeks
             + forecast.active_session_cards_in_3_weeks
-            == forecast.planned_new_per_day + forecast.reviews_per_day_in_3_weeks
+            == horizon_new + forecast.reviews_per_day_in_3_weeks
         )
         assert forecast.review_capacity_feasible_in_3_weeks is (
             forecast.reviews_per_day_in_3_weeks <= 1
