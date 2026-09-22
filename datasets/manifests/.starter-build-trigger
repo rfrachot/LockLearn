@@ -1,2 +1,3 @@
 Build the P1.10 bundled Japanese Starter artifact once.
 retry-module-import
+retry-root-module
