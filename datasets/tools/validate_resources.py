@@ -68,9 +68,7 @@ def validate() -> None:
         raise ValueError("Japanese showcase language metadata is required")
     for row in language_rows:
         if row["normalizer"] not in policy_ids:
-            raise ValueError(
-                f"unknown normalizer {row['normalizer']} for language {row['tag']}"
-            )
+            raise ValueError(f"unknown normalizer {row['normalizer']} for language {row['tag']}")
         scripts = row.get("scripts", [])
         if len(scripts) != len(set(scripts)):
             raise ValueError(f"duplicate scripts for language {row['tag']}")
