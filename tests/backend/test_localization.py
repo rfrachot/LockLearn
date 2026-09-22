@@ -147,6 +147,25 @@ def test_normalization_version_cannot_move_backwards() -> None:
         loc.normalization_rebuild_required(previous, current)
 
 
+def test_term_script_must_match_explicit_bcp47_script() -> None:
+    inferred = m.Term(
+        "locklearn:term:traditional",
+        "locklearn:dataset:starter",
+        "zh-Hant",
+        "傳統",
+    )
+    assert inferred.script == "Hant"
+
+    with pytest.raises(m.ContentModelError, match="must match"):
+        m.Term(
+            "locklearn:term:mismatch",
+            "locklearn:dataset:starter",
+            "zh-Hant",
+            "傳統",
+            "Hans",
+        )
+
+
 def test_term_language_script_and_normalization_metadata_are_canonical() -> None:
     term = m.Term(
         "locklearn:term:summer",
