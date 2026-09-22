@@ -478,7 +478,7 @@ class SQLiteStorage:
         async with await self.content_generations.acquire_reader() as lease:
             loop = asyncio.get_running_loop()
             builder = ContentGenerationBuilder()
-            return await loop.run_in_executor(
+            future = loop.run_in_executor(
                 self._long_executor,
                 lambda: builder.build(
                     package_list,
@@ -488,6 +488,16 @@ class SQLiteStorage:
                     previous_generation=lease.path,
                 ),
             )
+            cancelled = False
+            while True:
+                try:
+                    result = await asyncio.shield(future)
+                    break
+                except asyncio.CancelledError:
+                    cancelled = True
+            if cancelled:
+                raise asyncio.CancelledError
+            return result
 
     async def async_activate_content_generation(self, candidate: Path) -> GenerationMetadata:
         """Activate a validated candidate after every old reader has drained."""
