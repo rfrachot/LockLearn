@@ -376,7 +376,8 @@ class DatasetManager:
             if target is None:
                 raise DatasetRemovalError("dataset is not installed")
             target_pack_versions = frozenset(str(value) for value in target["pack_version_ids"])
-            used = target_pack_versions & active_pack_version_ids
+            referenced = await self._storage.async_referenced_pack_version_ids()
+            used = target_pack_versions & (active_pack_version_ids | referenced)
             if used:
                 raise DatasetRemovalError(
                     "dataset contains pack versions used by active tracks; archive tracks first"
