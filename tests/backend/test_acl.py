@@ -9,8 +9,8 @@ import pytest
 
 from custom_components.locklearn.core.acl import (
     LastOwnerError,
-    ProfileACLService,
     ProfileAccessDenied,
+    ProfileACLService,
     ProfilePermission,
     ProfileRole,
 )
@@ -84,14 +84,11 @@ async def test_permission_matrix_matches_v1_roles(tmp_path: Path) -> None:
         }
         for user_id, allowed in expected.items():
             for permission in ProfilePermission:
-                assert (
-                    await acl.async_can(
-                        profile_id=profile_id,
-                        ha_user_id=user_id,
-                        permission=permission,
-                    )
-                    is (permission in allowed)
-                )
+                assert await acl.async_can(
+                    profile_id=profile_id,
+                    ha_user_id=user_id,
+                    permission=permission,
+                ) is (permission in allowed)
     finally:
         await storage.async_close()
 
