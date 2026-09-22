@@ -40,11 +40,12 @@ async def _activate_package(
         version,
         active_item_ids=active_item_ids,
     )
-    candidate = runtime.storage.paths.content_staging_dir / f"generation-{version}.db"
+    generation_id = f"generation-websocket-crud-{version}"
+    candidate = runtime.storage.paths.content_staging_dir / f"{generation_id}.db"
     await runtime.storage.async_build_content_generation(
         (package,),
         candidate,
-        generation_id=f"generation-{version}",
+        generation_id=generation_id,
     )
     await runtime.storage.async_activate_content_generation(candidate)
 
