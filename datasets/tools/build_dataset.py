@@ -10,7 +10,7 @@ import os
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
