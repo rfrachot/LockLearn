@@ -1,3 +1,4 @@
 run
 retry-format
 retry-lint
+retry-migration-transaction
