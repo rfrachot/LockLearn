@@ -87,6 +87,43 @@ class TrackCardRuleRecord:
     rule: dict[str, Any] | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ReviewEventRecord:
+    """Canonical immutable learning interaction audit record."""
+
+    id: str
+    profile_id: str
+    track_id: str
+    learning_item_id: str
+    prompt_facet_id: str
+    answer_facet_id: str
+    card_key: str
+    mode: str
+    question_type: str
+    result: str
+    hint_used: bool
+    retrieval_occurred: bool
+    signal_quality: str
+    policy_version: int
+    dataset_generation: str
+    pre_state_snapshot: dict[str, Any]
+    post_state_snapshot: dict[str, Any]
+    created_at_utc: str
+    local_date: str
+    timezone_name: str
+    utc_offset_minutes: int
+    answer_id: str | None = None
+    expected_answer_id: str | None = None
+    scheduled_interval_days: float | None = None
+    elapsed_days: float | None = None
+    grading_result: str | None = None
+    normalization_version: int | None = None
+    presentation_to_answer_ms: int | None = None
+    delivery_to_action_ms: int | None = None
+    session_id: str | None = None
+    notification_id: str | None = None
+
+
 def _profile_dict(row: tuple[Any, ...], *, role: str | None = None) -> dict[str, Any]:
     keys = (
         "profile_id",
@@ -1260,6 +1297,269 @@ class ProgressRepository:
         return await self._storage._async_writer(create)
 
 
+class ReviewEventsRepository:
+    """Append-only audit log plus rebuildable progress projection."""
+
+    _PROGRESS_COLUMNS = (
+        "profile_id",
+        "track_id",
+        "card_key",
+        "learning_item_id",
+        "prompt_facet_id",
+        "answer_facet_id",
+        "state",
+        "mastery",
+        "box",
+        "seen_count",
+        "verified_correct_count",
+        "verified_wrong_count",
+        "self_known_count",
+        "self_review_count",
+        "first_seen_at_utc",
+        "last_seen_at_utc",
+        "last_result",
+        "next_due_at_utc",
+        "streak_correct",
+        "leech_score",
+        "difficulty_factor",
+        "last_verified_at_utc",
+        "verified_success_since_box",
+        "user_state",
+        "suspend_until_utc",
+        "example_rotation_index",
+        "content_status",
+        "policy_version",
+        "dataset_generation",
+        "normalization_version",
+        "updated_at_utc",
+    )
+
+    def __init__(self, storage: RepositoryStorage) -> None:
+        self._storage = storage
+
+    @classmethod
+    def _validate_projection_identity(
+        cls,
+        event: ReviewEventRecord,
+        snapshot: dict[str, Any],
+    ) -> None:
+        missing = tuple(column for column in cls._PROGRESS_COLUMNS if column not in snapshot)
+        if missing:
+            raise StateRepositoryError(f"incomplete progress snapshot: {missing!r}")
+        expected = {
+            "profile_id": event.profile_id,
+            "track_id": event.track_id,
+            "card_key": event.card_key,
+            "learning_item_id": event.learning_item_id,
+            "prompt_facet_id": event.prompt_facet_id,
+            "answer_facet_id": event.answer_facet_id,
+        }
+        mismatched = tuple(
+            key for key, value in expected.items() if snapshot.get(key) != value
+        )
+        if mismatched:
+            raise StateRepositoryError(f"progress snapshot identity mismatch: {mismatched!r}")
+
+    @classmethod
+    def _upsert_progress(
+        cls,
+        connection: sqlite3.Connection,
+        snapshot: dict[str, Any],
+    ) -> None:
+        placeholders = ",".join("?" for _ in cls._PROGRESS_COLUMNS)
+        update_columns = cls._PROGRESS_COLUMNS[3:]
+        assignments = ",".join(f"{column}=excluded.{column}" for column in update_columns)
+        connection.execute(
+            f"""INSERT INTO progress({",".join(cls._PROGRESS_COLUMNS)})
+                VALUES ({placeholders})
+                ON CONFLICT(profile_id, track_id, card_key) DO UPDATE SET
+                {assignments}""",
+            tuple(snapshot[column] for column in cls._PROGRESS_COLUMNS),
+        )
+
+    async def async_append_with_projection(self, event: ReviewEventRecord) -> None:
+        """Append one event and materialize its post-state in one transaction."""
+        valid = await self._storage.async_validate_card_reference(
+            card_key=event.card_key,
+            learning_item_id=event.learning_item_id,
+            prompt_facet_id=event.prompt_facet_id,
+            answer_facet_id=event.answer_facet_id,
+        )
+        if not valid:
+            raise ContentReferenceError(f"unknown active card reference: {event.card_key}")
+        self._validate_projection_identity(event, event.post_state_snapshot)
+
+        pre_json = json.dumps(
+            event.pre_state_snapshot,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        post_json = json.dumps(
+            event.post_state_snapshot,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    """INSERT INTO review_events(
+                           id, profile_id, track_id, learning_item_id,
+                           prompt_facet_id, answer_facet_id, card_key, mode,
+                           question_type, result, answer_id, expected_answer_id,
+                           hint_used, retrieval_occurred, scheduled_interval_days,
+                           elapsed_days, grading_result, signal_quality,
+                           policy_version, dataset_generation, normalization_version,
+                           pre_state_snapshot, post_state_snapshot,
+                           presentation_to_answer_ms, delivery_to_action_ms,
+                           session_id, notification_id, created_at_utc, local_date,
+                           timezone_name, utc_offset_minutes
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        event.id,
+                        event.profile_id,
+                        event.track_id,
+                        event.learning_item_id,
+                        event.prompt_facet_id,
+                        event.answer_facet_id,
+                        event.card_key,
+                        event.mode,
+                        event.question_type,
+                        event.result,
+                        event.answer_id,
+                        event.expected_answer_id,
+                        int(event.hint_used),
+                        int(event.retrieval_occurred),
+                        event.scheduled_interval_days,
+                        event.elapsed_days,
+                        event.grading_result,
+                        event.signal_quality,
+                        event.policy_version,
+                        event.dataset_generation,
+                        event.normalization_version,
+                        pre_json,
+                        post_json,
+                        event.presentation_to_answer_ms,
+                        event.delivery_to_action_ms,
+                        event.session_id,
+                        event.notification_id,
+                        event.created_at_utc,
+                        event.local_date,
+                        event.timezone_name,
+                        event.utc_offset_minutes,
+                    ),
+                )
+                self._upsert_progress(connection, event.post_state_snapshot)
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+
+    async def async_list_for_card(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        card_key: str,
+    ) -> tuple[dict[str, Any], ...]:
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT id, mode, question_type, result, hint_used,
+                          retrieval_occurred, signal_quality, policy_version,
+                          dataset_generation, normalization_version,
+                          pre_state_snapshot, post_state_snapshot,
+                          presentation_to_answer_ms, delivery_to_action_ms,
+                          created_at_utc, local_date, timezone_name,
+                          utc_offset_minutes
+                   FROM review_events
+                   WHERE profile_id = ? AND track_id = ? AND card_key = ?
+                   ORDER BY created_at_utc, id""",
+                (profile_id, track_id, card_key),
+            ).fetchall()
+            return tuple(
+                {
+                    "id": str(row[0]),
+                    "mode": str(row[1]),
+                    "question_type": str(row[2]),
+                    "result": str(row[3]),
+                    "hint_used": bool(row[4]),
+                    "retrieval_occurred": bool(row[5]),
+                    "signal_quality": str(row[6]),
+                    "policy_version": int(row[7]),
+                    "dataset_generation": str(row[8]),
+                    "normalization_version": None if row[9] is None else int(row[9]),
+                    "pre_state_snapshot": json.loads(str(row[10])),
+                    "post_state_snapshot": json.loads(str(row[11])),
+                    "presentation_to_answer_ms": None if row[12] is None else int(row[12]),
+                    "delivery_to_action_ms": None if row[13] is None else int(row[13]),
+                    "created_at_utc": str(row[14]),
+                    "local_date": str(row[15]),
+                    "timezone_name": str(row[16]),
+                    "utc_offset_minutes": int(row[17]),
+                }
+                for row in rows
+            )
+
+        return await self._storage._async_reader(read)
+
+    async def async_rebuild_progress(
+        self,
+        *,
+        profile_id: str | None = None,
+        track_id: str | None = None,
+    ) -> int:
+        """Rebuild progress from the latest event snapshot under historical policy."""
+        if track_id is not None and profile_id is None:
+            raise ValueError("track-scoped rebuild requires profile_id")
+
+        def write(connection: sqlite3.Connection) -> int:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                clauses: list[str] = []
+                params: list[str] = []
+                if profile_id is not None:
+                    clauses.append("profile_id = ?")
+                    params.append(profile_id)
+                if track_id is not None:
+                    clauses.append("track_id = ?")
+                    params.append(track_id)
+                where = "" if not clauses else " WHERE " + " AND ".join(clauses)
+                connection.execute(f"DELETE FROM progress{where}", tuple(params))
+                rows = connection.execute(
+                    f"""SELECT post_state_snapshot
+                        FROM review_events
+                        {where}
+                        ORDER BY created_at_utc, id""",
+                    tuple(params),
+                ).fetchall()
+                latest: dict[tuple[str, str, str], dict[str, Any]] = {}
+                for (payload,) in rows:
+                    snapshot = json.loads(str(payload))
+                    key = (
+                        str(snapshot["profile_id"]),
+                        str(snapshot["track_id"]),
+                        str(snapshot["card_key"]),
+                    )
+                    latest[key] = snapshot
+                for snapshot in latest.values():
+                    self._upsert_progress(connection, snapshot)
+                connection.commit()
+                return len(latest)
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        return await self._storage._async_writer(write)
+
+
 class SettingsRepository:
     """Small JSON settings store with deterministic serialization."""
 
@@ -1300,6 +1600,7 @@ class StateRepositories:
     profiles: ProfilesRepository
     tracks: TracksRepository
     progress: ProgressRepository
+    review_events: ReviewEventsRepository
     settings: SettingsRepository
 
     @classmethod
@@ -1308,5 +1609,6 @@ class StateRepositories:
             profiles=ProfilesRepository(storage),
             tracks=TracksRepository(storage),
             progress=ProgressRepository(storage),
+            review_events=ReviewEventsRepository(storage),
             settings=SettingsRepository(storage),
         )
