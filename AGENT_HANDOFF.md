@@ -2,9 +2,9 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11 and P2.1–P2.2 are complete. P1 is closed PASS and P2
-is in progress on `feat/p1-content-core`. P2.3 — Backend ACL and privacy
-filtering — is implemented and awaiting the combined local quality gate.
+P0.1–P0.7, P1.1–P1.11 and P2.1–P2.3 are complete. P1 is closed PASS and P2
+is in progress on `feat/p1-content-core`. P2.4 — Track configuration, pack
+pinning and card rules — is implemented and awaiting the local quality gate.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -356,3 +356,55 @@ Next required local gate:
 
 If PASS, close P2.3 and begin P2.4 Track configuration, pack pinning and card
 rules.
+
+
+## P2.3 closure
+
+Renaud's local P2.3 gate reported:
+- Ruff format: only mechanical formatting diffs in the ACL repository/test.
+- Ruff lint: one import-order issue in test_acl.py.
+- mypy: PASS, 81 source files.
+- resource registries: PASS.
+- pytest: PASS, 214 tests in 4.21 s.
+
+The exact Ruff formatting/import corrections were applied. No semantic ACL code
+changed after the passing type/resource/test gate. P2.3 is closed PASS.
+
+## P2.4 implementation pending verification
+
+P2.4 adds TrackService over the P2.1 state repositories and the immutable P1
+content catalog. Track identity remains user state and is distinct from Pack
+identity.
+
+Track creation now:
+- pins one explicit active PackVersion;
+- stores source/target language preferences and priority;
+- resolves direction preferences to exact active CardDefinitions;
+- supports explicit card-key selection;
+- respects pack-owned disabled-by-default card rules for broad direction
+  resolution;
+- persists exact prompt/answer facet card rules;
+- persists non-negative relative content weights;
+- writes Track + PackVersion pin + card rules + weights atomically.
+
+Pack updates are previewable and deliberate. Activating a newer content
+generation does not alter an existing Track pin. The service computes
+added/removed/changed LearningItem buckets and only changes the pin through an
+explicit integrate call. Direction-mode rules are regenerated against the new
+PackVersion; explicit-card mode refuses integration if a selected card
+disappeared instead of silently dropping the learner's choice.
+
+ADR-0020 records the Track/Pack/card-rule boundary.
+
+New tests in tests/backend/test_tracks.py cover direction resolution, explicit
+selection validation, content weights, stable pinning across content updates,
+preview diffs and explicit integration.
+
+Next required local gate:
+- python3 -m ruff format --check .
+- python3 -m ruff check .
+- python3 -m mypy custom_components datasets tests
+- python3 datasets/tools/validate_resources.py
+- python3 -m pytest -q --tb=short
+
+If PASS, close P2.4 and begin P2.5 learning quotas, goals and load forecast.
