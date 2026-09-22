@@ -3,10 +3,9 @@
 ## Current state
 
 P0.1–P0.7 remain complete. P1 is in progress on `feat/p1-content-core`.
-P1.1 and P1.2 are complete. P1.3 implementation is complete, with repository
-verification still pending because this branch does not trigger the current
-GitHub Actions workflow and this chat environment cannot execute the local
-checkout.
+P1.1, P1.2 and P1.3 are complete. P1.3 was verified on the Ubuntu development
+checkout after the final code changes; the final branch-only delta before
+closure was Ruff formatting with no semantic behavior change.
 
 P1.3 adds the generic content presentation/grading contract without changing
 progression identity. `CardDefinition` now carries mutable
@@ -37,21 +36,18 @@ generator.
 
 ## Verification
 
-P1.3 Python sources/tests were syntax-checked while authored. Full repository
-checks have **not** been executed in this run.
+P1.3 PASS on the Ubuntu development checkout:
 
-Required before changing P1.3 from “verification pending” to PASS:
+- Ruff format: pass (111 files already formatted on final head).
+- Ruff check: pass.
+- mypy (`custom_components datasets tests`): pass (49 source files).
+- dataset resource registries: pass.
+- pytest full suite: 102 passed in 1.19 s.
 
-```text
-python -m ruff format --check .
-python -m ruff check .
-python -m mypy custom_components datasets tests
-python datasets/tools/validate_resources.py
-python -m pytest -q --tb=short
-```
-
-No frontend files changed, so frontend verification is not functionally required
-for the P1.3 delta, although normal release CI may still run it.
+The mypy/registry/pytest run was performed immediately before the final
+format-only commit; that last commit changed only Ruff line wrapping. Ruff
+format was then re-run on the resulting head and passed. No frontend files
+changed in P1.3.
 
 ## Remaining risks / next action
 
@@ -66,5 +62,5 @@ for the P1.3 delta, although normal release CI may still run it.
 - The future Lit renderer must map the rich-text AST node-by-node and must never
   route dataset strings through `unsafeHTML`.
 
-Next concrete action after verification: close P1.3 PASS, then start P1.4
-multilingual normalization and locale primitives only.
+Next concrete action: start P1.4 multilingual normalization and locale
+primitives only. Do not begin P1.5/P1.6 or grading-engine work as part of P1.4.
