@@ -5,6 +5,14 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P1.6 normalized `content.db` schema with stable content/card relationships,
+  lifecycle tombstones and PackVersion pre-aggregates.
+- Validated immutable content generations built from one attached package at a
+  time, atomically activated after reader drain and retained for rollback.
+- Stable merge lifecycle history preserving exact IDs and card keys across
+  active → removed → active transitions.
+- ADR-0013 defining content generation versioning, activation, leases,
+  rollback, crash boundaries and the no-ATTACH-fan-out contract.
 - P1.5 pack/tag primitives with immutable pack-version pinning, prerequisites,
   unlock thresholds, confusable intro gaps and pack-version diff metadata.
 - Data-driven Japanese curation policy keeping isolated ON/KUN cards disabled by
