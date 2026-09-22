@@ -5,6 +5,15 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P1.8 build-time dataset pipeline separating upstream adapters from pedagogical
+  recipes, with bounded fetching, canonical JSONL normalization, semantic
+  validation, Ed25519 signing, deterministic package layout and external checksums.
+- Streaming adapters for JMdict, KANJIDIC2, Tatoeba text, Wiktextract/Kaikki,
+  KanjiVG and repository-authored LockLearn editorial input using synthetic tests only.
+- Scheduled/manual dataset GitHub Actions, source freshness/fetch registries and
+  a canonical-content publication gate that never commits or releases raw corpora.
+- Manifest v2 signed SourceSnapshot metadata including upstream date and adapter version.
+- ADR-0015 defining the offline build/release boundary.
 - P1.7 normalized source snapshots and per-object provenance retained inside merged content generations, including author/language/modification attribution fields.
 - Version-2 source/license registries with explicit software/editorial/dataset/asset license scopes, source field allowlists and required provenance contracts.
 - ADR-0014 defining snapshot identity, provenance granularity and license boundaries.
