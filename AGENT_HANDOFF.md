@@ -2,9 +2,9 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11 and P2.1–P2.6 are complete. P1 and P2 are closed PASS.
-P3 is in progress on `feat/p1-content-core`. P3.1 — ReviewEvent audit log and
-progress projection — is implemented and awaiting the local quality gate.
+P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1 are complete. P1 and P2 are closed
+PASS. P3 is in progress on `feat/p1-content-core`. P3.2 — Introduction and
+learning-step state machine — is implemented and awaiting the local quality gate.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -584,3 +584,45 @@ Next required local gate:
 - python3 -m pytest -q --tb=short
 
 If PASS, close P3.1 and begin P3.2 introduction and learning-step state machine.
+
+
+## P3.1 closure
+
+Renaud's local P3.1 gate is fully green:
+- Ruff format: PASS, 165 files already formatted.
+- Ruff lint: PASS.
+- mypy: PASS, 88 source files.
+- resource registries: PASS.
+- pytest: PASS, 226 tests in 5.53 s.
+
+P3.1 is closed PASS.
+
+## P3.2 implementation pending verification
+
+P3.2 adds a pure LearningStateMachine with the V1 short-step timing contract:
+- new cards first enter an explicit introduction/exposure transition;
+- introduction sets mode=introduction and retrieval_occurred=false;
+- first exposure cannot increment a verified failure;
+- learning uses 1/10/60 minute short steps;
+- relearning uses 10/60 minute short steps;
+- any short-step failure resets the current short sequence and always schedules
+  a strictly positive delay, so immediate working-memory retest is impossible.
+
+Short-step completion emits ready_for_long_review=true but deliberately leaves
+the state in learning/relearning with no short next_due. P3.3 owns the actual
+long-review state/box/interval transition. P3.4 owns mapping UI/quiz signals to
+success/failure strength, and P3.9 owns actual interleaving/session selection.
+
+ADR-0023 records these boundaries. New tests in
+tests/backend/test_learning_state_machine.py cover introduction semantics,
+1/10/60 learning, 10/60 relearning, failure reset/no-immediate-retest,
+graduation handoff and invalid state/configuration.
+
+Next required local gate:
+- python3 -m ruff format --check .
+- python3 -m ruff check .
+- python3 -m mypy custom_components datasets tests
+- python3 datasets/tools/validate_resources.py
+- python3 -m pytest -q --tb=short
+
+If PASS, close P3.2 and begin P3.3 ReviewPolicy V1 core.
