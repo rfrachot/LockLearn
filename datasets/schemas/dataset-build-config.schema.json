@@ -48,7 +48,7 @@
               },
               "oneOf": [
                 {"required": ["path"], "not": {"required": ["fetch_url"]}},
-                {"required": ["fetch_url", "maximum_bytes"], "not": {"required": ["path"]}}
+                {"required": ["fetch_url"], "not": {"required": ["path"]}}
               ]
             }
           }
