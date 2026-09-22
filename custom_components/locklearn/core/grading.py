@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass, replace
 
 from .content import GradingOutcome, GradingPolicyKind
@@ -154,9 +155,25 @@ class FreeTextGrader:
         for original, normalized in accepted:
             if len(normalized) < 4:
                 continue
+            if cls._diacritic_only_difference(submitted, normalized):
+                continue
             if cls._edit_distance_at_most_one(submitted, normalized):
                 return original
         return None
+
+    @staticmethod
+    def _diacritic_only_difference(left: str, right: str) -> bool:
+        """Keep semantically preserved accents from being accepted as fuzzy typos."""
+
+        def strip_marks(value: str) -> str:
+            decomposed = unicodedata.normalize("NFD", value)
+            return "".join(
+                character
+                for character in decomposed
+                if unicodedata.category(character) != "Mn"
+            )
+
+        return left != right and strip_marks(left) == strip_marks(right)
 
     @staticmethod
     def _edit_distance_at_most_one(left: str, right: str) -> bool:
