@@ -616,3 +616,36 @@ async def test_migration_targets_must_match_migrated_card_tuple(
             (package_v2,), candidate_v2, generation_id="semantic-two"
         )
     assert content_storage.content_generations.active_metadata.generation_id == "semantic-one"
+
+
+def test_package_requires_provenance_for_every_declared_source(tmp_path: Path) -> None:
+    """A declared source cannot enter an official-shaped package without a snapshot trail."""
+    package = create_package(tmp_path / "missing-provenance.db", "missing-provenance")
+    with sqlite3.connect(package) as connection:
+        connection.execute("DELETE FROM provenance_records")
+        connection.commit()
+    with pytest.raises(ContentValidationError, match="no provenance-backed source snapshot"):
+        ContentGenerationValidator().validate_package(package)
+
+
+def test_package_rejects_provenance_target_from_wrong_dataset(tmp_path: Path) -> None:
+    """Object provenance must resolve inside the dataset that declares it."""
+    package = create_package(tmp_path / "wrong-target.db", "wrong-target")
+    with sqlite3.connect(package) as connection:
+        connection.execute(
+            """UPDATE provenance_records
+               SET object_type = 'learning_item', object_id = 'locklearn:item:missing'"""
+        )
+        connection.commit()
+    with pytest.raises(ContentValidationError, match="target does not exist"):
+        ContentGenerationValidator().validate_package(package)
+
+
+def test_package_rejects_invalid_source_snapshot_hash(tmp_path: Path) -> None:
+    """Snapshot identity includes a lowercase canonical SHA-256 digest."""
+    package = create_package(tmp_path / "bad-snapshot.db", "bad-snapshot")
+    with sqlite3.connect(package) as connection:
+        connection.execute("UPDATE source_snapshots SET sha256 = ?", ("A" * 64,))
+        connection.commit()
+    with pytest.raises(ContentValidationError, match="invalid SHA-256"):
+        ContentGenerationValidator().validate_package(package)
