@@ -14,7 +14,7 @@ from custom_components.locklearn.storage.database import (
     StaleSessionError,
     StoragePaths,
 )
-from custom_components.locklearn.storage.schema import CONTENT_SCHEMA
+from tests.backend.content_db_helpers import ITEM_A, card_identity, create_package
 
 
 @dataclass(frozen=True)
@@ -139,52 +139,25 @@ async def test_ha_backup_hook_pauses_and_resumes_user_writes(storage: SQLiteStor
 
 async def test_content_merge_and_hot_queries(storage: SQLiteStorage, tmp_path: Path) -> None:
     """Packages merge one at a time and hot queries cross only the active DB."""
-    packages: list[Path] = []
-    for package_number in range(2):
-        path = tmp_path / f"package-{package_number}.db"
-        connection = sqlite3.connect(path)
-        try:
-            connection.executescript(CONTENT_SCHEMA)
-            connection.execute("INSERT INTO schema_version VALUES (1)")
-            connection.executemany(
-                "INSERT INTO card_definitions VALUES (?, ?, ?)",
-                [
-                    (f"card-{package_number}-{index}", "pack-1", package_number * 100 + index)
-                    for index in range(100)
-                ],
-            )
-            connection.commit()
-        finally:
-            connection.close()
-        packages.append(path)
+    package = create_package(tmp_path / "package.db", "v1")
+    merged = storage.paths.content_staging_dir / "content.next.db"
+    result = await storage.async_build_content_generation(
+        (package,), merged, generation_id="generation-hot-query"
+    )
+    assert result.max_database_count == 2
+    await storage.async_activate_content_generation(merged)
 
-    merged = tmp_path / "merged" / "current.db"
-    assert await storage.async_build_content_generation(packages, merged) == 200
+    pack_version_id = "locklearn:pack-version:v1"
+    card_key = card_identity(ITEM_A)[1]
+    assert await storage.async_new_cards("p1", "t1", pack_version_id, 5) == [card_key]
+    now = datetime.now(UTC).isoformat()
 
-    replacement = storage.paths.content_db
-    await storage.async_close()
-    replacement.unlink()
-    merged.replace(replacement)
-    reopened = SQLiteStorage(storage.paths)
-    await reopened.async_open()
-    try:
-        assert await reopened.async_new_cards("p1", "t1", "pack-1", 5) == [
-            "card-0-0",
-            "card-0-1",
-            "card-0-2",
-            "card-0-3",
-            "card-0-4",
-        ]
-        now = datetime.now(UTC).isoformat()
+    def seed(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            "INSERT INTO progress VALUES (?, ?, ?, 'review', ?)",
+            ("p1", "t1", card_key, now),
+        )
+        connection.commit()
 
-        def seed(connection: sqlite3.Connection) -> None:
-            connection.execute(
-                "INSERT INTO progress VALUES (?, ?, ?, 'review', ?)",
-                ("p1", "t1", "card-0-0", now),
-            )
-            connection.commit()
-
-        await reopened._async_writer(seed)
-        assert await reopened.async_due_cards("p1", "t1", now, 10) == ["card-0-0"]
-    finally:
-        await reopened.async_close()
+    await storage._async_writer(seed)
+    assert await storage.async_due_cards("p1", "t1", now, 10) == [card_key]
