@@ -9,10 +9,15 @@ on:
         description: "Optional repository-relative official dataset build config"
         required: false
         type: string
-      previous_artifact:
-        description: "Optional runner path to previous ZIP for content comparison"
+      previous_release_tag:
+        description: "Previous dataset GitHub Release tag used for content comparison"
         required: false
         type: string
+      first_release:
+        description: "Explicitly allow publication without a previous dataset release"
+        required: false
+        default: false
+        type: boolean
       release_tag:
         description: "Optional GitHub Release tag; skipped when content is unchanged"
         required: false
@@ -56,13 +61,32 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       - name: Require signing secret
         run: test -n "$LOCKLEARN_DATASET_SIGNING_KEY_B64"
+      - name: Enforce publication comparison
+        if: ${{ inputs.release_tag != '' }}
+        shell: bash
+        run: |
+          if [ -z "${{ inputs.previous_release_tag }}" ] && [ "${{ inputs.first_release }}" != "true" ]; then
+            echo "A release requires previous_release_tag, or first_release=true for the initial publication."
+            exit 1
+          fi
+      - name: Download previous signed dataset artifact
+        if: ${{ inputs.previous_release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mkdir -p datasets/staging/previous
+          gh release download "${{ inputs.previous_release_tag }}"             --pattern "*.zip"             --dir datasets/staging/previous
+          count="$(find datasets/staging/previous -maxdepth 1 -type f -name '*.zip' | wc -l)"
+          test "$count" -eq 1
       - name: Build signed artifact
         id: build
         shell: bash
         run: |
           args=()
-          if [ -n "${{ inputs.previous_artifact }}" ]; then
-            args+=(--previous "${{ inputs.previous_artifact }}")
+          if [ -n "${{ inputs.previous_release_tag }}" ]; then
+            previous="$(find datasets/staging/previous -maxdepth 1 -type f -name '*.zip' -print -quit)"
+            args+=(--previous "$previous")
           fi
           result="$(python datasets/tools/build_dataset.py             "${{ inputs.build_config }}"             --output datasets/dist             --workspace datasets/staging/build             "${args[@]}")"
           echo "$result"
