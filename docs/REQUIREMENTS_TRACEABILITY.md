@@ -33,16 +33,16 @@
 | §5 | Concept | V1 / cross-cutting | P1.1 |
 | §6 | Term | V1 / cross-cutting | P1.1 |
 | §7 | Relation Concept ↔ Term | V1 / cross-cutting | P1.1 |
-| §8 | LearningItem | V1 / cross-cutting | P1.1, P1.2, P3.7 |
-| §9 | ContentBlock | V1 / cross-cutting | P1.2 |
+| §8 | LearningItem | V1 / cross-cutting | P1.1, P1.3, P3.7 |
+| §9 | ContentBlock | V1 / cross-cutting | P1.3 |
 | §10 | Exemple : contenu kanji | V1 / cross-cutting | P1.4 |
-| §11 | Exemple : grammaire | V1 / cross-cutting | P1.2, P3.6 |
+| §11 | Exemple : grammaire | V1 / cross-cutting | P1.3, P3.6 |
 | §12 | Images | V1 / cross-cutting | P1.11, P7.3 |
 | §13 | Audio | V1 / cross-cutting | P1.11, P7.3 |
 | §14 | Tags | V1 / cross-cutting | P1.4 |
 | §15 | Packs | V1 / cross-cutting | P1.4, P3.5 |
 | §16 | Dataset versus Pack | V1 / cross-cutting | P1.1 |
-| §17 | Multilinguisme | V1 / cross-cutting | P1.2, P1.3, P3.7 |
+| §17 | Multilinguisme | V1 / cross-cutting | P1.3, P1.4, P3.7 |
 | §18 | Profil utilisateur | V1 / cross-cutting | P2.1, P2.2, P5.5 |
 | §19 | Relation avec les utilisateurs Home Assistant | V1 / cross-cutting | P0.5, P2.2 |
 | §20 | ACL des profils | V1 / cross-cutting | P0.5, P2.1, P2.3, P5.5 |
@@ -77,7 +77,7 @@
 | §48 | Home | V1 / cross-cutting | P5.2 |
 | §49 | Profile switcher | V1 / cross-cutting | P5.2 |
 | §50 | Learn | V1 / cross-cutting | P3.2, P5.3 |
-| §51 | Quiz | V1 / cross-cutting | P1.2, P3.6, P3.7, P5.4 |
+| §51 | Quiz | V1 / cross-cutting | P1.3, P3.6, P3.7, P5.4 |
 | §52 | Distracteurs | V1 / cross-cutting | P3.5, P3.6, P3.11, P5.4 |
 | §53 | Session | V1 / cross-cutting | P0.6, P2.1, P3.8, P3.9 |
 | §53.1 | Gestion de la fatigue intra-session | V1 / cross-cutting | P0.6, P2.1, P3.8, P3.9 |
@@ -96,47 +96,47 @@
 | §65 | Frontend ↔ Backend | V1 / cross-cutting | P0.6, P5.1 |
 | §65.1 | Serving des assets | V1 / cross-cutting | P0.6, P0.7, P1.11, P5.1, P6.4, P6.6 |
 | §66 | API WebSocket indicative | V1 / cross-cutting | P0.6, P2.6, P3.7, P3.8, P3.12 |
-| §67 | Base de données | V1 / cross-cutting | P0.3, P1.5 |
-| §68 | content.db | V1 / cross-cutting | P0.3, P1.5, P1.11, P6.7 |
+| §67 | Base de données | V1 / cross-cutting | P0.3, P1.6 |
+| §68 | content.db | V1 / cross-cutting | P0.3, P1.6, P1.11, P6.7 |
 | §69 | state.db | V1 / cross-cutting | P0.3, P2.1, P6.7 |
 | §70 | Emplacement des DB | V1 / cross-cutting | P0.3, P6.2 |
 | §71 | Accès SQLite | V1 / cross-cutting | P0.3, P2.1 |
 | §72 | Migrations DB | V1 / cross-cutting | P0.3, P6.1 |
 | §73 | Migration Config Entry | V1 / cross-cutting | P0.3, P6.1 |
 | §74 | Sources de contenu et chaîne de mise à jour | V1 / cross-cutting | P1.8 |
-| §74.1 | Source | V1 / cross-cutting | P1.6, P1.8 |
-| §74.2 | SourceSnapshot | V1 / cross-cutting | P1.6, P1.8 |
-| §74.3 | Provenance au niveau des données | V1 / cross-cutting | P1.6, P1.8 |
-| §74.4 | Stable IDs et mises à jour | V1 / cross-cutting | P1.6, P1.8 |
-| §74.5 | DatasetBuild | V1 / cross-cutting | P1.7, P1.8 |
-| §74.5.1 | Format d’artefact dataset | V1 / cross-cutting | P1.7, P1.8, P6.7 |
+| §74.1 | Source | V1 / cross-cutting | P1.7, P1.8 |
+| §74.2 | SourceSnapshot | V1 / cross-cutting | P1.7, P1.8 |
+| §74.3 | Provenance au niveau des données | V1 / cross-cutting | P1.7, P1.8 |
+| §74.4 | Stable IDs et mises à jour | V1 / cross-cutting | P1.7, P1.8 |
+| §74.5 | DatasetBuild | V1 / cross-cutting | P1.2, P1.8 |
+| §74.5.1 | Format d’artefact dataset | V1 / cross-cutting | P1.2, P1.8, P6.7 |
 | §74.6 | Distribution des mises à jour | V1 / cross-cutting | P1.8 |
 | §74.7 | Pipeline GitHub Actions recommandé | V1 / cross-cutting | P1.8 |
 | §74.8 | Update Manager Home Assistant | V1 / cross-cutting | P1.8, P1.9, P5.6 |
-| §74.9 | Stratégie d'activation | V1 / cross-cutting | P1.5, P1.7, P1.8, P1.9 |
+| §74.9 | Stratégie d'activation | V1 / cross-cutting | P1.2, P1.6, P1.8, P1.9 |
 | §74.10 | Fréquence et données obsolètes | V1 / cross-cutting | P1.8, P1.9 |
 | §74.11 | Pas de dépendance runtime aux sources amont | V1 / cross-cutting | P1.8 |
-| §75 | IDs stables | V1 / cross-cutting | P1.1, P1.5 |
+| §75 | IDs stables | V1 / cross-cutting | P1.1, P1.6 |
 | §76 | Pack format | V1 / cross-cutting | P1.4, P2.4, P5.5 |
 | §76.1 | Règles de curation japonaises recommandées | V1 / cross-cutting | P1.4, P2.4, P3.5, P5.5 |
-| §77 | Politique de licences et sources fortement recommandées | V1 / cross-cutting | P1.6 |
-| §77.1 | Principe général | V1 / cross-cutting | P1.6 |
-| §77.2 | Licence recommandée du projet | V1 / cross-cutting | P1.6 |
-| §77.3 | EDRDG — JMdict | V1 / cross-cutting | P1.6 |
-| §77.4 | EDRDG — KANJIDIC2 + RADKFILE/KRADFILE | V1 / cross-cutting | P1.6 |
-| §77.5 | Wiktionary via Wiktextract / Kaikki | V1 / cross-cutting | P1.6 |
-| §77.6 | Tatoeba | V1 / cross-cutting | P1.6 |
-| §77.7 | KanjiVG | V1 / cross-cutting | P1.6 |
-| §77.8 | Grammaire | V1 / cross-cutting | P1.6 |
-| §77.9 | JLPT | V1 / cross-cutting | P1.6 |
-| §77.9.1 | Compatibilité de distribution et marques | V1 / cross-cutting | P1.6 |
-| §77.10 | Registre de licences | V1 / cross-cutting | P1.6 |
-| §77.11 | Écran Sources & Licences | V1 / cross-cutting | P1.6, P5.6 |
-| §78 | Localisation de l'interface | V1 / cross-cutting | P1.3, P5.8 |
+| §77 | Politique de licences et sources fortement recommandées | V1 / cross-cutting | P1.7 |
+| §77.1 | Principe général | V1 / cross-cutting | P1.7 |
+| §77.2 | Licence recommandée du projet | V1 / cross-cutting | P1.7 |
+| §77.3 | EDRDG — JMdict | V1 / cross-cutting | P1.7 |
+| §77.4 | EDRDG — KANJIDIC2 + RADKFILE/KRADFILE | V1 / cross-cutting | P1.7 |
+| §77.5 | Wiktionary via Wiktextract / Kaikki | V1 / cross-cutting | P1.7 |
+| §77.6 | Tatoeba | V1 / cross-cutting | P1.7 |
+| §77.7 | KanjiVG | V1 / cross-cutting | P1.7 |
+| §77.8 | Grammaire | V1 / cross-cutting | P1.7 |
+| §77.9 | JLPT | V1 / cross-cutting | P1.7 |
+| §77.9.1 | Compatibilité de distribution et marques | V1 / cross-cutting | P1.7 |
+| §77.10 | Registre de licences | V1 / cross-cutting | P1.7 |
+| §77.11 | Écran Sources & Licences | V1 / cross-cutting | P1.7, P5.6 |
+| §78 | Localisation de l'interface | V1 / cross-cutting | P1.4, P5.8 |
 | §79 | Accessibilité | V1 / cross-cutting | P5.3, P5.4, P5.8 |
 | §80 | Performance | V1 / cross-cutting | P0.3, P0.6, P0.7, P3.14, P5.9, P6.7 |
 | §81 | Batterie téléphone | V1 / cross-cutting | P0.4, P5.9 |
-| §82 | Sécurité | V1 / cross-cutting | P0.5, P0.7, P1.2, P1.7, P4.6, P6.4, P6.6 |
+| §82 | Sécurité | V1 / cross-cutting | P0.5, P0.7, P1.2, P1.3, P4.6, P6.4, P6.6 |
 | §83 | Diagnostics | V1 / cross-cutting | P6.3 |
 | §84 | Export / import | V1 / cross-cutting | P6.4 |
 | §84.1 | Désinstallation et récupération | V1 / cross-cutting | P6.2, P6.4 |
@@ -146,7 +146,7 @@
 | §88 | Installation | V1 / cross-cutting | P0.2, P1.10, P6.10 |
 | §89 | Config Flow initial | V1 / cross-cutting | P0.2, P1.10, P2.2, P5.5 |
 | §90 | Pas de YAML obligatoire | V1 / cross-cutting | P0.2 |
-| §91 | Frontend packaging | V1 / cross-cutting | P1.3, P5.1, P5.8, P6.10 |
+| §91 | Frontend packaging | V1 / cross-cutting | P1.4, P5.1, P5.8, P6.10 |
 | §92 | Architecture repo recommandée | V1 / cross-cutting | P0.1 |
 | §93 | Tests backend | V1 / cross-cutting | P6.8 |
 | §94 | Tests ACL | V1 / cross-cutting | P2.3, P6.8 |
@@ -210,16 +210,16 @@ These 32 invariants are release gates. They must stay true even if the implement
 | I-05 | `Learning mode != content type` | P1.1, P3.6 |
 | I-06 | Progress is card/facet-specific | P3.1 |
 | I-07 | Frontend never owns permissions | P2.3, P5.1 |
-| I-08 | Content data != user state | P1.5, P2.1 |
+| I-08 | Content data != user state | P1.6, P2.1 |
 | I-09 | HA Recorder != LockLearn database | P6.5 |
 | I-10 | Core must not depend on Japanese | P1.1, P1.4 |
-| I-11 | Released dataset IDs stay stable unless explicit mapping exists | P1.1, P1.5 |
-| I-12 | Official datasets reject NC/ND/unknown/commercially incompatible data | P1.6 |
+| I-11 | Released dataset IDs stay stable unless explicit mapping exists | P1.1, P1.6 |
+| I-12 | Official datasets reject NC/ND/unknown/commercially incompatible data | P1.7 |
 | I-13 | Dataset update never replaces last-known-good before validation | P1.9 |
 | I-14 | Progress belongs to CardDefinition, not Concept | P3.1 |
 | I-15 | HA runtime never parses large raw upstream corpora | P1.8 |
 | I-16 | Cross-database referential integrity is application-enforced and tested | P2.1 |
-| I-17 | Third-party rich content is never trusted HTML | P1.2, P6.6 |
+| I-17 | Third-party rich content is never trusted HTML | P1.3, P6.6 |
 | I-18 | Review events are audit source; progress is rebuildable projection | P3.1, P3.12 |
 | I-19 | Notification actions are not strong authentication | P0.5, P4.6 |
 | I-20 | Stable progression identity includes facet/card-definition identity | P1.1, P3.1 |
@@ -251,10 +251,10 @@ The following is the release-facing checklist. Detailed acceptance remains in th
 | Leech, confusion, undo and rebuild | P3.11, P3.12 |
 | Scheduler + multi-track/target + actionable notifications | P4.1–P4.7 |
 | Basic stats + metacognitive calibration | P3.13, P5.7 |
-| SQLite state/content generations + migrations | P0.3, P1.5, P2.1, P6.1 |
+| SQLite state/content generations + migrations | P0.3, P1.6, P2.1, P6.1 |
 | Backup lifecycle + Repairs | P6.2, P6.3 |
 | HA services/events | P4.8, P4.9 |
-| Pack/dataset provenance/licensing/signatures/update/rollback | P1.4, P1.6–P1.10 |
+| Pack/dataset provenance/licensing/signatures/update/rollback | P1.2, P1.5, P1.7–P1.10 |
 | FR + EN UI | P5.8 |
 | Secure export/import | P6.4 |
 | Core documentation | P6.9 |

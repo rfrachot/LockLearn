@@ -55,7 +55,7 @@ No pack ID, pack version, track ID, dataset build/version, source snapshot,
 ordering, tag, display text, facet label, language metadata, grading policy or
 context hint participates in this derivation. Packs and tracks select or carry
 progress for an existing CardDefinition; they do not define its identity.
-Future P1.2 metadata may change without resetting progression as long as the
+Future P1.3 metadata may change without resetting progression as long as the
 tested LearningItem and facet pair is unchanged.
 
 ### Cross-source alignment
@@ -77,7 +77,7 @@ or silently reassigning progression.
 
 Changing the separator, encoding, digest algorithm, prefixes or tuple members
 also changes published identities and therefore requires the same explicit
-migration treatment. P1.5 must validate these mappings during generation build
+migration treatment. P1.6 must validate these mappings during generation build
 and activation; this ADR does not introduce the `content.db` schema.
 
 ## Consequences
@@ -90,4 +90,4 @@ and activation; this ADR does not introduce the `content.db` schema.
 - Correcting a bad published source identity has an explicit operational cost:
   complete migration mappings and validation are mandatory.
 - The P1.1 model defines identities and mappings only. Persistence, activation
-  and tombstone behavior remain P1.5 scope.
+  and tombstone behavior remain P1.6 scope.
