@@ -9,8 +9,8 @@ from pathlib import Path
 
 from datasets.adapters import (
     JMdictAdapter,
-    Kanjidic2Adapter,
     KaikkiAdapter,
+    Kanjidic2Adapter,
     KanjiVGAdapter,
     LockLearnEditorialAdapter,
     TatoebaTextAdapter,
