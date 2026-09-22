@@ -156,6 +156,52 @@ class TrackService:
             raise RuntimeError("created track could not be reloaded")
         return created
 
+    async def async_update_track(
+        self,
+        *,
+        track_id: str,
+        name: str | None = None,
+        status: str | None = None,
+        priority: int | None = None,
+        content_weights: Mapping[str, float] | None = None,
+    ) -> dict[str, Any]:
+        """Update mutable Track metadata and optional content weights."""
+        current = await self._repository.async_get(track_id)
+        if current is None:
+            raise TrackValidationError("track does not exist")
+        next_name = str(current["name"]) if name is None else name.strip()
+        if not next_name:
+            raise TrackValidationError("track name must not be empty")
+        next_status = str(current["status"]) if status is None else status
+        if next_status not in {"active", "paused", "archived"}:
+            raise TrackValidationError("invalid track status")
+        next_priority = int(current["priority"]) if priority is None else priority
+        if next_priority < 1:
+            raise TrackValidationError("track priority must be >= 1")
+
+        updated = await self._repository.async_update_metadata(
+            track_id=track_id,
+            name=next_name,
+            status=next_status,
+            priority=next_priority,
+            updated_at_utc=self._clock.now().isoformat(),
+        )
+        if not updated:
+            raise TrackValidationError("track does not exist")
+        if content_weights is not None:
+            await self._repository.async_replace_content_weights(
+                track_id,
+                self._validate_weights(content_weights),
+            )
+        result = await self._repository.async_get(track_id)
+        if result is None:
+            raise RuntimeError("updated track could not be reloaded")
+        return result
+
+    async def async_delete_track(self, track_id: str) -> bool:
+        """Delete one Track and its Track-scoped user state."""
+        return await self._repository.async_delete(track_id)
+
     async def async_preview_pack_update(
         self,
         *,
