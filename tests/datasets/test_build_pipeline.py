@@ -39,6 +39,22 @@ _BUILT_AT = datetime(2026, 9, 22, 12, tzinfo=UTC)
 _PRIVATE_KEY = Ed25519PrivateKey.from_private_bytes(bytes(range(1, 33)))
 
 
+class RecordTagRecipe:
+    recipe_id = "test:record-tag"
+    recipe_version = "1"
+
+    def materialize(
+        self, connection: sqlite3.Connection, context: BuildContext
+    ) -> Mapping[str, int]:
+        record = next(context.iter_records("locklearn:original"))
+        value = str(record.payload["value"])
+        connection.execute(
+            "INSERT INTO tags(tag_id, label) VALUES ('locklearn:tag:recipe-output', ?)",
+            (value,),
+        )
+        return {"learning_items": 0, "cards": 0, "tags": 1}
+
+
 class EmptyRecipe:
     recipe_id = "test:empty"
     recipe_version = "1"
@@ -207,3 +223,29 @@ def test_private_signing_key_fixture_never_needs_repository_secret() -> None:
         encryption_algorithm=serialization.NoEncryption(),
     )
     assert base64.b64encode(raw).decode("ascii") != ""
+
+
+def test_publish_gate_detects_real_canonical_content_change(tmp_path: Path) -> None:
+    raw = _editorial(tmp_path / "editorial.jsonl")
+    first = build_dataset(
+        _spec(raw, version="2.0.0", built_at=_BUILT_AT),
+        RecordTagRecipe(),
+        private_key=_PRIVATE_KEY,
+        output_directory=tmp_path / "dist-a",
+        repository_root=ROOT,
+        workspace=tmp_path / "workspace-a",
+    )
+    raw.write_text(
+        '{"id":"fixture:one","kind":"fixture","payload":{"value":"changed"}}\n',
+        encoding="utf-8",
+    )
+    second = build_dataset(
+        _spec(raw, version="2.0.1", built_at=_BUILT_AT + timedelta(days=1)),
+        RecordTagRecipe(),
+        private_key=_PRIVATE_KEY,
+        output_directory=tmp_path / "dist-b",
+        repository_root=ROOT,
+        workspace=tmp_path / "workspace-b",
+    )
+    assert first.canonical_content_hash != second.canonical_content_hash
+    assert should_publish(first.manifest, second.manifest) is True
