@@ -1,4 +1,4 @@
-"""P0 Home Assistant WebSocket commands."""
+"""Authenticated LockLearn Home Assistant WebSocket commands."""
 
 from __future__ import annotations
 
