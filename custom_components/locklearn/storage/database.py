@@ -277,20 +277,77 @@ class SQLiteStorage:
             connection.close()
 
     async def async_create_session(
-        self, session_id: str, profile_id: str, track_id: str | None
+        self,
+        session_id: str,
+        profile_id: str,
+        track_id: str | None,
+        *,
+        session_type: str = "learn",
+        strategy: str = "default",
+        settings: dict[str, Any] | None = None,
+        items: tuple[dict[str, Any], ...] = (),
     ) -> dict[str, Any]:
-        """Persist a new active session."""
+        """Persist a configured session and its prepared question state."""
         now = self._clock.now().isoformat()
+        serialized_settings = json.dumps(
+            settings or {},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
 
         def create(connection: sqlite3.Connection) -> None:
-            connection.execute(
-                """INSERT INTO sessions(
-                       id, profile_id, track_id, status, version, current_position,
-                       started_at_utc, last_activity_at_utc
-                   ) VALUES (?, ?, ?, 'active', 1, 0, ?, ?)""",
-                (session_id, profile_id, track_id, now, now),
-            )
-            connection.commit()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    """INSERT INTO sessions(
+                           id, profile_id, track_id, type, strategy, status, version,
+                           current_position, started_at_utc, last_activity_at_utc,
+                           question_count, settings_json
+                       ) VALUES (?, ?, ?, ?, ?, 'active', 1, 0, ?, ?, ?, ?)""",
+                    (
+                        session_id,
+                        profile_id,
+                        track_id,
+                        session_type,
+                        strategy,
+                        now,
+                        now,
+                        len(items),
+                        serialized_settings,
+                    ),
+                )
+                connection.executemany(
+                    """INSERT INTO session_items(
+                           session_id, position, question_id, card_key,
+                           learning_item_id, prompt_facet_id, answer_facet_id,
+                           status, payload_json
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        (
+                            session_id,
+                            position,
+                            str(item["question_id"]),
+                            str(item["card_key"]),
+                            str(item["learning_item_id"]),
+                            str(item["prompt_facet_id"]),
+                            str(item["answer_facet_id"]),
+                            "presented" if position == 0 else "queued",
+                            json.dumps(
+                                dict(item.get("payload", {})),
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                                sort_keys=True,
+                            ),
+                        )
+                        for position, item in enumerate(items)
+                    ),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
 
         await self._async_writer(create)
         session = await self.async_get_session(session_id)
@@ -298,12 +355,13 @@ class SQLiteStorage:
         return session
 
     async def async_get_session(self, session_id: str) -> dict[str, Any] | None:
-        """Read a session using a short-lived reader connection."""
+        """Read a complete resumable session snapshot."""
 
         def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
             row = connection.execute(
-                """SELECT id, profile_id, track_id, status, version, current_position,
-                          started_at_utc, last_activity_at_utc
+                """SELECT id, profile_id, track_id, type, strategy, status, version,
+                          current_position, started_at_utc, last_activity_at_utc,
+                          completed_at_utc, question_count, settings_json
                    FROM sessions WHERE id = ?""",
                 (session_id,),
             ).fetchone()
@@ -313,41 +371,65 @@ class SQLiteStorage:
                 "id",
                 "profile_id",
                 "track_id",
+                "type",
+                "strategy",
                 "status",
                 "version",
                 "current_position",
                 "started_at_utc",
                 "last_activity_at_utc",
+                "completed_at_utc",
+                "question_count",
+                "settings_json",
             )
-            return dict(zip(keys, row, strict=True))
+            result = dict(zip(keys, row, strict=True))
+            result["settings"] = json.loads(str(result.pop("settings_json")))
+            item_rows = connection.execute(
+                """SELECT position, question_id, card_key, learning_item_id,
+                          prompt_facet_id, answer_facet_id, status, payload_json
+                   FROM session_items
+                   WHERE session_id = ?
+                   ORDER BY position""",
+                (session_id,),
+            ).fetchall()
+            result["items"] = [
+                {
+                    "position": int(item[0]),
+                    "question_id": str(item[1]),
+                    "card_key": str(item[2]),
+                    "learning_item_id": str(item[3]),
+                    "prompt_facet_id": str(item[4]),
+                    "answer_facet_id": str(item[5]),
+                    "status": str(item[6]),
+                    "payload": json.loads(str(item[7])),
+                }
+                for item in item_rows
+            ]
+            answer_rows = connection.execute(
+                """SELECT id, question_id, answer_json, resulting_version, created_at_utc
+                   FROM session_answers
+                   WHERE session_id = ?
+                   ORDER BY resulting_version""",
+                (session_id,),
+            ).fetchall()
+            result["answers"] = [
+                {
+                    "id": int(answer[0]),
+                    "question_id": str(answer[1]),
+                    "answer": json.loads(str(answer[2])),
+                    "resulting_version": int(answer[3]),
+                    "created_at_utc": str(answer[4]),
+                }
+                for answer in answer_rows
+            ]
+            position = int(result["current_position"])
+            items = result["items"]
+            result["current_question"] = (
+                items[position] if 0 <= position < len(items) else None
+            )
+            return result
 
         return await self._async_reader(read)
-
-    async def async_diagnostic_status(self) -> dict[str, Any]:
-        """Return privacy-safe SQLite health metadata from a reader worker."""
-        event_loop_thread_id = threading.get_ident()
-
-        def inspect(connection: sqlite3.Connection) -> dict[str, Any]:
-            integrity_rows = connection.execute("PRAGMA integrity_check").fetchall()
-            schema_row = connection.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
-            return {
-                "integrity_check": [str(row[0]) for row in integrity_rows],
-                "foreign_key_violation_count": len(
-                    connection.execute("PRAGMA foreign_key_check").fetchall()
-                ),
-                "schema_version": None if schema_row is None else schema_row[0],
-                "journal_mode": connection.execute("PRAGMA journal_mode").fetchone()[0],
-                "session_count": connection.execute("SELECT COUNT(*) FROM sessions").fetchone()[0],
-                "session_answer_count": connection.execute(
-                    "SELECT COUNT(*) FROM session_answers"
-                ).fetchone()[0],
-                "reader_off_event_loop": threading.get_ident() != event_loop_thread_id,
-            }
-
-        status = await self._async_reader(inspect)
-        status["writer_initialized"] = self._writer_thread_id is not None
-        status["backup_active"] = self._backup_active
-        return status
 
     async def async_answer_session(
         self,
@@ -356,30 +438,68 @@ class SQLiteStorage:
         question_id: str,
         answer: Any,
     ) -> dict[str, Any]:
-        """Apply an answer with an atomic optimistic version check."""
+        """Apply an answer with atomic session/question CAS semantics."""
         now = self._clock.now().isoformat()
         answer_json = json.dumps(answer, ensure_ascii=False, separators=(",", ":"))
 
         def answer_cas(connection: sqlite3.Connection) -> None:
             try:
                 connection.execute("BEGIN IMMEDIATE")
+                session = connection.execute(
+                    """SELECT status, version, current_position, question_count
+                       FROM sessions WHERE id = ?""",
+                    (session_id,),
+                ).fetchone()
+                if session is None:
+                    connection.rollback()
+                    raise SessionNotFoundError(session_id)
+                status, version, position, question_count = session
+                if str(status) != "active" or int(version) != expected_version:
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+                item = connection.execute(
+                    """SELECT question_id, status
+                       FROM session_items
+                       WHERE session_id = ? AND position = ?""",
+                    (session_id, int(position)),
+                ).fetchone()
+                if item is None or str(item[0]) != question_id or str(item[1]) not in {
+                    "queued",
+                    "presented",
+                }:
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+
+                resulting_version = expected_version + 1
+                next_position = int(position) + 1
+                connection.execute(
+                    """UPDATE session_items
+                       SET status = 'answered'
+                       WHERE session_id = ? AND position = ?""",
+                    (session_id, int(position)),
+                )
+                if next_position < int(question_count):
+                    connection.execute(
+                        """UPDATE session_items
+                           SET status = 'presented'
+                           WHERE session_id = ? AND position = ? AND status = 'queued'""",
+                        (session_id, next_position),
+                    )
                 cursor = connection.execute(
                     """UPDATE sessions
-                       SET version = version + 1,
-                           current_position = current_position + 1,
-                           last_activity_at_utc = ?
+                       SET version = ?, current_position = ?, last_activity_at_utc = ?
                        WHERE id = ? AND version = ? AND status = 'active'""",
-                    (now, session_id, expected_version),
+                    (
+                        resulting_version,
+                        next_position,
+                        now,
+                        session_id,
+                        expected_version,
+                    ),
                 )
                 if cursor.rowcount != 1:
-                    exists = connection.execute(
-                        "SELECT 1 FROM sessions WHERE id = ?", (session_id,)
-                    ).fetchone()
                     connection.rollback()
-                    if exists is None:
-                        raise SessionNotFoundError(session_id)
                     raise StaleSessionError(session_id)
-                resulting_version = expected_version + 1
                 connection.execute(
                     """INSERT INTO session_answers(
                            session_id, question_id, answer_json, resulting_version, created_at_utc
@@ -393,6 +513,142 @@ class SQLiteStorage:
                 raise
 
         await self._async_writer(answer_cas)
+        session = await self.async_get_session(session_id)
+        assert session is not None
+        return session
+
+    async def async_set_session_status(
+        self,
+        session_id: str,
+        expected_version: int,
+        *,
+        status: str,
+    ) -> dict[str, Any]:
+        """CAS pause/resume/complete one persistent session."""
+        if status not in {"active", "paused", "completed"}:
+            raise ValueError(f"unsupported session status: {status}")
+        now = self._clock.now().isoformat()
+
+        def mutate(connection: sqlite3.Connection) -> None:
+            completed_at = now if status == "completed" else None
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                cursor = connection.execute(
+                    """UPDATE sessions
+                       SET status = ?, version = version + 1,
+                           last_activity_at_utc = ?,
+                           completed_at_utc = CASE WHEN ? = 'completed' THEN ? ELSE completed_at_utc END
+                       WHERE id = ? AND version = ? AND status <> 'completed'""",
+                    (
+                        status,
+                        now,
+                        status,
+                        completed_at,
+                        session_id,
+                        expected_version,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    exists = connection.execute(
+                        "SELECT 1 FROM sessions WHERE id = ?",
+                        (session_id,),
+                    ).fetchone()
+                    connection.rollback()
+                    if exists is None:
+                        raise SessionNotFoundError(session_id)
+                    raise StaleSessionError(session_id)
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._async_writer(mutate)
+        session = await self.async_get_session(session_id)
+        assert session is not None
+        return session
+
+    async def async_undo_session_answer(
+        self,
+        session_id: str,
+        expected_version: int,
+        *,
+        actor_user_id: str | None = None,
+    ) -> dict[str, Any]:
+        """CAS-rewind session navigation while preserving answer history."""
+        now = self._clock.now().isoformat()
+
+        def undo(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                session = connection.execute(
+                    """SELECT profile_id, status, version, current_position
+                       FROM sessions WHERE id = ?""",
+                    (session_id,),
+                ).fetchone()
+                if session is None:
+                    connection.rollback()
+                    raise SessionNotFoundError(session_id)
+                profile_id, status, version, position = session
+                if str(status) not in {"active", "paused"} or int(version) != expected_version:
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+                previous_position = int(position) - 1
+                if previous_position < 0:
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+                item = connection.execute(
+                    """SELECT question_id, status
+                       FROM session_items
+                       WHERE session_id = ? AND position = ?""",
+                    (session_id, previous_position),
+                ).fetchone()
+                if item is None or str(item[1]) != "answered":
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+                question_id = str(item[0])
+                connection.execute(
+                    """UPDATE session_items SET status = 'presented'
+                       WHERE session_id = ? AND position = ?""",
+                    (session_id, previous_position),
+                )
+                connection.execute(
+                    """UPDATE session_items SET status = 'queued'
+                       WHERE session_id = ? AND position = ? AND status = 'presented'""",
+                    (session_id, int(position)),
+                )
+                cursor = connection.execute(
+                    """UPDATE sessions
+                       SET version = version + 1, current_position = ?,
+                           status = 'active', last_activity_at_utc = ?
+                       WHERE id = ? AND version = ?""",
+                    (previous_position, now, session_id, expected_version),
+                )
+                if cursor.rowcount != 1:
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+                payload = json.dumps(
+                    {
+                        "session_id": session_id,
+                        "question_id": question_id,
+                        "previous_version": expected_version,
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+                connection.execute(
+                    """INSERT INTO audit_events(
+                           event_type, actor_user_id, profile_id, payload_json, created_at_utc
+                       ) VALUES ('session_undo_navigation', ?, ?, ?, ?)""",
+                    (actor_user_id, str(profile_id), payload, now),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._async_writer(undo)
         session = await self.async_get_session(session_id)
         assert session is not None
         return session
