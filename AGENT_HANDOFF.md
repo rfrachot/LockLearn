@@ -3,8 +3,8 @@
 ## Current state
 
 P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.7 are complete. P1 and P2 are
-closed PASS. P3 is in progress; P3.8 — persistent sessions, CAS concurrency and
-cross-client resume — is the next work package.
+closed PASS. P3 is in progress on `feat/p3-sessions`; P3.8 — persistent sessions,
+CAS concurrency and cross-client resume — is implemented and awaiting the local gate.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -974,3 +974,63 @@ Renaud's local P3.7 gate is fully green after the final typing/style remediation
 
 P3.7 is closed PASS. The long-lived feat/p1-content-core branch is ready to
 merge into main before P3.8 starts on a dedicated sessions branch.
+
+
+## Branch cut after P3.7
+
+The long-lived feat/p1-content-core branch was merged into main through PR #1
+with a merge commit, preserving full history. P3.8 starts from that merged main
+on dedicated branch feat/p3-sessions.
+
+## P3.8 implementation pending verification
+
+P3.8 upgrades the P0 session prototype into real persistent application state.
+
+Session snapshots now persist and return:
+- Profile/Track ownership;
+- type, strategy, status and version;
+- settings_json;
+- question_count/current_position;
+- full session_items with exact CardDefinition identity and renderer payload;
+- immutable session_answers history;
+- derived current_question.
+
+Backend-prepared SessionQuestion rows are validated against enabled Track card
+rules and the exact active CardDefinition. The persisted payload is pinned to the
+backend's active content generation rather than trusting a client-supplied
+generation.
+
+session/answer now CAS-checks session status/version and the exact question at
+current_position in one writer transaction. It marks the current item answered,
+presents the next item, advances the cursor/version and appends the immutable
+answer. Two same-version answers cannot both commit.
+
+pause/resume/complete are versioned CAS transitions. Completed sessions cannot
+resume. session/pause uses paused=true/false because the indicative V1 API names
+only that lifecycle command.
+
+session/subscribe returns current persistent state and publishes only successful
+winning mutations. Disconnect removes listeners but leaves state.db untouched,
+so another client can recover through session/get.
+
+All public session commands now use real Profile ACL instead of the old P0
+user-derived probe profile. READ gates get/subscribe; ANSWER gates mutations.
+Invisible private profiles preserve not_found semantics while visible viewers
+cannot mutate.
+
+session/undo in P3.8 is deliberately navigation-only: it reopens the last
+answered session item through CAS, preserves historical session_answers and
+appends a session_undo_navigation audit event. It never edits ReviewEvent or
+progress; pedagogical undo remains P3.12.
+
+ADR-0029 records these boundaries. Tests cover persistent settings/questions,
+storage close/reopen resume, simultaneous answer CAS, wrong-question rejection,
+pause/resume/complete, navigation undo, winner-only subscriptions, real ACL and
+cross-WebSocket-client resume.
+
+Next required local gate on feat/p3-sessions:
+- python3 -m ruff format --check .
+- python3 -m ruff check .
+- python3 -m mypy custom_components datasets tests
+- python3 datasets/tools/validate_resources.py
+- python3 -m pytest -q --tb=short
