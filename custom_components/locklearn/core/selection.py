@@ -4,13 +4,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
-
-from ..storage.repositories import TracksRepository
+from typing import Any, Protocol
 from .clock import Clock, SystemClock
 
 DEFAULT_SIBLING_GAP_NEW_MINUTES = 1440
 DEFAULT_SIBLING_GAP_REVIEW_MINUTES = 240
+
+
+class SelectionRepository(Protocol):
+    async def async_get(self, track_id: str) -> dict[str, Any] | None: ...
+
+    async def async_selection_constraints(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        pack_version_id: str,
+        learning_item_id: str,
+        card_key: str,
+    ) -> dict[str, Any]: ...
 
 
 class SelectionConstraintError(ValueError):
@@ -31,7 +43,7 @@ class SelectionConstraintService:
 
     def __init__(
         self,
-        tracks: TracksRepository,
+        tracks: SelectionRepository,
         *,
         clock: Clock | None = None,
         sibling_gap_new_minutes: int = DEFAULT_SIBLING_GAP_NEW_MINUTES,
