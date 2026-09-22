@@ -5,6 +5,13 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P1.4 multilingual locale primitives with BCP 47 canonicalization, ISO 15924
+  script metadata, deterministic locale fallback and versioned normalization policies.
+- Generic script-aware normalization policy registry with explicit Unicode,
+  case, whitespace and punctuation behavior; language-specific choices remain data-driven.
+- Versioned `Term.normalized_text` metadata and rebuild guards that reject
+  behavior changes without a normalization-version bump.
+- ADR-0011 defining multilingual normalization, stable Term identity and fallback rules.
 - P1.3 content-block contract with semantic roles, explicit reveal/mask metadata,
   structured reading/furigana/ruby segments and media references.
 - Strict bounded rich-text AST that rejects arbitrary HTML, links, remote media
