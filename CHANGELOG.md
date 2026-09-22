@@ -5,6 +5,13 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P3.7 versioned panel free-text grading for exact, any_of and conservative
+  script-gated fuzzy_normalized policies, with explicit correct/wrong/unrecognized
+  outcomes and normalization-version propagation.
+- Recoverable "answer should be accepted" content reports persisted as private
+  state audit feedback through the authenticated locklearn/content/report API.
+- ADR-0028 documenting the grading/report boundary, semantic-diacritic protection
+  and the no-false-SRS-failure contract for unrecognized answers.
 - P3.6 deterministic panel quiz engine with 4–6 option MCQ, grammar cloze-MCQ,
   explicit IDK, answer-position balancing and deterministic example rotation.
 - Safe distractor filtering for same native concept, accepted normalized answers,
