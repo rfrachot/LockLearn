@@ -309,6 +309,8 @@ class DatasetManager:
                 )
                 if actual_sha != release.artifact_sha256:
                     raise DatasetInstallError("downloaded dataset artifact checksum does not match")
+                if download.stat().st_size != release.artifact_size:
+                    raise DatasetInstallError("downloaded dataset artifact size does not match")
                 validated = await asyncio.to_thread(
                     validate_dataset_package,
                     download,
@@ -332,6 +334,16 @@ class DatasetManager:
                 await asyncio.to_thread(_store_package_atomically, extracted, package_path)
 
                 installed_rows = await self._storage.async_dataset_inventory()
+                current = next(
+                    (row for row in installed_rows if row["dataset_id"] == dataset_id),
+                    None,
+                )
+                if current is not None and str(current["version"]) == release.version:
+                    if str(current["canonical_content_hash"]) != package.canonical_content_hash:
+                        raise DatasetInstallError(
+                            "an installed dataset version cannot change canonical content"
+                        )
+                    raise DatasetInstallError("dataset version is already installed")
                 packages = await asyncio.to_thread(
                     self._complete_package_set,
                     installed_rows,
@@ -475,8 +487,13 @@ class DatasetManager:
                     f"cached package required to rebuild generation is missing: {dataset_id}"
                 )
             metadata = self._validator.validate_package(path)
-            if metadata.dataset_id != dataset_id:
-                raise DatasetInstallError("cached package identity does not match active dataset")
+            _validate_cached_package(
+                path,
+                metadata,
+                dataset_id=dataset_id,
+                version=str(row["version"]),
+                canonical_content_hash=str(row["canonical_content_hash"]),
+            )
             packages.append(path)
         return tuple(sorted(packages))
 
@@ -499,6 +516,17 @@ class DatasetManager:
                 raise DatasetRemovalError(
                     f"cached package required to rebuild generation is missing: {dataset_id}"
                 )
+            metadata = self._validator.validate_package(path)
+            try:
+                _validate_cached_package(
+                    path,
+                    metadata,
+                    dataset_id=dataset_id,
+                    version=str(row["version"]),
+                    canonical_content_hash=str(row["canonical_content_hash"]),
+                )
+            except DatasetInstallError as err:
+                raise DatasetRemovalError(str(err)) from err
             packages.append(path)
         return tuple(sorted(packages))
 
@@ -723,6 +751,28 @@ def _validate_package_matches_manifest(package: Any, manifest: DatasetManifest) 
         ).fetchone()
     if row is None or str(row[0]) != manifest.dataset_version:
         raise DatasetInstallError("package database version does not match signed manifest")
+
+
+def _validate_cached_package(
+    path: Path,
+    package: Any,
+    *,
+    dataset_id: str,
+    version: str,
+    canonical_content_hash: str,
+) -> None:
+    if package.dataset_id != dataset_id:
+        raise DatasetInstallError("cached package identity does not match active dataset")
+    if package.canonical_content_hash != canonical_content_hash:
+        raise DatasetInstallError("cached package content hash does not match active dataset")
+    with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro&immutable=1", uri=True) as db:
+        row = db.execute(
+            """SELECT version FROM dataset_versions
+               WHERE dataset_version_id = ? AND dataset_id = ?""",
+            (package.dataset_version_id, dataset_id),
+        ).fetchone()
+    if row is None or str(row[0]) != version:
+        raise DatasetInstallError("cached package version does not match active dataset")
 
 
 def _package_cache_path(root: Path, dataset_id: str, version: str) -> Path:
