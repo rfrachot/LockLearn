@@ -69,14 +69,44 @@ CREATE TABLE IF NOT EXISTS generation_metadata (
     package_set_hash TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS licenses (license_id TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS licenses (
+    license_id TEXT PRIMARY KEY,
+    spdx_or_internal_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    version TEXT NOT NULL,
+    commercial_use_allowed INTEGER NOT NULL CHECK (commercial_use_allowed IN (0, 1)),
+    derivatives_allowed INTEGER NOT NULL CHECK (derivatives_allowed IN (0, 1)),
+    share_alike INTEGER NOT NULL CHECK (share_alike IN (0, 1)),
+    attribution_required INTEGER NOT NULL CHECK (attribution_required IN (0, 1)),
+    source_url TEXT NOT NULL,
+    notes TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS sources (
     source_id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     provider TEXT NOT NULL,
-    license_id TEXT NOT NULL REFERENCES licenses(license_id)
+    homepage TEXT NOT NULL,
+    license_id TEXT NOT NULL REFERENCES licenses(license_id),
+    attribution_template TEXT NOT NULL,
+    adapter_id TEXT NOT NULL,
+    refresh_policy TEXT NOT NULL,
+    commercial_compatible INTEGER NOT NULL CHECK (commercial_compatible IN (0, 1)),
+    notes TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS source_snapshots (
+    snapshot_id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL REFERENCES sources(source_id),
+    upstream_version TEXT NOT NULL,
+    upstream_date TEXT,
+    retrieved_at TEXT NOT NULL,
+    source_url TEXT NOT NULL,
+    sha256 TEXT NOT NULL CHECK (length(sha256) = 64),
+    adapter_version TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS source_snapshots_source_retrieved
+ON source_snapshots(source_id, retrieved_at);
 
 CREATE TABLE IF NOT EXISTS datasets (dataset_id TEXT PRIMARY KEY);
 
@@ -89,7 +119,10 @@ CREATE TABLE IF NOT EXISTS dataset_sources (
 CREATE TABLE IF NOT EXISTS dataset_licenses (
     dataset_id TEXT NOT NULL REFERENCES datasets(dataset_id),
     license_id TEXT NOT NULL REFERENCES licenses(license_id),
-    PRIMARY KEY(dataset_id, license_id)
+    license_scope TEXT NOT NULL CHECK (
+        license_scope IN ('editorial', 'dataset', 'asset')
+    ),
+    PRIMARY KEY(dataset_id, license_id, license_scope)
 );
 
 CREATE TABLE IF NOT EXISTS dataset_versions (
@@ -109,6 +142,32 @@ CREATE TABLE IF NOT EXISTS dataset_packages (
     canonical_content_hash TEXT NOT NULL,
     UNIQUE(dataset_id)
 );
+
+CREATE TABLE IF NOT EXISTS provenance_records (
+    provenance_id TEXT PRIMARY KEY,
+    dataset_id TEXT NOT NULL REFERENCES datasets(dataset_id),
+    object_type TEXT NOT NULL CHECK (
+        object_type IN ('dataset', 'concept', 'term', 'learning_item', 'content_block', 'pack', 'asset')
+    ),
+    object_id TEXT NOT NULL,
+    source_snapshot_id TEXT NOT NULL REFERENCES source_snapshots(snapshot_id),
+    license_id TEXT NOT NULL REFERENCES licenses(license_id),
+    license_scope TEXT NOT NULL CHECK (
+        license_scope IN ('editorial', 'dataset', 'asset')
+    ),
+    source_record_id TEXT,
+    author TEXT,
+    language_tag TEXT,
+    modified_from_source INTEGER NOT NULL CHECK (modified_from_source IN (0, 1)),
+    attribution_text TEXT,
+    FOREIGN KEY(dataset_id, license_id, license_scope)
+        REFERENCES dataset_licenses(dataset_id, license_id, license_scope),
+    UNIQUE(object_type, object_id, source_snapshot_id, license_id, license_scope)
+);
+CREATE INDEX IF NOT EXISTS provenance_dataset_object
+ON provenance_records(dataset_id, object_type, object_id);
+CREATE INDEX IF NOT EXISTS provenance_snapshot
+ON provenance_records(source_snapshot_id);
 
 CREATE TABLE IF NOT EXISTS concepts (
     concept_id TEXT PRIMARY KEY,
@@ -412,6 +471,9 @@ CONTENT_REQUIRED_INDEXES = frozenset(
         "card_definitions_item_facets",
         "learning_item_tags_tag_item",
         "concept_terms_concept_term",
+        "source_snapshots_source_retrieved",
+        "provenance_dataset_object",
+        "provenance_snapshot",
     }
 )
 
@@ -419,7 +481,13 @@ CONTENT_REQUIRED_TABLES = frozenset(
     {
         "schema_version",
         "generation_metadata",
+        "licenses",
+        "sources",
+        "source_snapshots",
+        "dataset_sources",
+        "dataset_licenses",
         "dataset_packages",
+        "provenance_records",
         "concepts",
         "terms",
         "concept_terms",

@@ -139,6 +139,7 @@ class ContentGenerationValidator:
                 "dataset_sources",
                 "dataset_licenses",
                 "dataset_versions",
+                "provenance_records",
                 "concepts",
                 "terms",
                 "learning_items",
@@ -159,6 +160,7 @@ class ContentGenerationValidator:
             self._validate_stable_ids(connection)
             self._validate_id_migrations(connection, require_card_coverage=False)
             self._validate_content_blocks(connection)
+            self._validate_provenance(connection)
             self._validate_tombstones(connection)
             return PackageMetadata(
                 package_id=str(row[0]),
@@ -218,6 +220,7 @@ class ContentGenerationValidator:
             self._validate_stable_ids(connection)
             self._validate_id_migrations(connection, require_card_coverage=True)
             self._validate_content_blocks(connection)
+            self._validate_provenance(connection)
             self._validate_tombstones(connection)
             self._validate_preaggregates(connection)
             return metadata
@@ -283,6 +286,9 @@ class ContentGenerationValidator:
             ("datasets", "dataset_id"),
             ("dataset_versions", "dataset_version_id"),
             ("dataset_packages", "package_id"),
+            ("source_snapshots", "snapshot_id"),
+            ("provenance_records", "provenance_id"),
+            ("provenance_records", "object_id"),
             ("concepts", "concept_id"),
             ("terms", "term_id"),
             ("learning_items", "learning_item_id"),
@@ -461,6 +467,91 @@ class ContentGenerationValidator:
                 raise ContentValidationError(f"invalid content block payload: {block_id}") from err
 
     @staticmethod
+    def _validate_provenance(connection: sqlite3.Connection) -> None:
+        """Require reproducible source snapshots and coherent provenance boundaries."""
+        for snapshot_id, sha256 in connection.execute(
+            "SELECT snapshot_id, sha256 FROM source_snapshots"
+        ):
+            if not re.fullmatch(r"[0-9a-f]{64}", str(sha256)):
+                raise ContentValidationError(
+                    f"source snapshot has invalid SHA-256: {snapshot_id}"
+                )
+
+        missing_snapshot = connection.execute(
+            """SELECT dataset_source.dataset_id, dataset_source.source_id
+               FROM dataset_sources AS dataset_source
+               WHERE NOT EXISTS (
+                   SELECT 1
+                   FROM provenance_records AS provenance
+                   JOIN source_snapshots AS snapshot
+                     ON snapshot.snapshot_id = provenance.source_snapshot_id
+                   WHERE provenance.dataset_id = dataset_source.dataset_id
+                     AND snapshot.source_id = dataset_source.source_id
+               )
+               LIMIT 1"""
+        ).fetchone()
+        if missing_snapshot is not None:
+            raise ContentValidationError(
+                "dataset source has no provenance-backed source snapshot: "
+                f"{missing_snapshot[1]}"
+            )
+
+        undeclared_source = connection.execute(
+            """SELECT provenance.provenance_id
+               FROM provenance_records AS provenance
+               JOIN source_snapshots AS snapshot
+                 ON snapshot.snapshot_id = provenance.source_snapshot_id
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM dataset_sources
+                   WHERE dataset_sources.dataset_id = provenance.dataset_id
+                     AND dataset_sources.source_id = snapshot.source_id
+               )
+               LIMIT 1"""
+        ).fetchone()
+        if undeclared_source is not None:
+            raise ContentValidationError(
+                f"provenance uses an undeclared dataset source: {undeclared_source[0]}"
+            )
+
+        references = {
+            "dataset": ("datasets", "dataset_id", "dataset_id"),
+            "concept": ("concepts", "concept_id", "dataset_id"),
+            "term": ("terms", "term_id", "dataset_id"),
+            "learning_item": ("learning_items", "learning_item_id", "dataset_id"),
+            "pack": ("packs", "pack_id", "dataset_id"),
+        }
+        rows = connection.execute(
+            """SELECT provenance_id, dataset_id, object_type, object_id
+               FROM provenance_records"""
+        ).fetchall()
+        for raw_provenance_id, raw_dataset_id, raw_type, raw_object_id in rows:
+            provenance_id = str(raw_provenance_id)
+            dataset_id = str(raw_dataset_id)
+            object_type = str(raw_type)
+            object_id = str(raw_object_id)
+            if object_type == "asset":
+                continue
+            if object_type == "content_block":
+                match = connection.execute(
+                    """SELECT 1
+                       FROM content_blocks AS block
+                       JOIN learning_items AS item
+                         ON item.learning_item_id = block.learning_item_id
+                       WHERE block.content_block_id = ? AND item.dataset_id = ?""",
+                    (object_id, dataset_id),
+                ).fetchone()
+            else:
+                table, id_column, dataset_column = references[object_type]
+                match = connection.execute(
+                    f"SELECT 1 FROM {table} WHERE {id_column} = ? AND {dataset_column} = ?",
+                    (object_id, dataset_id),
+                ).fetchone()
+            if match is None:
+                raise ContentValidationError(
+                    f"provenance target does not exist in its dataset: {provenance_id}"
+                )
+
+    @staticmethod
     def _validate_tombstones(connection: sqlite3.Connection) -> None:
         missing = connection.execute(
             """SELECT tombstone.object_type, tombstone.stable_id
@@ -590,17 +681,47 @@ class _TableMerge:
 
 
 _MERGES = (
-    _TableMerge("licenses", ("license_id",)),
-    _TableMerge("sources", ("source_id",), ("name", "provider", "license_id")),
+    _TableMerge(
+        "licenses",
+        ("license_id",),
+        (
+            "spdx_or_internal_id",
+            "name",
+            "version",
+            "commercial_use_allowed",
+            "derivatives_allowed",
+            "share_alike",
+            "attribution_required",
+            "source_url",
+            "notes",
+        ),
+    ),
+    _TableMerge(
+        "sources",
+        ("source_id",),
+        (
+            "name",
+            "provider",
+            "homepage",
+            "license_id",
+            "attribution_template",
+            "adapter_id",
+            "refresh_policy",
+            "commercial_compatible",
+            "notes",
+        ),
+    ),
+    _TableMerge("source_snapshots", ("snapshot_id",)),
     _TableMerge("datasets", ("dataset_id",)),
     _TableMerge("dataset_sources", ("dataset_id", "source_id")),
-    _TableMerge("dataset_licenses", ("dataset_id", "license_id")),
+    _TableMerge("dataset_licenses", ("dataset_id", "license_id", "license_scope")),
     _TableMerge("dataset_versions", ("dataset_version_id",)),
     _TableMerge(
         "dataset_packages",
         ("package_id",),
         ("dataset_id", "dataset_version_id", "built_at_utc", "canonical_content_hash"),
     ),
+    _TableMerge("provenance_records", ("provenance_id",)),
     _TableMerge(
         "concepts",
         ("concept_id",),
@@ -843,6 +964,28 @@ class ContentGenerationBuilder:
     @staticmethod
     def _validate_stable_conflicts(connection: sqlite3.Connection) -> None:
         checks = (
+            (
+                "licenses",
+                "license_id",
+                (
+                    "spdx_or_internal_id",
+                    "commercial_use_allowed",
+                    "derivatives_allowed",
+                    "share_alike",
+                    "attribution_required",
+                    "source_url",
+                ),
+            ),
+            (
+                "sources",
+                "source_id",
+                ("homepage", "license_id", "attribution_template", "adapter_id"),
+            ),
+            (
+                "source_snapshots",
+                "snapshot_id",
+                ("source_id", "upstream_version", "source_url", "sha256", "adapter_version"),
+            ),
             ("concepts", "concept_id", ("dataset_id", "source_id")),
             ("terms", "term_id", ("dataset_id",)),
             ("learning_items", "learning_item_id", ("dataset_id",)),

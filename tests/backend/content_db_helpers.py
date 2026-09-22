@@ -43,7 +43,7 @@ def create_package(
     active_item_ids: tuple[str, ...] = (ITEM_A,),
     superseded: tuple[tuple[str, str], ...] = (),
 ) -> Path:
-    """Create one tiny self-contained package using the P1.6 normalized schema."""
+    """Create one tiny self-contained package using the normalized content schema."""
     initialize_content_database(path)
     dataset_version_id = f"locklearn:dataset-version:{version}"
     package_id = f"locklearn:package:{version}"
@@ -52,14 +52,40 @@ def create_package(
 
     with sqlite3.connect(path) as connection:
         connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute("INSERT INTO licenses VALUES ('MIT')")
         connection.execute(
-            "INSERT INTO sources VALUES (?, 'Test source', 'LockLearn tests', 'MIT')",
+            """INSERT INTO licenses VALUES (
+                   'CC-BY-SA-4.0', 'CC-BY-SA-4.0',
+                   'Creative Commons Attribution-ShareAlike 4.0 International', '4.0',
+                   1, 1, 1, 1, 'https://creativecommons.org/licenses/by-sa/4.0/',
+                   'Synthetic test license'
+               )"""
+        )
+        connection.execute(
+            """INSERT INTO sources VALUES (
+                   ?, 'Test source', 'LockLearn tests', 'https://example.invalid/source',
+                   'CC-BY-SA-4.0', 'Test source attribution', 'test_adapter',
+                   'release-driven', 1, 'Synthetic source'
+               )""",
             (SOURCE_ID,),
+        )
+        connection.execute(
+            """INSERT INTO source_snapshots VALUES (
+                   ?, ?, ?, NULL, '2026-09-22T10:00:00+00:00',
+                   'https://example.invalid/source/snapshot', ?, '1.0.0'
+               )""",
+            (
+                f"locklearn:snapshot:{version}",
+                SOURCE_ID,
+                version,
+                "0" * 64,
+            ),
         )
         connection.execute("INSERT INTO datasets VALUES (?)", (DATASET_ID,))
         connection.execute("INSERT INTO dataset_sources VALUES (?, ?)", (DATASET_ID, SOURCE_ID))
-        connection.execute("INSERT INTO dataset_licenses VALUES (?, 'MIT')", (DATASET_ID,))
+        connection.execute(
+            "INSERT INTO dataset_licenses VALUES (?, 'CC-BY-SA-4.0', 'dataset')",
+            (DATASET_ID,),
+        )
         connection.execute(
             "INSERT INTO dataset_versions VALUES (?, ?, ?, ?, ?)",
             (dataset_version_id, DATASET_ID, version, "2026-09-22T12:00:00+00:00", version * 8),
@@ -72,6 +98,18 @@ def create_package(
                 dataset_version_id,
                 "2026-09-22T12:00:00+00:00",
                 version * 8,
+            ),
+        )
+        connection.execute(
+            """INSERT INTO provenance_records VALUES (
+                   ?, ?, 'dataset', ?, ?, 'CC-BY-SA-4.0', 'dataset',
+                   NULL, NULL, NULL, 1, 'Synthetic dataset provenance'
+               )""",
+            (
+                f"locklearn:provenance:{version}",
+                DATASET_ID,
+                DATASET_ID,
+                f"locklearn:snapshot:{version}",
             ),
         )
         connection.execute(
