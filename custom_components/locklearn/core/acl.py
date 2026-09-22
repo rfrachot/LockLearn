@@ -149,15 +149,8 @@ class ProfileACLService:
             permission=ProfilePermission.MANAGE_ACL,
         )
         resolved_role = ProfileRole(role)
-        current_role = await self._repository.async_get_role(profile_id, target_ha_user_id)
-        if (
-            current_role == ProfileRole.OWNER.value
-            and resolved_role is not ProfileRole.OWNER
-            and await self._repository.async_count_owners(profile_id) <= 1
-        ):
-            raise LastOwnerError(profile_id)
         now = self._clock.now().isoformat()
-        await self._repository.async_upsert_member(
+        changed = await self._repository.async_set_member_role_preserving_owner(
             ProfileMemberRecord(
                 profile_id=profile_id,
                 ha_user_id=target_ha_user_id,
@@ -165,6 +158,8 @@ class ProfileACLService:
                 created_at_utc=now,
             )
         )
+        if not changed:
+            raise LastOwnerError(profile_id)
 
     async def async_remove_member(
         self,
@@ -179,8 +174,9 @@ class ProfileACLService:
             ha_user_id=actor_ha_user_id,
             permission=ProfilePermission.MANAGE_ACL,
         )
-        target_role = await self._repository.async_get_role(profile_id, target_ha_user_id)
-        if target_role == ProfileRole.OWNER.value:
-            if await self._repository.async_count_owners(profile_id) <= 1:
-                raise LastOwnerError(profile_id)
-        return await self._repository.async_delete_member(profile_id, target_ha_user_id)
+        result = await self._repository.async_delete_member_preserving_owner(
+            profile_id, target_ha_user_id
+        )
+        if result == "last_owner":
+            raise LastOwnerError(profile_id)
+        return result == "deleted"
