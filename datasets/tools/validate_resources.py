@@ -264,6 +264,49 @@ def validate() -> None:
         ):
             raise ValueError(f"invalid artifact host allowlist for {dataset_id}")
 
+    bundled = json.loads(
+        (RUNTIME_RESOURCES / "bundled_datasets.json").read_text(encoding="utf-8")
+    )
+    if bundled.get("schema_version") != 1:
+        raise ValueError("bundled dataset registry schema_version must be 1")
+    bundled_rows = bundled.get("datasets")
+    if not isinstance(bundled_rows, list):
+        raise ValueError("bundled dataset registry datasets must be an array")
+    bundled_ids: set[str] = set()
+    for row in bundled_rows:
+        if not isinstance(row, dict):
+            raise ValueError("bundled dataset registry rows must be objects")
+        dataset_id = row.get("dataset_id")
+        if not isinstance(dataset_id, str) or not dataset_id or dataset_id in bundled_ids:
+            raise ValueError("bundled dataset IDs must be unique non-empty strings")
+        bundled_ids.add(dataset_id)
+        version = row.get("version")
+        if not isinstance(version, str) or not version:
+            raise ValueError(f"bundled dataset version is required: {dataset_id}")
+        raw_path = row.get("path")
+        if not isinstance(raw_path, str) or not raw_path:
+            raise ValueError(f"bundled dataset path is required: {dataset_id}")
+        relative = Path(raw_path)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError(f"bundled dataset path must be relative: {dataset_id}")
+        sha256 = row.get("sha256")
+        if (
+            not isinstance(sha256, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", sha256)
+        ):
+            raise ValueError(f"invalid bundled dataset SHA-256: {dataset_id}")
+        size = row.get("size")
+        if isinstance(size, bool) or not isinstance(size, int) or size < 1:
+            raise ValueError(f"invalid bundled dataset size: {dataset_id}")
+        artifact = RUNTIME_RESOURCES.parent / relative
+        if not artifact.is_file():
+            raise ValueError(f"bundled dataset artifact is missing: {dataset_id}")
+        data = artifact.read_bytes()
+        if len(data) != size:
+            raise ValueError(f"bundled dataset size does not match artifact: {dataset_id}")
+        if __import__("hashlib").sha256(data).hexdigest() != sha256:
+            raise ValueError(f"bundled dataset SHA-256 does not match artifact: {dataset_id}")
+
     signing = json.loads((RUNTIME_RESOURCES / "signing_keys.json").read_text(encoding="utf-8"))
     if signing.get("schema_version") != 1 or not isinstance(signing.get("keys"), list):
         raise ValueError("runtime signing key registry is invalid")
