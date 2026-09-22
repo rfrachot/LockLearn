@@ -5,6 +5,16 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P2.1 state.db schema v2 covering the V1 profile/track/ACL-ready persistence
+  skeleton, progress/review events, sessions, scheduler, notifications,
+  annotations, stats and settings with required hot-query indexes.
+- Recoverable v1→v2 state migration using a coherent SQLite backup, out-of-place
+  candidate build, integrity checks and atomic replacement.
+- Application repositories for Profile, Track/PackVersion pinning, lazy Progress
+  materialization and settings, with explicit active-content reference validation.
+- Cross-domain integrity audit for state references that cannot use SQL foreign
+  keys into the independently replaceable content.db.
+- ADR-0019 defining the P2.1 state persistence and migration boundary.
 - P1.11 media-ready public Asset schema v2 with signed external image/audio
   payloads, strict path/MIME/dimension checks, asset-scope licensing/provenance
   and same-dataset Facet/ContentBlock references.
