@@ -11,11 +11,14 @@ from homeassistant.core import HomeAssistant
 
 from ..const import CONF_CREATE_PERSONAL_PROFILE, DATA_RUNTIME, DOMAIN, FRONTEND_PROTOCOL_VERSION
 from ..core.acl import LastOwnerError, ProfilePermission, ProfileRole
+from ..core.content import GradingOutcome, GradingPolicyKind
+from ..core.content_reports import ContentReportError
+from ..core.grading import FreeTextGradingResult
 from ..core.profiles import ProfileValidationError
 from ..core.tracks import TrackValidationError
 from ..runtime import LockLearnRuntime
 from ..storage.database import SessionNotFoundError, StaleSessionError
-from ..storage.repositories import ContentReferenceError
+from ..storage.repositories import CardReference, ContentReferenceError
 
 ERR_FORBIDDEN = "locklearn/forbidden"
 ERR_NOT_FOUND = "locklearn/not_found"
@@ -620,6 +623,84 @@ async def ws_datasets_list(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/content/report",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("card_key"): str,
+        vol.Required("learning_item_id"): str,
+        vol.Required("prompt_facet_id"): str,
+        vol.Required("answer_facet_id"): str,
+        vol.Required("submitted_text"): str,
+        vol.Optional("normalized_submission"): vol.Any(str, None),
+        vol.Required("grading_policy_kind"): vol.In(("exact", "any_of", "fuzzy_normalized")),
+        vol.Required("grading_policy_version"): vol.All(int, vol.Range(min=1)),
+        vol.Required("normalization_version"): vol.All(int, vol.Range(min=1)),
+        vol.Required("dataset_generation"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_content_report(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Report a plausible free-text answer that should be accepted."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.ANSWER,
+    ):
+        return
+
+    track = await runtime.storage.repositories.tracks.async_get(msg["track_id"])
+    if track is None or str(track["profile_id"]) != profile_id:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Track not found")
+        return
+
+    grade = FreeTextGradingResult(
+        outcome=GradingOutcome.UNRECOGNIZED,
+        submitted_text=msg["submitted_text"],
+        normalized_submission=msg.get("normalized_submission"),
+        matched_answer=None,
+        grading_policy_kind=GradingPolicyKind(msg["grading_policy_kind"]),
+        grading_policy_version=msg["grading_policy_version"],
+        normalization_version=msg["normalization_version"],
+        reportable=True,
+        reason="user_claimed_should_be_accepted",
+    )
+    try:
+        receipt = await runtime.content_reports.async_report_should_be_accepted(
+            actor_user_id=connection.user.id,
+            profile_id=profile_id,
+            track_id=msg["track_id"],
+            card=CardReference(
+                card_key=msg["card_key"],
+                learning_item_id=msg["learning_item_id"],
+                prompt_facet_id=msg["prompt_facet_id"],
+                answer_facet_id=msg["answer_facet_id"],
+            ),
+            grade=grade,
+            dataset_generation=msg["dataset_generation"],
+        )
+    except (ContentReportError, ContentReferenceError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(
+        msg["id"],
+        {
+            "report_id": receipt.report_id,
+            "grading_result": receipt.grading_result,
+            "srs_penalized": receipt.srs_penalized,
+        },
+    )
+
+
 @websocket_api.websocket_command({vol.Required("type"): "locklearn/admin/storage/status"})
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -806,6 +887,7 @@ COMMANDS = (
     ws_tracks_integrate_pack_update,
     ws_packs_list,
     ws_datasets_list,
+    ws_content_report,
     ws_admin_storage_status,
     ws_session_start,
     ws_session_get,
