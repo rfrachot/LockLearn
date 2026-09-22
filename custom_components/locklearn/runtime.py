@@ -12,6 +12,7 @@ from .core.operations import OperationRegistry
 from .datasets.manager import (
     DatasetManager,
     load_runtime_dataset_definitions,
+    load_runtime_source_freshness,
     load_runtime_trust_store,
 )
 from .datasets.policy import OfficialRegistryPolicy
@@ -42,7 +43,7 @@ class LockLearnRuntime:
         ) -> None:
             severity = (
                 ir.IssueSeverity.WARNING
-                if translation_key == "dataset_discovery_failed"
+                if translation_key in {"dataset_discovery_failed", "dataset_sources_stale"}
                 else ir.IssueSeverity.ERROR
             )
             ir.async_create_issue(
@@ -65,6 +66,7 @@ class LockLearnRuntime:
             definitions=load_runtime_dataset_definitions(),
             trust_store=load_runtime_trust_store(),
             policy=OfficialRegistryPolicy.from_runtime(),
+            freshness_targets=load_runtime_source_freshness(),
             issue_callback=report_issue,
             issue_clear_callback=clear_issue,
         )
