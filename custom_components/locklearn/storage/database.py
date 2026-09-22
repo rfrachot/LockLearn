@@ -6,15 +6,22 @@ import asyncio
 import json
 import sqlite3
 import threading
+import uuid
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypeVar
 
-from ..const import CONTENT_SCHEMA_VERSION, DB_SCHEMA_VERSION
+from ..const import DB_SCHEMA_VERSION
 from ..core.clock import Clock, SystemClock
-from .schema import CONTENT_SCHEMA, STATE_SCHEMA
+from .content import (
+    ContentBuildResult,
+    ContentGenerationBuilder,
+    ContentGenerationManager,
+    GenerationMetadata,
+)
+from .schema import STATE_SCHEMA
 
 T = TypeVar("T")
 
@@ -33,6 +40,16 @@ class StoragePaths:
 
     state_db: Path
     content_db: Path
+
+    @property
+    def content_root(self) -> Path:
+        """Return the root containing current, staging, and immutable generations."""
+        return self.content_db.parent
+
+    @property
+    def content_staging_dir(self) -> Path:
+        """Return the same-filesystem staging directory used for atomic activation."""
+        return self.content_root / "staging"
 
     @classmethod
     def from_config_dir(cls, config_dir: str) -> StoragePaths:
@@ -55,24 +72,11 @@ def _configure_state_connection(connection: sqlite3.Connection) -> None:
     connection.execute("PRAGMA foreign_keys = ON")
 
 
-def _initialize_database(path: Path, schema: str, version: int, *, state: bool) -> None:
+def _initialize_state_database(path: Path, schema: str, version: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    existing_immutable_content = not state and path.exists()
-    connection = sqlite3.connect(
-        _read_only_uri(path) if existing_immutable_content else path,
-        uri=existing_immutable_content,
-    )
+    connection = sqlite3.connect(path)
     try:
-        if existing_immutable_content:
-            row = connection.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
-            if row is None or row[0] != version:
-                found = None if row is None else row[0]
-                raise RuntimeError(f"Unsupported schema version {found} for {path}")
-            return
-        if state:
-            _configure_state_connection(connection)
-        else:
-            connection.execute("PRAGMA foreign_keys = ON")
+        _configure_state_connection(connection)
         connection.executescript(schema)
         row = connection.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
         if row is None:
@@ -104,6 +108,9 @@ class SQLiteStorage:
         self._long_executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="locklearn-db-long"
         )
+        self.content_generations = ContentGenerationManager(
+            self.paths.content_db, self._long_executor
+        )
         self._writer_connection: sqlite3.Connection | None = None
         self._writer_thread_id: int | None = None
         self._writes_gate = asyncio.Lock()
@@ -118,13 +125,17 @@ class SQLiteStorage:
     async def async_open(self) -> None:
         """Create schemas and the thread-confined writer connection."""
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(self._writer_executor, self._open_sync)
+        try:
+            await loop.run_in_executor(self._writer_executor, self._open_sync)
+            await self.content_generations.async_open(built_at_utc=self._clock.now().isoformat())
+        except Exception:
+            await loop.run_in_executor(self._writer_executor, self._close_sync)
+            await asyncio.to_thread(self._shutdown_executors)
+            self._closed = True
+            raise
 
     def _open_sync(self) -> None:
-        _initialize_database(self.paths.state_db, STATE_SCHEMA, DB_SCHEMA_VERSION, state=True)
-        _initialize_database(
-            self.paths.content_db, CONTENT_SCHEMA, CONTENT_SCHEMA_VERSION, state=False
-        )
+        _initialize_state_database(self.paths.state_db, STATE_SCHEMA, DB_SCHEMA_VERSION)
         self._writer_connection = sqlite3.connect(self.paths.state_db)
         _configure_state_connection(self._writer_connection)
         self._writer_thread_id = threading.get_ident()
@@ -147,17 +158,20 @@ class SQLiteStorage:
     async def _async_reader(self, operation: Callable[[sqlite3.Connection], T]) -> T:
         if self._closed:
             raise RuntimeError("LockLearn storage is closed")
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(self._reader_executor, self._run_reader, operation)
+        async with await self.content_generations.acquire_reader() as lease:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                self._reader_executor, self._run_reader, operation, lease.path
+            )
 
-    def _run_reader(self, operation: Callable[[sqlite3.Connection], T]) -> T:
+    def _run_reader(self, operation: Callable[[sqlite3.Connection], T], content_path: Path) -> T:
         connection = sqlite3.connect(_read_only_uri(self.paths.state_db), uri=True)
         try:
             connection.execute("PRAGMA busy_timeout = 5000")
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute(
                 "ATTACH DATABASE ? AS content",
-                (_read_only_uri(self.paths.content_db),),
+                (_read_only_uri(content_path),),
             )
             return operation(connection)
         finally:
@@ -331,13 +345,19 @@ class SQLiteStorage:
         def query(connection: sqlite3.Connection) -> list[str]:
             rows = connection.execute(
                 """SELECT card.card_key
-                   FROM content.card_definitions AS card
+                   FROM content.pack_items AS member
+                   JOIN content.learning_items AS item
+                     ON item.learning_item_id = member.learning_item_id
+                    AND item.lifecycle_status = 'active'
+                   JOIN content.card_definitions AS card
+                     ON card.learning_item_id = item.learning_item_id
+                    AND card.lifecycle_status = 'active'
                    LEFT JOIN progress AS progress
                      ON progress.profile_id = ?
                     AND progress.track_id = ?
                     AND progress.card_key = card.card_key
-                   WHERE card.pack_version_id = ? AND progress.card_key IS NULL
-                   ORDER BY card.ordinal LIMIT ?""",
+                   WHERE member.pack_version_id = ? AND progress.card_key IS NULL
+                   ORDER BY member.position, card.card_key LIMIT ?""",
                 (profile_id, track_id, pack_version_id, limit),
             ).fetchall()
             return [row[0] for row in rows]
@@ -345,17 +365,36 @@ class SQLiteStorage:
         return await self._async_reader(query)
 
     async def async_build_content_generation(
-        self, packages: Iterable[Path], destination: Path
-    ) -> int:
-        """Merge prebuilt package DBs one at a time into a new generation."""
+        self,
+        packages: Iterable[Path],
+        destination: Path,
+        *,
+        generation_id: str | None = None,
+    ) -> ContentBuildResult:
+        """Build a validated candidate without making it visible to readers."""
         package_list = tuple(packages)
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            self._long_executor,
-            _build_content_generation,
-            package_list,
-            destination,
-        )
+        selected_generation_id = generation_id or f"generation-{uuid.uuid4().hex}"
+        async with await self.content_generations.acquire_reader() as lease:
+            loop = asyncio.get_running_loop()
+            builder = ContentGenerationBuilder()
+            return await loop.run_in_executor(
+                self._long_executor,
+                lambda: builder.build(
+                    package_list,
+                    destination,
+                    generation_id=selected_generation_id,
+                    built_at_utc=self._clock.now().isoformat(),
+                    previous_generation=lease.path,
+                ),
+            )
+
+    async def async_activate_content_generation(self, candidate: Path) -> GenerationMetadata:
+        """Activate a validated candidate after every old reader has drained."""
+        return await self.content_generations.async_activate(candidate)
+
+    async def async_rollback_content_generation(self) -> GenerationMetadata:
+        """Reactivate the retained previous generation."""
+        return await self.content_generations.async_rollback()
 
     async def async_backup_to(self, destination: Path) -> None:
         """Create a coherent state snapshot using SQLite's backup API."""
@@ -402,6 +441,7 @@ class SQLiteStorage:
             return
         if self._backup_active:
             await self.async_finish_ha_backup()
+        await self.content_generations.async_close()
         async with self._writes_gate:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(self._writer_executor, self._close_sync)
@@ -417,30 +457,3 @@ class SQLiteStorage:
         self._writer_executor.shutdown(wait=True, cancel_futures=True)
         self._reader_executor.shutdown(wait=True, cancel_futures=True)
         self._long_executor.shutdown(wait=True, cancel_futures=True)
-
-
-def _build_content_generation(packages: tuple[Path, ...], destination: Path) -> int:
-    """Synchronous content merge executed only on the long-operation worker."""
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists():
-        destination.unlink()
-    _initialize_database(destination, CONTENT_SCHEMA, CONTENT_SCHEMA_VERSION, state=False)
-    connection = sqlite3.connect(destination, uri=True)
-    inserted = 0
-    try:
-        for package in packages:
-            connection.execute("ATTACH DATABASE ? AS package", (_read_only_uri(package),))
-            try:
-                before = connection.total_changes
-                connection.execute(
-                    """INSERT INTO card_definitions(card_key, pack_version_id, ordinal)
-                       SELECT card_key, pack_version_id, ordinal
-                       FROM package.card_definitions"""
-                )
-                connection.commit()
-                inserted += connection.total_changes - before
-            finally:
-                connection.execute("DETACH DATABASE package")
-        return inserted
-    finally:
-        connection.close()
