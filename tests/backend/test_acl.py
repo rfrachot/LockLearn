@@ -186,5 +186,13 @@ async def test_only_owner_can_modify_acl_and_last_owner_is_preserved(tmp_path: P
                 profile_id=profile_id,
                 target_ha_user_id="owner-1",
             )
+
+        with pytest.raises(LastOwnerError):
+            await acl.async_set_member_role(
+                actor_ha_user_id="owner-1",
+                profile_id=profile_id,
+                target_ha_user_id="owner-1",
+                role="editor",
+            )
     finally:
         await storage.async_close()
