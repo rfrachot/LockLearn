@@ -110,6 +110,7 @@ class DatasetStatus:
     latest: DatasetRelease | None
     update_available: bool
     source_age_days: int | None
+    stale_sources: tuple[str, ...]
     cache_bytes: int
     state: str
     error: str | None = None
@@ -157,6 +158,7 @@ class DatasetManager:
         definitions: tuple[DatasetDefinition, ...],
         trust_store: TrustStore,
         policy: OfficialRegistryPolicy,
+        freshness_targets: Mapping[str, int] | None = None,
         issue_callback: IssueCallback | None = None,
         issue_clear_callback: IssueClearCallback | None = None,
     ) -> None:
@@ -167,6 +169,7 @@ class DatasetManager:
             raise DatasetManagerError("duplicate official dataset definition")
         self._trust_store = trust_store
         self._policy = policy
+        self._freshness_targets = dict(freshness_targets or {})
         self._issue_callback = issue_callback
         self._issue_clear_callback = issue_clear_callback
         self._available: dict[str, tuple[DatasetRelease, ...]] = {}
@@ -223,6 +226,7 @@ class DatasetManager:
             active = installed.get(definition.dataset_id)
             latest = _latest_release(self._available.get(definition.dataset_id, ()))
             source_age = _source_age_days(active, now)
+            stale_sources = _stale_sources(active, self._freshness_targets, now)
             cache_bytes = await asyncio.to_thread(
                 _cached_dataset_size,
                 self._packages_root,
@@ -252,11 +256,24 @@ class DatasetManager:
                     latest=latest,
                     update_available=update_available,
                     source_age_days=source_age,
+                    stale_sources=stale_sources,
                     cache_bytes=cache_bytes,
                     state=state,
                     error=error,
                 )
             )
+            stale_issue_id = f"dataset_stale_{_issue_suffix(definition.dataset_id)}"
+            if stale_sources:
+                await self._report_issue(
+                    stale_issue_id,
+                    "dataset_sources_stale",
+                    {
+                        "dataset_id": definition.dataset_id,
+                        "sources": ", ".join(stale_sources),
+                    },
+                )
+            else:
+                await self._clear_issue(stale_issue_id)
         return tuple(statuses)
 
     async def async_status(self, dataset_id: str) -> DatasetStatus:
@@ -535,6 +552,29 @@ def load_runtime_dataset_definitions(
     return tuple(result)
 
 
+def load_runtime_source_freshness(
+    resources: Path | None = None,
+) -> dict[str, int]:
+    """Load per-source target refresh ages bundled with the integration."""
+    root = resources or Path(__file__).resolve().parent / "resources"
+    document = _load_json_object(root / "sources.json")
+    rows = document.get("sources")
+    if not isinstance(rows, list):
+        raise DatasetManagerError("source registry sources must be an array")
+    result: dict[str, int] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise DatasetManagerError("source registry row must be an object")
+        source_id = _required_string(row, "id")
+        target = row.get("target_refresh_days")
+        if target is None:
+            continue
+        if isinstance(target, bool) or not isinstance(target, int) or target <= 0:
+            raise DatasetManagerError("target_refresh_days must be a positive integer or null")
+        result[source_id] = target
+    return result
+
+
 def load_runtime_trust_store(resources: Path | None = None) -> TrustStore:
     """Load public Ed25519 signing keys bundled with the integration."""
     root = resources or Path(__file__).resolve().parent / "resources"
@@ -628,6 +668,28 @@ def _source_age_days(installed: InstalledDataset | None, now: datetime) -> int |
     if not retrieved:
         return None
     return max(0, max((now - value).days for value in retrieved))
+
+
+def _stale_sources(
+    installed: InstalledDataset | None,
+    freshness_targets: Mapping[str, int],
+    now: datetime,
+) -> tuple[str, ...]:
+    if installed is None:
+        return ()
+    stale: list[str] = []
+    for source in installed.sources:
+        source_id = source.get("source_id")
+        retrieved_at = source.get("retrieved_at")
+        if source_id is None or retrieved_at is None:
+            continue
+        target = freshness_targets.get(source_id)
+        if target is None:
+            continue
+        age_days = max(0, (now - _parse_timestamp(str(retrieved_at))).days)
+        if age_days > target:
+            stale.append(source_id)
+    return tuple(sorted(set(stale)))
 
 
 def _extract_dataset_database(archive_path: Path, destination: Path) -> None:
