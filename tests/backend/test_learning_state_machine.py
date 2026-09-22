@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -21,7 +22,7 @@ class _MutableClock:
         return self.current
 
 
-def _snapshot(state: str) -> dict[str, object]:
+def _snapshot(state: str) -> dict[str, Any]:
     return {
         "profile_id": "profile-1",
         "track_id": "track-1",
