@@ -2,9 +2,8 @@
 
 ## Current state
 
-P0.1–P0.7 and P1.1–P1.9 are complete. P1 remains in progress on
-`feat/p1-content-core`. P1.10 is implemented and awaits the full local
-Ruff/mypy/registry/pytest gate before PASS.
+P0.1–P0.7 and P1.1–P1.10 are complete. P1 remains in progress on
+`feat/p1-content-core`; P1.11 is the next work package.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -113,8 +112,8 @@ ADR-0015 records the offline ETL/release boundary.
   tables belongs with the released `state.db` schema; P1.6 prevents incomplete
   item/facet mappings from activating.
 
-P1.6, P1.7, P1.8 and P1.9 are closed PASS. P1.10 is implemented and awaits
-local verification. Do not begin P1.11 Asset schema until that gate closes.
+P1.6, P1.7, P1.8, P1.9 and P1.10 are closed PASS. The signed-starter P1 exit
+gate is satisfied. Next concrete action: implement P1.11 Asset schema.
 
 
 ## P1.9 closure
@@ -149,7 +148,7 @@ Final Ubuntu verification after the P1.9 fixture/style remediation:
 ADR-0016 records the runtime trust/update boundary.
 
 
-## P1.10 implementation awaiting verification
+## P1.10 closure
 
 P1.10 adds the actual bundled `Japanese Starter 1.0.0` product required by
 the first-run spec. It contains 120 LockLearn-authored LearningItems and 240
@@ -180,5 +179,11 @@ setup bootstrap and corrupt-bundle Repair behavior.
 
 ADR-0017 records the bundled starter and signing lifecycle.
 
-Next concrete action: run the full local quality suite. If green, close P1.10
-PASS and mark the signed-starter P1 exit gate satisfied; then move to P1.11.
+Final P1.10 verification:
+- local Ubuntu: mypy PASS (72 source files), resource registries PASS,
+  pytest PASS (192 tests in 3.54 s); Ruff reported only formatting/lint issues.
+- follow-up GitHub closure gate after the exact Ruff fixes: Ruff format PASS,
+  Ruff lint PASS, mypy PASS, resource registries PASS and full pytest PASS.
+
+P1.10 is closed PASS and the signed-starter P1 exit gate is satisfied. Next
+concrete action: implement P1.11 Asset schema.
