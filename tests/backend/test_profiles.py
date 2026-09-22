@@ -55,9 +55,7 @@ async def test_personal_profile_maps_to_ha_user_without_using_ha_id_as_profile_i
         assert profile["settings"]["max_new_per_day_cards"] == 8
         assert profile["settings"]["daily_push_budget"] == 6
 
-        assert await storage.repositories.profiles.async_list_members(
-            "profile-personal"
-        ) == (
+        assert await storage.repositories.profiles.async_list_members("profile-personal") == (
             {
                 "ha_user_id": "ha-user-1",
                 "role": "owner",
@@ -99,9 +97,10 @@ async def test_child_profile_needs_no_dedicated_ha_account_and_supports_multiple
             ("parent-1", "owner"),
             ("parent-2", "owner"),
         }
-        assert await storage.repositories.profiles.async_list_for_ha_user(
-            "child-without-ha-account"
-        ) == ()
+        assert (
+            await storage.repositories.profiles.async_list_for_ha_user("child-without-ha-account")
+            == ()
+        )
     finally:
         await storage.async_close()
 
