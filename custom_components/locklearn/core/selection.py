@@ -87,6 +87,8 @@ class SelectionConstraintService:
             learning_item_id=learning_item_id,
             card_key=card_key,
         )
+        if not bool(context.get("selected", False)):
+            raise SelectionConstraintError("card is not enabled in track selection")
         reasons: list[str] = []
         blocked_until: list[datetime] = []
 
