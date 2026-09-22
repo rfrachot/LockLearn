@@ -115,6 +115,7 @@ class StableObjectType(StrEnum):
     LEARNING_ITEM = "learning_item"
     FACET = "facet"
     CARD_DEFINITION = "card_definition"
+    CARD_KEY = "card_key"
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,9 +274,7 @@ class CardDefinition:
             raise ContentModelError("prompt facet belongs to a different LearningItem")
         if answer.learning_item_id != learning_item.learning_item_id:
             raise ContentModelError("answer facet belongs to a different LearningItem")
-        card_key = derive_card_key(
-            learning_item.learning_item_id, prompt.facet_id, answer.facet_id
-        )
+        card_key = derive_card_key(learning_item.learning_item_id, prompt.facet_id, answer.facet_id)
         return cls(
             card_definition_id=derive_card_definition_id(
                 learning_item.learning_item_id, prompt.facet_id, answer.facet_id

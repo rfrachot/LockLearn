@@ -1,5 +1,8 @@
 """Canonical content-domain model tests."""
 
+from dataclasses import replace
+from inspect import signature
+
 import pytest
 
 from custom_components.locklearn.core import content as m
@@ -40,6 +43,16 @@ def test_card_identity_is_deterministic_and_facet_specific() -> None:
     assert card == same
     assert card.card_key != reverse.card_key
     assert card.card_definition_id != reverse.card_definition_id
+
+
+def test_card_identity_derivation_accepts_only_item_and_facet_ids() -> None:
+    expected_parameters = [
+        "learning_item_id",
+        "prompt_facet_id",
+        "answer_facet_id",
+    ]
+    assert list(signature(m.derive_card_key).parameters) == expected_parameters
+    assert list(signature(m.derive_card_definition_id).parameters) == expected_parameters
 
 
 def test_card_rejects_foreign_facet() -> None:
@@ -87,18 +100,52 @@ def test_released_id_migration_is_explicit() -> None:
     )
     assert migration.old_id != migration.new_id
 
+    card_key_migration = m.StableIdMigration(
+        m.StableObjectType.CARD_KEY,
+        "locklearn:dataset:starter",
+        "locklearn:card:old",
+        "locklearn:card:new",
+        "1.1.0",
+        "facet identity correction changed the derived progression key",
+    )
+    assert card_key_migration.object_type is m.StableObjectType.CARD_KEY
+
 
 def test_mutable_display_text_is_not_part_of_card_identity() -> None:
     item, prompt, answer = _item_and_facets()
     before = m.CardDefinition.from_facets(item, prompt, answer)
-    renamed_item = m.LearningItem(
-        item.learning_item_id,
-        item.dataset_id,
-        item.content_type,
-        item.concept_ids,
+    relabelled_prompt = replace(
+        prompt,
+        key="renamed-prompt",
+        language_tag="en",
+        script="Latn",
     )
-    after = m.CardDefinition.from_facets(renamed_item, prompt, answer)
+    relabelled_answer = replace(answer, key="renamed-answer")
+    after = m.CardDefinition.from_facets(item, relabelled_prompt, relabelled_answer)
     assert before.card_key == after.card_key
+    assert before.card_definition_id == after.card_definition_id
+
+
+def test_concept_and_term_are_distinct_source_domain_objects() -> None:
+    concept = m.Concept(
+        "edrdg:concept:1",
+        "locklearn:dataset:starter",
+        "edrdg:jmdict",
+        "1234567",
+        "1",
+        m.ConceptType.LEXICAL,
+    )
+    term = m.Term(
+        "edrdg:term:1234567-rest",
+        "locklearn:dataset:starter",
+        "en",
+        "rest",
+        "Latn",
+    )
+
+    assert concept.concept_id != term.term_id
+    assert concept.source_record_id == "1234567"
+    assert term.text == "rest"
 
 
 def test_source_accepts_existing_license_registry_ids() -> None:
