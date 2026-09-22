@@ -22,6 +22,7 @@ from .content import (
     ContentGenerationManager,
     GenerationMetadata,
 )
+from .repositories import StateRepositories
 from .schema import STATE_SCHEMA
 
 T = TypeVar("T")
@@ -205,6 +206,7 @@ class SQLiteStorage:
         self._writes_gate = asyncio.Lock()
         self._backup_active = False
         self._closed = False
+        self.repositories = StateRepositories.for_storage(self)
 
     @property
     def writer_thread_id(self) -> int | None:
@@ -533,6 +535,127 @@ class SQLiteStorage:
                 "attribution",
             )
             return dict(zip(keys, row, strict=True))
+
+        return await self._async_reader(query)
+
+    async def async_validate_pack_version_reference(self, pack_version_id: str) -> bool:
+        """Validate a state -> content PackVersion reference against active content."""
+
+        def query(connection: sqlite3.Connection) -> bool:
+            return (
+                connection.execute(
+                    """SELECT 1 FROM content.pack_versions
+                       WHERE pack_version_id = ?""",
+                    (pack_version_id,),
+                ).fetchone()
+                is not None
+            )
+
+        return await self._async_reader(query)
+
+    async def async_validate_card_reference(
+        self,
+        *,
+        card_key: str,
+        learning_item_id: str,
+        prompt_facet_id: str,
+        answer_facet_id: str,
+    ) -> bool:
+        """Validate a complete state -> content CardDefinition identity."""
+
+        def query(connection: sqlite3.Connection) -> bool:
+            return (
+                connection.execute(
+                    """SELECT 1
+                       FROM content.card_definitions AS card
+                       JOIN content.learning_items AS item
+                         ON item.learning_item_id = card.learning_item_id
+                       JOIN content.facets AS prompt
+                         ON prompt.facet_id = card.prompt_facet_id
+                       JOIN content.facets AS answer
+                         ON answer.facet_id = card.answer_facet_id
+                       WHERE card.card_key = ?
+                         AND card.learning_item_id = ?
+                         AND card.prompt_facet_id = ?
+                         AND card.answer_facet_id = ?
+                         AND card.lifecycle_status = 'active'
+                         AND item.lifecycle_status = 'active'
+                         AND prompt.lifecycle_status = 'active'
+                         AND answer.lifecycle_status = 'active'""",
+                    (
+                        card_key,
+                        learning_item_id,
+                        prompt_facet_id,
+                        answer_facet_id,
+                    ),
+                ).fetchone()
+                is not None
+            )
+
+        return await self._async_reader(query)
+
+    async def async_cross_domain_integrity_issues(self) -> tuple[dict[str, str], ...]:
+        """Audit state references that SQLite cannot enforce across content.db."""
+
+        def query(connection: sqlite3.Connection) -> tuple[dict[str, str], ...]:
+            issues: list[dict[str, str]] = []
+            for track_id, pack_version_id in connection.execute(
+                "SELECT track_id, pack_version_id FROM track_pack_versions"
+            ).fetchall():
+                exists = connection.execute(
+                    "SELECT 1 FROM content.pack_versions WHERE pack_version_id = ?",
+                    (pack_version_id,),
+                ).fetchone()
+                if exists is None:
+                    issues.append(
+                        {
+                            "table": "track_pack_versions",
+                            "row_id": str(track_id),
+                            "reference": str(pack_version_id),
+                            "reason": "missing_pack_version",
+                        }
+                    )
+
+            state_card_queries = (
+                (
+                    "progress",
+                    """SELECT profile_id || ':' || track_id || ':' || card_key,
+                              card_key, learning_item_id, prompt_facet_id, answer_facet_id
+                       FROM progress
+                       WHERE learning_item_id IS NOT NULL""",
+                ),
+                (
+                    "review_events",
+                    """SELECT id, card_key, learning_item_id, prompt_facet_id, answer_facet_id
+                       FROM review_events""",
+                ),
+                (
+                    "session_items",
+                    """SELECT session_id || ':' || question_id,
+                              card_key, learning_item_id, prompt_facet_id, answer_facet_id
+                       FROM session_items""",
+                ),
+            )
+            for table_name, sql in state_card_queries:
+                for row_id, card_key, item_id, prompt_id, answer_id in connection.execute(
+                    sql
+                ).fetchall():
+                    exists = connection.execute(
+                        """SELECT 1 FROM content.card_definitions
+                           WHERE card_key = ? AND learning_item_id = ?
+                             AND prompt_facet_id = ? AND answer_facet_id = ?""",
+                        (card_key, item_id, prompt_id, answer_id),
+                    ).fetchone()
+                    if exists is None:
+                        issues.append(
+                            {
+                                "table": table_name,
+                                "row_id": str(row_id),
+                                "reference": str(card_key),
+                                "reason": "missing_card_identity",
+                            }
+                        )
+            return tuple(issues)
 
         return await self._async_reader(query)
 
