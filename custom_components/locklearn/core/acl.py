@@ -21,6 +21,7 @@ class ProfilePermission(StrEnum):
     """Backend permissions derived from profile membership."""
 
     READ = "read"
+    EDIT_PROFILE = "edit_profile"
     EDIT_TRACK = "edit_track"
     ANSWER = "answer"
     SHARE = "share"
