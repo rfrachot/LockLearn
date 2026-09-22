@@ -299,9 +299,10 @@ def fetch_snapshot(
     size = 0
     request = urllib.request.Request(url, headers={"User-Agent": "LockLearn-dataset-build/1"})
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as source, temporary.open(
-            "wb"
-        ) as target:
+        with (
+            urllib.request.urlopen(request, timeout=timeout_seconds) as source,
+            temporary.open("wb") as target,
+        ):
             while chunk := source.read(_STREAM_CHUNK_SIZE):
                 size += len(chunk)
                 if size > maximum_bytes:
@@ -345,9 +346,7 @@ def normalize_source(
     normalized_digest = hashlib.sha256()
     record_count = 0
     with normalized_path.open("w", encoding="utf-8", newline="\n") as stream:
-        for raw_file in sorted(
-            source.files, key=lambda item: (item.source_url, item.path.name)
-        ):
+        for raw_file in sorted(source.files, key=lambda item: (item.source_url, item.path.name)):
             if not raw_file.path.is_file():
                 raise DatasetBuildError(f"source input file does not exist: {raw_file.path}")
             for record in adapter.normalize(raw_file.path):
@@ -626,13 +625,9 @@ def _validate_record_provenance(adapter: SourceAdapter, record: NormalizedRecord
         "license_id": record.license_id,
         "language": record.language,
     }
-    missing = [
-        field for field in adapter.provenance_fields if not fields.get(field)
-    ]
+    missing = [field for field in adapter.provenance_fields if not fields.get(field)]
     if missing:
-        raise DatasetBuildError(
-            f"adapter record is missing required provenance: {sorted(missing)}"
-        )
+        raise DatasetBuildError(f"adapter record is missing required provenance: {sorted(missing)}")
 
 
 def _canonical_record_line(record: NormalizedRecord) -> str:
@@ -818,8 +813,7 @@ def _build_manifest(
         for path, content in sorted(license_files.items())
     )
     licenses = tuple(
-        LicenseReference(license_id=Path(path).stem, path=path)
-        for path in sorted(license_files)
+        LicenseReference(license_id=Path(path).stem, path=path) for path in sorted(license_files)
     )
     sources = tuple(
         SourceReference(
@@ -887,8 +881,7 @@ def _zip_write(archive: zipfile.ZipFile, name: str, content: bytes) -> None:
 
 def _safe_name(value: str) -> str:
     return "".join(
-        character if character.isalnum() or character in "._-" else "-"
-        for character in value
+        character if character.isalnum() or character in "._-" else "-" for character in value
     )
 
 
