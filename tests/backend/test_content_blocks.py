@@ -230,9 +230,7 @@ def test_html_like_characters_remain_plain_text_not_markup() -> None:
             "children": [
                 {
                     "type": "paragraph",
-                    "children": [
-                        {"type": "text", "text": "<script>alert(1)</script>"}
-                    ],
+                    "children": [{"type": "text", "text": "<script>alert(1)</script>"}],
                 }
             ],
         }
