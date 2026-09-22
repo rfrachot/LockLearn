@@ -12,6 +12,7 @@ from custom_components.locklearn.core.content_reports import ContentReportServic
 from custom_components.locklearn.core.grading import FreeTextGrader, GradingError
 from custom_components.locklearn.core.localization import (
     CaseMode,
+    LocalizationError,
     NormalizationPolicy,
     PunctuationMode,
     UnicodeNormalization,
@@ -104,7 +105,7 @@ def test_fuzzy_normalized_is_script_gated_versioned_and_conservative() -> None:
     assert typo.reason == "fuzzy_single_edit_match"
     assert semantic_accent.outcome is GradingOutcome.WRONG
 
-    with pytest.raises(Exception, match="not allowed"):
+    with pytest.raises(LocalizationError, match="not allowed"):
         grader.grade(
             "かな",
             accepted_answers=("カナ",),
