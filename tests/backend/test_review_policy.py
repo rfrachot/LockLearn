@@ -8,11 +8,7 @@ from datetime import UTC, datetime
 import pytest
 
 from custom_components.locklearn.core.learning import LearningStateMachine
-from custom_components.locklearn.core.review_policy import (
-    DEFAULT_BOX_INTERVAL_DAYS,
-    ReviewPolicyError,
-    ReviewPolicyV1,
-)
+from custom_components.locklearn.core.review_policy import ReviewPolicyError, ReviewPolicyV1
 
 
 @dataclass
