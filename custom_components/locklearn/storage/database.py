@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sqlite3
 import threading
 import uuid
@@ -74,18 +75,106 @@ def _configure_state_connection(connection: sqlite3.Connection) -> None:
 
 def _initialize_state_database(path: Path, schema: str, version: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        connection = sqlite3.connect(path)
+        try:
+            _configure_state_connection(connection)
+            connection.executescript(schema)
+            connection.execute("INSERT INTO schema_version(version) VALUES (?)", (version,))
+            connection.commit()
+        finally:
+            connection.close()
+        return
+
     connection = sqlite3.connect(path)
     try:
         _configure_state_connection(connection)
-        connection.executescript(schema)
+        table = connection.execute(
+            """SELECT 1 FROM sqlite_master
+               WHERE type = 'table' AND name = 'schema_version'"""
+        ).fetchone()
+        if table is None:
+            raise RuntimeError(f"State database has no schema_version table: {path}")
         row = connection.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
         if row is None:
-            connection.execute("INSERT INTO schema_version(version) VALUES (?)", (version,))
-        elif row[0] != version:
-            raise RuntimeError(f"Unsupported schema version {row[0]} for {path}")
-        connection.commit()
+            raise RuntimeError(f"State database has no schema version row: {path}")
+        current = int(row[0])
+        if current > version:
+            raise RuntimeError(f"Unsupported future schema version {current} for {path}")
+        if current == version:
+            connection.executescript(schema)
+            connection.commit()
+            return
+        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        backup = path.with_name(f"{path.name}.pre-migration-v{current}.bak")
+        target = sqlite3.connect(backup)
+        try:
+            connection.backup(target)
+        finally:
+            target.close()
     finally:
         connection.close()
+
+    _migrate_state_database(path, schema, current, version)
+
+
+def _migrate_state_database(path: Path, schema: str, current: int, target: int) -> None:
+    if (current, target) != (1, 2):
+        raise RuntimeError(f"No state migration path from {current} to {target}")
+
+    candidate = path.with_name(f".{path.name}.v2-migration")
+    candidate.unlink(missing_ok=True)
+    connection = sqlite3.connect(candidate)
+    try:
+        _configure_state_connection(connection)
+        connection.executescript(schema)
+        connection.execute("INSERT INTO schema_version(version) VALUES (2)")
+        connection.execute("ATTACH DATABASE ? AS legacy", (str(path),))
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """INSERT INTO sessions(
+                   id, profile_id, track_id, status, version, current_position,
+                   started_at_utc, last_activity_at_utc
+               )
+               SELECT id, profile_id, track_id, status, version, current_position,
+                      started_at_utc, last_activity_at_utc
+               FROM legacy.sessions"""
+        )
+        connection.execute(
+            """INSERT INTO session_answers(
+                   id, session_id, question_id, answer_json, resulting_version, created_at_utc
+               )
+               SELECT id, session_id, question_id, answer_json, resulting_version, created_at_utc
+               FROM legacy.session_answers"""
+        )
+        connection.execute(
+            """INSERT INTO progress(
+                   profile_id, track_id, card_key, state, next_due_at_utc
+               )
+               SELECT profile_id, track_id, card_key, state, next_due_at_utc
+               FROM legacy.progress"""
+        )
+        connection.execute(
+            """INSERT INTO audit_events(
+                   id, event_type, actor_user_id, profile_id, payload_json, created_at_utc
+               )
+               SELECT id, event_type, actor_user_id, profile_id, payload_json, created_at_utc
+               FROM legacy.audit_events"""
+        )
+        connection.commit()
+        connection.execute("DETACH DATABASE legacy")
+        if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+            raise RuntimeError("Migrated state database failed integrity_check")
+        if connection.execute("PRAGMA foreign_key_check").fetchall():
+            raise RuntimeError("Migrated state database failed foreign_key_check")
+    except Exception:
+        if connection.in_transaction:
+            connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+    os.replace(candidate, path)
 
 
 class SQLiteStorage:
