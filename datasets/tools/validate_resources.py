@@ -9,6 +9,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 RESOURCES = ROOT / "datasets" / "resources"
+RUNTIME_RESOURCES = ROOT / "custom_components" / "locklearn" / "datasets" / "resources"
 
 _SCRIPT_RE = re.compile(r"^[A-Z][a-z]{3}$")
 _POLICY_ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -223,6 +224,63 @@ def validate() -> None:
         required_provenance = row.get("required_provenance", [])
         if len(required_provenance) != len(set(required_provenance)):
             raise ValueError(f"duplicate required provenance fields for source {row['id']}")
+
+    runtime_sources = json.loads((RUNTIME_RESOURCES / "sources.json").read_text(encoding="utf-8"))
+    runtime_licenses = json.loads(
+        (RUNTIME_RESOURCES / "licenses.json").read_text(encoding="utf-8")
+    )
+    if runtime_sources != sources or runtime_licenses != licenses:
+        raise ValueError("runtime source/license registries must match build registries")
+
+    official = json.loads(
+        (RUNTIME_RESOURCES / "official_datasets.json").read_text(encoding="utf-8")
+    )
+    if official.get("schema_version") != 1:
+        raise ValueError("official dataset registry schema_version must be 1")
+    warning_bytes = official.get("cumulative_installed_warning_bytes")
+    if (
+        isinstance(warning_bytes, bool)
+        or not isinstance(warning_bytes, int)
+        or warning_bytes < 1
+    ):
+        raise ValueError("official dataset cumulative warning bytes must be positive")
+    official_rows = official.get("datasets")
+    if not isinstance(official_rows, list):
+        raise ValueError("official dataset registry datasets must be an array")
+    official_ids: set[str] = set()
+    for row in official_rows:
+        if not isinstance(row, dict):
+            raise ValueError("official dataset registry rows must be objects")
+        dataset_id = row.get("dataset_id")
+        if not isinstance(dataset_id, str) or not dataset_id or dataset_id in official_ids:
+            raise ValueError("official dataset IDs must be unique non-empty strings")
+        official_ids.add(dataset_id)
+        catalog_url = row.get("catalog_url")
+        if not isinstance(catalog_url, str) or not catalog_url.startswith("https://"):
+            raise ValueError(f"official dataset catalog must use HTTPS: {dataset_id}")
+        hosts = row.get("artifact_hosts")
+        if (
+            not isinstance(hosts, list)
+            or not hosts
+            or len(hosts) != len(set(hosts))
+            or any(
+                not isinstance(host, str)
+                or not host
+                or "/" in host
+                or ":" in host
+                for host in hosts
+            )
+        ):
+            raise ValueError(f"invalid artifact host allowlist for {dataset_id}")
+
+    signing = json.loads(
+        (RUNTIME_RESOURCES / "signing_keys.json").read_text(encoding="utf-8")
+    )
+    if signing.get("schema_version") != 1 or not isinstance(signing.get("keys"), list):
+        raise ValueError("runtime signing key registry is invalid")
+    key_ids = [row.get("key_id") for row in signing["keys"] if isinstance(row, dict)]
+    if len(key_ids) != len(signing["keys"]) or len(key_ids) != len(set(key_ids)):
+        raise ValueError("runtime signing key IDs must be unique")
 
     if source_builds.get("schema_version") != 1:
         raise ValueError("source build registry schema_version must be 1")
