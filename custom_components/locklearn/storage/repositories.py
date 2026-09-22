@@ -794,7 +794,10 @@ class TracksRepository:
                 connection.executemany(
                     """INSERT INTO track_content_weights(track_id, content_type, weight)
                        VALUES (?, ?, ?)""",
-                    ((track_id, content_type, weight) for content_type, weight in sorted(weights.items())),
+                    (
+                        (track_id, content_type, weight)
+                        for content_type, weight in sorted(weights.items())
+                    ),
                 )
                 connection.commit()
             except Exception:
