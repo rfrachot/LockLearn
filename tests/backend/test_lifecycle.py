@@ -25,9 +25,7 @@ async def test_setup_unload_and_reload_have_no_duplicate_panel(hass: HomeAssista
     assert len(inventory) == 1
     assert inventory[0]["dataset_id"] == "locklearn:dataset:japanese-starter"
     assert inventory[0]["version"] == "1.0.0"
-    assert inventory[0]["pack_version_ids"] == (
-        "locklearn:pack-version:japanese-starter-1.0.0",
-    )
+    assert inventory[0]["pack_version_ids"] == ("locklearn:pack-version:japanese-starter-1.0.0",)
 
     state_path = Path(runtime.storage.paths.state_db)
     assert state_path.is_file()
