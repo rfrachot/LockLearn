@@ -1,0 +1,26 @@
+name: P2.1 targeted state tests
+
+on:
+  push:
+    paths:
+      - "docs/.p2-1-target"
+
+permissions:
+  contents: read
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/p1-content-core
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          check-latest: true
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pytest -vv --tb=short --timeout=30 tests/backend/test_state_foundation.py tests/backend/test_storage.py
