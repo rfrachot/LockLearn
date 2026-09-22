@@ -404,6 +404,23 @@ class SQLiteStorage:
 
         return await self._async_reader(query)
 
+    async def async_referenced_pack_version_ids(self) -> frozenset[str]:
+        """Return every pack version referenced by persistent track state, when present."""
+
+        def query(connection: sqlite3.Connection) -> frozenset[str]:
+            table = connection.execute(
+                """SELECT 1 FROM sqlite_master
+                   WHERE type = 'table' AND name = 'track_pack_versions'"""
+            ).fetchone()
+            if table is None:
+                return frozenset()
+            rows = connection.execute(
+                "SELECT DISTINCT pack_version_id FROM track_pack_versions"
+            ).fetchall()
+            return frozenset(str(row[0]) for row in rows)
+
+        return await self._async_writer(query)
+
     async def async_due_cards(
         self, profile_id: str, track_id: str, before_utc: str, limit: int
     ) -> list[str]:
