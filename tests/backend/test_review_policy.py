@@ -172,9 +172,7 @@ def test_completed_short_steps_graduate_to_review_without_recomputing_short_step
 
 
 def test_policy_rejects_non_review_long_transition_and_invalid_config() -> None:
-    policy = ReviewPolicyV1(
-        clock=_MutableClock(datetime(2026, 9, 22, 20, 0, tzinfo=UTC))
-    )
+    policy = ReviewPolicyV1(clock=_MutableClock(datetime(2026, 9, 22, 20, 0, tzinfo=UTC)))
     snapshot = _review_snapshot()
     snapshot["state"] = "learning"
 
