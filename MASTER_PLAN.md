@@ -25,7 +25,7 @@
 | P0 | Architecture spikes + installable HA skeleton | complete | yes | `docs/plan/P0.md` |
 | P1 | Content core + signed starter dataset | complete | yes | `docs/plan/P1.md` |
 | P2 | Profiles/tracks/ACL | complete | yes | `docs/plan/P2.md` |
-| P3 | Learning/SRS/sessions/stats | in progress (P3.1–P3.5 complete; P3.6 pending gate) | yes | `docs/plan/P3.md` |
+| P3 | Learning/SRS/sessions/stats | in progress (P3.1–P3.6 complete; P3.7 pending gate) | yes | `docs/plan/P3.md` |
 | P4 | Scheduler/notifications/HA automation | queued | yes | `docs/plan/P4.md` |
 | P5 | Useful panel | queued | yes | `docs/plan/P5.md` |
 | P6 | Hardening/release | queued | yes | `docs/plan/P6.md` |
@@ -73,8 +73,8 @@
 - **P3.3** — ReviewPolicy V1 core (complete)
 - **P3.4** — Verified-retrieval gate and signal weighting (complete)
 - **P3.5** — Sibling burial, prerequisites and confusable introduction spacing (complete)
-- **P3.6** — Quiz engine, distractors and corrective feedback (implemented; verification pending)
-- **P3.7** — Panel free-text grading and content-quality feedback
+- **P3.6** — Quiz engine, distractors and corrective feedback (complete)
+- **P3.7** — Panel free-text grading and content-quality feedback (implemented; verification pending)
 - **P3.8** — Persistent sessions, concurrency and cross-client resume
 - **P3.9** — Fatigue-aware session selection and interleaving
 - **P3.10** — Known-already, suspend/bury and calibration
