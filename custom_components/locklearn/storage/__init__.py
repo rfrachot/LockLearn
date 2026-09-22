@@ -13,6 +13,13 @@ from .content import (
     initialize_content_database,
 )
 from .database import SQLiteStorage, StoragePaths
+from .repositories import (
+    CardReference,
+    ContentReferenceError,
+    ProfileRecord,
+    StateRepositories,
+    TrackRecord,
+)
 
 __all__ = [
     "ContentActivationError",
@@ -22,9 +29,14 @@ __all__ = [
     "ContentGenerationManager",
     "ContentGenerationValidator",
     "ContentReaderLease",
+    "ContentReferenceError",
     "ContentValidationError",
     "GenerationMetadata",
+    "CardReference",
+    "ProfileRecord",
     "SQLiteStorage",
+    "StateRepositories",
     "StoragePaths",
+    "TrackRecord",
     "initialize_content_database",
 ]
