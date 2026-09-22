@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.locklearn.const import DOMAIN
-from tests.backend.content_db_helpers import ITEM_A, ITEM_B, create_package
+from tests.backend.content_db_helpers import DATASET_ID, ITEM_A, ITEM_B, create_package
 
 
 def _directional_package(
@@ -183,6 +183,17 @@ async def test_bootstrap_profile_crud_privacy_share_and_pagination(
     assert invalid_cursor["success"] is False
     assert invalid_cursor["error"]["code"] == "locklearn/invalid_request"
 
+    await owner.send_json_auto_id(
+        {"type": "locklearn/profiles/delete", "profile_id": personal_id}
+    )
+    deleted = await owner.receive_json()
+    assert deleted["success"] is True
+
+    await owner.send_json_auto_id({"type": "locklearn/profiles/list"})
+    remaining = await owner.receive_json()
+    assert remaining["success"] is True
+    assert [item["profile_id"] for item in remaining["result"]["items"]] == [second_id]
+
     await hass.config_entries.async_unload(entry.entry_id)
 
 
@@ -214,12 +225,15 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
     await client.send_json_auto_id({"type": "locklearn/packs/list", "limit": 10})
     packs = await client.receive_json()
     assert packs["success"] is True
-    assert packs["result"]["items"][0]["pack_version_id"] == "locklearn:pack-version:v1"
+    assert any(
+        item["pack_version_id"] == "locklearn:pack-version:v1"
+        for item in packs["result"]["items"]
+    )
 
     await client.send_json_auto_id({"type": "locklearn/datasets/list", "limit": 10})
     datasets = await client.receive_json()
     assert datasets["success"] is True
-    assert datasets["result"]["items"]
+    assert any(item["dataset_id"] == DATASET_ID for item in datasets["result"]["items"])
 
     await client.send_json_auto_id(
         {
