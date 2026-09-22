@@ -120,17 +120,24 @@ class ReviewPolicyV1:
         snapshot: dict[str, Any],
         *,
         hint_used: bool = False,
+        promote_box: bool = True,
+        verified: bool = True,
+        reward_difficulty: bool = True,
     ) -> ReviewTransition:
-        """Promote a remembered review card and schedule its next interval."""
+        """Schedule a successful review with caller-supplied signal confidence."""
         self._require_review(snapshot)
         now = self._clock.now()
         scheduled_interval = self._scheduled_interval_days(snapshot)
-        elapsed = self._elapsed_days(snapshot, now)
+        elapsed = self._elapsed_days(snapshot, now) if verified else None
 
         current_box = max(1, int(snapshot.get("box", 1)))
-        target_box = min(max(DEFAULT_BOX_INTERVAL_DAYS), current_box + 1)
+        target_box = (
+            min(max(DEFAULT_BOX_INTERVAL_DAYS), current_box + 1)
+            if promote_box
+            else current_box
+        )
         difficulty = self._difficulty(snapshot)
-        if not hint_used:
+        if verified and reward_difficulty and not hint_used:
             difficulty = self._clamp_difficulty(difficulty * 1.05)
 
         base_adjusted = DEFAULT_BOX_INTERVAL_DAYS[target_box] * difficulty
@@ -150,18 +157,25 @@ class ReviewPolicyV1:
                 "state": "review",
                 "box": target_box,
                 "seen_count": int(snapshot.get("seen_count", 0)) + 1,
-                "verified_correct_count": int(snapshot.get("verified_correct_count", 0)) + 1,
+                "verified_correct_count": int(snapshot.get("verified_correct_count", 0))
+                + int(verified),
                 "last_seen_at_utc": now.isoformat(),
-                "last_verified_at_utc": now.isoformat(),
                 "last_result": "correct",
                 "next_due_at_utc": (now + timedelta(days=interval)).isoformat(),
                 "streak_correct": int(snapshot.get("streak_correct", 0)) + 1,
                 "difficulty_factor": difficulty,
-                "verified_success_since_box": 1,
                 "policy_version": self.policy_version,
                 "updated_at_utc": now.isoformat(),
             }
         )
+        if verified:
+            post["last_verified_at_utc"] = now.isoformat()
+        if target_box != current_box:
+            post["verified_success_since_box"] = 0
+        elif verified:
+            post["verified_success_since_box"] = int(
+                snapshot.get("verified_success_since_box", 0)
+            ) + 1
         post["mastery"] = self.mastery(post, at=now)
         return ReviewTransition(
             pre_state=dict(snapshot),
