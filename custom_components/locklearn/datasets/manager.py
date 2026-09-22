@@ -67,10 +67,7 @@ class DatasetDefinition:
         if not self.artifact_hosts:
             raise DatasetManagerError("dataset definition requires artifact_hosts")
         if any(
-            not host
-            or host != host.lower()
-            or "/" in host
-            or ":" in host
+            not host or host != host.lower() or "/" in host or ":" in host
             for host in self.artifact_hosts
         ):
             raise DatasetManagerError("artifact_hosts must contain lowercase plain hostnames")
@@ -93,9 +90,8 @@ class DatasetRelease:
     def __post_init__(self) -> None:
         if not self.dataset_id or not self.version or not self.artifact_url:
             raise DatasetDiscoveryError("release identity fields must be non-empty")
-        if (
-            len(self.artifact_sha256) != 64
-            or any(character not in "0123456789abcdef" for character in self.artifact_sha256)
+        if len(self.artifact_sha256) != 64 or any(
+            character not in "0123456789abcdef" for character in self.artifact_sha256
         ):
             raise DatasetDiscoveryError("release artifact_sha256 must be lowercase SHA-256")
         if self.artifact_size <= 0:
@@ -205,11 +201,7 @@ class DatasetManager:
 
     async def async_refresh(self, dataset_id: str | None = None) -> tuple[DatasetStatus, ...]:
         """Refresh untrusted release discovery while preserving installed content offline."""
-        selected = (
-            (self._definition(dataset_id),)
-            if dataset_id is not None
-            else self.definitions
-        )
+        selected = (self._definition(dataset_id),) if dataset_id is not None else self.definitions
         for definition in selected:
             try:
                 document = await self._transport.async_get_json(
@@ -227,17 +219,14 @@ class DatasetManager:
                 continue
             self._available[definition.dataset_id] = releases
             self._errors.pop(definition.dataset_id, None)
-            await self._clear_issue(
-                f"dataset_discovery_{_issue_suffix(definition.dataset_id)}"
-            )
+            await self._clear_issue(f"dataset_discovery_{_issue_suffix(definition.dataset_id)}")
         return await self.async_statuses()
 
     async def async_statuses(self) -> tuple[DatasetStatus, ...]:
         """List installed and available versions with provenance/license facts."""
         installed_rows = await self._storage.async_dataset_inventory()
         installed = {
-            item["dataset_id"]: _installed_dataset_from_row(item)
-            for item in installed_rows
+            item["dataset_id"]: _installed_dataset_from_row(item) for item in installed_rows
         }
         statuses: list[DatasetStatus] = []
         now = datetime.now(UTC)
@@ -490,9 +479,7 @@ class DatasetManager:
             raise DatasetInstallError("signed manifest dataset_version does not match release")
         if manifest.content_schema_version != CONTENT_SCHEMA_VERSION:
             raise DatasetInstallError("dataset content schema is not supported")
-        if AwesomeVersion(manifest.minimum_locklearn_version) > AwesomeVersion(
-            INTEGRATION_VERSION
-        ):
+        if AwesomeVersion(manifest.minimum_locklearn_version) > AwesomeVersion(INTEGRATION_VERSION):
             raise DatasetInstallError("dataset requires a newer LockLearn integration")
 
     def _complete_package_set(
