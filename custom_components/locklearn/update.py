@@ -83,6 +83,7 @@ class LockLearnDatasetUpdateEntity(UpdateEntity):
             "dataset_id": self._definition.dataset_id,
             "dataset_state": self._status.state,
             "source_age_days": self._status.source_age_days,
+            "stale_sources": list(self._status.stale_sources),
             "cache_bytes": self._status.cache_bytes,
             "licenses": [] if installed is None else list(installed.licenses),
             "sources": []
