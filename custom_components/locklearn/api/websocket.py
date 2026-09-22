@@ -637,7 +637,6 @@ async def ws_datasets_list(
         vol.Required("grading_policy_kind"): vol.In(("exact", "any_of", "fuzzy_normalized")),
         vol.Required("grading_policy_version"): vol.All(int, vol.Range(min=1)),
         vol.Required("normalization_version"): vol.All(int, vol.Range(min=1)),
-        vol.Required("dataset_generation"): str,
     }
 )
 @websocket_api.async_response
@@ -686,7 +685,7 @@ async def ws_content_report(
                 answer_facet_id=msg["answer_facet_id"],
             ),
             grade=grade,
-            dataset_generation=msg["dataset_generation"],
+            dataset_generation=runtime.storage.content_generations.active_metadata.generation_id,
         )
     except (ContentReportError, ContentReferenceError) as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
