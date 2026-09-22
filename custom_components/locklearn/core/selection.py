@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Protocol
+
 from .clock import Clock, SystemClock
 
 DEFAULT_SIBLING_GAP_NEW_MINUTES = 1440
@@ -143,9 +144,7 @@ class SelectionConstraintService:
                 minimum = float(condition["minimum"])
                 actual = self._metric_value(progress, metric)
                 if actual < minimum:
-                    failures.append(
-                        f"prerequisite_threshold:{prerequisite_card_key}:{metric}"
-                    )
+                    failures.append(f"prerequisite_threshold:{prerequisite_card_key}:{metric}")
         return failures
 
     def _confusable_blocks(
