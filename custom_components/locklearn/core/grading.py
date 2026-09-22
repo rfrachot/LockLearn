@@ -72,7 +72,9 @@ class FreeTextGrader:
             )
 
         if kind is GradingPolicyKind.ANY_OF:
-            matched = next((answer for answer in accepted_answers if submitted_text == answer), None)
+            matched = next(
+                (answer for answer in accepted_answers if submitted_text == answer), None
+            )
             return FreeTextGradingResult(
                 outcome=GradingOutcome.CORRECT if matched is not None else GradingOutcome.WRONG,
                 submitted_text=submitted_text,
@@ -105,7 +107,11 @@ class FreeTextGrader:
             for answer in accepted_answers
         )
         exact_normalized = next(
-            (answer for answer, normalized in normalized_answers if normalized == normalized_submission),
+            (
+                answer
+                for answer, normalized in normalized_answers
+                if normalized == normalized_submission
+            ),
             None,
         )
         if exact_normalized is not None:
@@ -168,9 +174,7 @@ class FreeTextGrader:
         def strip_marks(value: str) -> str:
             decomposed = unicodedata.normalize("NFD", value)
             return "".join(
-                character
-                for character in decomposed
-                if unicodedata.category(character) != "Mn"
+                character for character in decomposed if unicodedata.category(character) != "Mn"
             )
 
         return left != right and strip_marks(left) == strip_marks(right)
