@@ -1170,6 +1170,109 @@ class TracksRepository:
 
         await self._storage._async_writer(write)
 
+    async def async_selection_constraints(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        pack_version_id: str,
+        learning_item_id: str,
+        card_key: str,
+    ) -> dict[str, Any]:
+        """Load deterministic P3.5 selection constraints for one candidate card."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any]:
+            prerequisite_rows = connection.execute(
+                """SELECT prerequisite_card_key
+                   FROM content.pack_item_prerequisites
+                   WHERE pack_version_id = ? AND learning_item_id = ?
+                   ORDER BY prerequisite_card_key""",
+                (pack_version_id, learning_item_id),
+            ).fetchall()
+            unlock_rows = connection.execute(
+                """SELECT metric, minimum
+                   FROM content.pack_item_unlock_conditions
+                   WHERE pack_version_id = ? AND learning_item_id = ?
+                   ORDER BY position""",
+                (pack_version_id, learning_item_id),
+            ).fetchall()
+            prerequisite_progress = {
+                str(row[0]): {
+                    "state": str(row[1]),
+                    "mastery": float(row[2]),
+                    "box": int(row[3]),
+                    "verified_correct_count": int(row[4]),
+                }
+                for row in connection.execute(
+                    """SELECT card_key, state, mastery, box, verified_correct_count
+                       FROM progress
+                       WHERE profile_id = ? AND track_id = ?
+                         AND card_key IN (
+                             SELECT prerequisite_card_key
+                             FROM content.pack_item_prerequisites
+                             WHERE pack_version_id = ? AND learning_item_id = ?
+                         )""",
+                    (profile_id, track_id, pack_version_id, learning_item_id),
+                ).fetchall()
+            }
+            sibling_row = connection.execute(
+                """SELECT MAX(created_at_utc)
+                   FROM review_events
+                   WHERE profile_id = ? AND track_id = ?
+                     AND learning_item_id = ? AND card_key <> ?""",
+                (profile_id, track_id, learning_item_id, card_key),
+            ).fetchone()
+            confusable_rows = connection.execute(
+                """SELECT group_row.confusable_group_id, group_row.min_intro_gap_days
+                   FROM content.confusable_groups AS group_row
+                   JOIN content.confusable_group_items AS member
+                     ON member.confusable_group_id = group_row.confusable_group_id
+                   WHERE group_row.pack_version_id = ?
+                     AND member.learning_item_id = ?
+                   ORDER BY group_row.confusable_group_id""",
+                (pack_version_id, learning_item_id),
+            ).fetchall()
+            confusable_last_seen: dict[str, str | None] = {}
+            for group_id, _gap in confusable_rows:
+                row = connection.execute(
+                    """SELECT MAX(progress.first_seen_at_utc)
+                       FROM progress
+                       JOIN content.confusable_group_items AS member
+                         ON member.learning_item_id = progress.learning_item_id
+                       WHERE progress.profile_id = ? AND progress.track_id = ?
+                         AND member.confusable_group_id = ?
+                         AND progress.learning_item_id <> ?""",
+                    (profile_id, track_id, str(group_id), learning_item_id),
+                ).fetchone()
+                confusable_last_seen[str(group_id)] = (
+                    None if row is None or row[0] is None else str(row[0])
+                )
+            return {
+                "prerequisite_card_keys": tuple(str(row[0]) for row in prerequisite_rows),
+                "unlock_conditions": tuple(
+                    {"metric": str(row[0]), "minimum": float(row[1])}
+                    for row in unlock_rows
+                ),
+                "prerequisite_progress": prerequisite_progress,
+                "sibling_last_interaction_at_utc": (
+                    None
+                    if sibling_row is None or sibling_row[0] is None
+                    else str(sibling_row[0])
+                ),
+                "confusable_groups": tuple(
+                    {
+                        "confusable_group_id": str(group_id),
+                        "min_intro_gap_days": int(gap),
+                        "other_item_last_introduced_at_utc": confusable_last_seen[
+                            str(group_id)
+                        ],
+                    }
+                    for group_id, gap in confusable_rows
+                ),
+            }
+
+        return await self._storage._async_reader(read)
+
     async def async_pack_item_signatures(
         self, pack_version_id: str
     ) -> dict[str, tuple[tuple[str, int], ...]]:
