@@ -75,6 +75,18 @@ class CardReference:
     answer_facet_id: str
 
 
+@dataclass(frozen=True, slots=True)
+class TrackCardRuleRecord:
+    track_id: str
+    rule_id: str
+    rule_kind: str
+    enabled: bool = True
+    card_key: str | None = None
+    prompt_facet_id: str | None = None
+    answer_facet_id: str | None = None
+    rule: dict[str, Any] | None = None
+
+
 def _profile_dict(row: tuple[Any, ...], *, role: str | None = None) -> dict[str, Any]:
     keys = (
         "profile_id",
@@ -386,6 +398,249 @@ class TracksRepository:
             connection.commit()
 
         await self._storage._async_writer(pin)
+
+    async def async_get(self, track_id: str) -> dict[str, Any] | None:
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT track.track_id, track.profile_id, track.name,
+                          track.source_language, track.target_language, track.status,
+                          track.priority, track.settings_json, track.created_at_utc,
+                          track.updated_at_utc, pin.pack_version_id,
+                          pin.dataset_generation, pin.integrated_at_utc
+                   FROM tracks AS track
+                   LEFT JOIN track_pack_versions AS pin ON pin.track_id = track.track_id
+                   WHERE track.track_id = ?""",
+                (track_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            keys = (
+                "track_id",
+                "profile_id",
+                "name",
+                "source_language",
+                "target_language",
+                "status",
+                "priority",
+                "settings_json",
+                "created_at_utc",
+                "updated_at_utc",
+                "pack_version_id",
+                "dataset_generation",
+                "integrated_at_utc",
+            )
+            result = dict(zip(keys, row, strict=True))
+            result["settings"] = json.loads(result.pop("settings_json"))
+            return result
+
+        return await self._storage._async_reader(read)
+
+    async def async_pack_version_info(self, pack_version_id: str) -> dict[str, str] | None:
+        def read(connection: sqlite3.Connection) -> dict[str, str] | None:
+            row = connection.execute(
+                """SELECT version.pack_version_id, version.pack_id, version.version,
+                          metadata.generation_id
+                   FROM content.pack_versions AS version
+                   JOIN content.generation_metadata AS metadata
+                   WHERE version.pack_version_id = ?""",
+                (pack_version_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            return {
+                "pack_version_id": str(row[0]),
+                "pack_id": str(row[1]),
+                "version": str(row[2]),
+                "generation_id": str(row[3]),
+            }
+
+        return await self._storage._async_reader(read)
+
+    async def async_resolve_direction_cards(
+        self,
+        *,
+        pack_version_id: str,
+        source_language: str,
+        target_language: str,
+    ) -> tuple[dict[str, str], ...]:
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, str], ...]:
+            rows = connection.execute(
+                """SELECT card.card_key, card.learning_item_id,
+                          card.prompt_facet_id, card.answer_facet_id,
+                          item.content_type
+                   FROM content.pack_items AS member
+                   JOIN content.learning_items AS item
+                     ON item.learning_item_id = member.learning_item_id
+                    AND item.lifecycle_status = 'active'
+                   JOIN content.card_definitions AS card
+                     ON card.learning_item_id = item.learning_item_id
+                    AND card.lifecycle_status = 'active'
+                   JOIN content.facets AS prompt
+                     ON prompt.facet_id = card.prompt_facet_id
+                    AND prompt.lifecycle_status = 'active'
+                   JOIN content.facets AS answer
+                     ON answer.facet_id = card.answer_facet_id
+                    AND answer.lifecycle_status = 'active'
+                   LEFT JOIN content.pack_item_card_defaults AS default_rule
+                     ON default_rule.pack_version_id = member.pack_version_id
+                    AND default_rule.learning_item_id = member.learning_item_id
+                    AND default_rule.card_key = card.card_key
+                   WHERE member.pack_version_id = ?
+                     AND prompt.language_tag = ?
+                     AND answer.language_tag = ?
+                     AND COALESCE(default_rule.enabled_by_default, 1) = 1
+                   ORDER BY member.position, card.card_key""",
+                (pack_version_id, source_language, target_language),
+            ).fetchall()
+            return tuple(
+                {
+                    "card_key": str(row[0]),
+                    "learning_item_id": str(row[1]),
+                    "prompt_facet_id": str(row[2]),
+                    "answer_facet_id": str(row[3]),
+                    "content_type": str(row[4]),
+                }
+                for row in rows
+            )
+
+        return await self._storage._async_reader(read)
+
+    async def async_cards_in_pack(
+        self,
+        *,
+        pack_version_id: str,
+        card_keys: tuple[str, ...],
+    ) -> tuple[dict[str, str], ...]:
+        if not card_keys:
+            return ()
+        placeholders = ",".join("?" for _ in card_keys)
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, str], ...]:
+            rows = connection.execute(
+                f"""SELECT card.card_key, card.learning_item_id,
+                           card.prompt_facet_id, card.answer_facet_id,
+                           item.content_type
+                    FROM content.pack_items AS member
+                    JOIN content.learning_items AS item
+                      ON item.learning_item_id = member.learning_item_id
+                     AND item.lifecycle_status = 'active'
+                    JOIN content.card_definitions AS card
+                      ON card.learning_item_id = item.learning_item_id
+                     AND card.lifecycle_status = 'active'
+                    WHERE member.pack_version_id = ?
+                      AND card.card_key IN ({placeholders})
+                    ORDER BY card.card_key""",
+                (pack_version_id, *card_keys),
+            ).fetchall()
+            return tuple(
+                {
+                    "card_key": str(row[0]),
+                    "learning_item_id": str(row[1]),
+                    "prompt_facet_id": str(row[2]),
+                    "answer_facet_id": str(row[3]),
+                    "content_type": str(row[4]),
+                }
+                for row in rows
+            )
+
+        return await self._storage._async_reader(read)
+
+    async def async_replace_card_rules(
+        self,
+        track_id: str,
+        rules: tuple[TrackCardRuleRecord, ...],
+    ) -> None:
+        if any(rule.track_id != track_id for rule in rules):
+            raise ValueError("track card rule belongs to another track")
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute("DELETE FROM track_card_rules WHERE track_id = ?", (track_id,))
+                connection.executemany(
+                    """INSERT INTO track_card_rules(
+                           track_id, rule_id, rule_kind, card_key, prompt_facet_id,
+                           answer_facet_id, rule_json, enabled
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        (
+                            rule.track_id,
+                            rule.rule_id,
+                            rule.rule_kind,
+                            rule.card_key,
+                            rule.prompt_facet_id,
+                            rule.answer_facet_id,
+                            json.dumps(
+                                rule.rule or {},
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                                sort_keys=True,
+                            ),
+                            int(rule.enabled),
+                        )
+                        for rule in rules
+                    ),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+
+    async def async_replace_content_weights(
+        self,
+        track_id: str,
+        weights: dict[str, float],
+    ) -> None:
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    "DELETE FROM track_content_weights WHERE track_id = ?",
+                    (track_id,),
+                )
+                connection.executemany(
+                    """INSERT INTO track_content_weights(track_id, content_type, weight)
+                       VALUES (?, ?, ?)""",
+                    ((track_id, content_type, weight) for content_type, weight in sorted(weights.items())),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+
+    async def async_pack_item_signatures(
+        self, pack_version_id: str
+    ) -> dict[str, tuple[tuple[str, int], ...]]:
+        def read(connection: sqlite3.Connection) -> dict[str, tuple[tuple[str, int], ...]]:
+            rows = connection.execute(
+                """SELECT member.learning_item_id, card.card_key,
+                          COALESCE(default_rule.enabled_by_default, 1)
+                   FROM content.pack_items AS member
+                   LEFT JOIN content.card_definitions AS card
+                     ON card.learning_item_id = member.learning_item_id
+                    AND card.lifecycle_status = 'active'
+                   LEFT JOIN content.pack_item_card_defaults AS default_rule
+                     ON default_rule.pack_version_id = member.pack_version_id
+                    AND default_rule.learning_item_id = member.learning_item_id
+                    AND default_rule.card_key = card.card_key
+                   WHERE member.pack_version_id = ?
+                   ORDER BY member.learning_item_id, card.card_key""",
+                (pack_version_id,),
+            ).fetchall()
+            signatures: dict[str, list[tuple[str, int]]] = {}
+            for item_id, card_key, enabled in rows:
+                signatures.setdefault(str(item_id), []).append(
+                    ("" if card_key is None else str(card_key), int(enabled))
+                )
+            return {key: tuple(value) for key, value in signatures.items()}
+
+        return await self._storage._async_reader(read)
 
 
 class ProgressRepository:
