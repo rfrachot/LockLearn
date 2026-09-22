@@ -150,6 +150,13 @@ async def test_fresh_storage_bootstraps_starter_without_network(tmp_path: Path) 
 
         # Re-running first-run bootstrap is idempotent and never downgrades.
         assert await manager.async_install_bundled(bundled[0]) is None
+
+        await manager.async_rollback()
+        assert await storage.async_dataset_inventory() == []
+
+        reinstalled = await manager.async_install_bundled(bundled[0])
+        assert reinstalled is not None
+        assert (await storage.async_dataset_inventory())[0]["version"] == "1.0.0"
     finally:
         await storage.async_close()
 
