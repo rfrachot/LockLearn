@@ -84,6 +84,28 @@ def test_visible_answer_self_assessment_cannot_promote_srs() -> None:
     assert applied.box_promotion_allowed is False
 
 
+def test_self_assessment_without_retrieval_is_neutral() -> None:
+    signals = _policy()
+    decision = signals.evaluate(
+        mode=SignalMode.SELF_ASSESSMENT_AFTER_RETRIEVAL,
+        result="known",
+        retrieval_occurred=False,
+    )
+
+    assert decision.outcome is SignalOutcome.NEUTRAL
+    assert decision.reason == "self_assessment_without_retrieval"
+
+
+def test_verified_modes_require_actual_retrieval() -> None:
+    signals = _policy()
+    with pytest.raises(ValueError, match="requires retrieval_occurred"):
+        signals.evaluate(
+            mode=SignalMode.VERIFIED_FREE_TEXT,
+            result="correct",
+            retrieval_occurred=False,
+        )
+
+
 def test_post_retrieval_self_assessment_can_reach_gate_but_not_cross_it_alone() -> None:
     signals = _policy()
     decision = signals.evaluate(
