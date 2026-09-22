@@ -2,9 +2,9 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.4 are complete. P1 and P2 are
-closed PASS. P3 is in progress on `feat/p1-content-core`. P3.5 — sibling burial,
-prerequisites and confusable introduction spacing — is implemented and awaiting the local gate.
+P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.5 are complete. P1 and P2 are
+closed PASS. P3 is in progress on `feat/p1-content-core`. P3.6 — quiz engine,
+distractors and corrective feedback — is now the active work package.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -828,3 +828,17 @@ Next required local gate:
 
 If PASS, close P3.5 and begin P3.6 quiz engine, distractors and corrective
 feedback.
+
+
+## P3.5 closure
+
+Renaud's final local P3.5 gate reported:
+- Ruff format: one remaining blank-line formatting diff in
+  test_selection_constraints.py.
+- Ruff lint: PASS.
+- mypy: PASS, 96 source files.
+- resource registries: PASS.
+- pytest: PASS, 259 tests in 5.57 s.
+
+The final Ruff-only blank-line fix was applied. No semantic P3.5 behavior changed
+after the passing lint/type/resource/test gate. P3.5 is closed PASS.
