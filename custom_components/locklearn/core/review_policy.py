@@ -138,14 +138,15 @@ class ReviewPolicyV1:
             if elapsed is None
             else min(max(base_adjusted, elapsed), base_adjusted * 2)
         )
-        interval = self._jittered_interval(
+        jittered = self._jittered_interval(
             card_key=str(snapshot.get("card_key", "")),
             target_box=target_box,
             ordinal=int(snapshot.get("verified_correct_count", 0))
             + int(snapshot.get("verified_wrong_count", 0))
             + 1,
-            interval_days=demonstrated_floor,
+            interval_days=base_adjusted,
         )
+        interval = max(demonstrated_floor, jittered)
         post = dict(snapshot)
         post.update(
             {
