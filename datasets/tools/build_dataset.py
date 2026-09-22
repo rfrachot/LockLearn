@@ -14,8 +14,10 @@ from typing import cast
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from custom_components.locklearn.core.assets import AssetKind
 from custom_components.locklearn.datasets import parse_manifest
 from datasets.pipeline import (
+    BuildAssetInput,
     DatasetBuildSpec,
     DatasetRecipe,
     SourceFileInput,
@@ -163,6 +165,46 @@ def _load_config(
                 ),
             )
         )
+    assets: list[BuildAssetInput] = []
+    for raw_asset in document.get("assets", []):
+        if not isinstance(raw_asset, dict):
+            raise ValueError("asset config must be an object")
+        local_path = (path.parent / str(raw_asset["path"])).resolve()
+        raw_kind = raw_asset["kind"]
+        if not isinstance(raw_kind, str):
+            raise ValueError("asset kind must be a string")
+        assets.append(
+            BuildAssetInput(
+                asset_id=str(raw_asset["asset_id"]),
+                source_id=str(raw_asset["source_id"]),
+                source_record_id=str(raw_asset["source_record_id"]),
+                path=local_path,
+                archive_path=str(raw_asset["archive_path"]),
+                kind=AssetKind(raw_kind),
+                mime_type=str(raw_asset["mime_type"]),
+                attribution=str(raw_asset.get("attribution", "")),
+                license_id=(
+                    None
+                    if raw_asset.get("license_id") is None
+                    else str(raw_asset["license_id"])
+                ),
+                width=(
+                    None
+                    if raw_asset.get("width") is None
+                    else int(raw_asset["width"])
+                ),
+                height=(
+                    None
+                    if raw_asset.get("height") is None
+                    else int(raw_asset["height"])
+                ),
+                author=(
+                    None if raw_asset.get("author") is None else str(raw_asset["author"])
+                ),
+                modified_from_source=bool(raw_asset.get("modified_from_source", False)),
+            )
+        )
+
     spec = DatasetBuildSpec(
         dataset_id=str(document["dataset_id"]),
         dataset_version=str(document["dataset_version"]),
@@ -171,6 +213,7 @@ def _load_config(
         build_tool_version=str(document["build_tool_version"]),
         signing_key_id=str(document["signing_key_id"]),
         sources=tuple(sources),
+        assets=tuple(assets),
         added_count=int(document.get("added_count", 0)),
         changed_count=int(document.get("changed_count", 0)),
         removed_count=int(document.get("removed_count", 0)),
