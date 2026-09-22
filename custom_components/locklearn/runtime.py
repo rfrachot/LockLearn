@@ -13,6 +13,7 @@ from .core.operations import OperationRegistry
 from .core.sessions import SessionService
 from .datasets.manager import (
     DatasetManager,
+    load_runtime_bundled_datasets,
     load_runtime_dataset_definitions,
     load_runtime_source_freshness,
     load_runtime_trust_store,
@@ -72,6 +73,13 @@ class LockLearnRuntime:
                 issue_callback=report_issue,
                 issue_clear_callback=clear_issue,
             )
+            for bundled in load_runtime_bundled_datasets():
+                try:
+                    await datasets.async_install_bundled(bundled)
+                except Exception:
+                    # DatasetManager already raises a persistent Repair. Keep HA
+                    # usable and preserve the empty/last-known-good generation.
+                    pass
             return cls(
                 storage=storage,
                 sessions=SessionService(storage),
