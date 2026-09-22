@@ -718,7 +718,23 @@ _MERGES = (
         ("package_id",),
         ("dataset_id", "dataset_version_id", "built_at_utc", "canonical_content_hash"),
     ),
-    _TableMerge("provenance_records", ("provenance_id",)),
+    _TableMerge(
+        "provenance_records",
+        ("provenance_id",),
+        (
+            "dataset_id",
+            "object_type",
+            "object_id",
+            "source_snapshot_id",
+            "license_id",
+            "license_scope",
+            "source_record_id",
+            "author",
+            "language_tag",
+            "modified_from_source",
+            "attribution_text",
+        ),
+    ),
     _TableMerge(
         "concepts",
         ("concept_id",),
@@ -875,6 +891,13 @@ class ContentGenerationBuilder:
                     finally:
                         connection.execute("DETACH DATABASE package")
                 self._synchronize_lifecycle(connection, generation_id)
+                connection.execute(
+                    """DELETE FROM source_snapshots
+                       WHERE NOT EXISTS (
+                           SELECT 1 FROM provenance_records
+                           WHERE provenance_records.source_snapshot_id = source_snapshots.snapshot_id
+                       )"""
+                )
                 self._build_preaggregates(connection)
                 package_set_hash = _package_set_hash(package_metadata)
                 connection.execute(
@@ -983,23 +1006,6 @@ class ContentGenerationBuilder:
                 "snapshot_id",
                 ("source_id", "upstream_version", "source_url", "sha256", "adapter_version"),
             ),
-            (
-                "provenance_records",
-                "provenance_id",
-                (
-                    "dataset_id",
-                    "object_type",
-                    "object_id",
-                    "source_snapshot_id",
-                    "license_id",
-                    "license_scope",
-                    "source_record_id",
-                    "author",
-                    "language_tag",
-                    "modified_from_source",
-                    "attribution_text",
-                ),
-            ),
             ("concepts", "concept_id", ("dataset_id", "source_id")),
             ("terms", "term_id", ("dataset_id",)),
             ("learning_items", "learning_item_id", ("dataset_id",)),
@@ -1031,6 +1037,16 @@ class ContentGenerationBuilder:
 
     @staticmethod
     def _merge_attached_package(connection: sqlite3.Connection, generation_id: str) -> None:
+        dataset_row = connection.execute(
+            "SELECT dataset_id FROM package.dataset_packages"
+        ).fetchone()
+        if dataset_row is None:
+            raise ContentValidationError("attached package does not declare its dataset")
+        dataset_id = str(dataset_row[0])
+        connection.execute("DELETE FROM provenance_records WHERE dataset_id = ?", (dataset_id,))
+        connection.execute("DELETE FROM dataset_sources WHERE dataset_id = ?", (dataset_id,))
+        connection.execute("DELETE FROM dataset_licenses WHERE dataset_id = ?", (dataset_id,))
+
         for merge in _MERGES:
             columns = tuple(
                 str(row[1]) for row in connection.execute(f"PRAGMA main.table_info({merge.name})")
