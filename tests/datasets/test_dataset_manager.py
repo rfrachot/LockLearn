@@ -194,6 +194,7 @@ async def _manager(
                 dataset_id=_DATASET_ID,
                 name="Manager fixture",
                 catalog_url="https://example.invalid/catalog.json",
+                artifact_hosts=frozenset({"example.invalid"}),
             ),
         ),
         trust_store=_trust_store(),
@@ -293,5 +294,25 @@ async def test_removal_requires_confirmation_and_blocks_active_pack_usage(
 
         await manager.async_remove(_DATASET_ID, confirmed=True)
         assert await storage.async_dataset_inventory() == []
+    finally:
+        await storage.async_close()
+
+
+async def test_untrusted_catalog_cannot_redirect_artifact_download_to_other_host(
+    tmp_path: Path,
+) -> None:
+    storage, manager, transport = await _manager(tmp_path)
+    try:
+        artifact = _artifact(tmp_path, "1.0.0")
+        catalog = _catalog({"1.0.0": artifact})
+        releases = catalog["releases"]
+        assert isinstance(releases, list)
+        assert isinstance(releases[0], dict)
+        releases[0]["artifact_url"] = "https://attacker.invalid/payload.zip"
+        transport.catalogs["https://example.invalid/catalog.json"] = catalog
+        await manager.async_refresh()
+
+        with pytest.raises(DatasetInstallError, match="host allowlist"):
+            await manager.async_install(_DATASET_ID)
     finally:
         await storage.async_close()
