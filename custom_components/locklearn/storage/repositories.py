@@ -1354,9 +1354,7 @@ class ReviewEventsRepository:
             "prompt_facet_id": event.prompt_facet_id,
             "answer_facet_id": event.answer_facet_id,
         }
-        mismatched = tuple(
-            key for key, value in expected.items() if snapshot.get(key) != value
-        )
+        mismatched = tuple(key for key, value in expected.items() if snapshot.get(key) != value)
         if mismatched:
             raise StateRepositoryError(f"progress snapshot identity mismatch: {mismatched!r}")
 
