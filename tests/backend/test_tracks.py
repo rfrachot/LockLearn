@@ -28,12 +28,8 @@ def _directional_package(
 ) -> Path:
     package = create_package(path, version, active_item_ids=active_item_ids)
     with sqlite3.connect(package) as connection:
-        connection.execute(
-            "UPDATE facets SET language_tag = 'en' WHERE facet_key = 'prompt'"
-        )
-        connection.execute(
-            "UPDATE facets SET language_tag = 'fr' WHERE facet_key = 'answer'"
-        )
+        connection.execute("UPDATE facets SET language_tag = 'en' WHERE facet_key = 'prompt'")
+        connection.execute("UPDATE facets SET language_tag = 'fr' WHERE facet_key = 'answer'")
         connection.commit()
     return package
 
@@ -113,9 +109,9 @@ async def test_direction_configuration_resolves_to_exact_card_rules(tmp_path: Pa
             card_identity(ITEM_A)[1],
             card_identity(ITEM_B)[1],
         }
-        assert await storage.repositories.tracks.async_get_content_weights(
-            "track-direction"
-        ) == {"vocabulary": 50.0}
+        assert await storage.repositories.tracks.async_get_content_weights("track-direction") == {
+            "vocabulary": 50.0
+        }
     finally:
         await storage.async_close()
 
@@ -222,9 +218,7 @@ async def test_content_weights_are_relative_non_negative_targets(tmp_path: Path)
             track_id="track-weights",
             weights={"vocabulary": 50, "grammar": 20, "kanji": 30},
         )
-        assert await storage.repositories.tracks.async_get_content_weights(
-            "track-weights"
-        ) == {
+        assert await storage.repositories.tracks.async_get_content_weights("track-weights") == {
             "grammar": 20.0,
             "kanji": 30.0,
             "vocabulary": 50.0,
