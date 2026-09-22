@@ -5,6 +5,12 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P1.5 pack/tag primitives with immutable pack-version pinning, prerequisites,
+  unlock thresholds, confusable intro gaps and pack-version diff metadata.
+- Data-driven Japanese curation policy keeping isolated ON/KUN cards disabled by
+  default and requiring contextualized readings, complete-term production and strong grading defaults.
+- LearningItem curation metadata for queryable tags, register and required-item dependencies.
+- ADR-0012 defining versioned packs, prerequisite boundaries and data-owned curation.
 - P1.4 multilingual locale primitives with BCP 47 canonicalization, ISO 15924
   script metadata, deterministic locale fallback and versioned normalization policies.
 - Generic script-aware normalization policy registry with explicit Unicode,
