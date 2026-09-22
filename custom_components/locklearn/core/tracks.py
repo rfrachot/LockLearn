@@ -176,15 +176,15 @@ class TrackService:
         if not next_name:
             raise TrackValidationError("track name must not be empty")
         next_source = (
-            ""
-            if current["source_language"] is None
-            else str(current["source_language"])
-        ) if source_language is None else source_language.strip()
+            ("" if current["source_language"] is None else str(current["source_language"]))
+            if source_language is None
+            else source_language.strip()
+        )
         next_target = (
-            ""
-            if current["target_language"] is None
-            else str(current["target_language"])
-        ) if target_language is None else target_language.strip()
+            ("" if current["target_language"] is None else str(current["target_language"]))
+            if target_language is None
+            else target_language.strip()
+        )
         if not next_source or not next_target:
             raise TrackValidationError("source and target languages are required")
         if next_source == next_target:
