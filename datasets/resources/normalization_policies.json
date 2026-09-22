@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "policies": [
+    {
+      "id": "latin_default_v1",
+      "normalization_version": 1,
+      "unicode_normalization": "NFC",
+      "case_mode": "casefold",
+      "whitespace_mode": "collapse",
+      "punctuation_mode": "preserve",
+      "allowed_scripts": ["Latn"]
+    },
+    {
+      "id": "japanese_v1",
+      "normalization_version": 1,
+      "unicode_normalization": "NFKC",
+      "case_mode": "preserve",
+      "whitespace_mode": "collapse",
+      "punctuation_mode": "preserve",
+      "allowed_scripts": ["Jpan", "Hani", "Hira", "Kana"]
+    }
+  ]
+}
