@@ -22,6 +22,7 @@ V1 roles are:
 | Permission | owner | editor | viewer | outsider |
 | --- | --- | --- | --- | --- |
 | Read profile/progress/stats | yes | yes | yes | no |
+| Edit profile metadata/settings | yes | no | no | no |
 | Edit tracks/planning | yes | yes | no | no |
 | Answer/start learning work | yes | yes | no | no |
 | Manage progress | yes | yes | no | no |
