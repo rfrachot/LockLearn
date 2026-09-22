@@ -20,12 +20,20 @@
           "enabled_by_default": false
         },
         {
+          "id": "locklearn:curation-rule:ja-contextualized-reading",
+          "kind": "prefer_contextualized_reading"
+        },
+        {
           "id": "locklearn:curation-rule:ja-complete-production-term",
           "kind": "production_complete_term"
         },
         {
           "id": "locklearn:curation-rule:ja-mnemonic-keyword-label",
           "kind": "mnemonic_keyword_label"
+        },
+        {
+          "id": "locklearn:curation-rule:ja-strong-production-grading",
+          "kind": "production_requires_strong_grading"
         },
         {
           "id": "locklearn:curation-rule:ja-context-hint",
