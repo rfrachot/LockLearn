@@ -5,6 +5,9 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- Canonical P1.1 content-domain types with deterministic card identities,
+  explicit cross-source alignments and released-ID migration mappings.
+- ADR-0008 defining stable content/card identity and future migration rules.
 - Reproducible HAOS/Supervisor backup-and-restore qualification harness.
 - P0.7 real-instance evidence and platform-specific notification decisions.
 
