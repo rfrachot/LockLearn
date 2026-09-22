@@ -1,0 +1,29 @@
+name: P2.1 development gate
+
+on:
+  push:
+    paths:
+      - "docs/.p2-1-gate"
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/p1-content-core
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          check-latest: true
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m ruff format --check .
+      - run: python -m ruff check .
+      - run: python -m mypy custom_components datasets tests
+      - run: python datasets/tools/validate_resources.py
+      - run: python -m pytest -q --tb=short
