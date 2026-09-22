@@ -132,6 +132,22 @@ class DatasetStatus:
 
 
 @dataclass(frozen=True, slots=True)
+class ResolvedPublicAsset:
+    """A verified cache path for an asset present in the active generation."""
+
+    asset_id: str
+    path: Path
+    kind: str
+    mime_type: str
+    sha256: str
+    byte_size: int
+    width: int | None
+    height: int | None
+    license_id: str
+    attribution: str
+
+
+@dataclass(frozen=True, slots=True)
 class DatasetInstallResult:
     """Observable result after a fully verified generation switch."""
 
@@ -314,6 +330,42 @@ class DatasetManager:
             if status.definition.dataset_id == dataset_id:
                 return status
         raise DatasetManagerError(f"dataset status is unavailable: {dataset_id}")
+
+    async def async_resolve_public_asset(
+        self,
+        asset_id: str,
+    ) -> ResolvedPublicAsset | None:
+        """Resolve only an asset referenced by the currently active public dataset."""
+        metadata = await self._storage.async_asset_metadata(asset_id)
+        if metadata is None:
+            return None
+        root = _asset_cache_directory(
+            self._assets_root,
+            str(metadata["dataset_id"]),
+            str(metadata["dataset_version"]),
+        )
+        relative = PurePosixPath(str(metadata["path"])).relative_to("assets")
+        path = root.joinpath(*relative.parts)
+        if not path.is_file():
+            raise DatasetInstallError(f"active dataset asset is missing from cache: {asset_id}")
+        size = path.stat().st_size
+        if size != int(metadata["byte_size"]):
+            raise DatasetInstallError(f"active dataset asset size mismatch: {asset_id}")
+        digest = await asyncio.to_thread(_sha256_file, path)
+        if digest != str(metadata["sha256"]):
+            raise DatasetInstallError(f"active dataset asset checksum mismatch: {asset_id}")
+        return ResolvedPublicAsset(
+            asset_id=asset_id,
+            path=path,
+            kind=str(metadata["kind"]),
+            mime_type=str(metadata["mime_type"]),
+            sha256=digest,
+            byte_size=size,
+            width=None if metadata["width"] is None else int(metadata["width"]),
+            height=None if metadata["height"] is None else int(metadata["height"]),
+            license_id=str(metadata["license_id"]),
+            attribution=str(metadata["attribution"]),
+        )
 
     async def async_install(
         self,
