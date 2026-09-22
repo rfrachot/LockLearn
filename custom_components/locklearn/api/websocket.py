@@ -15,6 +15,7 @@ from ..core.content import GradingOutcome, GradingPolicyKind
 from ..core.content_reports import ContentReportError
 from ..core.grading import FreeTextGradingResult
 from ..core.profiles import ProfileValidationError
+from ..core.sessions import SessionValidationError
 from ..core.tracks import TrackValidationError
 from ..runtime import LockLearnRuntime
 from ..storage.database import SessionNotFoundError, StaleSessionError
@@ -45,11 +46,6 @@ def _require_runtime(
     if runtime is None:
         connection.send_error(message_id, ERR_NOT_FOUND, "LockLearn is not loaded")
     return runtime
-
-
-def _probe_profile_id(connection: ActiveConnection) -> str:
-    """Use an isolated P0 profile namespace until P2 supplies real ACL data."""
-    return f"p0-probe:{connection.user.id}"
 
 
 def _paginate(
@@ -131,14 +127,20 @@ async def _authorized_session(
     connection: ActiveConnection,
     message_id: int,
     session_id: str,
+    permission: ProfilePermission,
 ) -> dict[str, Any] | None:
-    """Reject cross-user session reads/mutations at the backend boundary."""
+    """Recheck Profile ACL for every persistent-session read or mutation."""
     state = await runtime.sessions.async_get(session_id)
     if state is None:
         connection.send_error(message_id, ERR_NOT_FOUND, "Session not found")
         return None
-    if state["profile_id"] != _probe_profile_id(connection):
-        connection.send_error(message_id, ERR_FORBIDDEN, "Session access denied")
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        message_id,
+        str(state["profile_id"]),
+        permission,
+    ):
         return None
     return state
 
@@ -716,18 +718,47 @@ async def ws_admin_storage_status(
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "locklearn/session/start",
+        vol.Required("profile_id"): str,
         vol.Optional("track_id"): str,
+        vol.Optional("session_type", default="learn"): str,
+        vol.Optional("strategy", default="default"): str,
+        vol.Optional("settings", default={}): dict,
     }
 )
 @websocket_api.async_response
 async def ws_session_start(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Start the P0 persistent session prototype."""
+    """Start a persistent session owned by a real LockLearn Profile."""
     runtime = _require_runtime(hass, connection, msg["id"])
     if runtime is None:
         return
-    state = await runtime.sessions.async_start(_probe_profile_id(connection), msg.get("track_id"))
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.ANSWER,
+    ):
+        return
+    track_id = msg.get("track_id")
+    if track_id is not None:
+        track = await runtime.storage.repositories.tracks.async_get(track_id)
+        if track is None or str(track["profile_id"]) != profile_id:
+            connection.send_error(msg["id"], ERR_NOT_FOUND, "Track not found")
+            return
+    try:
+        state = await runtime.sessions.async_start(
+            profile_id,
+            track_id,
+            session_type=msg["session_type"],
+            strategy=msg["strategy"],
+            settings=msg["settings"],
+        )
+    except SessionValidationError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
     connection.send_result(msg["id"], state)
 
 
@@ -741,11 +772,17 @@ async def ws_session_start(
 async def ws_session_get(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Get a P0 session."""
+    """Get a complete resumable persistent-session snapshot."""
     runtime = _require_runtime(hass, connection, msg["id"])
     if runtime is None:
         return
-    state = await _authorized_session(runtime, connection, msg["id"], msg["session_id"])
+    state = await _authorized_session(
+        runtime,
+        connection,
+        msg["id"],
+        msg["session_id"],
+        ProfilePermission.READ,
+    )
     if state is None:
         return
     connection.send_result(msg["id"], state)
@@ -764,11 +801,20 @@ async def ws_session_get(
 async def ws_session_answer(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Apply a session answer using CAS."""
+    """Apply one current-question answer using session/version CAS."""
     runtime = _require_runtime(hass, connection, msg["id"])
     if runtime is None:
         return
-    if await _authorized_session(runtime, connection, msg["id"], msg["session_id"]) is None:
+    if (
+        await _authorized_session(
+            runtime,
+            connection,
+            msg["id"],
+            msg["session_id"],
+            ProfilePermission.ANSWER,
+        )
+        is None
+    ):
         return
     try:
         state = await runtime.sessions.async_answer(
@@ -788,6 +834,131 @@ async def ws_session_answer(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "locklearn/session/pause",
+        vol.Required("session_id"): str,
+        vol.Required("expected_version"): vol.All(int, vol.Range(min=1)),
+        vol.Optional("paused", default=True): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_session_pause(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Pause or resume a session through one CAS lifecycle command."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _authorized_session(
+            runtime,
+            connection,
+            msg["id"],
+            msg["session_id"],
+            ProfilePermission.ANSWER,
+        )
+        is None
+    ):
+        return
+    try:
+        if msg["paused"]:
+            state = await runtime.sessions.async_pause(
+                msg["session_id"], msg["expected_version"]
+            )
+        else:
+            state = await runtime.sessions.async_resume(
+                msg["session_id"], msg["expected_version"]
+            )
+    except SessionNotFoundError:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Session not found")
+        return
+    except StaleSessionError:
+        connection.send_error(msg["id"], ERR_STALE_SESSION, "The session changed on another client")
+        return
+    connection.send_result(msg["id"], state)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/session/complete",
+        vol.Required("session_id"): str,
+        vol.Required("expected_version"): vol.All(int, vol.Range(min=1)),
+    }
+)
+@websocket_api.async_response
+async def ws_session_complete(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Complete a persistent session with CAS."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _authorized_session(
+            runtime,
+            connection,
+            msg["id"],
+            msg["session_id"],
+            ProfilePermission.ANSWER,
+        )
+        is None
+    ):
+        return
+    try:
+        state = await runtime.sessions.async_complete(
+            msg["session_id"], msg["expected_version"]
+        )
+    except SessionNotFoundError:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Session not found")
+        return
+    except StaleSessionError:
+        connection.send_error(msg["id"], ERR_STALE_SESSION, "The session changed on another client")
+        return
+    connection.send_result(msg["id"], state)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/session/undo",
+        vol.Required("session_id"): str,
+        vol.Required("expected_version"): vol.All(int, vol.Range(min=1)),
+    }
+)
+@websocket_api.async_response
+async def ws_session_undo(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Undo session navigation only; P3.12 owns ReviewEvent/progress undo."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _authorized_session(
+            runtime,
+            connection,
+            msg["id"],
+            msg["session_id"],
+            ProfilePermission.ANSWER,
+        )
+        is None
+    ):
+        return
+    try:
+        state = await runtime.sessions.async_undo(
+            msg["session_id"],
+            msg["expected_version"],
+            actor_user_id=connection.user.id,
+        )
+    except SessionNotFoundError:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Session not found")
+        return
+    except StaleSessionError:
+        connection.send_error(msg["id"], ERR_STALE_SESSION, "No admissible session answer to undo")
+        return
+    connection.send_result(msg["id"], state)
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "locklearn/session/subscribe",
         vol.Required("session_id"): str,
     }
@@ -796,18 +967,27 @@ async def ws_session_answer(
 async def ws_session_subscribe(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Subscribe a client to session mutations."""
+    """Subscribe a client to persistent session mutations."""
     runtime = _require_runtime(hass, connection, msg["id"])
     if runtime is None:
         return
-    state = await _authorized_session(runtime, connection, msg["id"], msg["session_id"])
+    state = await _authorized_session(
+        runtime,
+        connection,
+        msg["id"],
+        msg["session_id"],
+        ProfilePermission.READ,
+    )
     if state is None:
         return
 
     def forward(snapshot: dict[str, Any]) -> None:
         connection.send_event(msg["id"], snapshot)
 
-    connection.subscriptions[msg["id"]] = runtime.sessions.subscribe(msg["session_id"], forward)
+    connection.subscriptions[msg["id"]] = runtime.sessions.subscribe(
+        msg["session_id"],
+        forward,
+    )
     connection.send_result(msg["id"], state)
 
 
@@ -891,6 +1071,9 @@ COMMANDS = (
     ws_session_start,
     ws_session_get,
     ws_session_answer,
+    ws_session_pause,
+    ws_session_complete,
+    ws_session_undo,
     ws_session_subscribe,
     ws_operation_subscribe,
     ws_operation_cancel,
