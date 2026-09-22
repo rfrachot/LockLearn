@@ -108,6 +108,7 @@ def _initialize_state_database(path: Path, schema: str, version: int) -> None:
             return
         connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         backup = path.with_name(f"{path.name}.pre-migration-v{current}.bak")
+        backup.unlink(missing_ok=True)
         target = sqlite3.connect(backup)
         try:
             connection.backup(target)
@@ -168,6 +169,7 @@ def _migrate_state_database(path: Path, schema: str, current: int, target: int) 
             raise RuntimeError("Migrated state database failed integrity_check")
         if connection.execute("PRAGMA foreign_key_check").fetchall():
             raise RuntimeError("Migrated state database failed foreign_key_check")
+        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     except Exception:
         if connection.in_transaction:
             connection.rollback()
