@@ -1,5 +1,17 @@
 """Signed, prebuilt LockLearn dataset package contract."""
 
+from .manager import (
+    DatasetDefinition,
+    DatasetDiscoveryError,
+    DatasetInstallError,
+    DatasetInstallResult,
+    DatasetManager,
+    DatasetManagerError,
+    DatasetRelease,
+    DatasetRemovalError,
+    DatasetStatus,
+    InstalledDataset,
+)
 from .manifest import (
     MANIFEST_VERSION,
     DatasetManifest,
@@ -30,9 +42,19 @@ __all__ = [
     "ArchiveLimits",
     "ArchiveStructureError",
     "DatasetDatabaseError",
+    "DatasetDefinition",
+    "DatasetDiscoveryError",
+    "DatasetInstallError",
+    "DatasetInstallResult",
+    "DatasetManager",
+    "DatasetManagerError",
+    "DatasetRelease",
+    "DatasetRemovalError",
+    "DatasetStatus",
     "DatasetManifest",
     "DatasetPackageError",
     "FileRole",
+    "InstalledDataset",
     "KeyStatus",
     "KeyUsage",
     "LicensePolicyError",
