@@ -121,23 +121,85 @@ def validate() -> None:
                 f"language {row['tag']} declares scripts outside normalizer {row['normalizer']}"
             )
 
+    if licenses.get("schema_version") != 2:
+        raise ValueError("license registry schema_version must be 2")
     license_rows = licenses.get("licenses", [])
     license_ids = {row["id"] for row in license_rows}
+    if len(license_ids) != len(license_rows):
+        raise ValueError("duplicate license IDs")
+    allowed_license_scopes = {"software", "editorial", "dataset", "asset"}
     for row in license_rows:
+        required = {
+            "spdx_or_internal_id",
+            "name",
+            "version",
+            "commercial_use_allowed",
+            "derivatives_allowed",
+            "share_alike",
+            "attribution_required",
+            "official_dataset_allowed",
+            "allowed_scopes",
+            "source_url",
+            "notes",
+        }
+        if missing := required - set(row):
+            raise ValueError(f"license {row['id']} is missing fields: {sorted(missing)}")
+        scopes = row["allowed_scopes"]
+        if not scopes or len(scopes) != len(set(scopes)):
+            raise ValueError(f"license {row['id']} has invalid allowed_scopes")
+        if not set(scopes) <= allowed_license_scopes:
+            raise ValueError(f"license {row['id']} has unknown allowed_scopes")
         if row.get("official_dataset_allowed") and not row.get("commercial_use_allowed"):
             raise ValueError(f"official license is not commercial-compatible: {row['id']}")
         if row.get("official_dataset_allowed") and not row.get("derivatives_allowed"):
             raise ValueError(f"official license forbids derivatives: {row['id']}")
 
+    if sources.get("schema_version") != 2:
+        raise ValueError("source registry schema_version must be 2")
     source_rows = sources.get("sources", [])
     source_ids = [row["id"] for row in source_rows]
     if len(source_ids) != len(set(source_ids)):
         raise ValueError("duplicate source IDs")
+    licenses_by_id = {row["id"]: row for row in license_rows}
     for row in source_rows:
-        if row["license_id"] not in license_ids:
-            raise ValueError(f"unknown license {row['license_id']} for source {row['id']}")
+        required = {
+            "name",
+            "provider",
+            "homepage",
+            "license_id",
+            "license_scope",
+            "attribution_template",
+            "adapter_id",
+            "status",
+            "commercial_compatible",
+            "refresh_policy",
+            "uses",
+            "required_provenance",
+            "excluded_by_default",
+            "notes",
+        }
+        if missing := required - set(row):
+            raise ValueError(f"source {row['id']} is missing fields: {sorted(missing)}")
+        license_id = row["license_id"]
+        if license_id not in license_ids:
+            raise ValueError(f"unknown license {license_id} for source {row['id']}")
         if not row.get("commercial_compatible"):
             raise ValueError(f"official candidate is not commercial-compatible: {row['id']}")
+        scope = row["license_scope"]
+        if scope == "software" or scope not in allowed_license_scopes:
+            raise ValueError(f"invalid content license scope for source {row['id']}")
+        if scope not in licenses_by_id[license_id]["allowed_scopes"]:
+            raise ValueError(f"license scope is incompatible for source {row['id']}")
+        allowlist = row.get("field_allowlist")
+        excluded = row.get("excluded_by_default", [])
+        if allowlist is not None:
+            if len(allowlist) != len(set(allowlist)):
+                raise ValueError(f"duplicate field allowlist entries for source {row['id']}")
+            if set(allowlist) & set(excluded):
+                raise ValueError(f"source allowlist overlaps excluded fields for {row['id']}")
+        required_provenance = row.get("required_provenance", [])
+        if len(required_provenance) != len(set(required_provenance)):
+            raise ValueError(f"duplicate required provenance fields for source {row['id']}")
 
 
 if __name__ == "__main__":
