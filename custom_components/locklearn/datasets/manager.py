@@ -155,9 +155,8 @@ class BundledDataset:
     def __post_init__(self) -> None:
         if not self.dataset_id or not self.version:
             raise DatasetManagerError("bundled dataset identity fields must be non-empty")
-        if (
-            len(self.sha256) != 64
-            or any(character not in "0123456789abcdef" for character in self.sha256)
+        if len(self.sha256) != 64 or any(
+            character not in "0123456789abcdef" for character in self.sha256
         ):
             raise DatasetManagerError("bundled dataset sha256 must be lowercase SHA-256")
         if self.size <= 0:
@@ -398,9 +397,7 @@ class DatasetManager:
                 )
                 raise
             self._errors.pop(bundled.dataset_id, None)
-            await self._clear_issue(
-                f"dataset_install_{_issue_suffix(bundled.dataset_id)}"
-            )
+            await self._clear_issue(f"dataset_install_{_issue_suffix(bundled.dataset_id)}")
             return result
 
     async def _async_install_archive(
