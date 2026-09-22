@@ -3667,6 +3667,7 @@ Chaque artefact publié possède un manifest de build.
 Minimum :
 
 ```text
+manifest_version
 dataset_id
 dataset_version
 built_at
@@ -3675,9 +3676,35 @@ minimum_locklearn_version
 sources[]
 licenses[]
 item_counts
-sha256
 build_tool_version
+signing_key_id
+asset_count
+entry_count
+required_free_disk
+canonical_content_hash
+files[]
 ```
+
+`manifest_version` versionne l'enveloppe et son parser. Il est distinct de
+`content_schema_version` (schéma du payload SQLite) et de `dataset_version`
+(release de contenu). `canonical_content_hash` porte sur un export canonique
+déterministe du contenu logique ; ce n'est ni le SHA-256 du ZIP ni celui de
+`dataset.db`.
+
+Chaque entrée `files[]` déclare exactement un payload :
+
+```text
+path
+size
+sha256
+role: database | asset | license
+```
+
+La signature du manifest authentifie ainsi transitivement les tailles et
+SHA-256 de tous les payloads. Le SHA-256 éventuel du ZIP final et sa taille
+compressée sont des métadonnées externes de release : ils ne peuvent pas être
+placés dans le manifest contenu par ce même ZIP sans créer une définition
+auto-référentielle.
 
 Le manifest doit également permettre d'indiquer :
 
@@ -3703,22 +3730,37 @@ Artefact officiel recommandé :
 └── SIGNATURE.ed25519
 ```
 
-`.tar.gz` peut aussi être supporté. `.tar.zst` n'est pas retenu en V1 afin d'éviter une dépendance Python tierce.
+Le contrat V1 supporte uniquement ce layout ZIP. Tous les fichiers payload sont
+explicitement déclarés dans `files[]`; aucun payload implicite n'est accepté.
 
-La vérification de signature recommandée utilise Ed25519 via `cryptography`, déjà présent dans l'écosystème Home Assistant.
+`SIGNATURE.ed25519` contient exactement les 64 octets bruts de la signature
+Ed25519 des octets UTF-8 **exacts** de `manifest.json` tels qu'ils se trouvent
+dans l'archive. La vérification ne re-sérialise jamais le JSON avant de vérifier
+la signature. Le build produit néanmoins un JSON déterministe pour la
+reproductibilité.
+
+La vérification utilise Ed25519 via `cryptography`, déjà présent dans
+l'écosystème Home Assistant. Le runtime ne contient que des clés publiques de
+confiance ; aucune clé privée de production n'entre dans le repository ou dans
+l'intégration.
 
 Le manifest déclare :
 
 ```text
-compressed_size
-uncompressed_size
+manifest_version
+content_schema_version
+dataset_version
 asset_count
 entry_count
-schema_version
 required_free_disk
-content_hash
+canonical_content_hash
 signing_key_id
+files[path, size, sha256, role]
 ```
+
+Les tailles compressées du central directory sont des métadonnées ZIP hostiles
+utilisées uniquement pour appliquer les limites de sécurité. La taille
+décompressée authentifiée de chaque payload est `files[].size`.
 
 ### Trousseau de clés
 
@@ -3734,11 +3776,28 @@ Statuts : `active`, `deprecated`, `revoked`.
 
 La rotation/révocation passe par une release de code LockLearn avant expiration de la clé courante.
 
+Une clé `revoked` est toujours rejetée. Une clé `active` ou `deprecated` peut
+valider un artefact historique si `valid_from <= built_at < valid_until`; une
+expiration calendaire ultérieure n'invalide donc pas une restauration légitime.
+En revanche, un nouveau build exige une clé `active` valide à son `built_at`.
+
 Checksum et signature ont des rôles distincts : corruption accidentelle vs authenticité.
 
 ### Sécurité archive
 
-Avant extraction : chemins absolus/`..`/symlinks/hardlinks refusés, nombre de fichiers et tailles bornés, expansion ratio contrôlé, espace disque vérifié.
+Avant toute confiance ou extraction : chemins absolus, `..`, séparateurs Windows,
+NUL, symlinks/hardlinks et types non réguliers sont refusés. Les doublons,
+collisions insensibles à la casse, fichiers inattendus et payloads non déclarés
+sont refusés. Le nombre de fichiers, les tailles compressées/décompressées et le
+ratio d'expansion sont bornés par des plafonds de sécurité centralisés. Ces
+plafonds absolus ne sont pas le budget recommandé de 150 MiB d'un dataset
+officiel.
+
+Après authentification et hash de tous les payloads en streaming, `dataset.db`
+est copié seul vers un staging temporaire, ouvert en lecture seule/immutable et
+soumis à `PRAGMA integrity_check`. P1.2 n'impose encore ni tables métier
+incomplètes, ni `PRAGMA user_version`; le schéma métier complet reste une phase
+distincte.
 
 ### Reproductibilité
 

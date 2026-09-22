@@ -46,12 +46,12 @@
 ### P1
 
 - **P1.1** — Canonical content domain model (complete)
-- **P1.2** — Content blocks, grading metadata and safe rich text
-- **P1.3** — Multilingual normalization and locale primitives
-- **P1.4** — Tags, packs, prerequisites and Japanese curation primitives
-- **P1.5** — content.db schema, generations and stable merge
-- **P1.6** — Source/provenance/license registry
-- **P1.7** — Dataset artifact format, signatures and hostile-archive handling
+- **P1.2** — Dataset package contract, signatures and hostile-archive handling (complete)
+- **P1.3** — Content blocks, grading metadata and safe rich text
+- **P1.4** — Multilingual normalization and locale primitives
+- **P1.5** — Tags, packs, prerequisites and Japanese curation primitives
+- **P1.6** — content.db schema, generations and stable merge
+- **P1.7** — Source/provenance/license registry
 - **P1.8** — Dataset build pipeline and source adapters
 - **P1.9** — DatasetManager, update entity, staging and rollback
 - **P1.10** — Signed first-run mini dataset

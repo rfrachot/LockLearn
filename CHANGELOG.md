@@ -5,6 +5,12 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- Strict P1.2 signed dataset package contract with exact-byte Ed25519
+  verification, public-key lifecycle policy, transitively hashed payloads,
+  registry-backed official licensing, hostile-ZIP defenses and read-only SQLite
+  integrity validation.
+- ADR-0009 defining the dataset trust envelope, external ZIP checksum boundary
+  and historical key semantics.
 - Canonical P1.1 content-domain types with deterministic card identities,
   explicit cross-source alignments and released-ID migration mappings.
 - ADR-0008 defining stable content/card identity and future migration rules.
