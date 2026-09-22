@@ -65,7 +65,7 @@ class Asset:
 
 
 def _validate_asset_path(value: str) -> None:
-    if not value or "\" in value or value.startswith("/"):
+    if not value or "\\" in value or value.startswith("/"):
         raise AssetModelError("asset path must be a normalized relative POSIX path")
     path = PurePosixPath(value)
     if path.as_posix() != value or any(part in {"", ".", ".."} for part in path.parts):
