@@ -1,0 +1,72 @@
+name: Dataset pipeline
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      build_config:
+        description: "Optional repository-relative official dataset build config"
+        required: false
+        type: string
+      previous_artifact:
+        description: "Optional repository/runner path to previous ZIP for content comparison"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-check-sources:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          check-latest: true
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python datasets/tools/validate_resources.py
+      - run: python -m pytest -q --tb=short tests/datasets/test_source_adapters.py tests/datasets/test_build_pipeline.py
+      - run: python datasets/tools/source_check.py
+
+  manual-build:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_config != '' }}
+    needs: validate-and-check-sources
+    runs-on: ubuntu-latest
+    env:
+      LOCKLEARN_DATASET_SIGNING_KEY_B64: ${{ secrets.LOCKLEARN_DATASET_SIGNING_KEY_B64 }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          check-latest: true
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require signing secret
+        run: test -n "$LOCKLEARN_DATASET_SIGNING_KEY_B64"
+      - name: Build signed artifact
+        shell: bash
+        run: |
+          args=()
+          if [ -n "${{ inputs.previous_artifact }}" ]; then
+            args+=(--previous "${{ inputs.previous_artifact }}")
+          fi
+          python datasets/tools/build_dataset.py             "${{ inputs.build_config }}"             --output datasets/dist             --workspace datasets/staging/build             "${args[@]}"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: locklearn-dataset-build
+          path: |
+            datasets/dist/*.zip
+            datasets/dist/*.sha256
+          if-no-files-found: error
+
+# P1.8 deliberately does not publish GitHub Releases from arbitrary dispatch
+# input. P1.10 will add a reviewed official build config and the release step.
+# The pipeline already emits a publish=false decision when canonical content is
+# unchanged, so that release step can fail closed on no-op rebuilds.
