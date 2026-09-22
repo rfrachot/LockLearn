@@ -14,8 +14,8 @@ from .recommended import (
 __all__ = [
     "JMdictAdapter",
     "KaikkiAdapter",
-    "Kanjidic2Adapter",
     "KanjiVGAdapter",
+    "Kanjidic2Adapter",
     "LockLearnEditorialAdapter",
     "NormalizedRecord",
     "SourceAdapter",
