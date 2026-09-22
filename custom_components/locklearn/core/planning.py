@@ -66,6 +66,7 @@ class LoadForecast:
     target_date_feasible: bool
     review_capacity_feasible_in_3_weeks: bool
     review_capacity_feasible_in_3_months: bool
+    warnings: tuple[str, ...]
     assumptions: tuple[str, ...]
 
 
@@ -185,18 +186,38 @@ class LearningPlanService:
             horizon_days=90,
         )
         daily_push_budget = int(profile["settings"].get("daily_push_budget", 0))
+        new_21 = self._projected_new_load(
+            remaining_target_cards=remaining_target_cards,
+            max_new_per_day=plan.max_new_per_day_cards,
+            horizon_days=21,
+        )
+        new_90 = self._projected_new_load(
+            remaining_target_cards=remaining_target_cards,
+            max_new_per_day=plan.max_new_per_day_cards,
+            horizon_days=90,
+        )
         notif_21, active_21 = self._delivery_split(
-            new_cards=planned_new_per_day,
+            new_cards=new_21,
             reviews=reviews_21,
             daily_push_budget=daily_push_budget,
             max_notification_new_teasers=plan.max_notification_new_teasers,
         )
         notif_90, active_90 = self._delivery_split(
-            new_cards=planned_new_per_day,
+            new_cards=new_90,
             reviews=reviews_90,
             daily_push_budget=daily_push_budget,
             max_notification_new_teasers=plan.max_notification_new_teasers,
         )
+        warnings: list[str] = []
+        if not target_date_feasible:
+            warnings.append("target_date_requires_more_new_cards_than_daily_quota")
+        if reviews_21 > plan.max_reviews_per_day_cards:
+            warnings.append("review_load_exceeds_quota_in_3_weeks")
+        if reviews_90 > plan.max_reviews_per_day_cards:
+            warnings.append("review_load_exceeds_quota_in_3_months")
+        if snapshot["due_now"] > plan.max_reviews_per_day_cards:
+            warnings.append("current_due_backlog_exceeds_review_quota")
+
         return LoadForecast(
             selected_cards=selected_cards,
             introduced_cards=introduced_cards,
@@ -214,6 +235,7 @@ class LearningPlanService:
             target_date_feasible=target_date_feasible,
             review_capacity_feasible_in_3_weeks=reviews_21 <= plan.max_reviews_per_day_cards,
             review_capacity_feasible_in_3_months=reviews_90 <= plan.max_reviews_per_day_cards,
+            warnings=tuple(warnings),
             assumptions=(
                 "Forecast counts CardDefinitions, never LearningItems.",
                 "Future reviews use the V1 base intervals 1/3/7/14/30/60 days.",
@@ -244,6 +266,19 @@ class LearningPlanService:
         local_today = self._clock.now().astimezone(ZoneInfo(timezone)).date()
         if plan.target_date <= local_today:
             raise LearningPlanValidationError("target_date must be in the future")
+
+    @staticmethod
+    def _projected_new_load(
+        *,
+        remaining_target_cards: int,
+        max_new_per_day: int,
+        horizon_days: int,
+    ) -> int:
+        if remaining_target_cards == 0 or max_new_per_day == 0:
+            return 0
+        introduced_before_horizon = max_new_per_day * max(0, horizon_days - 1)
+        remaining = max(0, remaining_target_cards - introduced_before_horizon)
+        return min(max_new_per_day, remaining)
 
     @staticmethod
     def _projected_review_load(
