@@ -15,6 +15,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlparse
 from typing import Any, Protocol
 
 from awesomeversion import AwesomeVersion
@@ -54,11 +55,19 @@ class DatasetDefinition:
     dataset_id: str
     name: str
     catalog_url: str
+    artifact_hosts: frozenset[str]
     artifact_max_bytes: int = _OFFICIAL_ARTIFACT_DEFAULT_MAX_BYTES
 
     def __post_init__(self) -> None:
         if not self.dataset_id or not self.name or not self.catalog_url:
             raise DatasetManagerError("dataset definition fields must be non-empty")
+        catalog = urlparse(self.catalog_url)
+        if catalog.scheme != "https" or not catalog.hostname:
+            raise DatasetManagerError("dataset catalog_url must use HTTPS")
+        if not self.artifact_hosts:
+            raise DatasetManagerError("dataset definition requires artifact_hosts")
+        if any(not host or "/" in host or ":" in host for host in self.artifact_hosts):
+            raise DatasetManagerError("artifact_hosts must contain plain hostnames")
         if self.artifact_max_bytes <= 0:
             raise DatasetManagerError("artifact_max_bytes must be positive")
 
@@ -296,6 +305,12 @@ class DatasetManager:
             release = self._select_release(dataset_id, version)
             if release.artifact_size > definition.artifact_max_bytes:
                 raise DatasetInstallError("dataset artifact exceeds the configured official budget")
+            artifact_url = urlparse(release.artifact_url)
+            if (
+                artifact_url.scheme != "https"
+                or artifact_url.hostname not in definition.artifact_hosts
+            ):
+                raise DatasetInstallError("dataset artifact URL is outside the trusted host allowlist")
 
             self._downloads_root.mkdir(parents=True, exist_ok=True)
             download = self._downloads_root / f"{uuid.uuid4().hex}.zip"
@@ -570,6 +585,7 @@ def load_runtime_dataset_definitions(
                 dataset_id=_required_string(row, "dataset_id"),
                 name=_required_string(row, "name"),
                 catalog_url=_required_string(row, "catalog_url"),
+                artifact_hosts=frozenset(_required_string_list(row, "artifact_hosts")),
                 artifact_max_bytes=_required_int(
                     row,
                     "artifact_max_bytes",
@@ -816,6 +832,21 @@ def _required_string(row: Mapping[str, object], field: str) -> str:
     value = row.get(field)
     if not isinstance(value, str) or not value:
         raise DatasetManagerError(f"{field} must be a non-empty string")
+    return value
+
+
+def _required_string_list(
+    row: Mapping[str, object],
+    field: str,
+) -> list[str]:
+    value = row.get(field)
+    if (
+        not isinstance(value, list)
+        or not value
+        or any(not isinstance(item, str) or not item for item in value)
+        or len(value) != len(set(value))
+    ):
+        raise DatasetManagerError(f"{field} must contain unique non-empty strings")
     return value
 
 
