@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -91,8 +92,7 @@ class ReviewPolicyV1:
             target_box=target_box,
             ordinal=int(snapshot.get("verified_correct_count", 0))
             + int(snapshot.get("verified_wrong_count", 0)),
-            interval_days=DEFAULT_BOX_INTERVAL_DAYS[target_box]
-            * self._difficulty(snapshot),
+            interval_days=DEFAULT_BOX_INTERVAL_DAYS[target_box] * self._difficulty(snapshot),
         )
         post = dict(snapshot)
         post.update(
@@ -233,7 +233,7 @@ class ReviewPolicyV1:
         last_verified = datetime.fromisoformat(last_verified_raw)
         elapsed_days = max(0.0, (moment - last_verified).total_seconds() / 86400)
         reference = max(1.0, DEFAULT_BOX_INTERVAL_DAYS.get(max(1, box), 1.0) * 2)
-        decay = 0.5 ** (elapsed_days / reference)
+        decay = math.pow(0.5, elapsed_days / reference)
         return round(max(0.0, min(1.0, raw * decay)), 6)
 
     def is_mastered(
