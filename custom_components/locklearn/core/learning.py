@@ -120,9 +120,7 @@ class LearningStateMachine:
                 "state": "relearning",
                 "last_seen_at_utc": now.isoformat(),
                 "last_result": "wrong",
-                "next_due_at_utc": (
-                    now + timedelta(minutes=self._relearning_steps[0])
-                ).isoformat(),
+                "next_due_at_utc": (now + timedelta(minutes=self._relearning_steps[0])).isoformat(),
                 "streak_correct": 0,
                 "updated_at_utc": now.isoformat(),
             }
