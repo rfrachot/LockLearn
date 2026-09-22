@@ -22,6 +22,10 @@ pedagogical examples where LockLearn owns the copyright. Content must carry an
 explicit content license in its manifest; software's MIT license does not
 implicitly relicense learning content.
 
+The bundled `Japanese Starter 1.0.0` dataset is first-party editorial content
+under this CC BY-SA 4.0 boundary. Its signed package includes the corresponding
+license payload and LockLearn contributor attribution.
+
 ## Third-party datasets and assets
 
 Third-party material retains its own license. LockLearn must preserve required
