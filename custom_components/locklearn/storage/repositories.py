@@ -228,6 +228,76 @@ class ProfilesRepository:
 
         return await self._storage._async_reader(read)
 
+    async def async_update(
+        self,
+        *,
+        profile_id: str,
+        name: str,
+        timezone: str,
+        status: str,
+        settings: dict[str, Any],
+        updated_at_utc: str,
+    ) -> bool:
+        serialized = json.dumps(
+            settings,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                """UPDATE profiles
+                   SET name = ?, timezone = ?, status = ?, settings_json = ?,
+                       updated_at_utc = ?
+                   WHERE profile_id = ?""",
+                (name, timezone, status, serialized, updated_at_utc, profile_id),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(write)
+
+    async def async_delete(self, profile_id: str) -> bool:
+        """Delete one profile and profile-scoped private state."""
+
+        def write(connection: sqlite3.Connection) -> bool:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                exists = connection.execute(
+                    "SELECT 1 FROM profiles WHERE profile_id = ?",
+                    (profile_id,),
+                ).fetchone()
+                if exists is None:
+                    connection.rollback()
+                    return False
+                for table in (
+                    "notification_interactions",
+                    "scheduled_slots",
+                    "stats_daily",
+                    "exam_attempts",
+                    "review_events",
+                    "progress",
+                    "sessions",
+                    "audit_events",
+                ):
+                    connection.execute(
+                        f"DELETE FROM {table} WHERE profile_id = ?",
+                        (profile_id,),
+                    )
+                connection.execute(
+                    "DELETE FROM profiles WHERE profile_id = ?",
+                    (profile_id,),
+                )
+                connection.commit()
+                return True
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        return await self._storage._async_writer(write)
+
     async def async_get_role(self, profile_id: str, ha_user_id: str) -> str | None:
         def read(connection: sqlite3.Connection) -> str | None:
             row = connection.execute(
@@ -525,6 +595,100 @@ class TracksRepository:
             return result
 
         return await self._storage._async_reader(read)
+
+    async def async_list_for_profile(self, profile_id: str) -> tuple[dict[str, Any], ...]:
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT track.track_id, track.profile_id, track.name,
+                          track.source_language, track.target_language, track.status,
+                          track.priority, track.settings_json, track.created_at_utc,
+                          track.updated_at_utc, pin.pack_version_id,
+                          pin.dataset_generation, pin.integrated_at_utc
+                   FROM tracks AS track
+                   LEFT JOIN track_pack_versions AS pin ON pin.track_id = track.track_id
+                   WHERE track.profile_id = ?
+                   ORDER BY track.name COLLATE NOCASE, track.track_id""",
+                (profile_id,),
+            ).fetchall()
+            keys = (
+                "track_id",
+                "profile_id",
+                "name",
+                "source_language",
+                "target_language",
+                "status",
+                "priority",
+                "settings_json",
+                "created_at_utc",
+                "updated_at_utc",
+                "pack_version_id",
+                "dataset_generation",
+                "integrated_at_utc",
+            )
+            result: list[dict[str, Any]] = []
+            for row in rows:
+                item = dict(zip(keys, row, strict=True))
+                item["settings"] = json.loads(item.pop("settings_json"))
+                result.append(item)
+            return tuple(result)
+
+        return await self._storage._async_reader(read)
+
+    async def async_update_metadata(
+        self,
+        *,
+        track_id: str,
+        name: str,
+        status: str,
+        priority: int,
+        updated_at_utc: str,
+    ) -> bool:
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                """UPDATE tracks
+                   SET name = ?, status = ?, priority = ?, updated_at_utc = ?
+                   WHERE track_id = ?""",
+                (name, status, priority, updated_at_utc, track_id),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(write)
+
+    async def async_delete(self, track_id: str) -> bool:
+        """Delete one Track and its Track-scoped private state."""
+
+        def write(connection: sqlite3.Connection) -> bool:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                exists = connection.execute(
+                    "SELECT 1 FROM tracks WHERE track_id = ?",
+                    (track_id,),
+                ).fetchone()
+                if exists is None:
+                    connection.rollback()
+                    return False
+                for table in (
+                    "scheduled_slots",
+                    "stats_daily",
+                    "exam_attempts",
+                    "review_events",
+                    "progress",
+                    "sessions",
+                ):
+                    connection.execute(
+                        f"DELETE FROM {table} WHERE track_id = ?",
+                        (track_id,),
+                    )
+                connection.execute("DELETE FROM tracks WHERE track_id = ?", (track_id,))
+                connection.commit()
+                return True
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        return await self._storage._async_writer(write)
 
     async def async_pack_version_info(self, pack_version_id: str) -> dict[str, str] | None:
         def read(connection: sqlite3.Connection) -> dict[str, str] | None:
