@@ -157,9 +157,11 @@ async def test_unreleased_p1_6_content_generation_is_rebuilt_for_p1_7(
             assert connection.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='provenance_records'"
             ).fetchone() == (1,)
-            assert connection.execute(
-                "SELECT generation_id FROM generation_metadata"
-            ).fetchone()[0].startswith("bootstrap-")
+            assert (
+                connection.execute("SELECT generation_id FROM generation_metadata")
+                .fetchone()[0]
+                .startswith("bootstrap-")
+            )
         assert list(paths.content_staging_dir.glob("legacy-p1-6-*.db")) == []
     finally:
         await storage.async_close()
