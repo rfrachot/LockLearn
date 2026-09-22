@@ -80,7 +80,6 @@ async def test_content_report_requires_answer_permission_and_persists_unrecogniz
         "grading_policy_kind": "exact",
         "grading_policy_version": 1,
         "normalization_version": 3,
-        "dataset_generation": "generation-report",
     }
     await owner.send_json_auto_id(payload)
     response = await owner.receive_json()
