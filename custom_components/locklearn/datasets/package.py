@@ -289,13 +289,15 @@ def _verify_sqlite(
         if rows != [("ok",)]:
             raise DatasetDatabaseError(f"dataset.db integrity_check failed: {rows!r}")
 
-        with sqlite3.connect(uri, uri=True) as connection:
-            version_row = connection.execute(
-                "SELECT version FROM schema_version WHERE singleton = 1"
-            ).fetchone()
-            if version_row is None:
-                raise DatasetDatabaseError("dataset.db has no content schema version")
-            if int(version_row[0]) >= 2:
+        if manifest.content_schema_version >= 2:
+            with sqlite3.connect(uri, uri=True) as connection:
+                version_row = connection.execute(
+                    "SELECT version FROM schema_version WHERE singleton = 1"
+                ).fetchone()
+                if version_row is None or int(version_row[0]) != manifest.content_schema_version:
+                    raise DatasetDatabaseError(
+                        "dataset.db schema version does not match signed manifest"
+                    )
                 declared_assets = {
                     item.path: (item.size, item.sha256)
                     for item in manifest.files
