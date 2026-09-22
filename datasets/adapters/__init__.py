@@ -3,8 +3,8 @@
 from .base import NormalizedRecord, SourceAdapter
 from .recommended import (
     JMdictAdapter,
-    Kanjidic2Adapter,
     KaikkiAdapter,
+    Kanjidic2Adapter,
     KanjiVGAdapter,
     LockLearnEditorialAdapter,
     TatoebaTextAdapter,
@@ -13,8 +13,8 @@ from .recommended import (
 
 __all__ = [
     "JMdictAdapter",
-    "Kanjidic2Adapter",
     "KaikkiAdapter",
+    "Kanjidic2Adapter",
     "KanjiVGAdapter",
     "LockLearnEditorialAdapter",
     "NormalizedRecord",
