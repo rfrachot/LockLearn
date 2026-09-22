@@ -260,13 +260,12 @@ class ProfilesRepository:
                     (member.profile_id, member.ha_user_id),
                 ).fetchone()
                 if current is not None and str(current[0]) == "owner" and member.role != "owner":
-                    owner_count = int(
-                        connection.execute(
-                            """SELECT COUNT(*) FROM profile_members
-                               WHERE profile_id = ? AND role = 'owner'""",
-                            (member.profile_id,),
-                        ).fetchone()[0]
-                    )
+                    owner_row = connection.execute(
+                        """SELECT COUNT(*) FROM profile_members
+                           WHERE profile_id = ? AND role = 'owner'""",
+                        (member.profile_id,),
+                    ).fetchone()
+                    owner_count = 0 if owner_row is None else int(owner_row[0])
                     if owner_count <= 1:
                         connection.rollback()
                         return False
@@ -308,13 +307,12 @@ class ProfilesRepository:
                     connection.rollback()
                     return "missing"
                 if str(current[0]) == "owner":
-                    owner_count = int(
-                        connection.execute(
-                            """SELECT COUNT(*) FROM profile_members
-                               WHERE profile_id = ? AND role = 'owner'""",
-                            (profile_id,),
-                        ).fetchone()[0]
-                    )
+                    owner_row = connection.execute(
+                        """SELECT COUNT(*) FROM profile_members
+                           WHERE profile_id = ? AND role = 'owner'""",
+                        (profile_id,),
+                    ).fetchone()
+                    owner_count = 0 if owner_row is None else int(owner_row[0])
                     if owner_count <= 1:
                         connection.rollback()
                         return "last_owner"
