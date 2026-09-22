@@ -6,8 +6,8 @@ import base64
 import sqlite3
 import zipfile
 from datetime import UTC, datetime, timedelta
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 
 import pytest
 from cryptography.hazmat.primitives import serialization
