@@ -177,17 +177,17 @@ async def test_v1_state_migrates_out_of_place_with_backup_and_preserves_rows(
     finally:
         connection.close()
 
-    storage = SQLiteStorage(
-        StoragePaths(state_path, tmp_path / "content" / "current.db")
-    )
+    storage = SQLiteStorage(StoragePaths(state_path, tmp_path / "content" / "current.db"))
     await storage.async_open()
     try:
         migrated = sqlite3.connect(state_path)
         try:
             assert migrated.execute("SELECT version FROM schema_version").fetchone() == (2,)
-            assert migrated.execute(
-                "SELECT id, type, strategy FROM sessions"
-            ).fetchone() == ("legacy-session", "learn", "default")
+            assert migrated.execute("SELECT id, type, strategy FROM sessions").fetchone() == (
+                "legacy-session",
+                "learn",
+                "default",
+            )
             assert migrated.execute(
                 "SELECT profile_id, track_id, card_key, state FROM progress"
             ).fetchone() == (
