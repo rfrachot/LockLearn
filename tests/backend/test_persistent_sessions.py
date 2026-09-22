@@ -13,7 +13,13 @@ from custom_components.locklearn.core.sessions import SessionQuestion, SessionSe
 from custom_components.locklearn.core.tracks import TrackService
 from custom_components.locklearn.storage import SQLiteStorage, StoragePaths
 from custom_components.locklearn.storage.database import StaleSessionError
-from tests.backend.content_db_helpers import ITEM_A, ITEM_B, card_identity, create_package, facet_ids
+from tests.backend.content_db_helpers import (
+    ITEM_A,
+    ITEM_B,
+    card_identity,
+    create_package,
+    facet_ids,
+)
 
 
 @dataclass
@@ -214,7 +220,7 @@ async def test_pause_resume_complete_and_navigation_undo_are_versioned(
             "track-sessions",
             questions=(_question(ITEM_A, "q-a"), _question(ITEM_B, "q-b")),
         )
-        answered = await sessions.async_answer(
+        await sessions.async_answer(
             started["id"],
             1,
             "q-a",
