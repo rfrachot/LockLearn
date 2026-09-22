@@ -169,9 +169,85 @@ class StableObjectType(StrEnum):
     CARD_KEY = "card_key"
 
 
+class LicenseScope(StrEnum):
+    """Distribution boundary in which one data license is actually used."""
+
+    SOFTWARE = "software"
+    EDITORIAL = "editorial"
+    DATASET = "dataset"
+    ASSET = "asset"
+
+
+class ProvenanceObjectType(StrEnum):
+    """Content object kinds that can carry source-level provenance."""
+
+    DATASET = "dataset"
+    CONCEPT = "concept"
+    TERM = "term"
+    LEARNING_ITEM = "learning_item"
+    CONTENT_BLOCK = "content_block"
+    PACK = "pack"
+    ASSET = "asset"
+
+
+@dataclass(frozen=True, slots=True)
+class SourceSnapshot:
+    """Exact upstream material used by one reproducible dataset build."""
+
+    snapshot_id: str
+    source_id: str
+    upstream_version: str
+    upstream_date: str | None
+    retrieved_at: str
+    source_url: str
+    sha256: str
+    adapter_version: str
+
+    def __post_init__(self) -> None:
+        validate_stable_id(self.snapshot_id, field="snapshot_id")
+        validate_stable_id(self.source_id, field="source_id")
+        if not self.upstream_version or not self.retrieved_at or not self.source_url:
+            raise ContentModelError("source snapshot version, retrieval time and URL are required")
+        if not re.fullmatch(r"[0-9a-f]{64}", self.sha256):
+            raise ContentModelError("source snapshot sha256 must be lowercase hexadecimal")
+        if not self.adapter_version:
+            raise ContentModelError("source snapshot adapter_version is required")
+
+
+@dataclass(frozen=True, slots=True)
+class ProvenanceRecord:
+    """Trace one dataset/content object to an exact source snapshot and license."""
+
+    provenance_id: str
+    dataset_id: str
+    object_type: ProvenanceObjectType
+    object_id: str
+    source_snapshot_id: str
+    license_id: str
+    license_scope: LicenseScope
+    source_record_id: str | None = None
+    author: str | None = None
+    language_tag: str | None = None
+    modified_from_source: bool = False
+    attribution_text: str | None = None
+
+    def __post_init__(self) -> None:
+        validate_stable_id(self.provenance_id, field="provenance_id")
+        validate_stable_id(self.dataset_id, field="dataset_id")
+        validate_stable_id(self.object_id, field="object_id")
+        validate_stable_id(self.source_snapshot_id, field="source_snapshot_id")
+        validate_license_id(self.license_id)
+        if self.license_scope is LicenseScope.SOFTWARE:
+            raise ContentModelError("content provenance cannot use the software license scope")
+        if self.source_record_id == "":
+            raise ContentModelError("source_record_id must be None or non-empty")
+        if self.author == "":
+            raise ContentModelError("author must be None or non-empty")
+
+
 @dataclass(frozen=True, slots=True)
 class Source:
-    """An upstream source identity; detailed licensing lands in P1.6."""
+    """Canonical upstream source identity used by content-domain objects."""
 
     source_id: str
     name: str
