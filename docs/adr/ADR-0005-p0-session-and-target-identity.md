@@ -23,7 +23,9 @@ authority.
 - Actionable payloads require a data-capable `notify.mobile_app_*` action. The
   generic notify entity route is only an explicit plain-message fallback
   because HA 2026.7 rejects Companion `data` on that action.
-- Unknown notification capabilities fail closed to `exposure_only`.
+- Unknown notification capabilities fail closed for the affected renderer or
+  security function; capabilities alone never classify a pedagogical result as
+  `exposure_only`.
 
 ## Consequences
 

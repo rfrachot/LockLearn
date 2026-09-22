@@ -11,6 +11,9 @@ All notable changes will be documented here.
 ### Changed
 - Treat lockscreen visibility as an advisory OS rendering preference rather
   than a confidentiality boundary.
+- Separate per-target notification capabilities from pedagogical signal:
+  second vibration or stacked post-action reveal no longer implies
+  `exposure_only`.
 
 ## [0.0.2] - 2026-09-21
 

@@ -13,19 +13,23 @@ P1; no P1 implementation has started.
 - GitHub releases: `v0.0.1`, `v0.0.2`
 - Repository: public after a history secret audit
 - HACS live instance: `v0.0.2` installed
-- Remote feature branch was not pushed; only release tags were pushed with
-  explicit authorization.
+- Remote feature branch includes the final P0 closure commit; release tags are
+  unchanged.
+- No `v0.0.3` is required for P0 closure: `eb2e77d` and `9ae6642` contain only
+  tests/harness and documentation/ADR/evidence. The corrected capability
+  prototype is not called by the installed P0 runtime notification path.
 
 ## P0.7 outcome
 
 - Gate A — HACS / Config Flow / panel: PASS
 - Gate B — Android Companion: PASS as a capability qualification; same-tag
-  replacement worked, but incomplete silent-replacement evidence keeps tested
-  targets on the conservative `exposure_only` path.
+  replacement worked, and incomplete silent-replacement evidence is a UX
+  limitation rather than an `exposure_only` trigger.
 - Gate C — HAOS/Supervisor backup/restore: PASS; pre-backup state restored,
   post-backup state absent, integrity `ok`, writer/readers/panel/API healthy.
 - Gate D — iPadOS Companion: PASS as a capability qualification; missing tag
-  replacement and unreliable visibility require `exposure_only`.
+  replacement stacks the post-action answer but does not erase prompt-first
+  retrieval. Unreliable visibility remains a privacy/renderer constraint.
 
 Exact sub-test statuses, devices, timings, limitations and backup scope are in
 `docs/P0_EVIDENCE.md`. ADR-0006 freezes notification fallbacks; ADR-0007 freezes
@@ -41,12 +45,14 @@ security boundary.
 - `scripts/p0_backup_restore.py` reproduces the controlled Supervisor
   backup/restore markers and verification; it never triggers restore.
 - `.env` loaders accept only `LOCKLEARN_HA_*` and never print values.
+- Technical notification capabilities are separate from pedagogical signal;
+  `exposure_only` requires actual answer exposure without usable retrieval.
 
 ## Verification
 
 - Ruff format/check: pass (98 files).
 - mypy (`custom_components datasets tests scripts`): pass (44 source files).
-- pytest HA 2026.9.3 / Python 3.14.4: 30 passed.
+- pytest HA 2026.9.3 / Python 3.14.4: 32 passed.
 - pytest backend HA 2025.2.5 / Python 3.13.15: 24 passed.
 - dataset validation: pass.
 - frontend typecheck + 3 Vitest tests + production build: pass; bundle 21.96 kB
@@ -69,5 +75,5 @@ security boundary.
 - HAOS included `ssl` in the partial test backup despite an empty requested
   folder list; always show actual restore scope.
 
-Next concrete action: review the local P0 closure commits, then start a separate
-P1 mission/branch only when requested. Do not retag or mutate `v0.0.2`.
+Next concrete action: start a separate P1 mission/branch only when requested.
+Do not retag or mutate `v0.0.2`.

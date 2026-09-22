@@ -16,10 +16,17 @@ redaction.
 
 - Capabilities are stored per target with `supported`, `unsupported` or
   `unknown`; no platform-wide optimistic default is allowed.
-- Two-step reveal is enabled only when the target proves same-tag replacement,
-  silent replacement and at least two accessible actions.
-- Every other target uses `exposure_only`; visible-answer assessment can never
-  promote an SRS box.
+- Technical capabilities are distinct: `replace_by_tag`, `silent_replace`,
+  `action_data`, `text_input`, `clear_event`, `device_attribution`,
+  `lockscreen_privacy` and `visible_actions`. They select safe renderer,
+  routing, privacy and correlation behavior; they do not classify learning.
+- Prompt-first reveal requires proven actionable delivery and enough accessible
+  actions. Same-tag and silent replacement improve that flow but are not
+  prerequisites for preserving a retrieval attempt.
+- `exposure_only` is emitted only when the answer was actually exposed without
+  a usable retrieval. A second vibration, stacking, missing clear event or
+  missing device attribution cannot retroactively erase a real attempt.
+- Visible-answer assessment can never promote an SRS box.
 - Notification content is spoiler-safe and privacy-minimal independently of
   the requested lockscreen visibility. `private` is an OS rendering preference,
   not a security boundary.
@@ -47,8 +54,12 @@ redaction.
 
 ## Consequences
 
-- The initially qualified targets remain `exposure_only`; this is the safe P0
-  outcome, not a release defect.
+- Both Android targets qualify for prompt-first reveal. Samsung's second
+  vibration and Pixel's unknown silence remain UX limitations, not
+  `exposure_only` triggers.
+- iPadOS can preserve prompt-first semantics through its actionable flow even
+  though the answer notification stacks; P4 should prefer a renderer/panel
+  handoff that limits clutter.
 - P4 must provide a capability requalification path after Companion/OS changes
   and must never silently promote `unknown` to `supported`.
 - Shared/child profile privacy cannot rely on OS notification redaction.

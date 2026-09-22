@@ -2177,15 +2177,31 @@ réponse + explication
 [ 👍 Je savais ] [ 👎 À revoir ]
 ```
 
-Le remplacement par `tag` et la latence action→notification de remplacement sont des **gates P0 Android+iOS**.
+Le remplacement par `tag`, le silence et la latence action→notification de
+remplacement sont des **capabilities techniques P0 Android+iOS**. Ils qualifient
+l'UX du renderer, pas la nature pédagogique du signal. Le modèle par target
+distingue au minimum `replace_by_tag`, `silent_replace`, `action_data`,
+`text_input`, `clear_event`, `device_attribution`, `lockscreen_privacy` et
+`visible_actions`.
 
-Si la seconde étape ne peut pas être obtenue de manière fiable, fallback : affichage direct de la réponse et événement `exposure_only`, sans promotion de box.
+Une seconde vibration lors d'un remplacement réussi n'annule pas la tentative
+de récupération qui a précédé l'action `Révéler`. De même, un remplacement qui
+s'empile au lieu de réutiliser le tag peut rester un flux en deux temps si la
+réponse n'était pas visible avant l'action. Ces limites restent enregistrées
+comme dégradations techniques et doivent guider le choix du renderer.
 
-La gate est évaluée **par target**, et exige conjointement remplacement même
-tag, remplacement silencieux et nombre d'actions suffisant. Un résultat
-`unknown` sur un seul de ces points sélectionne aussi `exposure_only`. Les
-essais P0 ont notamment confirmé le remplacement sur deux Android, mais pas le
-silence sur tous les devices, et aucun remplacement même tag sur l'iPad testé.
+Si aucun flux prompt-first exploitable ne peut être rendu, le fallback peut
+afficher directement la réponse. L'événement devient alors `exposure_only`
+parce que la réponse a effectivement été exposée sans récupération exploitable,
+et il ne peut pas promouvoir de box. Une capability `unknown` sélectionne un
+renderer conservateur pour la fonction concernée ; elle ne suffit jamais, à
+elle seule, à requalifier une récupération réelle en `exposure_only`.
+
+Les essais P0 ont notamment confirmé le remplacement sur deux Android, mais
+pas le silence sur tous les devices, et aucun remplacement même tag sur l'iPad
+testé. Les trois targets ont toutefois fourni un flux prompt→action→réponse
+exploitable ; ces limites techniques ne rendent donc pas leurs interactions
+`exposure_only`.
 
 ### Quiz notification
 

@@ -16,25 +16,64 @@ from custom_components.locklearn.core.security import (
 from custom_components.locklearn.notifications.capabilities import (
     Capability,
     LearningNotificationMode,
+    LearningSignal,
     TargetCapabilities,
+    classify_learning_signal,
 )
 from custom_components.locklearn.notifications.targets import legacy_mobile_app_service
 from custom_components.locklearn.storage import SQLiteStorage, StoragePaths
 
 
-def test_two_step_requires_positive_device_evidence() -> None:
-    """Unknown platform behavior always falls back to exposure-only."""
+def test_two_step_requires_actionable_prompt_evidence() -> None:
+    """Unknown actionable behavior falls back to direct exposure."""
     unknown = TargetCapabilities(device_registry_id="device-1", platform="android")
-    assert unknown.learning_mode() is LearningNotificationMode.EXPOSURE_ONLY
+    assert unknown.learning_mode() is LearningNotificationMode.DIRECT_EXPOSURE
 
     proven = TargetCapabilities(
         device_registry_id="device-1",
         platform="android",
-        tag_replace=Capability.SUPPORTED,
-        silent_replace=Capability.SUPPORTED,
-        visible_action_count=2,
+        action_data=Capability.SUPPORTED,
+        visible_actions=2,
     )
     assert proven.learning_mode() is LearningNotificationMode.TWO_STEP_REVEAL
+
+
+def test_second_vibration_does_not_erase_retrieval_attempt() -> None:
+    """Silent replacement is UX evidence, not pedagogical evidence."""
+    android = TargetCapabilities(
+        device_registry_id="device-1",
+        platform="android",
+        replace_by_tag=Capability.SUPPORTED,
+        silent_replace=Capability.UNSUPPORTED,
+        action_data=Capability.SUPPORTED,
+        visible_actions=3,
+    )
+
+    assert android.learning_mode() is LearningNotificationMode.TWO_STEP_REVEAL
+    assert (
+        classify_learning_signal(
+            answer_exposed_before_retrieval=False,
+            retrieval_was_usable=True,
+        )
+        is LearningSignal.SELF_ASSESSMENT_AFTER_RETRIEVAL
+    )
+
+
+def test_exposure_only_depends_on_actual_answer_exposure() -> None:
+    assert (
+        classify_learning_signal(
+            answer_exposed_before_retrieval=True,
+            retrieval_was_usable=False,
+        )
+        is LearningSignal.EXPOSURE_ONLY
+    )
+    assert (
+        classify_learning_signal(
+            answer_exposed_before_retrieval=False,
+            retrieval_was_usable=False,
+        )
+        is LearningSignal.NO_RESULT
+    )
 
 
 def test_unattended_allowlist_cannot_read_export_or_delete() -> None:
