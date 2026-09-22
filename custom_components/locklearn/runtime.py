@@ -14,6 +14,7 @@ from .core.acl import ProfileACLService
 from .core.operations import OperationRegistry
 from .core.profiles import ProfileService
 from .core.sessions import SessionService
+from .core.tracks import TrackService
 from .datasets.manager import (
     DatasetManager,
     load_runtime_bundled_datasets,
@@ -35,6 +36,7 @@ class LockLearnRuntime:
     operations: OperationRegistry
     profiles: ProfileService
     acl: ProfileACLService
+    tracks: TrackService
     datasets: DatasetManager
 
     @classmethod
@@ -89,6 +91,7 @@ class LockLearnRuntime:
                 operations=OperationRegistry(),
                 profiles=ProfileService(storage.repositories.profiles),
                 acl=ProfileACLService(storage.repositories.profiles),
+                tracks=TrackService(storage.repositories.tracks),
                 datasets=datasets,
             )
         except Exception:
