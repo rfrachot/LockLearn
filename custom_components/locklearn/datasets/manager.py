@@ -14,7 +14,7 @@ import zipfile
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 from urllib.parse import urlparse
 
@@ -22,7 +22,7 @@ from awesomeversion import AwesomeVersion
 
 from ..const import INTEGRATION_VERSION, SUPPORTED_CONTENT_SCHEMA_VERSIONS
 from ..storage import ContentGenerationValidator, SQLiteStorage
-from .manifest import DatasetManifest
+from .manifest import DatasetManifest, FileRole
 from .package import validate_dataset_package
 from .policy import OfficialRegistryPolicy
 from .trust import KeyStatus, KeyUsage, TrustedKey, TrustStore
@@ -213,6 +213,7 @@ class DatasetManager:
         self._lock = asyncio.Lock()
         self._validator = ContentGenerationValidator()
         self._packages_root = storage.paths.content_root / "packages"
+        self._assets_root = storage.paths.content_root / "assets"
         self._downloads_root = storage.paths.content_staging_dir / "downloads"
 
     @property
@@ -259,6 +260,7 @@ class DatasetManager:
             cache_bytes = await asyncio.to_thread(
                 _cached_dataset_size,
                 self._packages_root,
+                self._assets_root,
                 definition.dataset_id,
             )
             error = self._errors.get(definition.dataset_id)
@@ -448,6 +450,14 @@ class DatasetManager:
                         "an installed dataset version cannot change canonical content"
                     )
                 raise DatasetInstallError("dataset version is already installed")
+            await asyncio.to_thread(
+                _store_assets_atomically,
+                archive,
+                validated.manifest,
+                self._assets_root,
+                dataset_id,
+                version,
+            )
             await asyncio.to_thread(_store_package_atomically, extracted, package_path)
             packages = await asyncio.to_thread(
                 self._complete_package_set,
@@ -869,6 +879,10 @@ def _extract_dataset_database(archive_path: Path, destination: Path) -> None:
 
 
 def _validate_package_matches_manifest(package: Any, manifest: DatasetManifest) -> None:
+    if package.content_schema_version != manifest.content_schema_version:
+        raise DatasetInstallError(
+            "package database schema version does not match signed manifest"
+        )
     if package.dataset_id != manifest.dataset_id:
         raise DatasetInstallError("package database dataset_id does not match signed manifest")
     if package.canonical_content_hash != manifest.canonical_content_hash:
@@ -907,6 +921,61 @@ def _validate_cached_package(
         raise DatasetInstallError("cached package version does not match active dataset")
 
 
+def _asset_cache_directory(root: Path, dataset_id: str, version: str) -> Path:
+    dataset_key = hashlib.sha256(dataset_id.encode("utf-8")).hexdigest()
+    version_key = hashlib.sha256(version.encode("utf-8")).hexdigest()
+    return root / dataset_key / version_key
+
+
+def _store_assets_atomically(
+    archive_path: Path,
+    manifest: DatasetManifest,
+    root: Path,
+    dataset_id: str,
+    version: str,
+) -> None:
+    declared = tuple(item for item in manifest.files if item.role is FileRole.ASSET)
+    destination = _asset_cache_directory(root, dataset_id, version)
+    if not declared:
+        shutil.rmtree(destination, ignore_errors=True)
+        return
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.part")
+    shutil.rmtree(temporary, ignore_errors=True)
+    temporary.mkdir(parents=True)
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            for item in declared:
+                relative = PurePosixPath(item.path).relative_to("assets")
+                target = temporary.joinpath(*relative.parts)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                digest = hashlib.sha256()
+                size = 0
+                with archive.open(item.path) as source, target.open("xb") as output:
+                    while chunk := source.read(_STREAM_CHUNK_SIZE):
+                        size += len(chunk)
+                        if size > item.size:
+                            raise DatasetInstallError(
+                                f"asset exceeds signed size while extracting: {item.path}"
+                            )
+                        digest.update(chunk)
+                        output.write(chunk)
+                    output.flush()
+                    os.fsync(output.fileno())
+                if size != item.size or digest.hexdigest() != item.sha256:
+                    raise DatasetInstallError(
+                        f"asset bytes do not match signed manifest: {item.path}"
+                    )
+                os.chmod(target, 0o444)
+        if destination.exists():
+            shutil.rmtree(destination)
+        os.replace(temporary, destination)
+        _fsync_directory(destination.parent)
+    finally:
+        shutil.rmtree(temporary, ignore_errors=True)
+
+
 def _package_cache_path(root: Path, dataset_id: str, version: str) -> Path:
     dataset_key = hashlib.sha256(dataset_id.encode("utf-8")).hexdigest()
     version_key = hashlib.sha256(version.encode("utf-8")).hexdigest()
@@ -931,11 +1000,36 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _cached_dataset_size(root: Path, dataset_id: str) -> int:
-    directory = root / hashlib.sha256(dataset_id.encode("utf-8")).hexdigest()
-    if not directory.is_dir():
-        return 0
-    return sum(path.stat().st_size for path in directory.glob("*.db") if path.is_file())
+def _cached_dataset_size(
+    packages_root: Path,
+    assets_root: Path,
+    dataset_id: str,
+) -> int:
+    dataset_key = hashlib.sha256(dataset_id.encode("utf-8")).hexdigest()
+    package_directory = packages_root / dataset_key
+    asset_directory = assets_root / dataset_key
+    package_bytes = (
+        sum(path.stat().st_size for path in package_directory.glob("*.db") if path.is_file())
+        if package_directory.is_dir()
+        else 0
+    )
+    asset_bytes = (
+        sum(path.stat().st_size for path in asset_directory.rglob("*") if path.is_file())
+        if asset_directory.is_dir()
+        else 0
+    )
+    return package_bytes + asset_bytes
+
+
+def _fsync_directory(path: Path) -> None:
+    try:
+        descriptor = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _issue_suffix(dataset_id: str) -> str:
