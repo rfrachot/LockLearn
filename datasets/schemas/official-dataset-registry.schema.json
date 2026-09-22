@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LockLearn official runtime dataset registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "cumulative_installed_warning_bytes", "datasets"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "cumulative_installed_warning_bytes": {"type": "integer", "minimum": 1},
+    "datasets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dataset_id", "name", "catalog_url", "artifact_hosts"],
+        "properties": {
+          "dataset_id": {"type": "string", "minLength": 1},
+          "name": {"type": "string", "minLength": 1},
+          "catalog_url": {"type": "string", "pattern": "^https://"},
+          "artifact_hosts": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "artifact_max_bytes": {"type": "integer", "minimum": 1}
+        }
+      }
+    }
+  }
+}

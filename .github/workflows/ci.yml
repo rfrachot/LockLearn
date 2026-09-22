@@ -22,9 +22,40 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m ruff format --check .
       - run: python -m ruff check .
-      - run: python -m mypy datasets tests
+      - run: python -m mypy custom_components datasets tests
       - run: python datasets/tools/validate_resources.py
       - run: python -m pytest -q --tb=short
+
+  home-assistant-compatibility:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: minimum
+            python: "3.13"
+            harness: "0.13.215"
+            home_assistant: "2025.2.5"
+            frontend: "20250221.0"
+          - name: latest
+            python: "3.14"
+            harness: "0.13.366"
+            home_assistant: "2026.9.3"
+            frontend: "20260826.7"
+    name: HA ${{ matrix.name }} (${{ matrix.home_assistant }})
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          check-latest: true
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: >-
+          python -m pip install
+          pytest-homeassistant-custom-component==${{ matrix.harness }}
+          home-assistant-frontend==${{ matrix.frontend }}
+      - run: python -m pytest -q --tb=short tests/backend
 
   frontend:
     runs-on: ubuntu-latest
@@ -40,3 +71,13 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  home-assistant-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: home-assistant/actions/hassfest@master
+      - uses: hacs/action@22.5.0
+        with:
+          category: integration
+          comment: false

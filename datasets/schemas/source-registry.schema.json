@@ -2,14 +2,51 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "LockLearn source registry",
   "type": "object",
+  "additionalProperties": false,
   "required": ["schema_version", "sources"],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {"const": 2},
     "sources": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "name", "provider", "homepage", "license_id", "status", "commercial_compatible"]
+        "required": [
+          "id", "name", "provider", "homepage", "license_id", "license_scope",
+          "attribution_template", "adapter_id", "status", "commercial_compatible",
+          "refresh_policy", "check_interval_days", "target_refresh_days",
+          "uses", "required_provenance", "excluded_by_default", "notes"
+        ],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "name": {"type": "string", "minLength": 1},
+          "provider": {"type": "string", "minLength": 1},
+          "homepage": {"type": "string", "format": "uri"},
+          "license_id": {"type": "string", "minLength": 1},
+          "license_scope": {"enum": ["editorial", "dataset", "asset"]},
+          "attribution_template": {"type": "string", "minLength": 1},
+          "adapter_id": {"type": "string", "minLength": 1},
+          "status": {"type": "string", "minLength": 1},
+          "commercial_compatible": {"type": "boolean"},
+          "refresh_policy": {"type": "string", "minLength": 1},
+          "check_interval_days": {
+            "oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]
+          },
+          "target_refresh_days": {
+            "oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]
+          },
+          "uses": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+          "required_provenance": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+          "field_allowlist": {
+            "oneOf": [
+              {"type": "null"},
+              {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}
+            ]
+          },
+          "excluded_by_default": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+          "asset_boundary": {"type": "string"},
+          "notes": {"type": "string"}
+        },
+        "additionalProperties": false
       }
     }
   }

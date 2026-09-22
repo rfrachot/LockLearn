@@ -22,6 +22,10 @@ pedagogical examples where LockLearn owns the copyright. Content must carry an
 explicit content license in its manifest; software's MIT license does not
 implicitly relicense learning content.
 
+The bundled `Japanese Starter 1.0.0` dataset is first-party editorial content
+under this CC BY-SA 4.0 boundary. Its signed package includes the corresponding
+license payload and LockLearn contributor attribution.
+
 ## Third-party datasets and assets
 
 Third-party material retains its own license. LockLearn must preserve required
@@ -63,3 +67,44 @@ constraint is that official LockLearn distributions must continue to respect
 each upstream license, especially attribution and ShareAlike obligations.
 
 Funding channels therefore remain separate from licensing rights.
+
+
+## Machine-enforced license scopes
+
+P1.7 gives license use an explicit scope:
+
+```text
+software
+editorial
+dataset
+asset
+```
+
+A license can be valid in more than one content scope, but a source must declare
+the scope in which it is actually reused. The official-package policy rejects a
+source when its declared scope is not allowed by the registry license.
+
+This prevents the repository's MIT software license from being treated as a
+fallback license for LockLearn editorial content or third-party datasets.
+
+Exact source snapshots and per-object provenance retain the source record,
+author/language when required, whether LockLearn modified the source material,
+and attribution text needed for later Sources & Licences UI.
+
+
+## Public Asset license boundary
+
+P1.11 treats signed dataset media as its own license scope:
+
+```text
+license_scope = asset
+```
+
+Every public Asset carries an explicit `license_id`, attribution text and
+Asset-level provenance back to the exact source snapshot. The signed manifest
+binds the media bytes by path, size and SHA-256.
+
+Public dataset Assets are separate from future private user media and
+export/import attachments. Private/export media must not inherit an Asset
+license merely because it is served by LockLearn, and it must not be inserted
+into the signed public `assets_metadata` namespace.

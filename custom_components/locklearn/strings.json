@@ -13,5 +13,19 @@
     "abort": {
       "single_instance_allowed": "Only one LockLearn instance is supported."
     }
+  },
+  "issues": {
+    "dataset_discovery_failed": {
+      "title": "Dataset catalog unavailable",
+      "description": "LockLearn could not check available versions for {dataset_id}. Already installed content remains usable offline."
+    },
+    "dataset_install_failed": {
+      "title": "Dataset update failed",
+      "description": "The update of {dataset_id} failed during download, verification, or activation. The last valid generation remains active."
+    },
+    "dataset_sources_stale": {
+      "title": "Dataset sources are stale",
+      "description": "The sources {sources} used by {dataset_id} exceed their freshness target. The installed dataset remains usable, but an update is recommended."
+    }
   }
 }

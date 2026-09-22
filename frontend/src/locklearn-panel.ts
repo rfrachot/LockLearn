@@ -1,7 +1,6 @@
 import { LitElement, css, html } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { property } from "lit/decorators.js";
 
-@customElement("locklearn-panel")
 export class LockLearnPanel extends LitElement {
   @property({ attribute: false }) hass: unknown;
 
@@ -29,6 +28,13 @@ export class LockLearnPanel extends LitElement {
       </main>
     `;
   }
+}
+
+// HA can retain the previous module across integration reloads. A different
+// module URL cache-busts releases, but the browser still forbids redefining an
+// existing custom element; a full browser reload is required for an upgrade.
+if (!customElements.get("locklearn-panel")) {
+  customElements.define("locklearn-panel", LockLearnPanel);
 }
 
 declare global {

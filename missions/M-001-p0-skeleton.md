@@ -1,5 +1,11 @@
 # M-001 — P0 installable skeleton
 
+## Status
+
+Automated toolchain, Config Flow, bundled panel and setup/unload/reload work is
+implemented on `feat/p0-foundation`. HACS installation and browser cache/reload
+observation on the live HA host remain manual evidence.
+
 ## Objective
 
 Turn the bootstrap into an installable development integration on the real HA

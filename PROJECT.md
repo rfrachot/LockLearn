@@ -33,7 +33,15 @@ Development Python:
 - use the newest stable interpreter installed on the dev VM that is compatible
   with the supported Home Assistant versions;
 - current HA development requires Python 3.14.2+, but the V1 HA floor remains a
-  P0 decision because `SPEC_V1.md` still names HA >= 2025.2 as a candidate.
+  P0 confirmed HA >= 2025.2; CI tests HA 2025.2.5/Python 3.13 and current
+  stable HA 2026.9.3/Python 3.14.
+
+Verified P0 development environment (2026-09-21):
+- Python 3.14.4 locally; Python 3.13.15 compatibility environment;
+- Node 24.20.0 and npm 11.19.0 locally; Node 22 in CI;
+- configured HA API instance 2026.7.4;
+- current stable HA 2026.9.3;
+- evidence and external/manual gates: `docs/P0_EVIDENCE.md`.
 
 ## AI workflow
 
@@ -57,7 +65,8 @@ Frontend  : cd frontend && npm run typecheck && npm test && npm run build
 ```
 
 Commands that depend on Home Assistant or npm packages become authoritative only
-after P0 validates the VM environment.
+after activating `.venv`; P0 verified every command above on the dev VM. The
+minimum/current HA matrix is also reproducible through `.github/workflows/ci.yml`.
 
 ## Architecture invariants
 

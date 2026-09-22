@@ -1,3 +1,5 @@
 ruff
 mypy
 pytest
+pytest-homeassistant-custom-component==0.13.366
+home-assistant-frontend==20260826.7

@@ -1,0 +1,122 @@
+name: Dataset pipeline
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      build_config:
+        description: "Optional repository-relative official dataset build config"
+        required: false
+        type: string
+      previous_release_tag:
+        description: "Previous dataset GitHub Release tag used for content comparison"
+        required: false
+        type: string
+      first_release:
+        description: "Explicitly allow publication without a previous dataset release"
+        required: false
+        default: false
+        type: boolean
+      release_tag:
+        description: "Optional GitHub Release tag; skipped when content is unchanged"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-check-sources:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          check-latest: true
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python datasets/tools/validate_resources.py
+      - run: python -m pytest -q --tb=short tests/datasets/test_source_adapters.py tests/datasets/test_build_pipeline.py
+      - run: python datasets/tools/source_check.py
+
+  manual-build:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_config != '' }}
+    needs: validate-and-check-sources
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      LOCKLEARN_DATASET_SIGNING_KEY_B64: ${{ secrets.LOCKLEARN_DATASET_SIGNING_KEY_B64 }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          check-latest: true
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require signing secret
+        run: test -n "$LOCKLEARN_DATASET_SIGNING_KEY_B64"
+      - name: Enforce publication comparison
+        if: ${{ inputs.release_tag != '' }}
+        shell: bash
+        run: |
+          if [ -z "${{ inputs.previous_release_tag }}" ] && [ "${{ inputs.first_release }}" != "true" ]; then
+            echo "A release requires previous_release_tag, or first_release=true for the initial publication."
+            exit 1
+          fi
+      - name: Download previous signed dataset artifact
+        if: ${{ inputs.previous_release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mkdir -p datasets/staging/previous
+          gh release download "${{ inputs.previous_release_tag }}"             --pattern "*.zip"             --dir datasets/staging/previous
+          count="$(find datasets/staging/previous -maxdepth 1 -type f -name '*.zip' | wc -l)"
+          test "$count" -eq 1
+      - name: Build signed artifact
+        id: build
+        shell: bash
+        run: |
+          args=()
+          if [ -n "${{ inputs.previous_release_tag }}" ]; then
+            previous="$(find datasets/staging/previous -maxdepth 1 -type f -name '*.zip' -print -quit)"
+            args+=(--previous "$previous")
+          fi
+          result="$(python datasets/tools/build_dataset.py             "${{ inputs.build_config }}"             --output datasets/dist             --workspace datasets/staging/build             "${args[@]}")"
+          echo "$result"
+          publish="$(printf '%s' "$result" | python -c 'import json,sys; print(str(json.load(sys.stdin)["publish"]).lower())')"
+          archive="$(printf '%s' "$result" | python -c 'import json,sys; print(json.load(sys.stdin)["archive"])')"
+          checksum="$(printf '%s' "$result" | python -c 'import json,sys; print(json.load(sys.stdin)["checksum"])')"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          echo "checksum=$checksum" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: locklearn-dataset-build
+          path: |
+            datasets/dist/*.zip
+            datasets/dist/*.sha256
+          if-no-files-found: error
+      - name: Publish changed signed artifact
+        if: ${{ inputs.release_tag != '' && steps.build.outputs.publish == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${{ inputs.release_tag }}"
+          "${{ steps.build.outputs.archive }}"
+          "${{ steps.build.outputs.checksum }}"
+          --title "${{ inputs.release_tag }}"
+          --generate-notes
+      - name: Explain unchanged build
+        if: ${{ inputs.release_tag != '' && steps.build.outputs.publish != 'true' }}
+        run: echo "Canonical content is unchanged; GitHub Release creation is skipped."
+
+# Raw upstream downloads stay under ignored staging/download directories and are
+# never uploaded as release assets. Only the signed LockLearn ZIP and its
+# external SHA-256 checksum are eligible for publication.
