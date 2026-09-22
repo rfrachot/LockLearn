@@ -151,6 +151,20 @@ async def test_bootstrap_profile_crud_privacy_share_and_pagination(
     assert forbidden["success"] is False
     assert forbidden["error"]["code"] == "locklearn/forbidden"
 
+    for command in (
+        {"type": "locklearn/profiles/delete", "profile_id": second_id},
+        {
+            "type": "locklearn/profiles/share",
+            "profile_id": second_id,
+            "target_user_id": hass_read_only_user.id,
+            "role": "editor",
+        },
+    ):
+        await outsider.send_json_auto_id(command)
+        denied = await outsider.receive_json()
+        assert denied["success"] is False
+        assert denied["error"]["code"] == "locklearn/forbidden"
+
     await owner.send_json_auto_id(
         {
             "type": "locklearn/profiles/update",
@@ -175,6 +189,8 @@ async def test_bootstrap_profile_crud_privacy_share_and_pagination(
 async def test_track_crud_pack_integration_and_catalog_surfaces(
     hass: HomeAssistant,
     hass_ws_client: Any,
+    hass_read_only_access_token: str,
+    hass_read_only_user: Any,
     tmp_path: Path,
 ) -> None:
     entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, data={})
@@ -221,6 +237,51 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
     track_id = created["result"]["track_id"]
     assert created["result"]["pack_version_id"] == "locklearn:pack-version:v1"
 
+    outsider = await hass_ws_client(hass, hass_read_only_access_token)
+    await outsider.send_json_auto_id(
+        {"type": "locklearn/tracks/list", "profile_id": profile_id}
+    )
+    hidden_tracks = await outsider.receive_json()
+    assert hidden_tracks["success"] is False
+    assert hidden_tracks["error"]["code"] == "locklearn/not_found"
+
+    await client.send_json_auto_id(
+        {
+            "type": "locklearn/profiles/share",
+            "profile_id": profile_id,
+            "target_user_id": hass_read_only_user.id,
+            "role": "viewer",
+        }
+    )
+    assert (await client.receive_json())["success"] is True
+
+    await outsider.send_json_auto_id(
+        {
+            "type": "locklearn/tracks/create",
+            "profile_id": profile_id,
+            "name": "Viewer cannot create",
+            "pack_version_id": "locklearn:pack-version:v1",
+            "source_language": "en",
+            "target_language": "fr",
+        }
+    )
+    viewer_create = await outsider.receive_json()
+    assert viewer_create["success"] is False
+    assert viewer_create["error"]["code"] == "locklearn/forbidden"
+
+    for command in (
+        {
+            "type": "locklearn/tracks/update",
+            "track_id": track_id,
+            "name": "Viewer cannot update",
+        },
+        {"type": "locklearn/tracks/delete", "track_id": track_id},
+    ):
+        await outsider.send_json_auto_id(command)
+        denied = await outsider.receive_json()
+        assert denied["success"] is False
+        assert denied["error"]["code"] == "locklearn/forbidden"
+
     await client.send_json_auto_id(
         {"type": "locklearn/tracks/list", "profile_id": profile_id, "limit": 10}
     )
@@ -247,6 +308,17 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
         version="v2",
         active_item_ids=(ITEM_A, ITEM_B),
     )
+    await outsider.send_json_auto_id(
+        {
+            "type": "locklearn/tracks/integrate_pack_update",
+            "track_id": track_id,
+            "pack_version_id": "locklearn:pack-version:v2",
+        }
+    )
+    viewer_integrate = await outsider.receive_json()
+    assert viewer_integrate["success"] is False
+    assert viewer_integrate["error"]["code"] == "locklearn/forbidden"
+
     await client.send_json_auto_id(
         {
             "type": "locklearn/tracks/integrate_pack_update",
