@@ -17,6 +17,7 @@ from .core.profiles import ProfileService
 from .core.review_policy import ReviewPolicyV1
 from .core.reviews import ReviewEventService
 from .core.sessions import SessionService
+from .core.signals import SignalPolicy
 from .core.tracks import TrackService
 from .datasets.manager import (
     DatasetManager,
@@ -42,6 +43,7 @@ class LockLearnRuntime:
     tracks: TrackService
     planning: LearningPlanService
     review_policy: ReviewPolicyV1
+    signal_policy: SignalPolicy
     reviews: ReviewEventService
     datasets: DatasetManager
 
@@ -91,6 +93,7 @@ class LockLearnRuntime:
                 # and preserve the empty/last-known-good generation.
                 with suppress(Exception):
                     await datasets.async_install_bundled(bundled)
+            review_policy = ReviewPolicyV1()
             return cls(
                 storage=storage,
                 sessions=SessionService(storage),
@@ -102,7 +105,8 @@ class LockLearnRuntime:
                     storage.repositories.tracks,
                     storage.repositories.profiles,
                 ),
-                review_policy=ReviewPolicyV1(),
+                review_policy=review_policy,
+                signal_policy=SignalPolicy(review_policy),
                 reviews=ReviewEventService(
                     storage.repositories.review_events,
                     storage.repositories.profiles,
