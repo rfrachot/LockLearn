@@ -23,7 +23,7 @@
 | Phase | Goal | State | 1.0 blocker | Detail |
 |---|---|---|---|---|
 | P0 | Architecture spikes + installable HA skeleton | complete | yes | `docs/plan/P0.md` |
-| P1 | Content core + signed starter dataset | in progress (P1.1–P1.8 complete) | yes | `docs/plan/P1.md` |
+| P1 | Content core + signed starter dataset | in progress (P1.1–P1.8 complete; P1.9 verification pending) | yes | `docs/plan/P1.md` |
 | P2 | Profiles/tracks/ACL | queued | yes | `docs/plan/P2.md` |
 | P3 | Learning/SRS/sessions/stats | queued | yes | `docs/plan/P3.md` |
 | P4 | Scheduler/notifications/HA automation | queued | yes | `docs/plan/P4.md` |
@@ -53,7 +53,7 @@
 - **P1.6** — content.db schema, generations and stable merge (complete)
 - **P1.7** — Source/provenance/license registry (complete)
 - **P1.8** — Dataset build pipeline and source adapters (complete)
-- **P1.9** — DatasetManager, update entity, staging and rollback
+- **P1.9** — DatasetManager, update entity, staging and rollback (implemented; verification pending)
 - **P1.10** — Signed first-run mini dataset
 - **P1.11** — Media-ready Asset schema without V1 renderer scope
 
