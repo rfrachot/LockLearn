@@ -66,7 +66,7 @@ class ReviewEventService:
         notification_id: str | None = None,
     ) -> ReviewEventRecord:
         """Append one audit event with explicit cognitive and delivery latencies."""
-        for field_name, value in (
+        for field_name, text_value in (
             ("profile_id", profile_id),
             ("track_id", track_id),
             ("learning_item_id", learning_item_id),
@@ -79,23 +79,23 @@ class ReviewEventService:
             ("signal_quality", signal_quality),
             ("dataset_generation", dataset_generation),
         ):
-            if not value.strip():
+            if not text_value.strip():
                 raise ReviewEventValidationError(f"{field_name} must not be empty")
         if policy_version < 1:
             raise ReviewEventValidationError("policy_version must be >= 1")
         if normalization_version is not None and normalization_version < 1:
             raise ReviewEventValidationError("normalization_version must be >= 1")
-        for field_name, value in (
+        for field_name, latency_value in (
             ("presentation_to_answer_ms", presentation_to_answer_ms),
             ("delivery_to_action_ms", delivery_to_action_ms),
         ):
-            if value is not None and value < 0:
+            if latency_value is not None and latency_value < 0:
                 raise ReviewEventValidationError(f"{field_name} must be >= 0")
-        for field_name, value in (
+        for field_name, interval_value in (
             ("scheduled_interval_days", scheduled_interval_days),
             ("elapsed_days", elapsed_days),
         ):
-            if value is not None and value < 0:
+            if interval_value is not None and interval_value < 0:
                 raise ReviewEventValidationError(f"{field_name} must be >= 0")
 
         profile = await self._profiles.async_get(profile_id)
