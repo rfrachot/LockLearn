@@ -3,8 +3,8 @@
 ## Current state
 
 P0.1–P0.7 remain complete. P1 is in progress on `feat/p1-content-core`.
-P1.1, P1.2, P1.3 and P1.4 are complete. P1.4 is verified on the Ubuntu
-development checkout.
+P1.1–P1.4 are complete. P1.5 implementation is complete and awaits repository
+verification on the Ubuntu development checkout.
 
 P1.3 adds the generic content presentation/grading contract without changing
 progression identity. `CardDefinition` now carries mutable
@@ -79,6 +79,41 @@ The final branch-only delta after the full mypy/registry/pytest run was import
 spacing required by Ruff; Ruff format and Ruff check were then re-run on the
 resulting head and both passed.
 
+## P1.5 implementation
+
+P1.5 adds `core/packs.py` with stable Tags, Pack/PackVersion identities,
+Track-to-PackVersion pinning, ordered PackItems, prerequisite card keys,
+declarative unlock conditions, card defaults, confusable groups and pack-version
+diff metadata.
+
+LearningItems now carry non-identifying curation metadata: queryable `tag_ids`,
+optional `register` and `required_item_ids`. The same LearningItem identity can
+be referenced by multiple PackVersions.
+
+Japanese official defaults are not hard-coded in the core. They live in
+`datasets/resources/curation_policies.json` as a versioned policy and are
+validated/tested as data. The policy disables isolated glyph->ON/KUN directions
+by default, prefers contextualized readings and complete-term production,
+requires stronger production grading, labels mnemonic keyword use, requires
+context hints for ambiguity, prefers covered examples and permits furigana for
+indispensable uncovered vocabulary.
+
+ADR-0012 records the pack/version/prerequisite/curation boundaries. P1.5 does
+not implement progress-based unlock evaluation, scheduler enforcement,
+`content.db` persistence/indexes, full Track CRUD or grading execution.
+
+## P1.5 verification pending
+
+Required before changing P1.5 to PASS:
+
+```text
+python3 -m ruff format --check .
+python3 -m ruff check .
+python3 -m mypy custom_components datasets tests
+python3 datasets/tools/validate_resources.py
+python3 -m pytest -q --tb=short
+```
+
 ## Remaining risks / next action
 
 - P1.4 is complete: BCP 47/ISO 15924 validation, `normalized_text`,
@@ -92,5 +127,6 @@ resulting head and both passed.
 - The future Lit renderer must map the rich-text AST node-by-node and must never
   route dataset strings through `unsafeHTML`.
 
-Next concrete action: start P1.5 tags/packs/prerequisites and Japanese curation
-primitives only. Do not begin P1.6 or grading-engine work as part of P1.5.
+Next concrete action: verify and close P1.5 PASS. Only after that, start P1.6
+content.db schema/generations/stable merge. Do not begin P1.7+ or grading-engine
+work as part of P1.5.
