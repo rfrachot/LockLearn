@@ -4,7 +4,7 @@
 
 P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.5 are complete. P1 and P2 are
 closed PASS. P3 is in progress on `feat/p1-content-core`. P3.6 — quiz engine,
-distractors and corrective feedback — is now the active work package.
+distractors and corrective feedback — is implemented and awaiting the local gate.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -842,3 +842,56 @@ Renaud's final local P3.5 gate reported:
 
 The final Ruff-only blank-line fix was applied. No semantic P3.5 behavior changed
 after the passing lint/type/resource/test gate. P3.5 is closed PASS.
+
+
+## P3.6 implementation pending verification
+
+P3.6 adds a deterministic QuizEngine for panel MCQ and grammar cloze-MCQ.
+
+Question construction now:
+- enforces 4–6 answer options;
+- keeps Je ne sais pas as a separate explicit action rather than a guessed option;
+- preserves CardDefinition-provided context hints;
+- marks every question reportable for the later dataset-quality workflow;
+- rotates examples deterministically from example_rotation_index;
+- balances correct-answer position from answer_position_balance;
+- re-samples distractors reproducibly using card_key + presentation_index +
+  answer_id.
+
+Distractor filtering excludes:
+- the correct answer;
+- current LearningItem/sibling answers;
+- same normalized accepted answers;
+- same native-concept answers;
+- explicit synonym relations supplied by candidate metadata;
+- duplicate answer IDs/normalized answers;
+- confusable candidates unless the card is already in review.
+
+Candidate pools are deliberately caller-owned/indexed. QuizEngine never performs
+corpus-wide SQL randomization and contains no ORDER BY RANDOM(). This keeps the
+domain engine independent from storage lookup while still requiring callers to
+narrow large corpora before construction.
+
+Grammar cloze-MCQ is accepted only for grammar cards with an explicit cloze
+prompt, and its distractors are restricted to grammar candidates so the task
+cannot accidentally become vocabulary-reading difficulty.
+
+Outside exam mode, wrong and IDK answers reveal the correct answer immediately.
+Known confusable distractors may attach contrastive feedback. Exam mode records
+the result but suppresses immediate feedback/reveal.
+
+ADR-0027 records these boundaries. New tests in tests/backend/test_quiz_engine.py
+cover option bounds, IDK, safety exclusions, confusable stability,
+presentation resampling, answer-position balance, example rotation, grammar
+cloze filtering, contrastive feedback, exam suppression and invalid
+construction.
+
+Next required local gate:
+- python3 -m ruff format --check .
+- python3 -m ruff check .
+- python3 -m mypy custom_components datasets tests
+- python3 datasets/tools/validate_resources.py
+- python3 -m pytest -q --tb=short
+
+If PASS, close P3.6 and begin P3.7 panel free-text grading and content-quality
+feedback.
