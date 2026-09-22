@@ -286,6 +286,8 @@ CREATE TABLE IF NOT EXISTS assets_metadata (
 );
 CREATE INDEX IF NOT EXISTS assets_metadata_dataset_path
 ON assets_metadata(dataset_id, path);
+CREATE INDEX IF NOT EXISTS assets_metadata_dataset_kind
+ON assets_metadata(dataset_id, kind);
 
 CREATE TABLE IF NOT EXISTS facet_assets (
     facet_id TEXT PRIMARY KEY REFERENCES facets(facet_id),
@@ -351,38 +353,6 @@ CREATE TABLE IF NOT EXISTS content_blocks (
     payload_json TEXT NOT NULL,
     UNIQUE(learning_item_id, position)
 );
-
-CREATE TABLE IF NOT EXISTS assets_metadata (
-    asset_id TEXT PRIMARY KEY,
-    dataset_id TEXT NOT NULL REFERENCES datasets(dataset_id),
-    kind TEXT NOT NULL CHECK (kind IN ('image', 'audio')),
-    path TEXT NOT NULL,
-    sha256 TEXT NOT NULL CHECK (length(sha256) = 64),
-    byte_size INTEGER NOT NULL CHECK (byte_size > 0),
-    mime_type TEXT NOT NULL,
-    width INTEGER,
-    height INTEGER,
-    license_id TEXT NOT NULL,
-    license_scope TEXT NOT NULL DEFAULT 'asset' CHECK (license_scope = 'asset'),
-    attribution TEXT NOT NULL,
-    UNIQUE(dataset_id, path),
-    CHECK (
-        (kind = 'image' AND width IS NOT NULL AND width > 0
-                        AND height IS NOT NULL AND height > 0)
-        OR (kind = 'audio' AND width IS NULL AND height IS NULL)
-    ),
-    FOREIGN KEY(dataset_id, license_id, license_scope)
-        REFERENCES dataset_licenses(dataset_id, license_id, license_scope)
-);
-CREATE INDEX IF NOT EXISTS assets_metadata_dataset_kind
-ON assets_metadata(dataset_id, kind);
-
-CREATE TABLE IF NOT EXISTS facet_assets (
-    facet_id TEXT PRIMARY KEY REFERENCES facets(facet_id),
-    asset_id TEXT NOT NULL REFERENCES assets_metadata(asset_id)
-);
-CREATE INDEX IF NOT EXISTS facet_assets_asset
-ON facet_assets(asset_id);
 
 CREATE TABLE IF NOT EXISTS tags (tag_id TEXT PRIMARY KEY, label TEXT);
 
@@ -538,12 +508,11 @@ CONTENT_REQUIRED_INDEXES_V1 = frozenset(
         "source_snapshots_source_retrieved",
         "provenance_dataset_object",
         "provenance_snapshot",
-        "assets_metadata_dataset_kind",
-        "facet_assets_asset",
     }
 )
 CONTENT_REQUIRED_INDEXES = CONTENT_REQUIRED_INDEXES_V1 | {
     "assets_metadata_dataset_path",
+    "assets_metadata_dataset_kind",
     "facet_assets_asset",
 }
 
@@ -565,8 +534,6 @@ CONTENT_REQUIRED_TABLES_V1 = frozenset(
         "facets",
         "card_definitions",
         "content_blocks",
-        "assets_metadata",
-        "facet_assets",
         "tags",
         "packs",
         "pack_versions",
