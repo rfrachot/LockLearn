@@ -126,12 +126,34 @@ class ContentGenerationValidator:
                 raise ContentValidationError("a package database must declare exactly one dataset")
             row = rows[0]
             dataset_id = str(row[1])
-            mismatched = connection.execute(
-                "SELECT COUNT(*) FROM learning_items WHERE dataset_id != ?",
-                (dataset_id,),
-            ).fetchone()[0]
-            if mismatched:
-                raise ContentValidationError("package learning items must belong to its dataset")
+            declared_datasets = {
+                str(dataset_row[0])
+                for dataset_row in connection.execute("SELECT dataset_id FROM datasets")
+            }
+            if declared_datasets != {dataset_id}:
+                raise ContentValidationError(
+                    "a package database must contain exactly its declared dataset"
+                )
+            dataset_scoped_tables = (
+                "dataset_sources",
+                "dataset_licenses",
+                "dataset_versions",
+                "concepts",
+                "terms",
+                "learning_items",
+                "packs",
+                "stable_id_migrations",
+                "tombstones",
+            )
+            for table in dataset_scoped_tables:
+                mismatched = connection.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE dataset_id != ?",
+                    (dataset_id,),
+                ).fetchone()[0]
+                if mismatched:
+                    raise ContentValidationError(
+                        f"package rows in {table} must belong to its declared dataset"
+                    )
             self._validate_cards(connection)
             self._validate_stable_ids(connection)
             self._validate_id_migrations(connection, require_card_coverage=False)
@@ -325,40 +347,45 @@ class ContentGenerationValidator:
 
         if not require_card_coverage:
             return
-        changed_items = {
-            old_id
-            for (object_type, old_id), _new in edges.items()
-            if object_type == "learning_item"
-        }
-        changed_facets = {
-            old_id for (object_type, old_id), _new in edges.items() if object_type == "facet"
-        }
-        if not changed_items and not changed_facets:
-            return
-        affected_cards: set[tuple[str, str]] = set()
-        for item_id in changed_items:
-            affected_cards.update(
-                (str(card_id), str(card_key))
-                for card_id, card_key in connection.execute(
-                    """SELECT card_definition_id, card_key FROM card_definitions
-                       WHERE learning_item_id = ?""",
-                    (item_id,),
-                )
+        def resolve(object_type: str, stable_id: str) -> str:
+            current = stable_id
+            while (object_type, current) in edges:
+                current = edges[(object_type, current)]
+            return current
+
+        rows = connection.execute(
+            """SELECT card_definition_id, card_key, learning_item_id,
+                      prompt_facet_id, answer_facet_id
+               FROM card_definitions"""
+        ).fetchall()
+        for raw_card_id, raw_card_key, raw_item_id, raw_prompt_id, raw_answer_id in rows:
+            card_id = str(raw_card_id)
+            card_key = str(raw_card_key)
+            item_id = str(raw_item_id)
+            prompt_id = str(raw_prompt_id)
+            answer_id = str(raw_answer_id)
+            resolved_item = resolve("learning_item", item_id)
+            resolved_prompt = resolve("facet", prompt_id)
+            resolved_answer = resolve("facet", answer_id)
+            if (resolved_item, resolved_prompt, resolved_answer) == (
+                item_id,
+                prompt_id,
+                answer_id,
+            ):
+                continue
+            expected_card_id = derive_card_definition_id(
+                resolved_item, resolved_prompt, resolved_answer
             )
-        for facet_id in changed_facets:
-            affected_cards.update(
-                (str(card_id), str(card_key))
-                for card_id, card_key in connection.execute(
-                    """SELECT card_definition_id, card_key FROM card_definitions
-                       WHERE prompt_facet_id = ? OR answer_facet_id = ?""",
-                    (facet_id, facet_id),
-                )
+            expected_card_key = derive_card_key(
+                resolved_item, resolved_prompt, resolved_answer
             )
-        for card_id, card_key in affected_cards:
-            if ("card_definition", card_id) not in edges or ("card_key", card_key) not in edges:
+            if (
+                resolve("card_definition", card_id) != expected_card_id
+                or resolve("card_key", card_key) != expected_card_key
+            ):
                 raise ContentValidationError(
-                    "LearningItem/Facet ID migrations must map every affected "
-                    "card_definition_id and card_key"
+                    "LearningItem/Facet ID migrations must map affected cards "
+                    "to the card identity derived from their migrated tuple"
                 )
 
     @staticmethod
@@ -1087,6 +1114,7 @@ class ContentGenerationManager:
         self.generations_dir = self.root / "generations"
         self.staging_dir = self.root / "staging"
         self.catalog_path = self.root / "catalog.json"
+        self.switch_journal_path = self.root / "switch-journal.json"
         self._executor = executor
         self._validator = ContentGenerationValidator()
         self._condition = asyncio.Condition()
@@ -1146,7 +1174,9 @@ class ContentGenerationManager:
         generation_path = self.generations_dir / f"{metadata.generation_id}.db"
         if not generation_path.exists():
             os.link(self.current_path, generation_path)
-        previous_id = self._read_catalog_previous(metadata.generation_id)
+        previous_id = self._read_switch_journal_previous(metadata.generation_id)
+        if previous_id is None:
+            previous_id = self._read_catalog_previous(metadata.generation_id)
         if previous_id is None:
             previous_id = metadata.parent_generation_id
         if previous_id is not None:
@@ -1158,7 +1188,15 @@ class ContentGenerationManager:
             except (ContentGenerationError, OSError):
                 previous_id = None
         os.chmod(generation_path, 0o444)
-        self._write_catalog(metadata.generation_id, previous_id)
+        catalog_written = False
+        try:
+            self._write_catalog(metadata.generation_id, previous_id)
+            catalog_written = True
+        except OSError:
+            pass
+        if catalog_written:
+            with suppress(OSError):
+                self._clear_switch_journal()
         return metadata, generation_path, previous_id
 
     def _create_bootstrap_sync(
@@ -1192,6 +1230,16 @@ class ContentGenerationManager:
                 self._leases[generation_id] = count - 1
             self._condition.notify_all()
 
+    @staticmethod
+    async def _await_switch_future(future: asyncio.Future[Any]) -> tuple[Any, bool]:
+        """Finish an atomic filesystem switch before propagating task cancellation."""
+        cancelled = False
+        while True:
+            try:
+                return await asyncio.shield(future), cancelled
+            except asyncio.CancelledError:
+                cancelled = True
+
     async def async_activate(self, candidate: Path) -> GenerationMetadata:
         """Drain readers, validate again, then atomically switch current.db."""
         async with self._condition:
@@ -1199,21 +1247,27 @@ class ContentGenerationManager:
                 raise ContentActivationError("content generation manager is closed")
             while self._switching:
                 await self._condition.wait()
+                if self._closed:
+                    raise ContentActivationError("content generation manager is closed")
             self._switching = True
             while self._leases:
                 await self._condition.wait()
         old_active = self.active_metadata
+        cancelled = False
         try:
             loop = asyncio.get_running_loop()
-            metadata, path, previous_id = await loop.run_in_executor(
+            future = loop.run_in_executor(
                 self._executor,
                 self._activate_sync,
                 candidate,
                 old_active.generation_id,
             )
+            (metadata, path, previous_id), cancelled = await self._await_switch_future(future)
             self._active = metadata
             self._active_path = path
             self._previous_id = previous_id
+            if cancelled:
+                raise asyncio.CancelledError
             return metadata
         finally:
             async with self._condition:
@@ -1227,6 +1281,8 @@ class ContentGenerationManager:
                 raise ContentActivationError("content generation manager is closed")
             while self._switching:
                 await self._condition.wait()
+                if self._closed:
+                    raise ContentActivationError("content generation manager is closed")
             if self._previous_id is None:
                 raise ContentActivationError("no previous generation is available")
             self._switching = True
@@ -1235,14 +1291,18 @@ class ContentGenerationManager:
         rolled_away = self.active_metadata.generation_id
         target_id = self._previous_id
         target = self.generations_dir / f"{target_id}.db"
+        cancelled = False
         try:
             loop = asyncio.get_running_loop()
-            metadata = await loop.run_in_executor(
+            future = loop.run_in_executor(
                 self._executor, self._switch_existing_sync, target, rolled_away
             )
+            metadata, cancelled = await self._await_switch_future(future)
             self._active = metadata
             self._active_path = target
             self._previous_id = rolled_away
+            if cancelled:
+                raise asyncio.CancelledError
             return metadata
         finally:
             async with self._condition:
@@ -1253,31 +1313,50 @@ class ContentGenerationManager:
         self, candidate: Path, previous_id: str | None
     ) -> tuple[GenerationMetadata, Path, str | None]:
         metadata = self._validator.validate_generation(candidate)
+        if metadata.parent_generation_id != previous_id:
+            raise ContentActivationError(
+                "candidate parent generation does not match the active generation"
+            )
         target = self.generations_dir / f"{metadata.generation_id}.db"
         if target.exists():
             raise ContentActivationError(f"generation already exists: {metadata.generation_id}")
         os.replace(candidate, target)
         os.chmod(target, 0o444)
         _fsync_directory(self.generations_dir)
-        self._replace_current_link(target)
-        self._finish_switch(metadata.generation_id, previous_id)
+        self._switch_generation_sync(target, metadata, previous_id)
         return metadata, target, previous_id
 
     def _switch_existing_sync(self, target: Path, previous_id: str) -> GenerationMetadata:
         metadata = self._validator.validate_generation(target)
-        self._replace_current_link(target)
-        self._finish_switch(metadata.generation_id, previous_id)
+        self._switch_generation_sync(target, metadata, previous_id)
         return metadata
 
-    def _finish_switch(self, active_id: str, previous_id: str | None) -> None:
-        """Best-effort bookkeeping after current.db has already switched."""
-        # current.db is the crash-safe source of truth; startup reconstructs
-        # the previous pointer from generation metadata when needed.
+    def _switch_generation_sync(
+        self,
+        target: Path,
+        metadata: GenerationMetadata,
+        previous_id: str | None,
+    ) -> None:
+        """Commit one pointer switch with a crash-recoverable intent journal."""
+        self._write_switch_journal(previous_id, metadata.generation_id)
+        try:
+            self._replace_current_link(target)
+        except Exception:
+            with suppress(OSError):
+                self._clear_switch_journal()
+            raise
+
+        catalog_written = False
+        try:
+            self._write_catalog(metadata.generation_id, previous_id)
+            catalog_written = True
+        except OSError:
+            pass
+        if catalog_written:
+            with suppress(OSError):
+                self._clear_switch_journal()
         with suppress(OSError):
-            self._write_catalog(active_id, previous_id)
-        # An extra immutable generation is safe and may be pruned later.
-        with suppress(OSError):
-            self._cleanup_generations({active_id, previous_id})
+            self._cleanup_generations({metadata.generation_id, previous_id})
 
     def _replace_current_link(self, target: Path) -> None:
         temporary = self.root / f".current.{uuid.uuid4().hex}.tmp"
@@ -1326,10 +1405,47 @@ class ContentGenerationManager:
         previous = data.get("previous_generation_id")
         return previous if isinstance(previous, str) else None
 
+    def _write_switch_journal(self, previous_id: str | None, target_id: str) -> None:
+        temporary = self.root / f".switch-journal.{uuid.uuid4().hex}.tmp"
+        payload = json.dumps(
+            {
+                "journal_version": 1,
+                "from_generation_id": previous_id,
+                "to_generation_id": target_id,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        try:
+            with temporary.open("w", encoding="utf-8") as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, self.switch_journal_path)
+            _fsync_directory(self.root)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _read_switch_journal_previous(self, active_id: str) -> str | None:
+        try:
+            data = json.loads(self.switch_journal_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return None
+        if data.get("journal_version") != 1 or data.get("to_generation_id") != active_id:
+            return None
+        previous = data.get("from_generation_id")
+        return previous if isinstance(previous, str) else None
+
+    def _clear_switch_journal(self) -> None:
+        self.switch_journal_path.unlink(missing_ok=True)
+        _fsync_directory(self.root)
+
     async def async_close(self) -> None:
-        """Prevent new readers and drain every in-flight lease."""
+        """Prevent new readers, wait out a switch, and drain every in-flight lease."""
         async with self._condition:
             self._closed = True
+            while self._switching:
+                await self._condition.wait()
             self._switching = True
             while self._leases:
                 await self._condition.wait()

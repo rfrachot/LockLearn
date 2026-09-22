@@ -5,12 +5,15 @@ from __future__ import annotations
 import asyncio
 import os
 import sqlite3
+import threading
 from pathlib import Path
 
 import pytest
 
 from custom_components.locklearn.const import CONTENT_SCHEMA_VERSION
 from custom_components.locklearn.storage import (
+    ContentActivationError,
+    ContentGenerationError,
     ContentGenerationValidator,
     ContentValidationError,
     SQLiteStorage,
@@ -422,3 +425,194 @@ async def test_parallel_real_sqlite_readers_survive_activation(
         assert new_lease.generation_id == "generation-two"
     finally:
         await new_lease.release()
+
+
+def test_package_validation_rejects_cross_dataset_rows(tmp_path: Path) -> None:
+    """Every dataset-scoped row in one package belongs to the declared dataset."""
+    package = create_package(tmp_path / "cross-dataset.db", "cross-dataset")
+    with sqlite3.connect(package) as connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute("INSERT INTO datasets VALUES ('locklearn:dataset:other')")
+        connection.execute(
+            "UPDATE terms SET dataset_id = 'locklearn:dataset:other' WHERE term_id = ?",
+            ("locklearn:term:test",),
+        )
+        connection.commit()
+    with pytest.raises(ContentValidationError, match="exactly its declared dataset"):
+        ContentGenerationValidator().validate_package(package)
+
+
+async def test_stale_candidate_parent_cannot_replace_newer_generation(
+    content_storage: SQLiteStorage, tmp_path: Path
+) -> None:
+    """Activation is a generation CAS and rejects candidates built from stale parents."""
+    package_b = create_package(tmp_path / "b.db", "b")
+    package_c = create_package(tmp_path / "c.db", "c", active_item_ids=())
+    candidate_b = await build_candidate(content_storage, package_b, "generation-b")
+    candidate_c = await build_candidate(content_storage, package_c, "generation-c")
+
+    await content_storage.async_activate_content_generation(candidate_b)
+    with pytest.raises(ContentActivationError, match="parent generation"):
+        await content_storage.async_activate_content_generation(candidate_c)
+
+    assert content_storage.content_generations.active_metadata.generation_id == "generation-b"
+    with inspect_generation(content_storage.paths.content_db) as connection:
+        assert connection.execute("SELECT generation_id FROM generation_metadata").fetchone() == (
+            "generation-b",
+        )
+
+
+async def test_cancelled_activation_finishes_switch_before_reopening_reader_gate(
+    content_storage: SQLiteStorage, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cancellation cannot expose a switched inode with stale in-memory generation state."""
+    package = create_package(tmp_path / "cancel.db", "cancel")
+    candidate = await build_candidate(content_storage, package, "generation-cancel")
+    manager = content_storage.content_generations
+    original_activate_sync = manager._activate_sync
+    entered = threading.Event()
+    release = threading.Event()
+
+    def delayed_activate_sync(path: Path, previous_id: str | None):
+        entered.set()
+        if not release.wait(timeout=5):
+            raise RuntimeError("timed out waiting to release activation")
+        return original_activate_sync(path, previous_id)
+
+    monkeypatch.setattr(manager, "_activate_sync", delayed_activate_sync)
+    activation = asyncio.create_task(content_storage.async_activate_content_generation(candidate))
+    assert await asyncio.to_thread(entered.wait, 2)
+    activation.cancel()
+    await asyncio.sleep(0)
+    waiting_reader = asyncio.create_task(manager.acquire_reader())
+    await asyncio.sleep(0.02)
+    assert not waiting_reader.done()
+
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await activation
+    lease = await waiting_reader
+    try:
+        assert lease.generation_id == "generation-cancel"
+        assert manager.active_metadata.generation_id == "generation-cancel"
+        with inspect_generation(content_storage.paths.content_db) as connection:
+            assert connection.execute(
+                "SELECT generation_id FROM generation_metadata"
+            ).fetchone() == ("generation-cancel",)
+    finally:
+        await lease.release()
+
+
+async def test_close_waits_for_inflight_activation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """HA unload cannot shut executors down underneath an atomic content switch."""
+    storage = SQLiteStorage(
+        StoragePaths(tmp_path / "state" / "state.db", tmp_path / "content" / "current.db")
+    )
+    await storage.async_open()
+    package = create_package(tmp_path / "close.db", "close")
+    candidate = await build_candidate(storage, package, "generation-close")
+    manager = storage.content_generations
+    original_activate_sync = manager._activate_sync
+    entered = threading.Event()
+    release = threading.Event()
+
+    def delayed_activate_sync(path: Path, previous_id: str | None):
+        entered.set()
+        if not release.wait(timeout=5):
+            raise RuntimeError("timed out waiting to release activation")
+        return original_activate_sync(path, previous_id)
+
+    monkeypatch.setattr(manager, "_activate_sync", delayed_activate_sync)
+    activation = asyncio.create_task(storage.async_activate_content_generation(candidate))
+    assert await asyncio.to_thread(entered.wait, 2)
+    closing = asyncio.create_task(storage.async_close())
+    await asyncio.sleep(0.02)
+    assert not closing.done()
+
+    release.set()
+    assert (await activation).generation_id == "generation-close"
+    await closing
+    with pytest.raises(ContentGenerationError, match="closed"):
+        await manager.acquire_reader()
+
+
+async def test_rollback_restart_recovers_previous_from_switch_journal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A crash boundary after rollback pointer swap can recover the rolled-away generation."""
+    paths = StoragePaths(tmp_path / "state" / "state.db", tmp_path / "content" / "current.db")
+    storage = SQLiteStorage(paths)
+    await storage.async_open()
+    try:
+        for version, generation_id, items in (
+            ("journal-v1", "journal-one", ("locklearn:item:a",)),
+            ("journal-v2", "journal-two", ()),
+        ):
+            package = create_package(tmp_path / f"{version}.db", version, active_item_ids=items)
+            candidate = await build_candidate(storage, package, generation_id)
+            await storage.async_activate_content_generation(candidate)
+
+        manager = storage.content_generations
+
+        def fail_catalog(*_args: object, **_kwargs: object) -> None:
+            raise OSError("simulated catalog persistence failure")
+
+        monkeypatch.setattr(manager, "_write_catalog", fail_catalog)
+        rolled_back = await storage.async_rollback_content_generation()
+        assert rolled_back.generation_id == "journal-one"
+        assert manager.switch_journal_path.exists()
+    finally:
+        await storage.async_close()
+
+    reopened = SQLiteStorage(paths)
+    await reopened.async_open()
+    try:
+        assert reopened.content_generations.active_metadata.generation_id == "journal-one"
+        assert reopened.content_generations.previous_generation_id == "journal-two"
+        assert not reopened.content_generations.switch_journal_path.exists()
+    finally:
+        await reopened.async_close()
+
+
+async def test_migration_targets_must_match_migrated_card_tuple(
+    content_storage: SQLiteStorage, tmp_path: Path
+) -> None:
+    """Complete-looking mappings cannot redirect progress to a semantically different card."""
+    item_c = "locklearn:item:c"
+    package_v1 = create_package(tmp_path / "semantic-v1.db", "semantic-v1")
+    candidate_v1 = await build_candidate(content_storage, package_v1, "semantic-one")
+    await content_storage.async_activate_content_generation(candidate_v1)
+
+    package_v2 = create_package(
+        tmp_path / "semantic-v2.db",
+        "semantic-v2",
+        active_item_ids=("locklearn:item:b", item_c),
+    )
+    old_prompt, old_answer = facet_ids("locklearn:item:a")
+    new_prompt, new_answer = facet_ids("locklearn:item:b")
+    old_card_id, old_card_key = card_identity("locklearn:item:a")
+    wrong_card_id, wrong_card_key = card_identity(item_c)
+    with sqlite3.connect(package_v2) as connection:
+        migrations = (
+            ("learning_item", "locklearn:item:a", "locklearn:item:b"),
+            ("facet", old_prompt, new_prompt),
+            ("facet", old_answer, new_answer),
+            ("card_definition", old_card_id, wrong_card_id),
+            ("card_key", old_card_key, wrong_card_key),
+        )
+        connection.executemany(
+            """INSERT INTO stable_id_migrations(
+                   object_type, dataset_id, old_id, new_id, introduced_in_version, reason
+               ) VALUES (?, 'locklearn:dataset:test', ?, ?, 'semantic-v2', 'test mapping')""",
+            migrations,
+        )
+        connection.commit()
+
+    candidate_v2 = content_storage.paths.content_staging_dir / "semantic-two.next.db"
+    with pytest.raises(ContentValidationError, match="migrated tuple"):
+        await content_storage.async_build_content_generation(
+            (package_v2,), candidate_v2, generation_id="semantic-two"
+        )
+    assert content_storage.content_generations.active_metadata.generation_id == "semantic-one"

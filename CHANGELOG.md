@@ -46,6 +46,17 @@ All notable changes will be documented here.
 - Reproducible HAOS/Supervisor backup-and-restore qualification harness.
 - P0.7 real-instance evidence and platform-specific notification decisions.
 
+### Fixed
+- Harden content-generation activation against asyncio cancellation and HA unload
+  so the reader gate cannot reopen before an executor-side pointer switch has
+  finished and in-memory generation state has been reconciled.
+- Reject stale generation candidates whose declared parent is no longer active,
+  preventing an older build from overwriting a newer activated catalog.
+- Add a fsynced switch-intent journal so restart can recover the exact previous
+  generation after a crash during forward activation or rollback.
+- Validate package-wide dataset ownership and require stable-ID card migrations
+  to target the identity derived from the migrated item/facet tuple.
+
 ### Changed
 - Treat lockscreen visibility as an advisory OS rendering preference rather
   than a confidentiality boundary.
