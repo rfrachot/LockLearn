@@ -100,11 +100,12 @@ class ReviewPolicyV1:
                 "state": "review",
                 "box": target_box,
                 "next_due_at_utc": (now + timedelta(days=interval)).isoformat(),
+                "streak_correct": 0,
                 "policy_version": self.policy_version,
-                "mastery": self.mastery(post, at=now),
                 "updated_at_utc": now.isoformat(),
             }
         )
+        post["mastery"] = self.mastery(post, at=now)
         return ReviewTransition(
             pre_state=dict(snapshot),
             post_state=post,
