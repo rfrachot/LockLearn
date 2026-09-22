@@ -477,12 +477,18 @@ class ContentGenerationValidator:
                     payload = MediaReference(payload_data["asset_id"])
                     if schema_version >= 2:
                         asset = connection.execute(
-                            "SELECT kind FROM assets_metadata WHERE asset_id = ?",
-                            (payload.asset_id,),
+                            """SELECT asset.kind
+                               FROM assets_metadata AS asset
+                               JOIN learning_items AS item
+                                 ON item.learning_item_id = ?
+                                AND item.dataset_id = asset.dataset_id
+                               WHERE asset.asset_id = ?""",
+                            (str(item_id), payload.asset_id),
                         ).fetchone()
                         if asset is None or str(asset[0]) != kind.value:
                             raise ValueError(
-                                "media content block must reference an asset of matching kind"
+                                "media content block must reference a same-dataset asset "
+                                "of matching kind"
                             )
                 ContentBlock(
                     content_block_id=str(block_id),
@@ -615,10 +621,16 @@ class ContentGenerationValidator:
         invalid_facets = connection.execute(
             """SELECT facet.facet_id
                FROM facets AS facet
+               JOIN learning_items AS item
+                 ON item.learning_item_id = facet.learning_item_id
                LEFT JOIN facet_assets AS link ON link.facet_id = facet.facet_id
                LEFT JOIN assets_metadata AS asset ON asset.asset_id = link.asset_id
                WHERE (facet.kind IN ('image', 'audio')
-                      AND (asset.asset_id IS NULL OR asset.kind != facet.kind))
+                      AND (
+                          asset.asset_id IS NULL
+                          OR asset.kind != facet.kind
+                          OR asset.dataset_id != item.dataset_id
+                      ))
                   OR (facet.kind NOT IN ('image', 'audio') AND link.asset_id IS NOT NULL)
                LIMIT 1"""
         ).fetchone()
