@@ -1,4 +1,4 @@
-"""Canonical content-domain identities for LockLearn P1.1."""
+"""Canonical content-domain identities and grading metadata for LockLearn P1."""
 
 from __future__ import annotations
 
@@ -99,6 +99,50 @@ class FacetKind(StrEnum):
     STRUCTURED = "structured"
 
 
+class AnswerSemantics(StrEnum):
+    """Shape of the answer expected by a CardDefinition."""
+
+    SINGLE_VALUE = "single_value"
+    SET_OF_VALID_VALUES = "set_of_valid_values"
+    ORDERED_SEQUENCE = "ordered_sequence"
+    FREE_TEXT = "free_text"
+    RESERVED_RULE_BASED = "reserved_rule_based"
+
+
+class GradingPolicyKind(StrEnum):
+    """Stable grading-policy kinds; execution is implemented in later phases."""
+
+    EXACT = "exact"
+    ANY_OF = "any_of"
+    FUZZY_NORMALIZED = "fuzzy_normalized"
+    RULE_BASED_RESERVED = "rule_based_reserved"
+
+
+class GradingOutcome(StrEnum):
+    """Grading result without conflating uncertainty with a wrong answer."""
+
+    CORRECT = "correct"
+    WRONG = "wrong"
+    UNRECOGNIZED = "unrecognized"
+
+    @property
+    def is_definitive_failure(self) -> bool:
+        """Return whether downstream planning may safely treat this as wrong."""
+        return self is GradingOutcome.WRONG
+
+
+@dataclass(frozen=True, slots=True)
+class GradingPolicy:
+    """Versioned grading metadata that never participates in card identity."""
+
+    kind: GradingPolicyKind
+    policy_version: int = 1
+
+    def __post_init__(self) -> None:
+        if self.policy_version < 1:
+            raise ContentModelError("grading policy_version must be >= 1")
+
+
 class AlignmentReviewStatus(StrEnum):
     """Human-review state for an explicit cross-source semantic alignment."""
 
@@ -184,7 +228,7 @@ class Concept:
 
 @dataclass(frozen=True, slots=True)
 class Term:
-    """A linguistic representation; normalization details are P1.3 policy."""
+    """A linguistic representation; normalization details are P1.4 policy."""
 
     term_id: str
     dataset_id: str
@@ -246,6 +290,9 @@ class CardDefinition:
     learning_item_id: str
     prompt_facet_id: str
     answer_facet_id: str
+    answer_semantics: AnswerSemantics = AnswerSemantics.SINGLE_VALUE
+    grading_policy: GradingPolicy = GradingPolicy(GradingPolicyKind.EXACT)
+    context_hint_facet_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         validate_stable_id(self.card_definition_id, field="card_definition_id")
@@ -264,25 +311,58 @@ class CardDefinition:
             )
         if self.prompt_facet_id == self.answer_facet_id:
             raise ContentModelError("prompt and answer facets must be distinct")
+        if len(set(self.context_hint_facet_ids)) != len(self.context_hint_facet_ids):
+            raise ContentModelError("context_hint_facet_ids must be unique")
+        for facet_id in self.context_hint_facet_ids:
+            validate_stable_id(facet_id, field="context_hint_facet_id")
+            if facet_id == self.answer_facet_id:
+                raise ContentModelError("answer facet cannot also be a context hint")
 
     @classmethod
     def from_facets(
-        cls, learning_item: LearningItem, prompt: Facet, answer: Facet
+        cls,
+        learning_item: LearningItem,
+        prompt: Facet,
+        answer: Facet,
+        *,
+        answer_semantics: AnswerSemantics = AnswerSemantics.SINGLE_VALUE,
+        grading_policy: GradingPolicy | None = None,
+        context_hints: tuple[Facet, ...] = (),
     ) -> CardDefinition:
-        """Construct a card only when both facets belong to the same item."""
+        """Construct a card only when all referenced facets belong to one item."""
         if prompt.learning_item_id != learning_item.learning_item_id:
             raise ContentModelError("prompt facet belongs to a different LearningItem")
         if answer.learning_item_id != learning_item.learning_item_id:
             raise ContentModelError("answer facet belongs to a different LearningItem")
-        card_key = derive_card_key(learning_item.learning_item_id, prompt.facet_id, answer.facet_id)
+        if len({hint.facet_id for hint in context_hints}) != len(context_hints):
+            raise ContentModelError("context hint facets must be unique")
+        for hint in context_hints:
+            if hint.learning_item_id != learning_item.learning_item_id:
+                raise ContentModelError(
+                    "context hint facet belongs to a different LearningItem"
+                )
+            if hint.facet_id == answer.facet_id:
+                raise ContentModelError("answer facet cannot also be a context hint")
+        card_key = derive_card_key(
+            learning_item.learning_item_id,
+            prompt.facet_id,
+            answer.facet_id,
+        )
         return cls(
             card_definition_id=derive_card_definition_id(
-                learning_item.learning_item_id, prompt.facet_id, answer.facet_id
+                learning_item.learning_item_id,
+                prompt.facet_id,
+                answer.facet_id,
             ),
             card_key=card_key,
             learning_item_id=learning_item.learning_item_id,
             prompt_facet_id=prompt.facet_id,
             answer_facet_id=answer.facet_id,
+            answer_semantics=answer_semantics,
+            grading_policy=grading_policy
+            if grading_policy is not None
+            else GradingPolicy(GradingPolicyKind.EXACT),
+            context_hint_facet_ids=tuple(hint.facet_id for hint in context_hints),
         )
 
 
