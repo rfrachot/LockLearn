@@ -3,8 +3,8 @@
 ## Current state
 
 P0.1–P0.7 and P1.1–P1.6 are complete. P1 remains in progress on
-`feat/p1-content-core`. P1.6 received a post-review hardening pass for
-cancellation-safe switching, stale-parent rejection and rollback crash recovery.
+`feat/p1-content-core`. P1.7 source/provenance/license implementation is now
+on the branch and awaits local Ruff/mypy/registry/pytest verification before PASS.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -63,10 +63,17 @@ Final P1.6 verification after post-review hardening on the Ubuntu development ch
 
 No frontend files changed. No frontend command was needed for P1.6.
 
+## P1.7 implementation awaiting verification
+
+P1.7 upgrades the repository source/license registries to policy schema v2,
+adds centralized field-allowlist/provenance gates, persists exact SourceSnapshot
+and per-object provenance rows in content.db, and reserves an Asset provenance
+boundary without implementing the P1.11 Asset schema.
+
+ADR-0014 records the source/snapshot/provenance/license-scope decision.
+
 ## Remaining risks / next action
 
-- P1.7 owns the detailed source/snapshot/provenance/license registry; P1.6 only
-  persists the existing minimal Source/Dataset contract.
 - P1.9 owns download orchestration, update entities, Repairs and user-facing
   install/rollback policy; P1.6 supplies the storage primitives.
 - P1.11 owns full Asset metadata and serving; P1.6 stores only P1.3 stable media
@@ -75,5 +82,6 @@ No frontend files changed. No frontend command was needed for P1.6.
   tables belongs with the released `state.db` schema; P1.6 prevents incomplete
   item/facet mappings from activating.
 
-P1.6 is closed PASS. Next concrete action: implement P1.7 source/snapshot/
-provenance/license normalization without entering the P1.8 adapter/build-pipeline scope.
+P1.6 is closed PASS. Next concrete action: run the full local quality suite on
+the P1.7 commits. If green, mark P1.7 PASS; otherwise remediate P1.7 only. Do
+not begin P1.8 adapters before that gate closes.
