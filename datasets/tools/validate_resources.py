@@ -39,7 +39,9 @@ def validate() -> None:
         raise ValueError("duplicate curation policy IDs")
     allowed_curation_kinds = {
         "card_direction_default",
+        "prefer_contextualized_reading",
         "production_complete_term",
+        "production_requires_strong_grading",
         "mnemonic_keyword_label",
         "ambiguous_prompt_context_hint",
         "prefer_covered_example",
