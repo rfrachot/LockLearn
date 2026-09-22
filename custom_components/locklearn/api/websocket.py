@@ -448,9 +448,12 @@ async def ws_tracks_create(
         vol.Required("type"): "locklearn/tracks/update",
         vol.Required("track_id"): str,
         vol.Optional("name"): str,
+        vol.Optional("source_language"): str,
+        vol.Optional("target_language"): str,
         vol.Optional("status"): vol.In(("active", "paused", "archived")),
         vol.Optional("priority"): vol.All(int, vol.Range(min=1)),
         vol.Optional("content_weights"): dict,
+        vol.Optional("explicit_card_keys"): [str],
     }
 )
 @websocket_api.async_response
@@ -475,9 +478,16 @@ async def ws_tracks_update(
         track = await runtime.tracks.async_update_track(
             track_id=msg["track_id"],
             name=msg.get("name"),
+            source_language=msg.get("source_language"),
+            target_language=msg.get("target_language"),
             status=msg.get("status"),
             priority=msg.get("priority"),
             content_weights=msg.get("content_weights"),
+            explicit_card_keys=(
+                None
+                if "explicit_card_keys" not in msg
+                else tuple(msg["explicit_card_keys"])
+            ),
         )
     except TrackValidationError as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
