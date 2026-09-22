@@ -100,7 +100,21 @@ async def test_storage_diagnostic_is_private_and_off_event_loop(storage: SQLiteS
 
 async def test_session_cas_allows_only_one_client(storage: SQLiteStorage) -> None:
     """Two clients with the same expected version cannot both mutate."""
-    await storage.async_create_session("s1", "p1", "t1")
+    await storage.async_create_session(
+        "s1",
+        "p1",
+        "t1",
+        items=(
+            {
+                "question_id": "q1",
+                "card_key": "card-1",
+                "learning_item_id": "item-1",
+                "prompt_facet_id": "prompt-1",
+                "answer_facet_id": "answer-1",
+                "payload": {},
+            },
+        ),
+    )
     results = await asyncio.gather(
         storage.async_answer_session("s1", 1, "q1", {"choice": "a"}),
         storage.async_answer_session("s1", 1, "q1", {"choice": "b"}),
