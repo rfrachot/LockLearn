@@ -2,9 +2,9 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11 and P2.1–P2.4 are complete. P1 is closed PASS and P2
-is in progress on `feat/p1-content-core`. P2.5 — Learning quotas, goals and
-load forecast — is implemented and awaiting the local quality gate.
+P0.1–P0.7, P1.1–P1.11 and P2.1–P2.5 are complete. P1 is closed PASS and P2
+is in progress on `feat/p1-content-core`. P2.6 — Profiles/tracks WebSocket CRUD
+and errors — is implemented and awaiting the final P2 local quality gate.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -462,3 +462,70 @@ Next required local gate:
 - python3 -m pytest -q --tb=short
 
 If PASS, close P2.5 and begin P2.6 Profiles/tracks WebSocket CRUD and errors.
+
+
+## P2.5 closure
+
+Renaud's local P2.5 gate reported:
+- Ruff format: one mechanical wrapping diff in test_planning.py.
+- Ruff lint: PASS.
+- mypy: PASS, 85 source files.
+- resource registries: PASS.
+- pytest: PASS, 222 tests in 4.61 s.
+
+The exact Ruff-recommended formatting change was applied. No semantic planning
+code changed after the passing type/resource/test gate. P2.5 is closed PASS.
+
+## P2.6 implementation pending verification
+
+P2.6 replaces the profile/track management gap with authenticated Home Assistant
+WebSocket surfaces.
+
+Bootstrap now consumes the config-entry personal-profile preference only after
+an authenticated HA user exists. Personal-profile creation is idempotent and
+keeps Profile identity independent from HA user identity.
+
+Implemented P2 WebSocket surfaces:
+- profiles list/create/update/delete/share;
+- tracks list/create/update/delete/integrate_pack_update;
+- packs/list and datasets/list;
+- existing bootstrap/session/operation/admin commands remain registered.
+
+All P2 collection endpoints use a server-bounded limit (max 100) plus cursor.
+Profile listing is ACL-filtered before pagination. Private profile/track access
+returns not_found when the caller cannot see the owning profile; a visible
+viewer receives forbidden for mutations. This avoids using normal API errors as
+a private-profile existence oracle.
+
+Profile update/delete/share and Track list/create/update/delete/integration
+recheck backend ACL on every request. HA admin status is not a profile ACL
+bypass. Track reconfiguration preserves explicit-card mode unless the caller
+explicitly replaces the card selection; direction-mode updates resolve exact
+CardDefinitions again.
+
+Profile/Track deletion explicitly cleans non-FK private state in addition to the
+state.db cascade-owned rows. Track configuration updates replace metadata, card
+rules and content weights atomically.
+
+Pack and dataset list surfaces expose only public installed-content metadata from
+the active immutable content generation.
+
+New tests in tests/backend/test_websocket_crud.py cover:
+- authenticated personal-profile bootstrap;
+- Profile CRUD visibility and bounded pagination;
+- private-profile not_found semantics;
+- viewer forbidden semantics for Profile mutations;
+- Track CRUD, PackVersion integration and catalog list surfaces;
+- negative ACL checks for Track list/create/update/delete/integrate.
+
+The existing ACL matrix gained an explicit owner-only EDIT_PROFILE permission.
+
+Next required local gate:
+- python3 -m ruff format --check .
+- python3 -m ruff check .
+- python3 -m mypy custom_components datasets tests
+- python3 datasets/tools/validate_resources.py
+- python3 -m pytest -q --tb=short
+
+If PASS, close P2.6 and the P2 exit gate, then begin P3.1 ReviewEvent audit log
+and progress projection.
