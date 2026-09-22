@@ -24,6 +24,7 @@ from typing import Protocol
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from custom_components.locklearn.const import CONTENT_SCHEMA_VERSION
+from custom_components.locklearn.core.assets import Asset, AssetKind, validate_asset_path
 from custom_components.locklearn.core.content import make_stable_id
 from custom_components.locklearn.datasets import (
     MANIFEST_VERSION,
@@ -52,6 +53,8 @@ _CANONICAL_CONTENT_TABLES = (
     "learning_item_concepts",
     "learning_item_requirements",
     "facets",
+    "assets_metadata",
+    "facet_assets",
     "card_definitions",
     "card_context_hints",
     "content_blocks",
@@ -109,6 +112,44 @@ class SourceInput:
 
 
 @dataclass(frozen=True, slots=True)
+class BuildAssetInput:
+    """One public media file embedded in a signed dataset package."""
+
+    asset_id: str
+    source_id: str
+    source_record_id: str
+    path: Path
+    archive_path: str
+    kind: AssetKind
+    mime_type: str
+    attribution: str
+    license_id: str | None = None
+    width: int | None = None
+    height: int | None = None
+    author: str | None = None
+    modified_from_source: bool = False
+
+    def __post_init__(self) -> None:
+        validate_asset_path(self.archive_path)
+        if not self.source_record_id:
+            raise DatasetBuildError("asset source_record_id is required")
+        if self.author == "":
+            raise DatasetBuildError("asset author must be None or non-empty")
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedAsset:
+    """Validated asset bytes plus package metadata derived from those exact bytes."""
+
+    metadata: Asset
+    source_id: str
+    source_record_id: str
+    author: str | None
+    modified_from_source: bool
+    source_path: Path
+
+
+@dataclass(frozen=True, slots=True)
 class NormalizedSource:
     """Canonical intermediate representation plus exact source snapshot facts."""
 
@@ -136,6 +177,7 @@ class DatasetBuildSpec:
     build_tool_version: str
     signing_key_id: str
     sources: tuple[SourceInput, ...]
+    assets: tuple[BuildAssetInput, ...] = ()
     added_count: int = 0
     changed_count: int = 0
     removed_count: int = 0
@@ -149,6 +191,14 @@ class DatasetBuildSpec:
         source_ids = [source.source_id for source in self.sources]
         if len(source_ids) != len(set(source_ids)):
             raise DatasetBuildError("dataset build source_id values must be unique")
+        asset_ids = [asset.asset_id for asset in self.assets]
+        asset_paths = [asset.archive_path for asset in self.assets]
+        if len(asset_ids) != len(set(asset_ids)):
+            raise DatasetBuildError("dataset asset_id values must be unique")
+        if len(asset_paths) != len(set(asset_paths)):
+            raise DatasetBuildError("dataset asset paths must be unique")
+        if any(asset.source_id not in source_ids for asset in self.assets):
+            raise DatasetBuildError("every asset source_id must be declared in sources")
         for count in (
             self.added_count,
             self.changed_count,
@@ -402,6 +452,11 @@ def build_dataset(
             for source in sorted(spec.sources, key=lambda item: item.source_id)
         )
         normalized_map = MappingProxyType({item.source_id: item for item in normalized})
+        prepared_assets = _prepare_assets(
+            spec,
+            normalized_map=normalized_map,
+            repository_root=repository_root,
+        )
         database_path = workspace_path / "dataset.db"
         database_path.unlink(missing_ok=True)
         initialize_content_database(database_path)
@@ -471,6 +526,56 @@ def build_dataset(
                 )
 
             context = BuildContext(spec.dataset_id, normalized_map)
+            for prepared in prepared_assets:
+                asset = prepared.metadata
+                license_row = registry_licenses.get(asset.license_id)
+                if license_row is None:
+                    raise DatasetBuildError(
+                        f"asset references unknown license: {asset.license_id}"
+                    )
+                _insert_license(connection, license_row)
+                connection.execute(
+                    """INSERT OR IGNORE INTO dataset_licenses(
+                           dataset_id, license_id, license_scope
+                       ) VALUES (?, ?, 'asset')""",
+                    (spec.dataset_id, asset.license_id),
+                )
+                connection.execute(
+                    """INSERT INTO assets_metadata(
+                           asset_id, dataset_id, kind, path, sha256, byte_size,
+                           mime_type, width, height, license_id, license_scope, attribution
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'asset', ?)""",
+                    (
+                        asset.asset_id,
+                        asset.dataset_id,
+                        asset.kind.value,
+                        asset.path,
+                        asset.sha256,
+                        asset.byte_size,
+                        asset.mime_type,
+                        asset.width,
+                        asset.height,
+                        asset.license_id,
+                        asset.attribution,
+                    ),
+                )
+                context.insert_provenance(
+                    connection,
+                    record=NormalizedRecord(
+                        source_id=prepared.source_id,
+                        source_record_id=prepared.source_record_id,
+                        kind="asset",
+                        payload={},
+                        author=prepared.author,
+                        license_id=asset.license_id,
+                        modified_from_source=prepared.modified_from_source,
+                    ),
+                    object_type="asset",
+                    object_id=asset.asset_id,
+                    license_scope="asset",
+                    attribution_text=asset.attribution or None,
+                )
+
             item_counts = dict(recipe.materialize(connection, context))
             if any(
                 not isinstance(key, str)
@@ -528,13 +633,17 @@ def build_dataset(
 
         ContentGenerationValidator().validate_package(database_path)
         license_files = _license_payloads(
-            normalized, registry_sources=registry_sources, registry_licenses=registry_licenses
+            normalized,
+            prepared_assets=prepared_assets,
+            registry_sources=registry_sources,
+            registry_licenses=registry_licenses,
         )
         manifest = _build_manifest(
             spec,
             normalized,
             database_path,
             license_files,
+            prepared_assets,
             canonical_hash,
             item_counts,
         )
@@ -549,6 +658,7 @@ def build_dataset(
             signature=signature,
             database_path=database_path,
             license_files=license_files,
+            prepared_assets=prepared_assets,
         )
         archive_sha = _sha256_file(archive_path)
         checksum_path = archive_path.with_suffix(archive_path.suffix + ".sha256")
@@ -616,6 +726,50 @@ def source_is_stale(
     if retrieved_at.tzinfo is None or now.tzinfo is None:
         raise DatasetBuildError("freshness timestamps must be timezone-aware")
     return (now.astimezone(UTC) - retrieved_at.astimezone(UTC)).days > target_refresh_days
+
+
+def _prepare_assets(
+    spec: DatasetBuildSpec,
+    *,
+    normalized_map: Mapping[str, NormalizedSource],
+    repository_root: Path,
+) -> tuple[PreparedAsset, ...]:
+    registry_sources = _source_registry(repository_root)
+    registry_licenses = _license_registry(repository_root)
+    prepared: list[PreparedAsset] = []
+    for item in sorted(spec.assets, key=lambda asset: asset.archive_path):
+        if not item.path.is_file():
+            raise DatasetBuildError(f"asset file does not exist: {item.path}")
+        source = registry_sources.get(item.source_id)
+        if source is None or item.source_id not in normalized_map:
+            raise DatasetBuildError(f"asset source is not declared: {item.source_id}")
+        license_id = item.license_id or _required_string(source, "license_id")
+        if license_id not in registry_licenses:
+            raise DatasetBuildError(f"asset license is not registered: {license_id}")
+        metadata = Asset(
+            asset_id=item.asset_id,
+            dataset_id=spec.dataset_id,
+            kind=item.kind,
+            path=item.archive_path,
+            sha256=_sha256_file(item.path),
+            byte_size=item.path.stat().st_size,
+            mime_type=item.mime_type,
+            license_id=license_id,
+            attribution=item.attribution,
+            width=item.width,
+            height=item.height,
+        )
+        prepared.append(
+            PreparedAsset(
+                metadata=metadata,
+                source_id=item.source_id,
+                source_record_id=item.source_record_id,
+                author=item.author,
+                modified_from_source=item.modified_from_source,
+                source_path=item.path,
+            )
+        )
+    return tuple(prepared)
 
 
 def _validate_record_provenance(adapter: SourceAdapter, record: NormalizedRecord) -> None:
@@ -761,6 +915,7 @@ def _insert_source(connection: sqlite3.Connection, row: Mapping[str, object]) ->
 def _license_payloads(
     normalized: tuple[NormalizedSource, ...],
     *,
+    prepared_assets: tuple[PreparedAsset, ...],
     registry_sources: Mapping[str, Mapping[str, object]],
     registry_licenses: Mapping[str, Mapping[str, object]],
 ) -> dict[str, bytes]:
@@ -770,6 +925,10 @@ def _license_payloads(
         license_id = _required_string(source, "license_id")
         attributions.setdefault(license_id, []).append(
             _required_string(source, "attribution_template")
+        )
+    for prepared in prepared_assets:
+        attributions.setdefault(prepared.metadata.license_id, []).append(
+            prepared.metadata.attribution
         )
     result: dict[str, bytes] = {}
     for license_id in sorted(attributions):
@@ -792,6 +951,7 @@ def _build_manifest(
     normalized: tuple[NormalizedSource, ...],
     database_path: Path,
     license_files: Mapping[str, bytes],
+    prepared_assets: tuple[PreparedAsset, ...],
     canonical_hash: str,
     item_counts: Mapping[str, int],
 ) -> DatasetManifest:
@@ -811,6 +971,15 @@ def _build_manifest(
             role=FileRole.LICENSE,
         )
         for path, content in sorted(license_files.items())
+    )
+    files.extend(
+        ManifestFile(
+            path=prepared.metadata.path,
+            size=prepared.metadata.byte_size,
+            sha256=prepared.metadata.sha256,
+            role=FileRole.ASSET,
+        )
+        for prepared in prepared_assets
     )
     licenses = tuple(
         LicenseReference(license_id=Path(path).stem, path=path) for path in sorted(license_files)
@@ -843,7 +1012,7 @@ def _build_manifest(
         added_count=spec.added_count,
         changed_count=spec.changed_count,
         removed_count=spec.removed_count,
-        asset_count=0,
+        asset_count=len(prepared_assets),
         entry_count=len(files),
         required_free_disk=spec.required_free_disk,
         canonical_content_hash=canonical_hash,
@@ -858,6 +1027,7 @@ def _write_archive(
     signature: bytes,
     database_path: Path,
     license_files: Mapping[str, bytes],
+    prepared_assets: tuple[PreparedAsset, ...],
 ) -> None:
     temporary = path.with_name(f".{path.name}.part")
     try:
@@ -866,6 +1036,12 @@ def _write_archive(
             _zip_write(archive, "dataset.db", database_path.read_bytes())
             for name, content in sorted(license_files.items()):
                 _zip_write(archive, name, content)
+            for prepared in sorted(prepared_assets, key=lambda item: item.metadata.path):
+                _zip_write(
+                    archive,
+                    prepared.metadata.path,
+                    prepared.source_path.read_bytes(),
+                )
             _zip_write(archive, "SIGNATURE.ed25519", signature)
         os.replace(temporary, path)
     finally:
