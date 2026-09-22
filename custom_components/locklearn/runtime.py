@@ -14,6 +14,7 @@ from .core.acl import ProfileACLService
 from .core.operations import OperationRegistry
 from .core.planning import LearningPlanService
 from .core.profiles import ProfileService
+from .core.review_policy import ReviewPolicyV1
 from .core.reviews import ReviewEventService
 from .core.sessions import SessionService
 from .core.tracks import TrackService
@@ -40,6 +41,7 @@ class LockLearnRuntime:
     acl: ProfileACLService
     tracks: TrackService
     planning: LearningPlanService
+    review_policy: ReviewPolicyV1
     reviews: ReviewEventService
     datasets: DatasetManager
 
@@ -100,6 +102,7 @@ class LockLearnRuntime:
                     storage.repositories.tracks,
                     storage.repositories.profiles,
                 ),
+                review_policy=ReviewPolicyV1(),
                 reviews=ReviewEventService(
                     storage.repositories.review_events,
                     storage.repositories.profiles,
