@@ -1,2 +1,3 @@
 run
 retry-format
+retry-lint
