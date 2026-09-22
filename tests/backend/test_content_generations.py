@@ -720,9 +720,7 @@ async def test_dataset_update_replaces_active_provenance_snapshot(
     await content_storage.async_activate_content_generation(first_candidate)
 
     second_package = create_package(tmp_path / "prov-v2.db", "prov-v2")
-    second_candidate = await build_candidate(
-        content_storage, second_package, "prov-generation-two"
-    )
+    second_candidate = await build_candidate(content_storage, second_package, "prov-generation-two")
     await content_storage.async_activate_content_generation(second_candidate)
 
     with inspect_generation(content_storage.paths.content_db) as connection:
