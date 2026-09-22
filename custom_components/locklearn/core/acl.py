@@ -149,6 +149,13 @@ class ProfileACLService:
             permission=ProfilePermission.MANAGE_ACL,
         )
         resolved_role = ProfileRole(role)
+        current_role = await self._repository.async_get_role(profile_id, target_ha_user_id)
+        if (
+            current_role == ProfileRole.OWNER.value
+            and resolved_role is not ProfileRole.OWNER
+            and await self._repository.async_count_owners(profile_id) <= 1
+        ):
+            raise LastOwnerError(profile_id)
         now = self._clock.now().isoformat()
         await self._repository.async_upsert_member(
             ProfileMemberRecord(
