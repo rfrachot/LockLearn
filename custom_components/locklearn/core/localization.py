@@ -201,6 +201,43 @@ class NormalizationPolicy:
         object.__setattr__(self, "allowed_scripts", canonical_scripts)
 
 
+def normalization_rebuild_required(
+    previous: NormalizationPolicy,
+    current: NormalizationPolicy,
+) -> bool:
+    """Return whether indexes derived from a policy must be rebuilt.
+
+    Reusing a version after changing behavior is invalid because persisted
+    normalized values would become ambiguous.
+    """
+    if previous.policy_id != current.policy_id:
+        return True
+
+    previous_behavior = (
+        previous.unicode_normalization,
+        previous.case_mode,
+        previous.whitespace_mode,
+        previous.punctuation_mode,
+        previous.allowed_scripts,
+    )
+    current_behavior = (
+        current.unicode_normalization,
+        current.case_mode,
+        current.whitespace_mode,
+        current.punctuation_mode,
+        current.allowed_scripts,
+    )
+    behavior_changed = previous_behavior != current_behavior
+
+    if behavior_changed and current.normalization_version <= previous.normalization_version:
+        raise LocalizationError(
+            "changed normalization behavior requires a higher normalization_version"
+        )
+    if current.normalization_version < previous.normalization_version:
+        raise LocalizationError("normalization_version cannot move backwards")
+    return behavior_changed or current.normalization_version != previous.normalization_version
+
+
 def normalize_text(
     text: str,
     policy: NormalizationPolicy,
