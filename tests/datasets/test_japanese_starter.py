@@ -6,6 +6,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from custom_components.locklearn.datasets import (
@@ -13,6 +14,8 @@ from custom_components.locklearn.datasets import (
     validate_dataset_package,
 )
 from custom_components.locklearn.datasets.manager import (
+    BundledDataset,
+    DatasetInstallError,
     DatasetManager,
     load_runtime_bundled_datasets,
     load_runtime_dataset_definitions,
@@ -146,5 +149,49 @@ async def test_fresh_storage_bootstraps_starter_without_network(tmp_path: Path) 
 
         # Re-running first-run bootstrap is idempotent and never downgrades.
         assert await manager.async_install_bundled(bundled[0]) is None
+    finally:
+        await storage.async_close()
+
+
+async def test_corrupt_bundled_starter_reports_issue_without_activation(
+    tmp_path: Path,
+) -> None:
+    storage = SQLiteStorage(
+        StoragePaths(tmp_path / "state" / "state.db", tmp_path / "content" / "current.db")
+    )
+    await storage.async_open()
+    created: list[tuple[str, str]] = []
+
+    async def report(
+        issue_id: str,
+        translation_key: str,
+        placeholders: Mapping[str, str],
+    ) -> None:
+        assert placeholders["dataset_id"] == DATASET_ID
+        created.append((issue_id, translation_key))
+
+    try:
+        corrupt = tmp_path / "corrupt.zip"
+        corrupt.write_bytes(b"not-the-signed-starter")
+        manager = DatasetManager(
+            storage=storage,
+            transport=NoNetworkTransport(),
+            definitions=load_runtime_dataset_definitions(),
+            trust_store=load_runtime_trust_store(),
+            policy=OfficialRegistryPolicy.from_runtime(),
+            issue_callback=report,
+        )
+        bundled = BundledDataset(
+            dataset_id=DATASET_ID,
+            version="1.0.0",
+            path=corrupt,
+            sha256="0" * 64,
+            size=corrupt.stat().st_size,
+        )
+        with pytest.raises(DatasetInstallError, match="checksum"):
+            await manager.async_install_bundled(bundled)
+
+        assert await storage.async_dataset_inventory() == []
+        assert created and created[-1][1] == "dataset_install_failed"
     finally:
         await storage.async_close()
