@@ -9,10 +9,7 @@ from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from custom_components.locklearn.datasets import (
-    KeyStatus,
     OfficialRegistryPolicy,
-    TrustedKey,
-    TrustStore,
     validate_dataset_package,
 )
 from custom_components.locklearn.datasets.manager import (
