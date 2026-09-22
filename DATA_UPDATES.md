@@ -128,3 +128,36 @@ PackVersions.
 An UpdateEntity exists for each official dataset definition and exposes
 installed/latest version, source freshness, disk cache size, sources, licenses
 and release notes. Installed content remains usable when discovery is offline.
+
+
+## P1.10 bundled first-run dataset
+
+The HACS payload includes a tiny signed `Japanese Starter 1.0.0` artifact.
+It is built from repository-authored CC BY-SA 4.0 editorial JSONL through the
+same P1.8 recipe/signing pipeline as other official content.
+
+```text
+120 LearningItems
+240 CardDefinitions
+1 PackVersion
+178478-byte signed ZIP
+0 network requests required for first install
+```
+
+At runtime the bundle registry supplies only the expected local path, version,
+size and external SHA-256. DatasetManager still verifies the signed manifest,
+public-key trust, source/license policy, SQLite package and generation before
+activation.
+
+The starter signing key `locklearn-starter-2026-01` is retained as a
+**deprecated public key only**. Its ephemeral private key was destroyed after
+the immutable 1.0.0 artifact was generated. Future builds must use new reviewed
+signing material and a new dataset version.
+
+The source/recipe/build config remain reviewable in:
+
+```text
+datasets/src/japanese_starter.jsonl
+datasets/recipes/japanese_starter.py
+datasets/manifests/japanese-starter-1.0.0.json
+```
