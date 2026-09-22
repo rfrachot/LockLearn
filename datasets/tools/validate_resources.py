@@ -31,6 +31,43 @@ def validate() -> None:
     licenses = _load("licenses.json")
     sources = _load("sources.json")
     normalization_policies = _load("normalization_policies.json")
+    curation_policies = _load("curation_policies.json")
+
+    curation_rows = curation_policies.get("policies", [])
+    curation_ids = [row["id"] for row in curation_rows]
+    if len(curation_ids) != len(set(curation_ids)):
+        raise ValueError("duplicate curation policy IDs")
+    allowed_curation_kinds = {
+        "card_direction_default",
+        "production_complete_term",
+        "mnemonic_keyword_label",
+        "ambiguous_prompt_context_hint",
+        "prefer_covered_example",
+        "allow_furigana_for_uncovered",
+    }
+    for row in curation_rows:
+        if row.get("version", 0) < 1:
+            raise ValueError(f"invalid curation policy version for {row['id']}")
+        rules = row.get("rules", [])
+        if not rules:
+            raise ValueError(f"curation policy {row['id']} has no rules")
+        rule_ids = [rule["id"] for rule in rules]
+        if len(rule_ids) != len(set(rule_ids)):
+            raise ValueError(f"duplicate curation rule IDs for {row['id']}")
+        for rule in rules:
+            kind = rule.get("kind")
+            if kind not in allowed_curation_kinds:
+                raise ValueError(f"unknown curation rule kind {kind} in {row['id']}")
+            if kind == "card_direction_default":
+                if not rule.get("prompt_facet_key") or not rule.get("answer_facet_key"):
+                    raise ValueError(f"card direction rule missing facet keys in {row['id']}")
+                if not isinstance(rule.get("enabled_by_default"), bool):
+                    raise ValueError(f"card direction rule missing boolean default in {row['id']}")
+            elif any(
+                field in rule
+                for field in ("prompt_facet_key", "answer_facet_key", "enabled_by_default")
+            ):
+                raise ValueError(f"non-direction curation rule carries direction fields in {row['id']}")
 
     policy_rows = normalization_policies.get("policies", [])
     policy_ids = [row["id"] for row in policy_rows]
