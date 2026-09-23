@@ -5,6 +5,14 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P3.11 versioned leech detection using the V1 6-of-10 and 8-relapse
+  thresholds over trusted verified retrievals in a 60-day window.
+- Profile-private difficulties/confusion/annotation WebSocket surfaces,
+  targeted `leeches_only` sessions and manual leech reactivation.
+- State schema v3 and explicit v2→v3 migration adding the normative
+  `leech` Progress state.
+- ADR-0032 documenting leech persistence, reduced automatic frequency,
+  derived confusion evidence and mnemonic-first remediation.
 - P3.10 user-owned card states for known-already, indefinite suspension,
   timed burial and explicit reactivation without fabricating ReviewEvents.
 - Deterministic read-only initial calibration sampling over 20–40 requested
