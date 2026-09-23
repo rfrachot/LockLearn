@@ -79,7 +79,10 @@ P3.14 adds a deterministic 180-day quality simulator using the actual
 LearningStateMachine, ReviewPolicyV1 and LeechPolicyV1. Production preset
 new-card quotas are reused (child 3, standard 8, intensive 15 cards/day).
 Declared positive-bench review capacities are 30/80/150 cards/day respectively
-and are simulation assumptions only; no runtime default has changed. The matrix
+and are simulation assumptions only; no runtime default has changed. The
+simulator treats max_new_per_day as a ceiling and throttles introductions when
+the opening due queue consumes capacity, matching P3.9 due-first session
+selection; throttled cards/days are reported explicitly. The matrix
 covers typical, mixed and bursty learners plus an explicit negative-control
 stress case. Detectors cover sustained due backlog, >7-day starvation,
 short-step cap exhaustion/relearning oscillation, box promotion beyond
