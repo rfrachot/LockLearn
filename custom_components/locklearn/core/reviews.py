@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -13,6 +14,7 @@ from ..storage.repositories import (
     ReviewEventsRepository,
 )
 from .clock import Clock, SystemClock
+from .leeches import LEECH_WINDOW_DAYS_V1, LeechPolicyV1
 
 
 class ReviewEventValidationError(ValueError):
@@ -29,11 +31,13 @@ class ReviewEventService:
         *,
         clock: Clock | None = None,
         id_factory: Callable[[], str] | None = None,
+        leech_policy: LeechPolicyV1 | None = None,
     ) -> None:
         self._events = events
         self._profiles = profiles
         self._clock = clock or SystemClock()
         self._id_factory = id_factory or (lambda: str(uuid4()))
+        self._leech_policy = leech_policy or LeechPolicyV1()
 
     async def async_record(
         self,
@@ -112,6 +116,42 @@ class ReviewEventService:
         offset = local.utcoffset()
         utc_offset_minutes = 0 if offset is None else int(offset.total_seconds() // 60)
 
+        history = await self._events.async_recent_verified_card_events(
+            profile_id=profile_id,
+            track_id=track_id,
+            card_key=card_key,
+            since_utc=(now - timedelta(days=LEECH_WINDOW_DAYS_V1)).isoformat(),
+        )
+        leech = self._leech_policy.evaluate(
+            history,
+            current={
+                "mode": mode,
+                "result": result,
+                "retrieval_occurred": retrieval_occurred,
+                "signal_quality": signal_quality,
+                "pre_state_snapshot": pre_state_snapshot,
+                "post_state_snapshot": post_state_snapshot,
+                "created_at_utc": now.isoformat(),
+            },
+            now=now,
+        )
+        resolved_post_state = dict(post_state_snapshot)
+        if leech.detected:
+            resolved_post_state.update(
+                {
+                    "state": "leech",
+                    "leech_score": max(
+                        float(resolved_post_state.get("leech_score", 0.0)),
+                        leech.score,
+                    ),
+                    "leech_policy_version": leech.policy_version,
+                    "leech_reason": leech.reason,
+                    "leech_recent_verified_attempts": leech.recent_verified_attempts,
+                    "leech_recent_verified_failures": leech.recent_verified_failures,
+                    "leech_verified_relapses_in_window": leech.verified_relapses_in_window,
+                }
+            )
+
         event = ReviewEventRecord(
             id=self._id_factory(),
             profile_id=profile_id,
@@ -135,7 +175,7 @@ class ReviewEventService:
             dataset_generation=dataset_generation,
             normalization_version=normalization_version,
             pre_state_snapshot=pre_state_snapshot,
-            post_state_snapshot=post_state_snapshot,
+            post_state_snapshot=resolved_post_state,
             presentation_to_answer_ms=presentation_to_answer_ms,
             delivery_to_action_ms=delivery_to_action_ms,
             session_id=session_id,
