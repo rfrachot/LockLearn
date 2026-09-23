@@ -13,6 +13,7 @@ from ..const import CONF_CREATE_PERSONAL_PROFILE, DATA_RUNTIME, DOMAIN, FRONTEND
 from ..core.acl import LastOwnerError, ProfilePermission, ProfileRole
 from ..core.content import GradingOutcome, GradingPolicyKind
 from ..core.content_reports import ContentReportError
+from ..core.difficulties import DifficultyServiceError
 from ..core.grading import FreeTextGradingResult
 from ..core.profiles import ProfileValidationError
 from ..core.progress_state import ProgressUserStateError
@@ -807,6 +808,232 @@ async def ws_calibration_sample(
     connection.send_result(msg["id"], sample.as_dict())
 
 
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/difficulties/list",
+        vol.Required("profile_id"): str,
+        vol.Optional("track_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_difficulties_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List profile-private leeches and remediation context."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.READ
+    ):
+        return
+    track_id = msg.get("track_id")
+    if track_id is not None:
+        track = await runtime.storage.repositories.tracks.async_get(track_id)
+        if track is None or str(track["profile_id"]) != profile_id:
+            connection.send_error(msg["id"], ERR_NOT_FOUND, "Track not found")
+            return
+    items = await runtime.difficulties.async_list(
+        profile_id=profile_id,
+        track_id=track_id,
+    )
+    connection.send_result(msg["id"], {"items": list(items)})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/confusions/list",
+        vol.Required("profile_id"): str,
+        vol.Optional("track_id"): str,
+        vol.Optional("card_key"): str,
+        vol.Optional("limit", default=50): vol.All(int, vol.Range(min=1, max=200)),
+    }
+)
+@websocket_api.async_response
+async def ws_confusions_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return a profile-private confusion matrix derived from ReviewEvents."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.READ
+    ):
+        return
+    items = await runtime.difficulties.async_list_confusions(
+        profile_id=profile_id,
+        track_id=msg.get("track_id"),
+        card_key=msg.get("card_key"),
+        limit=msg["limit"],
+    )
+    connection.send_result(msg["id"], {"items": list(items)})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/annotations/list",
+        vol.Required("profile_id"): str,
+        vol.Optional("learning_item_id"): str,
+        vol.Optional("card_key"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_annotations_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List private/exportable annotations visible through profile ACL."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.READ
+    ):
+        return
+    items = await runtime.difficulties.async_list_annotations(
+        profile_id=profile_id,
+        learning_item_id=msg.get("learning_item_id"),
+        card_key=msg.get("card_key"),
+    )
+    connection.send_result(msg["id"], {"items": list(items)})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/annotations/create",
+        vol.Required("profile_id"): str,
+        vol.Required("note"): str,
+        vol.Optional("learning_item_id"): str,
+        vol.Optional("card_key"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_annotations_create(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Create one profile-private note or mnemonic."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.MANAGE_PROGRESS
+    ):
+        return
+    try:
+        item = await runtime.difficulties.async_create_annotation(
+            profile_id=profile_id,
+            note=msg["note"],
+            learning_item_id=msg.get("learning_item_id"),
+            card_key=msg.get("card_key"),
+        )
+    except (DifficultyServiceError, ContentReferenceError, ValueError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], item)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/annotations/update",
+        vol.Required("profile_id"): str,
+        vol.Required("annotation_id"): str,
+        vol.Required("note"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_annotations_update(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Update one profile-private annotation."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.MANAGE_PROGRESS
+    ):
+        return
+    try:
+        item = await runtime.difficulties.async_update_annotation(
+            profile_id=profile_id,
+            annotation_id=msg["annotation_id"],
+            note=msg["note"],
+        )
+    except (DifficultyServiceError, ValueError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], item)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/annotations/delete",
+        vol.Required("profile_id"): str,
+        vol.Required("annotation_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_annotations_delete(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Delete one profile-private annotation."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.MANAGE_PROGRESS
+    ):
+        return
+    try:
+        await runtime.difficulties.async_delete_annotation(
+            profile_id=profile_id,
+            annotation_id=msg["annotation_id"],
+        )
+    except DifficultyServiceError as err:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, str(err))
+        return
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/leeches/reactivate",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("card_key"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_leeches_reactivate(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Reactivate one leech through a canonical non-retrieval ReviewEvent."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.MANAGE_PROGRESS
+    ):
+        return
+    try:
+        state = await runtime.difficulties.async_reactivate_leech(
+            profile_id=profile_id,
+            track_id=msg["track_id"],
+            card_key=msg["card_key"],
+        )
+    except DifficultyServiceError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], state)
+
+
 @websocket_api.websocket_command({vol.Required("type"): "locklearn/admin/storage/status"})
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -1192,6 +1419,13 @@ COMMANDS = (
     ws_content_report,
     ws_progress_set_user_state,
     ws_calibration_sample,
+    ws_difficulties_list,
+    ws_confusions_list,
+    ws_annotations_list,
+    ws_annotations_create,
+    ws_annotations_update,
+    ws_annotations_delete,
+    ws_leeches_reactivate,
     ws_admin_storage_status,
     ws_session_start,
     ws_session_get,
