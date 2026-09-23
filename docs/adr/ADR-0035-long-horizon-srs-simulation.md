@@ -39,9 +39,12 @@ identity, day, stage and attempt. No global RNG or wall clock participates.
 
 ### The declared horizon is 180 days
 
-The default matrix continuously introduces cards for approximately six months,
-so the review system is evaluated under sustained load rather than a small
-fixed deck that quickly reaches steady state.
+The default matrix keeps a six-month supply of new cards available so the
+review system is evaluated under sustained load rather than a small fixed deck
+that quickly reaches steady state. `max_new_per_day_cards` remains a ceiling,
+not a forced daily injection: when the opening due queue consumes the declared
+review/session capacity, the simulator throttles new introductions first, just
+like the runtime session selector reserves due work before new cards.
 
 The default new-card quotas are the production preset values:
 
@@ -63,7 +66,9 @@ Profile defaults or Track settings by P3.14.
 
 A deliberately constrained stress scenario is included as a negative control.
 At least one sustainability detector must fire in that scenario, proving the
-gate is capable of failing.
+gate is capable of failing. Reports also expose `throttled_new_cards` and
+`throttled_new_days` so sustainability cannot hide the cost of deferring new
+material.
 
 ### Response patterns are deterministic and diverse
 
