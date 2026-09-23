@@ -3,8 +3,11 @@
 ## Current state
 
 P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.7 are complete. P1 and P2 are
-closed PASS. P3 is in progress on `feat/p3-sessions`; P3.8 — persistent sessions,
-CAS concurrency and cross-client resume — has passed the local gate and now awaits a targeted real-HA qualification before P3.9.
+closed PASS. P3 is in progress on `feat/p3-sessions`. P3.8 has passed its local
+gate but remains blocked on the final real-HA answer/undo/second-user evidence.
+P3.9 is implemented and now awaits the full repository quality gate; its public
+backend selection path supplies the real prepared question needed to resume the
+P3.8 qualification without a test-only fixture.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -1079,8 +1082,55 @@ answer-row proof could not be executed. Viewer/outsider real ACL was also not
 run because only one HA token is configured; it remains harness-only evidence.
 See `docs/P3_8_REAL_HA_QUALIFICATION.md` for the exact matrix.
 
-Next action: without beginning P3.9 or exposing client-supplied questions,
-provide a non-shipping backend-owned live-runtime fixture for one valid prepared
-question, rerun answer CAS/subscription/reload, and optionally supply a second
-development-user token for real viewer/outsider ACL. Do not change P3.8 from
-`LOCAL GATE PASS — real HA qualification pending` until that succeeds.
+Next action for P3.8: after the P3.9 repository gate is green, install the
+qualified P3.9 branch on real HA and rerun the mandatory concurrent
+`session/answer` race plus navigation undo using the public backend-selected
+question. Add a second development-user token for real viewer/outsider ACL when
+available. Do not change P3.8 from `LOCAL GATE PASS — real HA qualification
+pending` until those checks succeed.
+
+
+## P3.9 implementation pending repository gate
+
+P3.9 now owns backend session candidate ranking while P3.5 remains the reusable
+eligibility layer.
+
+Implemented behavior:
+- `locklearn/session/start` with a Track asks `SessionSelectionService` for
+  backend-owned CardDefinitions and persists them through the unchanged P3.8
+  SessionQuestion/CAS boundary;
+- absent Progress is treated as `new`; learning/relearning/review are candidates
+  only when due;
+- relearning/learning short steps take priority, while remaining candidates are
+  interleaved by Track content weights with stable deterministic tie-breakers;
+- profile-local actual introduction events consume the new-card daily quota;
+- new cards are never queued in the final 25% of a bounded requested session;
+- prospective planning avoids pre-queuing new/review siblings and multiple new
+  members of the same confusable group;
+- prepared question payloads retain explainable selection state/reason/weight and
+  Pack position;
+- fatigue advice reads the ten most recent trusted verified ReviewEvents for the
+  session, defaults to a 0.60 accuracy threshold and offers
+  finish/recognition_only/continue without mutating Progress or ReviewEvents.
+
+The existing two-WebSocket CAS test now starts its question through the public
+P3.9 path instead of injecting a prepared SessionQuestion directly. Focused
+P3.9 tests cover short-step priority, final-quarter behavior, card-based daily
+quota, prospective confusable protection, not-yet-due rejection and fatigue
+advice. ADR-0030 records the policy/boundaries.
+
+No state/content schema migration was added. No frontend, scheduler/P4,
+P3.10 known/suspend/bury/calibration, P3.11 leech/annotations or P3.12
+pedagogical undo work is included.
+
+Required gate before marking P3.9 PASS:
+- `python3 -m ruff format --check .`
+- `python3 -m ruff check .`
+- `python3 -m mypy custom_components datasets tests`
+- `python3 datasets/tools/validate_resources.py`
+- `python3 -m pytest -q --tb=short`
+
+The current ChatGPT execution environment could not clone the private repository
+because its container has no outbound DNS and GitHub Actions does not run on
+ordinary pushes to this feature branch. Do not claim the repository gate is
+green until it is executed in the development checkout or an authorized CI run.
