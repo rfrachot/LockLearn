@@ -16,6 +16,7 @@ from .core.grading import FreeTextGrader
 from .core.operations import OperationRegistry
 from .core.planning import LearningPlanService
 from .core.profiles import ProfileService
+from .core.progress_state import ProgressUserStateService
 from .core.quiz import QuizEngine
 from .core.review_policy import ReviewPolicyV1
 from .core.reviews import ReviewEventService
@@ -47,6 +48,7 @@ class LockLearnRuntime:
     acl: ProfileACLService
     tracks: TrackService
     planning: LearningPlanService
+    progress_state: ProgressUserStateService
     grading: FreeTextGrader
     content_reports: ContentReportService
     quiz: QuizEngine
@@ -121,6 +123,13 @@ class LockLearnRuntime:
                 planning=LearningPlanService(
                     storage.repositories.tracks,
                     storage.repositories.profiles,
+                ),
+                progress_state=ProgressUserStateService(
+                    storage.repositories.tracks,
+                    storage.repositories.progress,
+                    dataset_generation=lambda: (
+                        storage.content_generations.active_metadata.generation_id
+                    ),
                 ),
                 grading=FreeTextGrader(),
                 content_reports=ContentReportService(
