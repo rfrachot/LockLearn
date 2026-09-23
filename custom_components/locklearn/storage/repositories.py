@@ -1229,9 +1229,7 @@ class TracksRepository:
                    ORDER BY member.learning_item_id, member.confusable_group_id""",
                 (pack_version_id,),
             ).fetchall():
-                confusable_by_item.setdefault(str(learning_item_id), []).append(
-                    str(group_id)
-                )
+                confusable_by_item.setdefault(str(learning_item_id), []).append(str(group_id))
 
             return tuple(
                 {
@@ -1243,9 +1241,7 @@ class TracksRepository:
                     "state": str(row[5]),
                     "next_due_at_utc": None if row[6] is None else str(row[6]),
                     "pack_position": int(row[7]),
-                    "confusable_group_ids": tuple(
-                        confusable_by_item.get(str(row[1]), ())
-                    ),
+                    "confusable_group_ids": tuple(confusable_by_item.get(str(row[1]), ())),
                 }
                 for row in rows
             )
