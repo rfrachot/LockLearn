@@ -74,10 +74,7 @@ def test_simulation_uses_preset_card_quota_and_bounded_review_capacity() -> None
     assert report.max_reviews_per_day_cards == 30
     assert report.introduced_cards <= 3 * 30
     assert all(sample.reviews_treated <= 30 for sample in report.daily)
-    assert all(
-        sample.introduced + sample.new_throttled <= 3
-        for sample in report.daily
-    )
+    assert all(sample.introduced + sample.new_throttled <= 3 for sample in report.daily)
 
 
 def test_default_matrix_contains_explicit_negative_detector_case() -> None:
