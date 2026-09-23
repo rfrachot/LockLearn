@@ -2,8 +2,8 @@
 
 ## Status
 
-Proposed for P3.14 on 2026-09-23. Implementation pending repository and
-simulation quality gates.
+Accepted for P3.14 on 2026-09-23 after both the simulation quality gate and the
+full repository gate passed.
 
 ## Context
 
@@ -142,3 +142,17 @@ The explicit stress negative control remained unsustainable, with 1202
 throttled introductions over 173 days and the expected due-queue,
 relearning-oscillation and workload warnings. This confirms the gate remains
 sensitive rather than trivially green.
+
+## Final qualification gate — 2026-09-23
+
+The final repository gate passed after the last formatting-only correction:
+
+- Ruff format: PASS, 214 files already formatted;
+- Ruff lint: PASS;
+- mypy: PASS, 121 source files;
+- resource registries: PASS;
+- pytest: PASS, 318 tests in 15.14 s.
+
+All required positive simulation scenarios remained sustainable and the
+negative-control stress scenario remained unsustainable. No production SRS or
+preset default was changed.
