@@ -47,9 +47,7 @@ class StatsReviewRepository(Protocol):
         profile_id: str | None = None,
         track_id: str | None = None,
     ) -> tuple[dict[str, Any], ...]: ...
-    async def async_undone_event_ids(
-        self, *, profile_id: str | None = None
-    ) -> frozenset[str]: ...
+    async def async_undone_event_ids(self, *, profile_id: str | None = None) -> frozenset[str]: ...
     async def async_stats_daily(
         self,
         *,
@@ -113,6 +111,7 @@ class StatsService:
         profile = await self._profiles.async_get(profile_id)
         if profile is None:
             raise StatsServiceError("profile does not exist")
+        tracks: tuple[dict[str, Any], ...]
         if track_id is not None:
             track = await self._tracks.async_get(track_id)
             if track is None or str(track["profile_id"]) != profile_id:
@@ -189,7 +188,9 @@ class StatsService:
             and str(snapshot["content_status"]) == "active"
             and self._effective_user_active(snapshot, now=now)
         ]
-        mastery = None if not mastery_values else round(sum(mastery_values) / len(mastery_values), 6)
+        mastery = (
+            None if not mastery_values else round(sum(mastery_values) / len(mastery_values), 6)
+        )
 
         calibration = await self._calibration(
             profile_id=profile_id,
@@ -240,9 +241,7 @@ class StatsService:
                 "correct": recent_correct,
                 "total": len(recent_verified),
                 "accuracy": (
-                    None
-                    if not recent_verified
-                    else round(recent_correct / len(recent_verified), 6)
+                    None if not recent_verified else round(recent_correct / len(recent_verified), 6)
                 ),
                 "window_limit": recent_verified_limit,
             },
@@ -368,8 +367,7 @@ class StatsService:
 
         first_date = min(self._event_local_date(event) for event in events)
         timezone_by_date = {
-            date.fromisoformat(str(row["local_date"])): str(row["timezone_name"])
-            for row in daily
+            date.fromisoformat(str(row["local_date"])): str(row["timezone_name"]) for row in daily
         }
         event_timezone_by_date = {
             self._event_local_date(event): str(event["timezone_name"]) for event in events
@@ -413,17 +411,15 @@ class StatsService:
                 and str(event["mode"]) not in {"undo_compensation", "leech_reactivation"}
             }
             due_count = len(due_keys)
-            target = 0 if due_count == 0 else min(
-                due_count,
-                max(goal_minimum, math.ceil(due_count * goal_fraction)),
-            )
-            status = (
-                "neutral"
+            target = (
+                0
                 if due_count == 0
-                else "success"
-                if len(treated) >= target
-                else "missed"
+                else min(
+                    due_count,
+                    max(goal_minimum, math.ceil(due_count * goal_fraction)),
+                )
             )
+            status = "neutral" if due_count == 0 else "success" if len(treated) >= target else "missed"
             statuses[day] = {
                 "due_opening": due_count,
                 "treated_due": len(treated),
@@ -484,9 +480,13 @@ class StatsService:
                 continue
             pre = dict(event["pre_state_snapshot"])
             first_seen = pre.get("first_seen_at_utc")
-            if latest is None and isinstance(first_seen, str) and first_seen:
-                if StatsService._parse_time(first_seen) < moment:
-                    latest = pre
+            if (
+                latest is None
+                and isinstance(first_seen, str)
+                and first_seen
+                and StatsService._parse_time(first_seen) < moment
+            ):
+                latest = pre
             break
         return latest
 
