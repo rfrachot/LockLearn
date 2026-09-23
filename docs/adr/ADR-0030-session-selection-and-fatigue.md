@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for P3.9 implementation on 2026-09-23. Final quality gate is pending.
+Accepted for P3.9 on 2026-09-23. Repository quality gate PASS.
 
 ## Context
 
@@ -155,5 +155,9 @@ the learner's choice.
 P3.9 adds focused selection/fatigue tests and converts the existing two-client
 WebSocket CAS test to start a session through the public backend-selection path.
 
-The repository-wide Ruff/mypy/resource/pytest gate must pass before P3.9 is
-marked PASS.
+Final repository gate on 2026-09-23:
+- Ruff format: PASS, 192 files already formatted.
+- Ruff lint: PASS.
+- mypy: PASS, 106 source files.
+- resource registries: PASS.
+- pytest: PASS, 287 tests in 6.88 s.
