@@ -49,9 +49,7 @@ def _snapshot(
         "streak_correct": correct,
         "leech_score": 0.0,
         "difficulty_factor": 1.0,
-        "last_verified_at_utc": (
-            "2026-09-21T08:00:00+00:00" if correct + wrong else None
-        ),
+        "last_verified_at_utc": ("2026-09-21T08:00:00+00:00" if correct + wrong else None),
         "verified_success_since_box": correct,
         "user_state": "active",
         "suspend_until_utc": None,
