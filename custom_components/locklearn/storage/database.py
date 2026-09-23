@@ -989,6 +989,21 @@ class SQLiteStorage:
 
         return await self._async_reader(query)
 
+    async def async_validate_learning_item_reference(self, learning_item_id: str) -> bool:
+        """Validate one active LearningItem against the active content generation."""
+
+        def query(connection: sqlite3.Connection) -> bool:
+            return (
+                connection.execute(
+                    """SELECT 1 FROM content.learning_items
+                       WHERE learning_item_id = ? AND lifecycle_status = 'active'""",
+                    (learning_item_id,),
+                ).fetchone()
+                is not None
+            )
+
+        return await self._async_reader(query)
+
     async def async_validate_card_reference(
         self,
         *,
