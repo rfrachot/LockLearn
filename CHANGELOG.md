@@ -5,6 +5,14 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P3.10 user-owned card states for known-already, indefinite suspension,
+  timed burial and explicit reactivation without fabricating ReviewEvents.
+- Deterministic read-only initial calibration sampling over 20–40 requested
+  new cards, with explicit known-already decisions kept outside SRS evidence.
+- P3.10 WebSocket boundaries for progress user state and calibration with
+  backend MANAGE_PROGRESS ACL enforcement.
+- ADR-0031 documenting user-state/SRS/content-lifecycle separation and the
+  P3.12 rebuild/recompute preservation boundary.
 - P3.9 backend-owned session candidate preparation with due short-step priority,
   Track content-weight interleaving, profile-local new-card quotas and explainable
   selection metadata (PASS).
