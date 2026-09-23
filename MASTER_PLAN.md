@@ -25,7 +25,7 @@
 | P0 | Architecture spikes + installable HA skeleton | complete | yes | `docs/plan/P0.md` |
 | P1 | Content core + signed starter dataset | complete | yes | `docs/plan/P1.md` |
 | P2 | Profiles/tracks/ACL | complete | yes | `docs/plan/P2.md` |
-| P3 | Learning/SRS/sessions/stats | in progress (P3.1–P3.13 complete) | yes | `docs/plan/P3.md` |
+| P3 | Learning/SRS/sessions/stats | complete | yes | `docs/plan/P3.md` |
 | P4 | Scheduler/notifications/HA automation | queued | yes | `docs/plan/P4.md` |
 | P5 | Useful panel | queued | yes | `docs/plan/P5.md` |
 | P6 | Hardening/release | queued | yes | `docs/plan/P6.md` |
@@ -81,7 +81,7 @@
 - **P3.11** — Leech detection, confusion matrix and personal annotations (complete)
 - **P3.12** — Undo, integrity rebuild and algorithmic recompute (complete)
 - **P3.13** — Basic statistics and metacognitive calibration backend (complete)
-- **P3.14** — Long-horizon SRS simulation gate
+- **P3.14** — Long-horizon SRS simulation gate (complete)
 
 ### P4
 
