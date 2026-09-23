@@ -305,9 +305,6 @@ async def test_leech_detection_confusions_mnemonic_and_reactivation(tmp_path: Pa
             profile_id=identity["profile_id"],
             annotation_id="annotation-p3-11",
         )
-        assert (
-            await difficulties.async_list_annotations(profile_id=identity["profile_id"])
-            == ()
-        )
+        assert await difficulties.async_list_annotations(profile_id=identity["profile_id"]) == ()
     finally:
         await storage.async_close()
