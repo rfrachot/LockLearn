@@ -87,7 +87,8 @@ A scenario is flagged when any of these conditions occur:
 
 - sustained/final due backlog exceeds declared capacity bounds;
 - a card remains overdue for more than seven days;
-- a card repeatedly exhausts the bounded same-day short-step attempt budget;
+- short-step cap exhaustion becomes systemic: at least one card hits the cap
+  repeatedly, or cap-hit cards reach at least 1% of introduced cards;
 - a card reaches a box that cannot be justified by its accumulated verified
   successes (box > 1 + verified_correct_count, capped at box 7);
 - p95 daily interactions exceed the declared review capacity plus the expected
