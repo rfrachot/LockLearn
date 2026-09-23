@@ -1170,6 +1170,88 @@ class TracksRepository:
 
         await self._storage._async_writer(write)
 
+    async def async_session_candidates(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+    ) -> tuple[dict[str, Any], ...]:
+        """Load P3.9 session candidates from the pinned active PackVersion."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            pin = connection.execute(
+                """SELECT pin.pack_version_id
+                   FROM tracks AS track
+                   JOIN track_pack_versions AS pin ON pin.track_id = track.track_id
+                   WHERE track.track_id = ? AND track.profile_id = ?
+                     AND track.status = 'active'""",
+                (track_id, profile_id),
+            ).fetchone()
+            if pin is None:
+                return ()
+            pack_version_id = str(pin[0])
+
+            rows = connection.execute(
+                """SELECT rule.card_key, card.learning_item_id,
+                          card.prompt_facet_id, card.answer_facet_id,
+                          item.content_type,
+                          COALESCE(progress.state, 'new') AS progress_state,
+                          progress.next_due_at_utc, pack_item.position
+                   FROM track_card_rules AS rule
+                   JOIN content.card_definitions AS card
+                     ON card.card_key = rule.card_key
+                    AND card.lifecycle_status = 'active'
+                   JOIN content.learning_items AS item
+                     ON item.learning_item_id = card.learning_item_id
+                    AND item.lifecycle_status = 'active'
+                   JOIN content.pack_items AS pack_item
+                     ON pack_item.pack_version_id = ?
+                    AND pack_item.learning_item_id = item.learning_item_id
+                   LEFT JOIN progress
+                     ON progress.profile_id = ?
+                    AND progress.track_id = rule.track_id
+                    AND progress.card_key = rule.card_key
+                   WHERE rule.track_id = ? AND rule.enabled = 1
+                     AND rule.card_key IS NOT NULL
+                     AND COALESCE(progress.user_state, 'active') = 'active'
+                     AND COALESCE(progress.content_status, 'active') = 'active'
+                   ORDER BY pack_item.position, rule.card_key""",
+                (pack_version_id, profile_id, track_id),
+            ).fetchall()
+
+            confusable_by_item: dict[str, list[str]] = {}
+            for learning_item_id, group_id in connection.execute(
+                """SELECT member.learning_item_id, member.confusable_group_id
+                   FROM content.confusable_group_items AS member
+                   JOIN content.confusable_groups AS group_row
+                     ON group_row.confusable_group_id = member.confusable_group_id
+                   WHERE group_row.pack_version_id = ?
+                   ORDER BY member.learning_item_id, member.confusable_group_id""",
+                (pack_version_id,),
+            ).fetchall():
+                confusable_by_item.setdefault(str(learning_item_id), []).append(
+                    str(group_id)
+                )
+
+            return tuple(
+                {
+                    "card_key": str(row[0]),
+                    "learning_item_id": str(row[1]),
+                    "prompt_facet_id": str(row[2]),
+                    "answer_facet_id": str(row[3]),
+                    "content_type": str(row[4]),
+                    "state": str(row[5]),
+                    "next_due_at_utc": None if row[6] is None else str(row[6]),
+                    "pack_position": int(row[7]),
+                    "confusable_group_ids": tuple(
+                        confusable_by_item.get(str(row[1]), ())
+                    ),
+                }
+                for row in rows
+            )
+
+        return await self._storage._async_reader(read)
+
     async def async_selection_constraints(
         self,
         *,
@@ -1566,6 +1648,59 @@ class ReviewEventsRepository:
                 raise
 
         await self._storage._async_writer(write)
+
+    async def async_count_introductions(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        local_date: str,
+    ) -> int:
+        """Count distinct cards introduced today for P3.9 new-card quota."""
+
+        def read(connection: sqlite3.Connection) -> int:
+            row = connection.execute(
+                """SELECT COUNT(DISTINCT card_key)
+                   FROM review_events
+                   WHERE profile_id = ? AND track_id = ?
+                     AND local_date = ? AND mode = 'introduction'""",
+                (profile_id, track_id, local_date),
+            ).fetchone()
+            return 0 if row is None else int(row[0])
+
+        return await self._storage._async_reader(read)
+
+    async def async_recent_session_verified_results(
+        self,
+        session_id: str,
+        *,
+        limit: int,
+    ) -> tuple[str, ...]:
+        """Return recent trusted verified outcomes for fatigue detection."""
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+
+        def read(connection: sqlite3.Connection) -> tuple[str, ...]:
+            rows = connection.execute(
+                """SELECT result
+                   FROM review_events
+                   WHERE session_id = ?
+                     AND retrieval_occurred = 1
+                     AND mode IN (
+                         'verified_mcq',
+                         'verified_free_text',
+                         'verified_cloze',
+                         'exam_retrieval'
+                     )
+                     AND signal_quality IN ('weak', 'medium', 'strong')
+                     AND result IN ('correct', 'wrong', 'idk')
+                   ORDER BY created_at_utc DESC, id DESC
+                   LIMIT ?""",
+                (session_id, limit),
+            ).fetchall()
+            return tuple(str(row[0]) for row in rows)
+
+        return await self._storage._async_reader(read)
 
     async def async_list_for_card(
         self,
