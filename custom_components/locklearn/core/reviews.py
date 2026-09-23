@@ -116,27 +116,31 @@ class ReviewEventService:
         offset = local.utcoffset()
         utc_offset_minutes = 0 if offset is None else int(offset.total_seconds() // 60)
 
-        history = await self._events.async_recent_verified_card_events(
-            profile_id=profile_id,
-            track_id=track_id,
-            card_key=card_key,
-            since_utc=(now - timedelta(days=LEECH_WINDOW_DAYS_V1)).isoformat(),
-        )
-        leech = self._leech_policy.evaluate(
-            history,
-            current={
-                "mode": mode,
-                "result": result,
-                "retrieval_occurred": retrieval_occurred,
-                "signal_quality": signal_quality,
-                "pre_state_snapshot": pre_state_snapshot,
-                "post_state_snapshot": post_state_snapshot,
-                "created_at_utc": now.isoformat(),
-            },
-            now=now,
-        )
+        current_for_leech = {
+            "mode": mode,
+            "result": result,
+            "retrieval_occurred": retrieval_occurred,
+            "signal_quality": signal_quality,
+            "pre_state_snapshot": pre_state_snapshot,
+            "post_state_snapshot": post_state_snapshot,
+            "created_at_utc": now.isoformat(),
+        }
         resolved_post_state = dict(post_state_snapshot)
-        if leech.detected:
+        if self._leech_policy._is_trusted_verified(current_for_leech):
+            history = await self._events.async_recent_verified_card_events(
+                profile_id=profile_id,
+                track_id=track_id,
+                card_key=card_key,
+                since_utc=(now - timedelta(days=LEECH_WINDOW_DAYS_V1)).isoformat(),
+            )
+            leech = self._leech_policy.evaluate(
+                history,
+                current=current_for_leech,
+                now=now,
+            )
+        else:
+            leech = None
+        if leech is not None and leech.detected:
             resolved_post_state.update(
                 {
                     "state": "leech",
