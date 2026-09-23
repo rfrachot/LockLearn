@@ -4,6 +4,7 @@
 
 P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.10 are complete. P1 and P2 are
 closed PASS. P3 remains in progress on `feat/p3-sessions`. P3.10 is PASS.
+P3.11 implementation is complete and pending the repository quality gate.
 P3.8 and P3.9 are PASS. P3.8's targeted real-HA qualification ran on 2026-09-23
 at `417ff41df90cf137e2751320d72e3166bdc0793b` after HACS explicitly
 redownloaded `feat/p3-sessions` and HA restarted. It exercised public P3.9
@@ -23,6 +24,21 @@ that P3.12 owns preservation/replay of these non-pedagogical overlays during
 rebuild/recompute. Backend and WebSocket ACL tests are present. Final P3.10 gate on 2026-09-23:
 Ruff format PASS (197 files), Ruff lint PASS, mypy PASS (109 sources), resource
 registries PASS and pytest PASS (292 tests in 7.12 s).
+
+P3.11 implements the normative `leech` scheduling state with state schema
+v3 and an explicit v2→v3 Progress-table migration. LeechPolicy V1 evaluates
+trusted verified ReviewEvents using the 6 failures / last 10 attempts / 60 days
+or 8 verified relapses / 60 days thresholds. Detection is written into the
+triggering ReviewEvent post-state, not as a projection-only mutation. Ordinary
+session selection treats leeches as fallback and supports explicit
+`leeches_only=true` targeted sessions. Confusion matrices are derived from
+expected/chosen answer IDs already stored in ReviewEvents. Private
+LearningItem/CardDefinition annotations reuse `user_annotations`, prioritize
+personal mnemonic remediation, and follow Profile READ/MANAGE_PROGRESS ACL.
+Manual reactivation uses a canonical non-retrieval ReviewEvent. ADR-0032 records
+the design. New migration, policy, integration, session and WebSocket privacy
+tests are present. Do not mark P3.11 PASS until the normal full repository gate
+is green.
 
 The only unavailable supplemental proof is real viewer/outsider ACL: one HA
 development-user token is configured, and no second usable token exists in the
