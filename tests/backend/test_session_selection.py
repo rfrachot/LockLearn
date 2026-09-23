@@ -422,9 +422,7 @@ async def test_targeted_leech_session_selects_only_leeches() -> None:
     )
 
     assert [item.card_key for item in selected] == ["card-3", "card-4"]
-    assert all(
-        item.payload["selection"]["progress_state"] == "leech" for item in selected
-    )
+    assert all(item.payload["selection"]["progress_state"] == "leech" for item in selected)
 
 
 def test_targeted_leech_setting_must_be_boolean() -> None:
