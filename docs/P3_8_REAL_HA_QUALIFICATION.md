@@ -2,74 +2,73 @@
 
 ## Result
 
-**P3.8 REAL HA QUALIFICATION — BLOCKED**
+**P3.8 REAL HA QUALIFICATION — PASS**
 
 Tested on 2026-09-23 from `feat/p3-sessions` at
-`7857143376c317f955bfd783196aeb5effea0982`.
+`417ff41df90cf137e2751320d72e3166bdc0793b`.
 
-The real-instance lifecycle, persistence and storage checks passed, but the
-mandatory concurrent `session/answer` proof could not be executed. P3.8
-deliberately does not prepare questions through the public `session/start`
-command: the created real session therefore had `question_count=0` and
-`current_question=null`. Question selection/preparation remains P3.9 scope.
-The automated P3.8 harness covers answer CAS, but it is not accepted as real-HA
-evidence for this gate.
+The qualification uses only the public P3.9 path:
 
-## Environment
+```text
+locklearn/session/start
+-> backend selection
+-> persisted backend-owned current_question
+-> locklearn/session/answer
+```
+
+No client-prepared question, test fixture, direct `SessionQuestion` injection,
+state.db mutation or ACL bypass was used. The reproducible, secret-safe harness
+is `python -m scripts.p3_8_real_ha_qualification`.
+
+## Environment and deployment
 
 - Home Assistant Core: 2026.7.4
-- Supervisor: 2026.09.2
-- Home Assistant OS: 18.2
-- LockLearn source: HACS download of `feat/p3-sessions`
-- State migration observed on the real instance: schema 1 to schema 2
-- Secrets, instance URL and private profile data were not retained
-
-## Local gate
-
-The repository gate passed in `.venv`:
-
-- Ruff format: PASS, 188 files already formatted
-- Ruff lint: PASS
-- mypy: PASS, 104 source files
-- resource registries: PASS
-- pytest: PASS, 280 tests in 6.77 s
-
-The system `python3` did not contain Ruff, so the verified project virtual
-environment was used as required by `PROJECT.md`.
+- LockLearn source: HACS `rfrachot/LockLearn`, explicitly redownloaded from
+  `feat/p3-sessions`, then Home Assistant Core restarted.
+- The first probe detected an older HACS artifact despite its branch label:
+  public `session/start` returned zero questions and no P3.9 `fatigue_advice`.
+  After the explicit branch download/restart, it returned two selected questions,
+  a current question and fatigue advice.
+- Secrets, instance URL, Profile IDs and learning content are not retained here.
 
 ## Real-instance results
 
 | Scenario | Result | Evidence |
 |---|---|---|
-| A — bootstrap | PASS | A temporary owner Profile and Track backed by the signed Japanese Starter pack created a persistent session. Type, strategy, settings, status, version and position round-tripped through `session/get`. |
-| B — two WebSocket clients | PASS | Independent authenticated connections read identical version, position and current-question state; a second client subscribed successfully. |
-| C — concurrent answer CAS | **BLOCKED** | No backend-prepared question is reachable through the P3.8 public API before P3.9. No answer-CAS claim is made. |
-| C — lifecycle CAS control | PASS | Two clients paused from version 1 concurrently: exactly one succeeded, exactly one returned `locklearn/stale_session`, version advanced once and the subscriber received only version 2. |
-| D — pause/resume | PASS | Cross-client pause and resume persisted; an obsolete version returned `locklearn/stale_session` without publishing an event. |
-| E — disconnect/reconnect | PASS | After subscriber disconnect, a new connection reconstructed version, status, position, current question, answers, settings and strategy from persistent state. |
-| F — integration reload | PASS | A real Config Entry reload preserved the exact session snapshot. One panel and one LockLearn Config Entry remained. A pre-reload subscription received no post-reload mutation, while new connections and mutations worked. |
-| G — completion | PASS | Completion incremented the version and populated `completed_at_utc`. Resume, answer and navigation undo were then rejected with `locklearn/stale_session` and did not alter the completed snapshot. |
-| H — owner ACL | PASS (partial) | The authenticated Profile owner could start, read, subscribe and mutate the session through backend ACL checks. |
-| H — viewer/outsider ACL | NOT EXECUTED | Only one HA access token was configured. Viewer and invisible-user behavior remains covered only by the automated harness; no real-instance proof is claimed. |
-| I — storage/lifecycle | PASS | Before and after reload: `integrity_check=ok`, zero FK violations, WAL, reader off the event loop and initialized writer. No LockLearn ERROR/CRITICAL record was present in `system_log`. |
+| A — P3.9 bootstrap | PASS | A temporary owner Profile plus a real Track pinned to the signed Japanese Starter PackVersion started a bounded session with `question_count=2`, a non-null current question, real CardDefinition identity and a non-empty backend-pinned `dataset_generation`. |
+| B — concurrent `session/answer` | PASS | Two independent authenticated WebSockets reconstructed the same `(session_id, version=1, question_id)` snapshot. Sent concurrently, primary won and advanced to version 2; the other client received exactly `locklearn/stale_session`. The session snapshot had one answer attempt and the privacy-safe state.db diagnostic answer count rose by exactly one. |
+| B — subscriber | PASS | The subscribed client received only the winning version-2 mutation; the stale answer did not publish a notification. |
+| C — navigation undo | PASS | `session/undo` at version 2 advanced to 3, restored the original question as current and retained the one immutable answer row. An undo with the stale version failed with `locklearn/stale_session`. This is the P3.8 navigation/audit path only; it does not claim P3.12 pedagogical undo or alter ReviewEvents/Progress. |
+| D — reconnect | PASS | After subscriber disconnect, a new client reconstructed the persisted version-3 snapshot and its one answer row through `session/get`. |
+| D — Config Entry reload | PASS | A real `homeassistant.reload_config_entry` preserved that same session snapshot. The pre-reload process-local subscription received no subsequent event; a new subscription received the post-reload pause mutation. Exactly one LockLearn Config Entry and one panel remained. |
+| E — storage/logs | PASS | Before/after: `integrity_check=['ok']`, zero FK violations, WAL mode, reader off the event loop and initialized writer. No new LockLearn ERROR/CRITICAL `system_log` record appeared. |
+| F — cleanup | PASS | Public Profile deletion removed all temporary Profile/Track/session/audit state. The runtime returned to its baseline of three sessions and three answer rows; no temporary Profile remained. |
 
-The initial P0 runtime contained three sessions and three answers. After schema
-migration, qualification and cleanup, those same counts remained, providing a
-targeted no-loss lifecycle check. The temporary Profile, Track and session were
-removed; no qualification Profile remained.
+`session/undo` executed the append-only P3.8 `session_undo_navigation` writer
+path; the public diagnostic intentionally exposes only privacy-safe aggregates.
+The same audit insertion and the no-ReviewEvent/no-Progress-mutation boundary
+remain covered by the focused automated P3.8 tests. The real run specifically
+exercised that path without any database injection or deletion.
 
-## Required follow-up
+## ACL qualification
 
-Do not mark P3.8 PASS and do not begin P3.9 from this result alone. Complete the
-mandatory real-HA answer race by providing a non-shipping, backend-owned way to
-prepare at least one valid `SessionQuestion` inside the live HA runtime (or an
-equivalent supported development-instance fixture), then verify:
+Owner ACL was exercised by every public operation above. The repository contains
+one configured development-user access token only; no second usable development
+token was found without searching outside the declared environment.
 
-- exactly one same-version `session/answer` winner;
-- exactly one `locklearn/stale_session` loser;
-- one version/position advance and one immutable answer row;
-- winner-only subscription publication;
-- reconnect and reload preservation of that answer history.
+**viewer/outsider real-HA ACL remains BLOCKED — second HA development-user token unavailable.**
 
-If real viewer/outsider ACL evidence is desired in the same rerun, configure a
-second HA development user token; never infer that result from the owner token.
+This is supplemental evidence, not a formal P3.8 exit blocker: the P3.8 exit
+criteria are the one-winner answer CAS and cross-client resume, both now proven
+on real HA. Viewer/outsider behavior remains additionally covered by the
+automated authenticated-WebSocket harness and ADR-0029's ACL contract.
+
+## Repository verification
+
+Final post-qualification gate in the project virtual environment:
+
+- `python3 -m ruff format --check .`: PASS, 193 files already formatted.
+- `python3 -m ruff check .`: PASS.
+- `python3 -m mypy custom_components datasets tests`: PASS, 106 source files.
+- `python3 datasets/tools/validate_resources.py`: PASS.
+- `python3 -m pytest -q --tb=short`: PASS, 287 tests in 6.85 s.
