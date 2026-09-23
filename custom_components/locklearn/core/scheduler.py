@@ -492,6 +492,20 @@ class SchedulerService:
             raise SchedulerValidationError("daily_push_budget must be an integer >= 0")
         daily_push_budget = 0 if profile.get("status") != "active" else daily_budget_raw
 
+        receptive_when_raw = scheduler_settings.get("receptive_when")
+        receptive_when = (
+            None
+            if receptive_when_raw is None
+            else str(receptive_when_raw).strip() or None
+        )
+        defer_window_raw = scheduler_settings.get("defer_window_minutes", 0)
+        if (
+            isinstance(defer_window_raw, bool)
+            or not isinstance(defer_window_raw, int)
+            or defer_window_raw < 0
+        ):
+            raise SchedulerValidationError("defer_window_minutes must be an integer >= 0")
+
         provisional = SchedulerConfig(
             profile_id=str(profile["profile_id"]),
             version=1 if persisted is None else int(persisted["version"]),
@@ -501,6 +515,8 @@ class SchedulerService:
             minimum_gap_seconds=minimum_gap,
             maximum_notifications_per_hour=max_per_hour,
             quiet_hours=quiet_hours,
+            receptive_when=receptive_when,
+            defer_window_minutes=defer_window_raw,
         )
         if persisted is not None and _persisted_semantics(persisted) != _semantic_config(
             provisional
