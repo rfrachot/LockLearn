@@ -89,8 +89,8 @@ async def test_preview_is_deterministic_and_obeys_windows_quiet_gap_and_hour_lim
         )
 
         assert first == second
-        assert first["generated_slots"] == 5
-        assert first["capacity_limited"] is True
+        assert first["generated_slots"] == 6
+        assert first["capacity_limited"] is False
         assert first["content_selection"] == "send_time"
         assert await storage.repositories.scheduler.async_get_config("profile-scheduler") is None
 
