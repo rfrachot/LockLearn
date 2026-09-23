@@ -96,6 +96,8 @@ class _Candidate:
     state: str
     next_due_at_utc: str | None
     pack_position: int
+    user_state: str
+    suspend_until_utc: str | None
     confusable_group_ids: tuple[str, ...]
 
     @classmethod
@@ -111,6 +113,10 @@ class _Candidate:
                 None if row.get("next_due_at_utc") is None else str(row["next_due_at_utc"])
             ),
             pack_position=int(row["pack_position"]),
+            user_state=str(row.get("user_state", "active")),
+            suspend_until_utc=(
+                None if row.get("suspend_until_utc") is None else str(row["suspend_until_utc"])
+            ),
             confusable_group_ids=tuple(str(v) for v in row.get("confusable_group_ids", ())),
         )
 
@@ -169,6 +175,8 @@ class SessionSelectionService:
         candidates: list[_Candidate] = []
         for row in raw_candidates:
             candidate = _Candidate.from_row(row)
+            if not self._user_state_available(candidate, now=now):
+                continue
             if allowed_types is not None and candidate.content_type not in allowed_types:
                 continue
             if self._weight(candidate.content_type, weights) <= 0:
@@ -441,6 +449,17 @@ class SessionSelectionService:
             candidate.pack_position,
             candidate.card_key,
         )
+
+    @staticmethod
+    def _user_state_available(candidate: _Candidate, *, now: datetime) -> bool:
+        if candidate.user_state == "active":
+            return True
+        if candidate.user_state != "buried" or candidate.suspend_until_utc is None:
+            return False
+        until = datetime.fromisoformat(candidate.suspend_until_utc)
+        if until.tzinfo is None:
+            raise SessionSelectionError("candidate suspend timestamp must be timezone-aware")
+        return until <= now
 
     @staticmethod
     def _state_available(
