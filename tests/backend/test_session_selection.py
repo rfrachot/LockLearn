@@ -401,3 +401,34 @@ async def test_leeches_are_fallback_after_normal_due_and_new_cards() -> None:
     assert {item.card_key for item in selected[:2]} == {"card-1", "card-2"}
     assert selected[2].card_key == "card-3"
     assert selected[2].payload["selection"]["reason"] == "leech_due"
+
+
+@pytest.mark.asyncio
+async def test_targeted_leech_session_selects_only_leeches() -> None:
+    due = "2026-09-23T10:00:00+00:00"
+    candidates = (
+        _candidate(1, state="review", content_type="vocabulary", due=due),
+        _candidate(2, state="new", content_type="grammar"),
+        _candidate(3, state="leech", content_type="kanji", due=due),
+        _candidate(4, state="leech", content_type="vocabulary", due=due),
+    )
+    service = _service(candidates)
+
+    selected = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="bounded",
+        settings={"requested_cards": 4, "leeches_only": True},
+    )
+
+    assert [item.card_key for item in selected] == ["card-3", "card-4"]
+    assert all(
+        item.payload["selection"]["progress_state"] == "leech" for item in selected
+    )
+
+
+def test_targeted_leech_setting_must_be_boolean() -> None:
+    service = _service(())
+
+    with pytest.raises(SessionSelectionError, match="leeches_only"):
+        service.validate_session_settings({"leeches_only": "yes"})
