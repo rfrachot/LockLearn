@@ -2049,15 +2049,291 @@ class ReviewEventsRepository:
 
         return await self._storage._async_reader(read)
 
-    async def async_rebuild_progress(
+    async def async_list_scope_events(
         self,
         *,
         profile_id: str | None = None,
         track_id: str | None = None,
-    ) -> int:
-        """Rebuild progress from the latest event snapshot under historical policy."""
+    ) -> tuple[dict[str, Any], ...]:
+        """Return canonical events in deterministic replay order."""
         if track_id is not None and profile_id is None:
-            raise ValueError("track-scoped rebuild requires profile_id")
+            raise ValueError("track-scoped event replay requires profile_id")
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            clauses: list[str] = []
+            params: list[str] = []
+            if profile_id is not None:
+                clauses.append("profile_id = ?")
+                params.append(profile_id)
+            if track_id is not None:
+                clauses.append("track_id = ?")
+                params.append(track_id)
+            where = "" if not clauses else " WHERE " + " AND ".join(clauses)
+            rows = connection.execute(
+                f"""SELECT id, profile_id, track_id, learning_item_id,
+                           prompt_facet_id, answer_facet_id, card_key, mode,
+                           question_type, result, answer_id, expected_answer_id,
+                           hint_used, retrieval_occurred, scheduled_interval_days,
+                           elapsed_days, grading_result, signal_quality,
+                           policy_version, dataset_generation, normalization_version,
+                           pre_state_snapshot, post_state_snapshot,
+                           presentation_to_answer_ms, delivery_to_action_ms,
+                           session_id, notification_id, created_at_utc, local_date,
+                           timezone_name, utc_offset_minutes
+                    FROM review_events{where}
+                    ORDER BY created_at_utc, id""",
+                tuple(params),
+            ).fetchall()
+            keys = (
+                "id",
+                "profile_id",
+                "track_id",
+                "learning_item_id",
+                "prompt_facet_id",
+                "answer_facet_id",
+                "card_key",
+                "mode",
+                "question_type",
+                "result",
+                "answer_id",
+                "expected_answer_id",
+                "hint_used",
+                "retrieval_occurred",
+                "scheduled_interval_days",
+                "elapsed_days",
+                "grading_result",
+                "signal_quality",
+                "policy_version",
+                "dataset_generation",
+                "normalization_version",
+                "pre_state_snapshot",
+                "post_state_snapshot",
+                "presentation_to_answer_ms",
+                "delivery_to_action_ms",
+                "session_id",
+                "notification_id",
+                "created_at_utc",
+                "local_date",
+                "timezone_name",
+                "utc_offset_minutes",
+            )
+            result: list[dict[str, Any]] = []
+            for row in rows:
+                event = dict(zip(keys, row, strict=True))
+                event["hint_used"] = bool(event["hint_used"])
+                event["retrieval_occurred"] = bool(event["retrieval_occurred"])
+                event["policy_version"] = int(event["policy_version"])
+                event["normalization_version"] = (
+                    None
+                    if event["normalization_version"] is None
+                    else int(event["normalization_version"])
+                )
+                event["pre_state_snapshot"] = json.loads(str(event["pre_state_snapshot"]))
+                event["post_state_snapshot"] = json.loads(str(event["post_state_snapshot"]))
+                result.append(event)
+            return tuple(result)
+
+        return await self._storage._async_reader(read)
+
+    async def async_latest_undo_candidate(
+        self,
+        *,
+        profile_id: str,
+        track_id: str | None = None,
+        card_key: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Return the newest not-yet-undone progress mutation in scope."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            undone: set[str] = set()
+            rows = connection.execute(
+                """SELECT payload_json FROM audit_events
+                   WHERE event_type = 'progress_undo' AND profile_id = ?
+                   ORDER BY id""",
+                (profile_id,),
+            ).fetchall()
+            for (payload,) in rows:
+                decoded = json.loads(str(payload))
+                target = decoded.get("target_event_id")
+                if isinstance(target, str):
+                    undone.add(target)
+
+            clauses = ["profile_id = ?", "mode != 'undo_compensation'"]
+            params: list[Any] = [profile_id]
+            if track_id is not None:
+                clauses.append("track_id = ?")
+                params.append(track_id)
+            if card_key is not None:
+                clauses.append("card_key = ?")
+                params.append(card_key)
+            rows = connection.execute(
+                f"""SELECT id, profile_id, track_id, learning_item_id,
+                           prompt_facet_id, answer_facet_id, card_key, mode,
+                           question_type, result, signal_quality, policy_version,
+                           dataset_generation, normalization_version,
+                           pre_state_snapshot, post_state_snapshot, created_at_utc,
+                           local_date, timezone_name, utc_offset_minutes
+                    FROM review_events
+                    WHERE {" AND ".join(clauses)}
+                    ORDER BY created_at_utc DESC, id DESC""",
+                tuple(params),
+            ).fetchall()
+            for row in rows:
+                event_id = str(row[0])
+                if event_id in undone:
+                    continue
+                return {
+                    "id": event_id,
+                    "profile_id": str(row[1]),
+                    "track_id": str(row[2]),
+                    "learning_item_id": str(row[3]),
+                    "prompt_facet_id": str(row[4]),
+                    "answer_facet_id": str(row[5]),
+                    "card_key": str(row[6]),
+                    "mode": str(row[7]),
+                    "question_type": str(row[8]),
+                    "result": str(row[9]),
+                    "signal_quality": str(row[10]),
+                    "policy_version": int(row[11]),
+                    "dataset_generation": str(row[12]),
+                    "normalization_version": None if row[13] is None else int(row[13]),
+                    "pre_state_snapshot": json.loads(str(row[14])),
+                    "post_state_snapshot": json.loads(str(row[15])),
+                    "created_at_utc": str(row[16]),
+                    "local_date": str(row[17]),
+                    "timezone_name": str(row[18]),
+                    "utc_offset_minutes": int(row[19]),
+                }
+            return None
+
+        return await self._storage._async_reader(read)
+
+    async def async_append_undo_compensation(
+        self,
+        event: ReviewEventRecord,
+        *,
+        target_event_id: str,
+        actor_user_id: str,
+    ) -> None:
+        """Atomically append an undo compensation and audit its target."""
+        self._validate_projection_identity(event, event.post_state_snapshot)
+        pre_json = json.dumps(
+            event.pre_state_snapshot,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        post_json = json.dumps(
+            event.post_state_snapshot,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                current = connection.execute(
+                    """SELECT post_state_snapshot
+                       FROM review_events
+                       WHERE profile_id = ? AND track_id = ? AND card_key = ?
+                       ORDER BY created_at_utc DESC, id DESC
+                       LIMIT 1""",
+                    (event.profile_id, event.track_id, event.card_key),
+                ).fetchone()
+                current_progress = connection.execute(
+                    """SELECT state, box, seen_count, verified_correct_count,
+                              verified_wrong_count, next_due_at_utc
+                       FROM progress
+                       WHERE profile_id = ? AND track_id = ? AND card_key = ?""",
+                    (event.profile_id, event.track_id, event.card_key),
+                ).fetchone()
+                if current is None or current_progress is None:
+                    raise StateRepositoryError("undo target has no current progress")
+                connection.execute(
+                    """INSERT INTO review_events(
+                           id, profile_id, track_id, learning_item_id,
+                           prompt_facet_id, answer_facet_id, card_key, mode,
+                           question_type, result, answer_id, expected_answer_id,
+                           hint_used, retrieval_occurred, scheduled_interval_days,
+                           elapsed_days, grading_result, signal_quality,
+                           policy_version, dataset_generation, normalization_version,
+                           pre_state_snapshot, post_state_snapshot,
+                           presentation_to_answer_ms, delivery_to_action_ms,
+                           session_id, notification_id, created_at_utc, local_date,
+                           timezone_name, utc_offset_minutes
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        event.id,
+                        event.profile_id,
+                        event.track_id,
+                        event.learning_item_id,
+                        event.prompt_facet_id,
+                        event.answer_facet_id,
+                        event.card_key,
+                        event.mode,
+                        event.question_type,
+                        event.result,
+                        event.answer_id,
+                        event.expected_answer_id,
+                        int(event.hint_used),
+                        int(event.retrieval_occurred),
+                        event.scheduled_interval_days,
+                        event.elapsed_days,
+                        event.grading_result,
+                        event.signal_quality,
+                        event.policy_version,
+                        event.dataset_generation,
+                        event.normalization_version,
+                        pre_json,
+                        post_json,
+                        event.presentation_to_answer_ms,
+                        event.delivery_to_action_ms,
+                        event.session_id,
+                        event.notification_id,
+                        event.created_at_utc,
+                        event.local_date,
+                        event.timezone_name,
+                        event.utc_offset_minutes,
+                    ),
+                )
+                self._upsert_progress(connection, event.post_state_snapshot)
+                audit_payload = json.dumps(
+                    {
+                        "target_event_id": target_event_id,
+                        "compensation_event_id": event.id,
+                        "track_id": event.track_id,
+                        "card_key": event.card_key,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+                connection.execute(
+                    """INSERT INTO audit_events(
+                           event_type, actor_user_id, profile_id, payload_json, created_at_utc
+                       ) VALUES ('progress_undo', ?, ?, ?, ?)""",
+                    (actor_user_id, event.profile_id, audit_payload, event.created_at_utc),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+
+    async def async_replace_progress(
+        self,
+        snapshots: tuple[dict[str, Any], ...],
+        *,
+        profile_id: str | None = None,
+        track_id: str | None = None,
+    ) -> int:
+        """Replace a scoped Progress projection while preserving user/content overlays."""
+        if track_id is not None and profile_id is None:
+            raise ValueError("track-scoped replacement requires profile_id")
 
         def write(connection: sqlite3.Connection) -> int:
             try:
@@ -2071,33 +2347,218 @@ class ReviewEventsRepository:
                     clauses.append("track_id = ?")
                     params.append(track_id)
                 where = "" if not clauses else " WHERE " + " AND ".join(clauses)
-                connection.execute(f"DELETE FROM progress{where}", tuple(params))
+
+                overlays: dict[tuple[str, str, str], tuple[str, str | None, str]] = {}
                 rows = connection.execute(
-                    f"""SELECT post_state_snapshot
-                        FROM review_events
-                        {where}
-                        ORDER BY created_at_utc, id""",
+                    f"""SELECT profile_id, track_id, card_key, user_state,
+                               suspend_until_utc, content_status
+                        FROM progress{where}""",
                     tuple(params),
                 ).fetchall()
-                latest: dict[tuple[str, str, str], dict[str, Any]] = {}
-                for (payload,) in rows:
-                    snapshot = json.loads(str(payload))
+                for row in rows:
+                    overlays[(str(row[0]), str(row[1]), str(row[2]))] = (
+                        str(row[3]),
+                        None if row[4] is None else str(row[4]),
+                        str(row[5]),
+                    )
+
+                connection.execute(f"DELETE FROM progress{where}", tuple(params))
+                for raw in snapshots:
+                    snapshot = dict(raw)
                     key = (
                         str(snapshot["profile_id"]),
                         str(snapshot["track_id"]),
                         str(snapshot["card_key"]),
                     )
-                    latest[key] = snapshot
-                for snapshot in latest.values():
+                    overlay = overlays.get(key)
+                    if overlay is not None:
+                        snapshot["user_state"] = overlay[0]
+                        snapshot["suspend_until_utc"] = overlay[1]
+                        snapshot["content_status"] = overlay[2]
                     self._upsert_progress(connection, snapshot)
                 connection.commit()
-                return len(latest)
+                return len(snapshots)
             except Exception:
                 if connection.in_transaction:
                     connection.rollback()
                 raise
 
         return await self._storage._async_writer(write)
+
+    async def async_rebuild_stats(
+        self,
+        *,
+        profile_id: str | None = None,
+        track_id: str | None = None,
+    ) -> int:
+        """Rebuild stats_daily independently from canonical ReviewEvents."""
+        if track_id is not None and profile_id is None:
+            raise ValueError("track-scoped stats rebuild requires profile_id")
+
+        def write(connection: sqlite3.Connection) -> int:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                clauses: list[str] = []
+                params: list[str] = []
+                if profile_id is not None:
+                    clauses.append("profile_id = ?")
+                    params.append(profile_id)
+                if track_id is not None:
+                    clauses.append("track_id = ?")
+                    params.append(track_id)
+                where = "" if not clauses else " WHERE " + " AND ".join(clauses)
+                connection.execute(f"DELETE FROM stats_daily{where}", tuple(params))
+                rows = connection.execute(
+                    f"""SELECT profile_id, track_id, local_date, timezone_name,
+                               utc_offset_minutes, policy_version, mode, result,
+                               hint_used, retrieval_occurred, signal_quality,
+                               question_type, pre_state_snapshot, post_state_snapshot,
+                               presentation_to_answer_ms
+                        FROM review_events{where}
+                        ORDER BY created_at_utc, id""",
+                    tuple(params),
+                ).fetchall()
+                aggregates: dict[tuple[str, str, str], dict[str, Any]] = {}
+                for row in rows:
+                    key = (str(row[0]), str(row[1]), str(row[2]))
+                    item = aggregates.setdefault(
+                        key,
+                        {
+                            "timezone_name": str(row[3]),
+                            "utc_offset_minutes": int(row[4]),
+                            "policy_version": int(row[5]),
+                            "learning_exposures": 0,
+                            "verified_retrievals": 0,
+                            "self_known": 0,
+                            "verified_correct": 0,
+                            "verified_wrong": 0,
+                            "quiz_total": 0,
+                            "free_text_total": 0,
+                            "hints_used": 0,
+                            "new_cards": set(),
+                            "reviewed_cards": set(),
+                            "relearning_cards": set(),
+                            "leech_cards": set(),
+                            "active_seconds": 0,
+                        },
+                    )
+                    mode = str(row[6])
+                    result = str(row[7])
+                    retrieval = bool(row[9])
+                    quality = str(row[10])
+                    question_type = str(row[11])
+                    pre = json.loads(str(row[12]))
+                    post = json.loads(str(row[13]))
+                    if mode == "introduction":
+                        item["learning_exposures"] += 1
+                        item["new_cards"].add(str(post["card_key"]))
+                    trusted_verified = (
+                        retrieval
+                        and mode
+                        in {
+                            "verified_mcq",
+                            "verified_free_text",
+                            "verified_cloze",
+                            "exam_retrieval",
+                        }
+                        and quality in {"weak", "medium", "strong"}
+                        and result in {"correct", "wrong", "idk"}
+                    )
+                    if trusted_verified:
+                        item["verified_retrievals"] += 1
+                        if result == "correct":
+                            item["verified_correct"] += 1
+                        else:
+                            item["verified_wrong"] += 1
+                    if mode == "self_assessment_after_retrieval" and result in {
+                        "correct",
+                        "known",
+                        "knew",
+                        "easy",
+                        "hard",
+                    }:
+                        item["self_known"] += 1
+                    if question_type in {"mcq", "cloze", "cloze_mcq"}:
+                        item["quiz_total"] += 1
+                    if question_type == "free_text":
+                        item["free_text_total"] += 1
+                    if bool(row[8]):
+                        item["hints_used"] += 1
+                    if str(pre.get("state")) in {"review", "leech"} and retrieval:
+                        item["reviewed_cards"].add(str(post["card_key"]))
+                    if str(pre.get("state")) == "relearning" or str(post.get("state")) == "relearning":
+                        item["relearning_cards"].add(str(post["card_key"]))
+                    if str(post.get("state")) == "leech":
+                        item["leech_cards"].add(str(post["card_key"]))
+                    if row[14] is not None:
+                        item["active_seconds"] += max(0, int(row[14]) // 1000)
+
+                for (p_id, t_id, local_date), item in aggregates.items():
+                    connection.execute(
+                        """INSERT INTO stats_daily(
+                               profile_id, track_id, local_date, timezone_name,
+                               utc_offset_minutes, policy_version, learning_exposures,
+                               verified_retrievals, self_known, verified_correct,
+                               verified_wrong, quiz_total, free_text_total, hints_used,
+                               new_cards, reviewed_cards, relearning_cards, leech_cards,
+                               active_seconds
+                           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            p_id,
+                            t_id,
+                            local_date,
+                            item["timezone_name"],
+                            item["utc_offset_minutes"],
+                            item["policy_version"],
+                            item["learning_exposures"],
+                            item["verified_retrievals"],
+                            item["self_known"],
+                            item["verified_correct"],
+                            item["verified_wrong"],
+                            item["quiz_total"],
+                            item["free_text_total"],
+                            item["hints_used"],
+                            len(item["new_cards"]),
+                            len(item["reviewed_cards"]),
+                            len(item["relearning_cards"]),
+                            len(item["leech_cards"]),
+                            item["active_seconds"],
+                        ),
+                    )
+                connection.commit()
+                return len(aggregates)
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        return await self._storage._async_writer(write)
+
+    async def async_rebuild_progress(
+        self,
+        *,
+        profile_id: str | None = None,
+        track_id: str | None = None,
+    ) -> int:
+        """Rebuild Progress from historical post snapshots, preserving overlays."""
+        events = await self.async_list_scope_events(
+            profile_id=profile_id,
+            track_id=track_id,
+        )
+        latest: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for event in events:
+            snapshot = dict(event["post_state_snapshot"])
+            key = (
+                str(snapshot["profile_id"]),
+                str(snapshot["track_id"]),
+                str(snapshot["card_key"]),
+            )
+            latest[key] = snapshot
+        return await self.async_replace_progress(
+            tuple(latest.values()),
+            profile_id=profile_id,
+            track_id=track_id,
+        )
 
 
 class UserAnnotationsRepository:
