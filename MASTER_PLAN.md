@@ -25,7 +25,7 @@
 | P0 | Architecture spikes + installable HA skeleton | complete | yes | `docs/plan/P0.md` |
 | P1 | Content core + signed starter dataset | complete | yes | `docs/plan/P1.md` |
 | P2 | Profiles/tracks/ACL | complete | yes | `docs/plan/P2.md` |
-| P3 | Learning/SRS/sessions/stats | in progress (P3.1–P3.9 complete) | yes | `docs/plan/P3.md` |
+| P3 | Learning/SRS/sessions/stats | in progress (P3.1–P3.10 complete) | yes | `docs/plan/P3.md` |
 | P4 | Scheduler/notifications/HA automation | queued | yes | `docs/plan/P4.md` |
 | P5 | Useful panel | queued | yes | `docs/plan/P5.md` |
 | P6 | Hardening/release | queued | yes | `docs/plan/P6.md` |
@@ -77,7 +77,7 @@
 - **P3.7** — Panel free-text grading and content-quality feedback (complete)
 - **P3.8** — Persistent sessions, concurrency and cross-client resume (complete)
 - **P3.9** — Fatigue-aware session selection and interleaving (complete)
-- **P3.10** — Known-already, suspend/bury and calibration
+- **P3.10** — Known-already, suspend/bury and calibration (complete)
 - **P3.11** — Leech detection, confusion matrix and personal annotations
 - **P3.12** — Undo, integrity rebuild and algorithmic recompute
 - **P3.13** — Basic statistics and metacognitive calibration backend
