@@ -14,6 +14,7 @@ from .core.acl import ProfileACLService
 from .core.content_reports import ContentReportService
 from .core.difficulties import DifficultyService
 from .core.grading import FreeTextGrader
+from .core.integrity import IntegrityService
 from .core.operations import OperationRegistry
 from .core.planning import LearningPlanService
 from .core.profiles import ProfileService
@@ -51,6 +52,7 @@ class LockLearnRuntime:
     planning: LearningPlanService
     progress_state: ProgressUserStateService
     grading: FreeTextGrader
+    integrity: IntegrityService
     content_reports: ContentReportService
     difficulties: DifficultyService
     quiz: QuizEngine
@@ -138,6 +140,11 @@ class LockLearnRuntime:
                     ),
                 ),
                 grading=FreeTextGrader(),
+                integrity=IntegrityService(
+                    storage.repositories.review_events,
+                    storage.repositories.progress,
+                    storage.repositories.profiles,
+                ),
                 content_reports=ContentReportService(
                     storage.repositories.content_reports,
                     storage.repositories.tracks,
