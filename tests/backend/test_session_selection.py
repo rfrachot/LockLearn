@@ -138,6 +138,8 @@ def _candidate(
     content_type: str,
     due: str | None = None,
     group: str | None = None,
+    user_state: str = "active",
+    suspend_until_utc: str | None = None,
 ) -> dict[str, Any]:
     return {
         "card_key": f"card-{index}",
@@ -148,6 +150,8 @@ def _candidate(
         "state": state,
         "next_due_at_utc": due,
         "pack_position": index,
+        "user_state": user_state,
+        "suspend_until_utc": suspend_until_utc,
         "confusable_group_ids": () if group is None else (group,),
     }
 
@@ -327,3 +331,51 @@ def test_invalid_fatigue_threshold_is_rejected() -> None:
 
     with pytest.raises(SessionSelectionError, match="within"):
         service.validate_session_settings({"fatigue_accuracy_threshold": 1.1})
+
+
+@pytest.mark.asyncio
+async def test_user_owned_state_filters_sessions_and_expired_burial_reactivates() -> None:
+    due = "2026-09-23T10:00:00+00:00"
+    candidates = (
+        _candidate(1, state="review", content_type="vocabulary", due=due),
+        _candidate(
+            2,
+            state="review",
+            content_type="vocabulary",
+            due=due,
+            user_state="known_already",
+        ),
+        _candidate(
+            3,
+            state="review",
+            content_type="vocabulary",
+            due=due,
+            user_state="suspended",
+        ),
+        _candidate(
+            4,
+            state="review",
+            content_type="vocabulary",
+            due=due,
+            user_state="buried",
+            suspend_until_utc="2026-09-23T13:00:00+00:00",
+        ),
+        _candidate(
+            5,
+            state="review",
+            content_type="vocabulary",
+            due=due,
+            user_state="buried",
+            suspend_until_utc="2026-09-23T11:00:00+00:00",
+        ),
+    )
+    service = _service(candidates)
+
+    selected = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="bounded",
+        settings={"requested_cards": 5},
+    )
+
+    assert [item.card_key for item in selected] == ["card-1", "card-5"]
