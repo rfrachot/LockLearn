@@ -15,6 +15,7 @@ from ..core.content import GradingOutcome, GradingPolicyKind
 from ..core.content_reports import ContentReportError
 from ..core.difficulties import DifficultyServiceError
 from ..core.grading import FreeTextGradingResult
+from ..core.integrity import IntegrityServiceError
 from ..core.profiles import ProfileValidationError
 from ..core.progress_state import ProgressUserStateError
 from ..core.session_selection import SessionSelectionError
@@ -1039,6 +1040,172 @@ async def ws_leeches_reactivate(
     connection.send_result(msg["id"], state)
 
 
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/progress/undo_last",
+        vol.Required("profile_id"): str,
+        vol.Optional("track_id"): str,
+        vol.Optional("card_key"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_progress_undo_last(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Undo the latest admissible progress mutation by compensation."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.MANAGE_PROGRESS,
+    ):
+        return
+    try:
+        result = await runtime.integrity.async_undo_last(
+            actor_user_id=connection.user.id,
+            profile_id=profile_id,
+            track_id=msg.get("track_id"),
+            card_key=msg.get("card_key"),
+        )
+    except IntegrityServiceError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+def _admin_integrity_scope(msg: dict[str, Any]) -> tuple[str | None, str | None]:
+    profile_id = msg.get("profile_id")
+    track_id = msg.get("track_id")
+    if track_id is not None and profile_id is None:
+        raise IntegrityServiceError("track-scoped operation requires profile_id")
+    return profile_id, track_id
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/admin/rebuild_progress",
+        vol.Optional("profile_id"): str,
+        vol.Optional("track_id"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_admin_rebuild_progress(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Start an explicit historical-snapshot progress rebuild."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    try:
+        profile_id, track_id = _admin_integrity_scope(msg)
+    except IntegrityServiceError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+
+    async def worker(context: Any) -> None:
+        await context.async_update("rebuild_progress", 0.1)
+        result = await runtime.integrity.async_rebuild_progress(
+            profile_id=profile_id,
+            track_id=track_id,
+        )
+        await context.async_set_result(result)
+        await context.async_update("rebuild_progress", 0.95)
+
+    operation_id = runtime.operations.start(
+        "rebuild_progress",
+        worker,
+        owner_user_id=connection.user.id,
+    )
+    connection.send_result(msg["id"], {"operation_id": operation_id})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/admin/rebuild_stats",
+        vol.Optional("profile_id"): str,
+        vol.Optional("track_id"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_admin_rebuild_stats(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Start an independent stats_daily rebuild."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    try:
+        profile_id, track_id = _admin_integrity_scope(msg)
+    except IntegrityServiceError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+
+    async def worker(context: Any) -> None:
+        await context.async_update("rebuild_stats", 0.1)
+        result = await runtime.integrity.async_rebuild_stats(
+            profile_id=profile_id,
+            track_id=track_id,
+        )
+        await context.async_set_result(result)
+        await context.async_update("rebuild_stats", 0.95)
+
+    operation_id = runtime.operations.start(
+        "rebuild_stats",
+        worker,
+        owner_user_id=connection.user.id,
+    )
+    connection.send_result(msg["id"], {"operation_id": operation_id})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/admin/recompute_progress",
+        vol.Required("policy_version"): vol.All(int, vol.Range(min=1)),
+        vol.Optional("profile_id"): str,
+        vol.Optional("track_id"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_admin_recompute_progress(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Start a deliberate policy-targeted progress recompute."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    try:
+        profile_id, track_id = _admin_integrity_scope(msg)
+    except IntegrityServiceError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+
+    async def worker(context: Any) -> None:
+        await context.async_update("recompute_progress", 0.05)
+        report = await runtime.integrity.async_recompute_progress(
+            target_policy_version=msg["policy_version"],
+            profile_id=profile_id,
+            track_id=track_id,
+        )
+        await context.async_set_result(report.as_dict())
+        await context.async_update("recompute_progress", 0.95)
+
+    operation_id = runtime.operations.start(
+        "recompute_progress",
+        worker,
+        owner_user_id=connection.user.id,
+    )
+    connection.send_result(msg["id"], {"operation_id": operation_id})
+
+
 @websocket_api.websocket_command({vol.Required("type"): "locklearn/admin/storage/status"})
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -1431,6 +1598,10 @@ COMMANDS = (
     ws_annotations_update,
     ws_annotations_delete,
     ws_leeches_reactivate,
+    ws_progress_undo_last,
+    ws_admin_rebuild_progress,
+    ws_admin_rebuild_stats,
+    ws_admin_recompute_progress,
     ws_admin_storage_status,
     ws_session_start,
     ws_session_get,
