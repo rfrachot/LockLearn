@@ -21,6 +21,7 @@ from .core.profiles import ProfileService
 from .core.progress_state import ProgressUserStateService
 from .core.quiz import QuizEngine
 from .core.review_policy import ReviewPolicyV1
+from .core.scheduler import SchedulerService
 from .core.reviews import ReviewEventService
 from .core.selection import SelectionConstraintService
 from .core.session_selection import SessionSelectionService
@@ -63,6 +64,7 @@ class LockLearnRuntime:
     session_selection: SessionSelectionService
     stats: StatsService
     reviews: ReviewEventService
+    scheduler: SchedulerService
     datasets: DatasetManager
 
     @classmethod
@@ -170,6 +172,10 @@ class LockLearnRuntime:
                     review_policy=review_policy,
                 ),
                 reviews=reviews,
+                scheduler=SchedulerService(
+                    storage.repositories.profiles,
+                    storage.repositories.scheduler,
+                ),
                 datasets=datasets,
             )
         except Exception:
