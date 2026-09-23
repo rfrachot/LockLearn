@@ -126,3 +126,19 @@ declared matrix and exits non-zero if:
 - Product defaults remain unchanged unless measured evidence justifies tuning.
 - P3 can close only after both the repository gate and the simulation script are
   green.
+
+## Measured qualification — 2026-09-23
+
+After aligning the simulator with P3.9 due-first selection, all required
+positive scenarios were sustainable without changing runtime SRS or preset
+defaults.
+
+The mixed standard scenario sustained ~81.8% verified accuracy by throttling
+208 new-card introductions over 39 days; backlog remained bounded (77 final,
+96 maximum) and maximum overdue age was one day. The bursty standard scenario
+showed the same property with 112 throttled introductions over 24 days.
+
+The explicit stress negative control remained unsustainable, with 1202
+throttled introductions over 173 days and the expected due-queue,
+relearning-oscillation and workload warnings. This confirms the gate remains
+sensitive rather than trivially green.
