@@ -237,9 +237,7 @@ class SessionSelectionService:
             limit=FATIGUE_WINDOW_SIZE,
         )
         accuracy = (
-            None
-            if not results
-            else sum(result == "correct" for result in results) / len(results)
+            None if not results else sum(result == "correct" for result in results) / len(results)
         )
         if len(results) < FATIGUE_WINDOW_SIZE:
             return FatigueAdvice(
@@ -280,12 +278,7 @@ class SessionSelectionService:
         if max_new <= 0:
             return 0
 
-        local_date = (
-            self._clock.now()
-            .astimezone(ZoneInfo(str(profile["timezone"])))
-            .date()
-            .isoformat()
-        )
+        local_date = self._clock.now().astimezone(ZoneInfo(str(profile["timezone"]))).date().isoformat()
         introduced = await self._reviews.async_count_introductions(
             profile_id=profile_id,
             track_id=track_id,
@@ -312,13 +305,7 @@ class SessionSelectionService:
         final_quarter_start = ceil(requested_cards * 0.75)
         strict_due_count = min(
             requested_cards,
-            len(
-                {
-                    c.learning_item_id
-                    for c in due
-                    if c.state in {"relearning", "learning"}
-                }
-            ),
+            len({c.learning_item_id for c in due if c.state in {"relearning", "learning"}}),
         )
         new_target = min(
             new_target,
@@ -430,10 +417,7 @@ class SessionSelectionService:
         selected_new: int,
         new_target: int,
     ) -> bool:
-        if (
-            candidate.state in {"new", "review"}
-            and candidate.learning_item_id in selected_items
-        ):
+        if candidate.state in {"new", "review"} and candidate.learning_item_id in selected_items:
             return False
         if candidate.state != "new":
             return True
@@ -511,7 +495,5 @@ class SessionSelectionService:
             raise SessionSelectionError("fatigue_accuracy_threshold must be numeric")
         threshold = float(raw)
         if not 0.0 <= threshold <= 1.0:
-            raise SessionSelectionError(
-                "fatigue_accuracy_threshold must be within [0, 1]"
-            )
+            raise SessionSelectionError("fatigue_accuracy_threshold must be within [0, 1]")
         return threshold
