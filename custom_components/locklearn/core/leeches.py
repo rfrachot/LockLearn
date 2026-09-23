@@ -46,7 +46,7 @@ class LeechPolicyV1:
     ) -> LeechDecision:
         cutoff = now - timedelta(days=LEECH_WINDOW_DAYS_V1)
         events = [event for event in history if self._timestamp(event) >= cutoff]
-        if self._is_trusted_verified(current):
+        if self.is_trusted_verified(current):
             events.append(current)
         events.sort(key=self._timestamp, reverse=True)
 
@@ -80,7 +80,7 @@ class LeechPolicyV1:
         )
 
     @staticmethod
-    def _is_trusted_verified(event: dict[str, Any]) -> bool:
+    def is_trusted_verified(event: dict[str, Any]) -> bool:
         return (
             bool(event.get("retrieval_occurred"))
             and str(event.get("mode")) in _VERIFIED_MODES
@@ -90,7 +90,7 @@ class LeechPolicyV1:
 
     @classmethod
     def _is_verified_relapse(cls, event: dict[str, Any]) -> bool:
-        if not cls._is_trusted_verified(event):
+        if not cls.is_trusted_verified(event):
             return False
         if str(event.get("result")) not in _FAILURE_RESULTS:
             return False
