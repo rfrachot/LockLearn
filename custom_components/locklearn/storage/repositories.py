@@ -31,6 +31,7 @@ class RepositoryStorage(Protocol):
         answer_facet_id: str,
     ) -> bool: ...
     async def async_validate_pack_version_reference(self, pack_version_id: str) -> bool: ...
+    async def async_validate_learning_item_reference(self, learning_item_id: str) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -1585,6 +1586,55 @@ class ProgressRepository:
 
         await self._storage._async_writer(write)
 
+    async def async_list_leeches(
+        self,
+        *,
+        profile_id: str,
+        track_id: str | None = None,
+    ) -> tuple[dict[str, Any], ...]:
+        """List materialized leech cards for a profile."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            clauses = ["profile_id = ?", "state = 'leech'"]
+            params: list[Any] = [profile_id]
+            if track_id is not None:
+                clauses.append("track_id = ?")
+                params.append(track_id)
+            rows = connection.execute(
+                f"""SELECT profile_id, track_id, card_key, learning_item_id,
+                           prompt_facet_id, answer_facet_id, mastery, box,
+                           seen_count, verified_correct_count, verified_wrong_count,
+                           next_due_at_utc, leech_score, difficulty_factor,
+                           user_state, content_status, policy_version, updated_at_utc
+                    FROM progress
+                    WHERE {" AND ".join(clauses)}
+                    ORDER BY leech_score DESC, updated_at_utc DESC, card_key""",
+                tuple(params),
+            ).fetchall()
+            keys = (
+                "profile_id",
+                "track_id",
+                "card_key",
+                "learning_item_id",
+                "prompt_facet_id",
+                "answer_facet_id",
+                "mastery",
+                "box",
+                "seen_count",
+                "verified_correct_count",
+                "verified_wrong_count",
+                "next_due_at_utc",
+                "leech_score",
+                "difficulty_factor",
+                "user_state",
+                "content_status",
+                "policy_version",
+                "updated_at_utc",
+            )
+            return tuple(dict(zip(keys, row, strict=True)) for row in rows)
+
+        return await self._storage._async_reader(read)
+
     async def async_create_if_absent(
         self,
         *,
@@ -1845,6 +1895,100 @@ class ReviewEventsRepository:
 
         return await self._storage._async_reader(read)
 
+    async def async_recent_verified_card_events(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        card_key: str,
+        since_utc: str,
+    ) -> tuple[dict[str, Any], ...]:
+        """Return trusted verified card events for versioned leech detection."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT mode, result, retrieval_occurred, signal_quality,
+                          pre_state_snapshot, post_state_snapshot, created_at_utc
+                   FROM review_events
+                   WHERE profile_id = ? AND track_id = ? AND card_key = ?
+                     AND created_at_utc >= ?
+                     AND retrieval_occurred = 1
+                     AND mode IN (
+                         'verified_mcq',
+                         'verified_free_text',
+                         'verified_cloze',
+                         'exam_retrieval'
+                     )
+                     AND signal_quality IN ('weak', 'medium', 'strong')
+                     AND result IN ('correct', 'wrong', 'idk')
+                   ORDER BY created_at_utc DESC, id DESC""",
+                (profile_id, track_id, card_key, since_utc),
+            ).fetchall()
+            return tuple(
+                {
+                    "mode": str(row[0]),
+                    "result": str(row[1]),
+                    "retrieval_occurred": bool(row[2]),
+                    "signal_quality": str(row[3]),
+                    "pre_state_snapshot": json.loads(str(row[4])),
+                    "post_state_snapshot": json.loads(str(row[5])),
+                    "created_at_utc": str(row[6]),
+                }
+                for row in rows
+            )
+
+        return await self._storage._async_reader(read)
+
+    async def async_confusions(
+        self,
+        *,
+        profile_id: str,
+        track_id: str | None = None,
+        card_key: str | None = None,
+        limit: int = 50,
+    ) -> tuple[dict[str, Any], ...]:
+        """Aggregate expected/chosen answer confusions from canonical events."""
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            clauses = [
+                "profile_id = ?",
+                "retrieval_occurred = 1",
+                "result IN ('wrong', 'idk')",
+                "expected_answer_id IS NOT NULL",
+                "answer_id IS NOT NULL",
+                "expected_answer_id != answer_id",
+            ]
+            params: list[Any] = [profile_id]
+            if track_id is not None:
+                clauses.append("track_id = ?")
+                params.append(track_id)
+            if card_key is not None:
+                clauses.append("card_key = ?")
+                params.append(card_key)
+            params.append(limit)
+            rows = connection.execute(
+                f"""SELECT card_key, expected_answer_id, answer_id, COUNT(*) AS confusion_count
+                    FROM review_events
+                    WHERE {" AND ".join(clauses)}
+                    GROUP BY card_key, expected_answer_id, answer_id
+                    ORDER BY confusion_count DESC, card_key, expected_answer_id, answer_id
+                    LIMIT ?""",
+                tuple(params),
+            ).fetchall()
+            return tuple(
+                {
+                    "card_key": str(row[0]),
+                    "expected_answer_id": str(row[1]),
+                    "chosen_answer_id": str(row[2]),
+                    "count": int(row[3]),
+                }
+                for row in rows
+            )
+
+        return await self._storage._async_reader(read)
+
     async def async_list_for_card(
         self,
         *,
@@ -1939,6 +2083,161 @@ class ReviewEventsRepository:
                 if connection.in_transaction:
                     connection.rollback()
                 raise
+
+        return await self._storage._async_writer(write)
+
+
+class UserAnnotationsRepository:
+    """Private profile-scoped notes and mnemonics."""
+
+    def __init__(self, storage: RepositoryStorage) -> None:
+        self._storage = storage
+
+    async def async_upsert(
+        self,
+        *,
+        annotation_id: str,
+        profile_id: str,
+        learning_item_id: str | None,
+        card_key: str | None,
+        note: str,
+        created_at_utc: str,
+        updated_at_utc: str,
+    ) -> dict[str, Any]:
+        if (learning_item_id is None) == (card_key is None):
+            raise StateRepositoryError("annotation must target exactly one item or card")
+        if not note.strip():
+            raise StateRepositoryError("annotation note must not be empty")
+        if learning_item_id is not None:
+            if not await self._storage.async_validate_learning_item_reference(learning_item_id):
+                raise ContentReferenceError(
+                    f"unknown active learning item reference: {learning_item_id}"
+                )
+
+        def write(connection: sqlite3.Connection) -> None:
+            if card_key is not None:
+                exists = connection.execute(
+                    """SELECT 1 FROM progress
+                       WHERE profile_id = ? AND card_key = ?
+                       LIMIT 1""",
+                    (profile_id, card_key),
+                ).fetchone()
+                if exists is None:
+                    # Card annotations may precede Progress materialization; validate
+                    # identity against active content through the reader boundary above
+                    # is unavailable here, so require at least one track rule for profile.
+                    exists = connection.execute(
+                        """SELECT 1
+                           FROM track_card_rules AS rule
+                           JOIN tracks AS track ON track.track_id = rule.track_id
+                           WHERE track.profile_id = ? AND rule.card_key = ?
+                             AND rule.enabled = 1
+                           LIMIT 1""",
+                        (profile_id, card_key),
+                    ).fetchone()
+                if exists is None:
+                    raise StateRepositoryError("card is not available to profile")
+            connection.execute(
+                """INSERT INTO user_annotations(
+                       annotation_id, profile_id, learning_item_id, card_key, note,
+                       created_at_utc, updated_at_utc
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(annotation_id) DO UPDATE SET
+                       note = excluded.note,
+                       updated_at_utc = excluded.updated_at_utc
+                   WHERE user_annotations.profile_id = excluded.profile_id""",
+                (
+                    annotation_id,
+                    profile_id,
+                    learning_item_id,
+                    card_key,
+                    note.strip(),
+                    created_at_utc,
+                    updated_at_utc,
+                ),
+            )
+            connection.commit()
+
+        await self._storage._async_writer(write)
+        result = await self.async_get(annotation_id=annotation_id, profile_id=profile_id)
+        if result is None:
+            raise StateRepositoryError("annotation upsert failed")
+        return result
+
+    async def async_get(
+        self,
+        *,
+        annotation_id: str,
+        profile_id: str,
+    ) -> dict[str, Any] | None:
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT annotation_id, profile_id, learning_item_id, card_key,
+                          note, created_at_utc, updated_at_utc
+                   FROM user_annotations
+                   WHERE annotation_id = ? AND profile_id = ?""",
+                (annotation_id, profile_id),
+            ).fetchone()
+            if row is None:
+                return None
+            keys = (
+                "annotation_id",
+                "profile_id",
+                "learning_item_id",
+                "card_key",
+                "note",
+                "created_at_utc",
+                "updated_at_utc",
+            )
+            return dict(zip(keys, row, strict=True))
+
+        return await self._storage._async_reader(read)
+
+    async def async_list(
+        self,
+        *,
+        profile_id: str,
+        learning_item_id: str | None = None,
+        card_key: str | None = None,
+    ) -> tuple[dict[str, Any], ...]:
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            clauses = ["profile_id = ?"]
+            params: list[Any] = [profile_id]
+            if learning_item_id is not None:
+                clauses.append("learning_item_id = ?")
+                params.append(learning_item_id)
+            if card_key is not None:
+                clauses.append("card_key = ?")
+                params.append(card_key)
+            rows = connection.execute(
+                f"""SELECT annotation_id, profile_id, learning_item_id, card_key,
+                           note, created_at_utc, updated_at_utc
+                    FROM user_annotations
+                    WHERE {" AND ".join(clauses)}
+                    ORDER BY updated_at_utc DESC, annotation_id""",
+                tuple(params),
+            ).fetchall()
+            keys = (
+                "annotation_id",
+                "profile_id",
+                "learning_item_id",
+                "card_key",
+                "note",
+                "created_at_utc",
+                "updated_at_utc",
+            )
+            return tuple(dict(zip(keys, row, strict=True)) for row in rows)
+
+        return await self._storage._async_reader(read)
+
+    async def async_delete(self, *, annotation_id: str, profile_id: str) -> bool:
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                "DELETE FROM user_annotations WHERE annotation_id = ? AND profile_id = ?",
+                (annotation_id, profile_id),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
 
         return await self._storage._async_writer(write)
 
@@ -2085,6 +2384,7 @@ class StateRepositories:
     tracks: TracksRepository
     progress: ProgressRepository
     review_events: ReviewEventsRepository
+    user_annotations: UserAnnotationsRepository
     content_reports: ContentReportsRepository
     settings: SettingsRepository
 
@@ -2095,6 +2395,7 @@ class StateRepositories:
             tracks=TracksRepository(storage),
             progress=ProgressRepository(storage),
             review_events=ReviewEventsRepository(storage),
+            user_annotations=UserAnnotationsRepository(storage),
             content_reports=ContentReportsRepository(storage),
             settings=SettingsRepository(storage),
         )
