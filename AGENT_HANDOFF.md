@@ -2,12 +2,29 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.7 are complete. P1 and P2 are
-closed PASS. P3 is in progress on `feat/p3-sessions`. P3.8 has passed its local
-gate but remains blocked on the final real-HA answer/undo/second-user evidence.
-P3.9 is closed PASS. Its public backend selection path supplies the real prepared
-question needed to resume the remaining P3.8 real-HA qualification without a
-test-only fixture.
+P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.9 are complete. P1 and P2 are
+closed PASS. P3 remains in progress on `feat/p3-sessions` for P3.10 onward.
+P3.8 and P3.9 are PASS. P3.8's targeted real-HA qualification ran on 2026-09-23
+at `417ff41df90cf137e2751320d72e3166bdc0793b` after HACS explicitly
+redownloaded `feat/p3-sessions` and HA restarted. It exercised public P3.9
+selection into a real question, simultaneous two-client answer CAS (one primary
+winner, one `locklearn/stale_session` loser, one immutable answer), navigation
+undo, reconnect, Config Entry reload/subscription cleanup, storage diagnostics
+and public cleanup. The baseline three sessions/three answers was restored.
+
+The only unavailable supplemental proof is real viewer/outsider ACL: one HA
+development-user token is configured, and no second usable token exists in the
+declared repository environment. This is documented as
+`viewer/outsider real-HA ACL remains BLOCKED — second HA development-user token unavailable`,
+but is not a P3.8 formal exit blocker. `scripts/p3_8_real_ha_qualification.py`
+is the secret-safe public-API harness; it adds no runtime endpoint, fixture or
+development-mode behavior. Next concrete action: do not extend P3.8/P3.9;
+start the separately scoped P3.10 work package when requested.
+
+Final post-qualification gate in `.venv`: Ruff format PASS (193 files), Ruff
+lint PASS, mypy PASS (106 sources), resource registries PASS and pytest PASS
+(287 tests in 6.85 s). The P3.8 closure is committed locally on
+`feat/p3-sessions`; no frontend, schema or ADR change was required.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,

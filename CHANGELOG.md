@@ -17,7 +17,7 @@ All notable changes will be documented here.
   selection contract and fatigue evidence policy.
 - P3.8 persistent resumable sessions with stored strategy/settings, prepared
   question state, immutable answer attempts and active content-generation pinning
-  (local gate PASS; real HA qualification pending).
+  (PASS, including targeted real-HA qualification through the P3.9 public path).
 - Optimistic session CAS across answer/pause/resume/complete/navigation-undo,
   winner-only subscriptions and cross-client WebSocket resume under real Profile ACL.
 - ADR-0029 documenting the persistent-session source of truth, CAS token,
