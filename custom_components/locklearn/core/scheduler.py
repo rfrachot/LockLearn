@@ -264,16 +264,20 @@ def _greedy_capacity(
 ) -> tuple[datetime, ...]:
     selected: list[datetime] = []
     for candidate in candidates:
-        if _valid_after(
-            candidate,
-            selected,
-            timezone=timezone,
-            minimum_gap_seconds=minimum_gap_seconds,
-            maximum_notifications_per_hour=maximum_notifications_per_hour,
+        if selected and (candidate - selected[-1]).total_seconds() < minimum_gap_seconds:
+            continue
+        if (
+            sum(
+                1
+                for item in selected
+                if _hour_bucket(item, timezone) == _hour_bucket(candidate, timezone)
+            )
+            >= maximum_notifications_per_hour
         ):
-            selected.append(candidate)
-            if len(selected) == requested:
-                break
+            continue
+        selected.append(candidate)
+        if len(selected) == requested:
+            break
     return tuple(selected)
 
 
