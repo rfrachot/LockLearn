@@ -94,11 +94,10 @@ class ReviewPolicyV1:
             + int(snapshot.get("verified_wrong_count", 0)),
             interval_days=DEFAULT_BOX_INTERVAL_DAYS[target_box] * self._difficulty(snapshot),
         )
-        was_leech = snapshot.get("state") == "leech"
         post = dict(snapshot)
         post.update(
             {
-                "state": "leech" if was_leech else "review",
+                "state": "review",
                 "box": target_box,
                 "next_due_at_utc": (now + timedelta(days=interval)).isoformat(),
                 "streak_correct": 0,
@@ -150,10 +149,11 @@ class ReviewPolicyV1:
             interval_days=base_adjusted,
         )
         interval = max(demonstrated_floor, jittered)
+        was_leech = snapshot.get("state") == "leech"
         post = dict(snapshot)
         post.update(
             {
-                "state": "review",
+                "state": "leech" if was_leech else "review",
                 "box": target_box,
                 "seen_count": int(snapshot.get("seen_count", 0)) + 1,
                 "verified_correct_count": int(snapshot.get("verified_correct_count", 0))
