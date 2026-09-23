@@ -396,7 +396,7 @@ class SessionSelectionService:
         selected_review: int,
         target_review: int,
     ) -> list[_Candidate]:
-        for state in ("relearning", "learning", "review", "leech"):
+        for state in ("relearning", "learning"):
             pool = [c for c in available if c.state == state]
             if pool:
                 return pool
