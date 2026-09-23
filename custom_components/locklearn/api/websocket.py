@@ -19,6 +19,7 @@ from ..core.integrity import IntegrityServiceError
 from ..core.profiles import ProfileValidationError
 from ..core.progress_state import ProgressUserStateError
 from ..core.session_selection import SessionSelectionError
+from ..core.stats import StatsServiceError
 from ..core.sessions import SessionQuestion, SessionValidationError
 from ..core.tracks import TrackValidationError
 from ..runtime import LockLearnRuntime
@@ -811,6 +812,45 @@ async def ws_calibration_sample(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "locklearn/stats/get",
+        vol.Required("profile_id"): str,
+        vol.Optional("track_id"): str,
+        vol.Optional("recent_verified_limit", default=30): vol.All(
+            int, vol.Range(min=1, max=200)
+        ),
+        vol.Optional("calibration_days", default=7): vol.All(int, vol.Range(min=1, max=90)),
+        vol.Optional("confusion_limit", default=10): vol.All(int, vol.Range(min=1, max=100)),
+    }
+)
+@websocket_api.async_response
+async def ws_stats_get(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return private pedagogically honest dashboard statistics."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.READ
+    ):
+        return
+    try:
+        result = await runtime.stats.async_get(
+            profile_id=profile_id,
+            track_id=msg.get("track_id"),
+            recent_verified_limit=msg["recent_verified_limit"],
+            calibration_days=msg["calibration_days"],
+            confusion_limit=msg["confusion_limit"],
+        )
+    except StatsServiceError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "locklearn/difficulties/list",
         vol.Required("profile_id"): str,
         vol.Optional("track_id"): str,
@@ -1590,6 +1630,7 @@ COMMANDS = (
     ws_content_report,
     ws_progress_set_user_state,
     ws_calibration_sample,
+    ws_stats_get,
     ws_difficulties_list,
     ws_confusions_list,
     ws_annotations_list,
