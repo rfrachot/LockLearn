@@ -96,6 +96,20 @@ scenario fails or the negative control unexpectedly passes. ADR-0035 records
 the methodology. Do not tune SRS/preset defaults or mark P3.14 PASS until the
 simulation output and normal repository gate are both green.
 
+P3.14 measured qualification on 2026-09-23 is functionally green:
+child_typical, standard_typical, standard_mixed, standard_bursty and
+intensive_typical are sustainable under due-first new-card throttling.
+standard_mixed remained bounded at backlog 77 final / 96 max with 208 deferred
+new cards and max overdue age one day at 0.818412 verified accuracy.
+standard_bursty remained bounded at 48 / 97 with 112 deferred new cards and max
+overdue one day. The explicit stress negative control remained unsustainable
+and triggered due_queue_explosion, relearning_oscillation and
+unrealistic_daily_workload, proving detector sensitivity. The same run had
+Ruff lint PASS, mypy PASS (121 sources), resource registries PASS and pytest
+PASS (318 tests in 15.01 s). One Ruff format-only wrap was fixed afterward.
+Run the final repository gate; if green, close P3.14 and the full P3 phase
+without changing SRS/preset defaults.
+
 The only unavailable supplemental proof is real viewer/outsider ACL: one HA
 development-user token is configured, and no second usable token exists in the
 declared repository environment. This is documented as
