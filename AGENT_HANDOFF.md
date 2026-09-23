@@ -2,10 +2,9 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.11 are complete. P1 and P2 are
-closed PASS. P3 remains in progress on `feat/p3-sessions`. P3.10 and P3.11
-are PASS. P3.12 implementation is complete and pending the repository quality
-gate.
+P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.12 are complete. P1 and P2 are
+closed PASS. P3 remains in progress on `feat/p3-sessions`. P3.10–P3.12 are
+PASS.
 P3.8 and P3.9 are PASS. P3.8's targeted real-HA qualification ran on 2026-09-23
 at `417ff41df90cf137e2751320d72e3166bdc0793b` after HACS explicitly
 redownloaded `feat/p3-sessions` and HA restarted. It exercised public P3.9
@@ -54,9 +53,10 @@ leech state and produces card-level changed-field divergences. Any unsupported
 historical replay mode makes the operation fail closed with `applied=false` and
 no Progress replacement. `stats_daily` rebuild is independent and excludes
 undone events. Admin rebuild/recompute use OperationRegistry and expose terminal
-result payloads. ADR-0033 records the design. New integrity, operation and
-WebSocket ACL tests are present. Do not mark P3.12 PASS until the normal full
-repository gate is green.
+result payloads. ADR-0033 records the design. Integrity, operation and WebSocket ACL tests are present. Final
+P3.12 gate on 2026-09-23: Ruff format PASS (206 files), Ruff lint PASS, mypy
+PASS (116 sources), resource registries PASS and pytest PASS (309 tests in
+8.20 s).
 
 The only unavailable supplemental proof is real viewer/outsider ACL: one HA
 development-user token is configured, and no second usable token exists in the
@@ -64,8 +64,8 @@ declared repository environment. This is documented as
 `viewer/outsider real-HA ACL remains BLOCKED — second HA development-user token unavailable`,
 but is not a P3.8 formal exit blocker. `scripts/p3_8_real_ha_qualification.py`
 is the secret-safe public-API harness; it adds no runtime endpoint, fixture or
-development-mode behavior. Next concrete action: finish the P3.12 repository gate. If green, close P3.12
-and start P3.13 only when requested.
+development-mode behavior. Next concrete action: do not extend P3.8–P3.12; start the separately scoped
+P3.13 work package when requested.
 
 Final post-qualification gate in `.venv`: Ruff format PASS (193 files), Ruff
 lint PASS, mypy PASS (106 sources), resource registries PASS and pytest PASS
