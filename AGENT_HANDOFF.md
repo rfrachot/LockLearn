@@ -4,7 +4,7 @@
 
 P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.12 are complete. P1 and P2 are
 closed PASS. P3 remains in progress on `feat/p3-sessions`. P3.10–P3.12 are
-PASS.
+PASS. P3.13 implementation is complete and pending the repository quality gate.
 P3.8 and P3.9 are PASS. P3.8's targeted real-HA qualification ran on 2026-09-23
 at `417ff41df90cf137e2751320d72e3166bdc0793b` after HACS explicitly
 redownloaded `feat/p3-sessions` and HA restarted. It exercised public P3.9
@@ -58,14 +58,29 @@ P3.12 gate on 2026-09-23: Ruff format PASS (206 files), Ruff lint PASS, mypy
 PASS (116 sources), resource registries PASS and pytest PASS (309 tests in
 8.20 s).
 
+P3.13 makes `stats_daily` a live rebuildable projection: every committed
+ReviewEvent refreshes its historical local-date row atomically, while undo
+refreshes both the source and compensation days. `locklearn/stats/get` is
+profile-private READ-only and reports due-through-local-midnight, new/learning/
+review/relearning/leech counts, latest trusted verified retention, recent
+verified accuracy, secondary time-decayed mastery, metacognitive calibration,
+frequent confusions, daily aggregates and streak status. Calibration counts
+distinct cards declared known through P3.10 `known_already` audit or positive
+post-retrieval self-assessment and compares the first later trusted verified
+retrieval. Streak uses an 80% due-queue goal by default, configurable absolute
+minimum and one grace day; no-due days are neutral. Historical local dates and
+timezone names remain immutable when a profile timezone changes. ADR-0034
+records the design. New stats/domain/timezone/WebSocket ACL tests are present.
+Do not mark P3.13 PASS until the normal full repository gate is green.
+
 The only unavailable supplemental proof is real viewer/outsider ACL: one HA
 development-user token is configured, and no second usable token exists in the
 declared repository environment. This is documented as
 `viewer/outsider real-HA ACL remains BLOCKED — second HA development-user token unavailable`,
 but is not a P3.8 formal exit blocker. `scripts/p3_8_real_ha_qualification.py`
 is the secret-safe public-API harness; it adds no runtime endpoint, fixture or
-development-mode behavior. Next concrete action: do not extend P3.8–P3.12; start the separately scoped
-P3.13 work package when requested.
+development-mode behavior. Next concrete action: finish the P3.13 repository gate. If green, close P3.13
+and start P3.14 only when requested.
 
 Final post-qualification gate in `.venv`: Ruff format PASS (193 files), Ruff
 lint PASS, mypy PASS (106 sources), resource registries PASS and pytest PASS
