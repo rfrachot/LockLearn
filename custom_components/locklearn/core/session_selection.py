@@ -146,6 +146,9 @@ class SessionSelectionService:
     def validate_session_settings(self, settings: dict[str, Any]) -> None:
         """Validate settings that apply even before card preparation."""
         self._fatigue_threshold(settings)
+        raw_leeches_only = settings.get("leeches_only", False)
+        if not isinstance(raw_leeches_only, bool):
+            raise SessionSelectionError("leeches_only must be boolean")
 
     async def async_prepare(
         self,
@@ -166,6 +169,7 @@ class SessionSelectionService:
 
         requested_cards = self._requested_cards(settings, profile)
         allowed_types = self._allowed_content_types(settings)
+        leeches_only = bool(settings.get("leeches_only", False))
         weights = await self._tracks.async_get_content_weights(track_id)
         raw_candidates = await self._tracks.async_session_candidates(
             profile_id=profile_id,
@@ -176,6 +180,8 @@ class SessionSelectionService:
         for row in raw_candidates:
             candidate = _Candidate.from_row(row)
             if not self._user_state_available(candidate, now=now):
+                continue
+            if leeches_only and candidate.state != "leech":
                 continue
             if allowed_types is not None and candidate.content_type not in allowed_types:
                 continue
