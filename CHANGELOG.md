@@ -5,6 +5,14 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P3.12 append-only progress undo using pre-state snapshots, compensating
+  ReviewEvents and audited undo targets.
+- Explicit admin progress rebuild, independent stats rebuild and target-policy
+  recompute operations with observable terminal result/divergence reports.
+- Fail-closed policy recompute that excludes undone evidence and refuses to
+  replace Progress when historical event semantics cannot be replayed safely.
+- ADR-0033 documenting undo, historical rebuild and recompute boundaries.
+
 - P3.11 versioned leech detection using the V1 6-of-10 and 8-relapse
   thresholds over trusted verified retrievals in a 60-day window.
 - Profile-private difficulties/confusion/annotation WebSocket surfaces,
