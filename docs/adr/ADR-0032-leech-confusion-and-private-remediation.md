@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed for P3.11 on 2026-09-23. Implementation pending repository quality gate.
+Accepted for P3.11 on 2026-09-23 after the repository quality gate passed.
 
 ## Context
 
