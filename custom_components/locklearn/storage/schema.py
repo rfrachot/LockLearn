@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS progress (
     learning_item_id TEXT,
     prompt_facet_id TEXT,
     answer_facet_id TEXT,
-    state TEXT NOT NULL CHECK (state IN ('new', 'learning', 'review', 'relearning')),
+    state TEXT NOT NULL CHECK (state IN ('new', 'learning', 'review', 'relearning', 'leech')),
     mastery REAL NOT NULL DEFAULT 0 CHECK (mastery >= 0 AND mastery <= 1),
     box INTEGER NOT NULL DEFAULT 0 CHECK (box >= 0),
     seen_count INTEGER NOT NULL DEFAULT 0 CHECK (seen_count >= 0),
