@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 import voluptuous as vol
@@ -18,6 +19,7 @@ from ..core.grading import FreeTextGradingResult
 from ..core.integrity import IntegrityServiceError
 from ..core.profiles import ProfileValidationError
 from ..core.progress_state import ProgressUserStateError
+from ..core.scheduler import SchedulerValidationError
 from ..core.session_selection import SessionSelectionError
 from ..core.sessions import SessionQuestion, SessionValidationError
 from ..core.stats import StatsServiceError
@@ -1611,6 +1613,43 @@ async def ws_operation_cancel(
     connection.send_result(msg["id"])
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/scheduler/preview",
+        vol.Required("profile_id"): str,
+        vol.Optional("local_date"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_scheduler_preview(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Preview deterministic generic slots without materializing them."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.READ,
+    ):
+        return
+    try:
+        raw_date = msg.get("local_date")
+        local_date = None if raw_date is None else date.fromisoformat(raw_date)
+        preview = await runtime.scheduler.async_preview(
+            profile_id=profile_id,
+            local_date=local_date,
+        )
+    except (SchedulerValidationError, ValueError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], preview)
+
+
 COMMANDS = (
     ws_bootstrap,
     ws_profiles_list,
@@ -1641,6 +1680,7 @@ COMMANDS = (
     ws_admin_rebuild_stats,
     ws_admin_recompute_progress,
     ws_admin_storage_status,
+    ws_scheduler_preview,
     ws_session_start,
     ws_session_get,
     ws_session_answer,
