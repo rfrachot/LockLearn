@@ -5,6 +5,17 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P3.13 live `stats_daily` materialization on committed ReviewEvents with
+  undo-aware per-day repair using the same rebuild primitive.
+- Private `locklearn/stats/get` dashboard backend for due-today, current
+  learning states, verified retention/accuracy, secondary mastery, daily
+  aggregates, frequent confusions and streak state.
+- Card-based metacognitive calibration comparing explicit/self-assessed known
+  declarations with the first later trusted verified retrieval.
+- Due-queue streak semantics with 80% default goal, configurable minimum,
+  one grace day and neutral no-due days reconstructed from historical SRS state.
+- ADR-0034 documenting dashboard honesty, historical timezone and streak rules.
+
 - P3.12 append-only progress undo using pre-state snapshots, compensating
   ReviewEvents and audited undo targets.
 - Explicit admin progress rebuild, independent stats rebuild and target-policy
