@@ -2287,9 +2287,7 @@ class ReviewEventsRepository:
                 ).fetchone()
                 if current_row is None:
                     raise StateRepositoryError("undo target has no current progress")
-                current_progress = dict(
-                    zip(self._PROGRESS_COLUMNS, current_row, strict=True)
-                )
+                current_progress = dict(zip(self._PROGRESS_COLUMNS, current_row, strict=True))
                 if any(
                     current_progress[column] != event.pre_state_snapshot.get(column)
                     for column in self._PROGRESS_COLUMNS
@@ -2562,7 +2560,10 @@ class ReviewEventsRepository:
                         item["hints_used"] += 1
                     if str(pre.get("state")) in {"review", "leech"} and retrieval:
                         item["reviewed_cards"].add(str(post["card_key"]))
-                    if str(pre.get("state")) == "relearning" or str(post.get("state")) == "relearning":
+                    if (
+                        str(pre.get("state")) == "relearning"
+                        or str(post.get("state")) == "relearning"
+                    ):
                         item["relearning_cards"].add(str(post["card_key"]))
                     if str(post.get("state")) == "leech":
                         item["leech_cards"].add(str(post["card_key"]))
