@@ -83,9 +83,10 @@ A scenario is flagged when any of these conditions occur:
 - sustained/final due backlog exceeds declared capacity bounds;
 - a card remains overdue for more than seven days;
 - a card repeatedly exhausts the bounded same-day short-step attempt budget;
-- a card reaches box 6+ while verified accuracy remains below 75%;
-- p95 daily interactions exceed the declared review capacity plus a bounded
-  short-step budget for new cards.
+- a card reaches a box that cannot be justified by its accumulated verified
+  successes (box > 1 + verified_correct_count, capped at box 7);
+- p95 daily interactions exceed the declared review capacity plus the expected
+  short-step cost of new cards and a 50% review-capacity burst margin.
 
 The thresholds are quality-gate assumptions and are recorded in the simulator
 instead of being hidden in tests.
