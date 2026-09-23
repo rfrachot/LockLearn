@@ -94,26 +94,24 @@ async def test_two_websocket_clients_get_cas_and_subscription(
     track_response = await client_one.receive_json()
     assert track_response["success"] is True
     track_id = track_response["result"]["track_id"]
-    prompt_id, answer_id = facet_ids(ITEM_A)
-
-    started = await runtime.sessions.async_start(
-        profile_id,
-        track_id,
-        session_type="bounded",
-        strategy="prepared-test",
-        settings={"requested_cards": 1},
-        questions=(
-            SessionQuestion(
-                question_id="question-1",
-                card_key=card_key,
-                learning_item_id=ITEM_A,
-                prompt_facet_id=prompt_id,
-                answer_facet_id=answer_id,
-                payload={"format": "mcq", "dataset_generation": "generation-session-websocket"},
-            ),
-        ),
+    await client_one.send_json_auto_id(
+        {
+            "type": "locklearn/session/start",
+            "profile_id": profile_id,
+            "track_id": track_id,
+            "session_type": "bounded",
+            "strategy": "default",
+            "settings": {"requested_cards": 1},
+        }
     )
+    started_response = await client_one.receive_json()
+    assert started_response["success"] is True
+    started = started_response["result"]
+    assert started["question_count"] == 1
+    assert started["current_question"] is not None
+    assert started["fatigue_advice"]["detected"] is False
     session_id = started["id"]
+    question_id = started["current_question"]["question_id"]
 
     client_two = await hass_ws_client(hass)
     await client_two.send_json_auto_id(
@@ -121,13 +119,13 @@ async def test_two_websocket_clients_get_cas_and_subscription(
     )
     subscribed = await client_two.receive_json()
     assert subscribed["success"] is True
-    assert subscribed["result"]["current_question"]["question_id"] == "question-1"
+    assert subscribed["result"]["current_question"]["question_id"] == question_id
 
     answer = {
         "type": "locklearn/session/answer",
         "session_id": session_id,
         "expected_version": 1,
-        "question_id": "question-1",
+        "question_id": question_id,
         "answer": {"choice": "a"},
     }
     await client_one.send_json_auto_id(answer)
