@@ -85,8 +85,9 @@ the opening due queue consumes capacity, matching P3.9 due-first session
 selection; throttled cards/days are reported explicitly. The matrix
 covers typical, mixed and bursty learners plus an explicit negative-control
 stress case. Detectors cover sustained due backlog, >7-day starvation,
-short-step cap exhaustion/relearning oscillation, box promotion beyond
-accumulated verified-success evidence, and excessive p95 daily interactions
+systemic short-step cap exhaustion/relearning oscillation (repeat on a card or
+>=1% of introduced cards), box promotion beyond accumulated verified-success
+evidence, and excessive p95 daily interactions
 after accounting for expected short-step work.
 `tests/backend/test_srs_simulation.py` checks reproducibility, preset coverage,
 required-scenario sustainability and negative-control sensitivity.
