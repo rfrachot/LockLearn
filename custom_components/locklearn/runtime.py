@@ -60,6 +60,7 @@ class LockLearnRuntime:
     signal_policy: SignalPolicy
     selection: SelectionConstraintService
     session_selection: SessionSelectionService
+    stats: StatsService
     reviews: ReviewEventService
     datasets: DatasetManager
 
@@ -160,6 +161,13 @@ class LockLearnRuntime:
                 signal_policy=SignalPolicy(review_policy),
                 selection=selection,
                 session_selection=session_selection,
+                stats=StatsService(
+                    storage.repositories.profiles,
+                    storage.repositories.tracks,
+                    storage.repositories.progress,
+                    storage.repositories.review_events,
+                    review_policy=review_policy,
+                ),
                 reviews=reviews,
                 datasets=datasets,
             )
