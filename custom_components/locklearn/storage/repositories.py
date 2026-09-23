@@ -1170,13 +1170,54 @@ class TracksRepository:
 
         await self._storage._async_writer(write)
 
+    async def async_card_reference(
+        self,
+        *,
+        track_id: str,
+        card_key: str,
+    ) -> CardReference | None:
+        """Resolve one enabled active CardDefinition selected by a Track."""
+
+        def read(connection: sqlite3.Connection) -> CardReference | None:
+            row = connection.execute(
+                """SELECT card.card_key, card.learning_item_id,
+                          card.prompt_facet_id, card.answer_facet_id
+                   FROM track_card_rules AS rule
+                   JOIN content.card_definitions AS card
+                     ON card.card_key = rule.card_key
+                    AND card.lifecycle_status = 'active'
+                   JOIN content.learning_items AS item
+                     ON item.learning_item_id = card.learning_item_id
+                    AND item.lifecycle_status = 'active'
+                   JOIN content.facets AS prompt
+                     ON prompt.facet_id = card.prompt_facet_id
+                    AND prompt.lifecycle_status = 'active'
+                   JOIN content.facets AS answer
+                     ON answer.facet_id = card.answer_facet_id
+                    AND answer.lifecycle_status = 'active'
+                   WHERE rule.track_id = ? AND rule.card_key = ?
+                     AND rule.enabled = 1
+                   LIMIT 1""",
+                (track_id, card_key),
+            ).fetchone()
+            if row is None:
+                return None
+            return CardReference(
+                card_key=str(row[0]),
+                learning_item_id=str(row[1]),
+                prompt_facet_id=str(row[2]),
+                answer_facet_id=str(row[3]),
+            )
+
+        return await self._storage._async_reader(read)
+
     async def async_session_candidates(
         self,
         *,
         profile_id: str,
         track_id: str,
     ) -> tuple[dict[str, Any], ...]:
-        """Load P3.9 session candidates from the pinned active PackVersion."""
+        """Load P3.9/P3.10 candidate facts from the pinned active PackVersion."""
 
         def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
             pin = connection.execute(
@@ -1196,7 +1237,9 @@ class TracksRepository:
                           card.prompt_facet_id, card.answer_facet_id,
                           item.content_type,
                           COALESCE(progress.state, 'new') AS progress_state,
-                          progress.next_due_at_utc, pack_item.position
+                          progress.next_due_at_utc, pack_item.position,
+                          COALESCE(progress.user_state, 'active') AS user_state,
+                          progress.suspend_until_utc
                    FROM track_card_rules AS rule
                    JOIN content.card_definitions AS card
                      ON card.card_key = rule.card_key
@@ -1213,7 +1256,6 @@ class TracksRepository:
                     AND progress.card_key = rule.card_key
                    WHERE rule.track_id = ? AND rule.enabled = 1
                      AND rule.card_key IS NOT NULL
-                     AND COALESCE(progress.user_state, 'active') = 'active'
                      AND COALESCE(progress.content_status, 'active') = 'active'
                    ORDER BY pack_item.position, rule.card_key""",
                 (pack_version_id, profile_id, track_id),
@@ -1241,6 +1283,8 @@ class TracksRepository:
                     "state": str(row[5]),
                     "next_due_at_utc": None if row[6] is None else str(row[6]),
                     "pack_position": int(row[7]),
+                    "user_state": str(row[8]),
+                    "suspend_until_utc": None if row[9] is None else str(row[9]),
                     "confusable_group_ids": tuple(confusable_by_item.get(str(row[1]), ())),
                 }
                 for row in rows
@@ -1403,7 +1447,7 @@ class ProgressRepository:
                           prompt_facet_id, answer_facet_id, state, mastery, box,
                           seen_count, verified_correct_count, verified_wrong_count,
                           self_known_count, self_review_count, next_due_at_utc,
-                          user_state, content_status, policy_version,
+                          user_state, suspend_until_utc, content_status, policy_version,
                           dataset_generation, normalization_version, updated_at_utc
                    FROM progress
                    WHERE profile_id = ? AND track_id = ? AND card_key = ?""",
@@ -1428,6 +1472,7 @@ class ProgressRepository:
                 "self_review_count",
                 "next_due_at_utc",
                 "user_state",
+                "suspend_until_utc",
                 "content_status",
                 "policy_version",
                 "dataset_generation",
@@ -1437,6 +1482,108 @@ class ProgressRepository:
             return dict(zip(keys, row, strict=True))
 
         return await self._storage._async_reader(read)
+
+    async def async_set_user_state(
+        self,
+        *,
+        actor_user_id: str,
+        profile_id: str,
+        track_id: str,
+        card: CardReference,
+        user_state: str,
+        suspend_until_utc: str | None,
+        dataset_generation: str,
+        updated_at_utc: str,
+    ) -> None:
+        """Upsert user-owned card state without changing SRS scheduling fields."""
+        valid = await self._storage.async_validate_card_reference(
+            card_key=card.card_key,
+            learning_item_id=card.learning_item_id,
+            prompt_facet_id=card.prompt_facet_id,
+            answer_facet_id=card.answer_facet_id,
+        )
+        if not valid:
+            raise ContentReferenceError(f"unknown active card reference: {card.card_key}")
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                track = connection.execute(
+                    "SELECT profile_id FROM tracks WHERE track_id = ?",
+                    (track_id,),
+                ).fetchone()
+                if track is None or str(track[0]) != profile_id:
+                    raise StateRepositoryError("track does not belong to profile")
+                selected = connection.execute(
+                    """SELECT 1 FROM track_card_rules
+                       WHERE track_id = ? AND card_key = ? AND enabled = 1
+                       LIMIT 1""",
+                    (track_id, card.card_key),
+                ).fetchone()
+                if selected is None:
+                    raise StateRepositoryError("card is not enabled in track")
+
+                previous = connection.execute(
+                    """SELECT user_state, suspend_until_utc
+                       FROM progress
+                       WHERE profile_id = ? AND track_id = ? AND card_key = ?""",
+                    (profile_id, track_id, card.card_key),
+                ).fetchone()
+                connection.execute(
+                    """INSERT INTO progress(
+                           profile_id, track_id, card_key, learning_item_id,
+                           prompt_facet_id, answer_facet_id, state, user_state,
+                           suspend_until_utc, dataset_generation, updated_at_utc
+                       ) VALUES (?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?)
+                       ON CONFLICT(profile_id, track_id, card_key) DO UPDATE SET
+                           user_state = excluded.user_state,
+                           suspend_until_utc = excluded.suspend_until_utc,
+                           updated_at_utc = excluded.updated_at_utc""",
+                    (
+                        profile_id,
+                        track_id,
+                        card.card_key,
+                        card.learning_item_id,
+                        card.prompt_facet_id,
+                        card.answer_facet_id,
+                        user_state,
+                        suspend_until_utc,
+                        dataset_generation,
+                        updated_at_utc,
+                    ),
+                )
+                payload = json.dumps(
+                    {
+                        "track_id": track_id,
+                        "card_key": card.card_key,
+                        "learning_item_id": card.learning_item_id,
+                        "prompt_facet_id": card.prompt_facet_id,
+                        "answer_facet_id": card.answer_facet_id,
+                        "previous_user_state": "active" if previous is None else str(previous[0]),
+                        "previous_suspend_until_utc": (
+                            None if previous is None or previous[1] is None else str(previous[1])
+                        ),
+                        "user_state": user_state,
+                        "suspend_until_utc": suspend_until_utc,
+                        "dataset_generation": dataset_generation,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+                connection.execute(
+                    """INSERT INTO audit_events(
+                           event_type, actor_user_id, profile_id, payload_json, created_at_utc
+                       ) VALUES ('progress_user_state', ?, ?, ?, ?)""",
+                    (actor_user_id, profile_id, payload, updated_at_utc),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
 
     async def async_create_if_absent(
         self,
