@@ -204,8 +204,7 @@ async def test_selection_prioritizes_short_steps_and_reserves_final_quarter() ->
 @pytest.mark.asyncio
 async def test_new_card_quota_is_counted_in_cards_for_profile_local_date() -> None:
     candidates = tuple(
-        _candidate(index, state="new", content_type="vocabulary")
-        for index in range(1, 6)
+        _candidate(index, state="new", content_type="vocabulary") for index in range(1, 6)
     )
     service = _service(candidates, reviews=_Reviews(introductions=7))
 
@@ -239,10 +238,7 @@ async def test_session_plan_does_not_prequeue_confusable_new_cards_together() ->
 
     selected_keys = {item.card_key for item in selected}
     assert not {"card-1", "card-2"} <= selected_keys
-    assert all(
-        item.payload["selection"]["progress_state"] != "new"
-        for item in selected[3:]
-    )
+    assert all(item.payload["selection"]["progress_state"] != "new" for item in selected[3:])
 
 
 @pytest.mark.asyncio
