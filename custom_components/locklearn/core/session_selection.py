@@ -305,8 +305,9 @@ class SessionSelectionService:
         weights: dict[str, float],
     ) -> list[_Candidate]:
         due = [c for c in candidates if c.state != "new"]
+        scheduled_due = [c for c in due if c.state != "leech"]
         new = [c for c in candidates if c.state == "new"]
-        due_target = min(len({c.learning_item_id for c in due}), requested_cards)
+        due_target = min(len({c.learning_item_id for c in scheduled_due}), requested_cards)
         new_target = min(
             new_quota,
             len({candidate.learning_item_id for candidate in new}),
