@@ -1,0 +1,36 @@
+# Scheduler
+
+LockLearn V1 separates **time opportunities** from **pedagogical selection**.
+
+## P4.1 contract
+
+A Profile scheduler resolves:
+
+- Profile timezone;
+- active weekdays and active windows;
+- quiet hours;
+- minimum gap between notifications;
+- maximum notifications per local hour;
+- Profile daily push budget.
+
+Generation is deterministic for `(profile_id, local_date, scheduler_config_version)`.
+`locklearn/scheduler/preview` uses the same rules as materialization but writes
+nothing.
+
+Once a row exists in `scheduled_slots`, that row is authoritative. Later
+Profile/config edits do not rewrite its timestamp, seed, config version or
+status. A later config version may materialize additional future rows; P4.2+
+owns reconciliation/cancellation policy.
+
+P4.1 slots deliberately contain no CardDefinition and do not bind a Track or
+notification target. Content is selected at send time so current SRS state is
+used rather than stale planning state.
+
+## P4.1 boundaries
+
+Cross-midnight active windows, DST duplicated/nonexistent times, timezone
+changes, restart/clock-jump reconciliation are P4.2.
+
+Multi-track/target arbitration and capacity Repairs are P4.3. Receptivity and
+routine hooks are P4.4. Missed/pending/backoff policy is P4.5. Notification
+interactions/rendering are P4.6/P4.7.
