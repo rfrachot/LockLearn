@@ -864,9 +864,15 @@ async def ws_confusions_list(
         runtime, connection, msg["id"], profile_id, ProfilePermission.READ
     ):
         return
+    track_id = msg.get("track_id")
+    if track_id is not None:
+        track = await runtime.storage.repositories.tracks.async_get(track_id)
+        if track is None or str(track["profile_id"]) != profile_id:
+            connection.send_error(msg["id"], ERR_NOT_FOUND, "Track not found")
+            return
     items = await runtime.difficulties.async_list_confusions(
         profile_id=profile_id,
-        track_id=msg.get("track_id"),
+        track_id=track_id,
         card_key=msg.get("card_key"),
         limit=msg["limit"],
     )
@@ -931,7 +937,7 @@ async def ws_annotations_create(
             learning_item_id=msg.get("learning_item_id"),
             card_key=msg.get("card_key"),
         )
-    except (DifficultyServiceError, ContentReferenceError, StateRepositoryError, ValueError) as err:
+    except (DifficultyServiceError, ContentReferenceError, StateRepositoryError) as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     connection.send_result(msg["id"], item)
@@ -964,7 +970,7 @@ async def ws_annotations_update(
             annotation_id=msg["annotation_id"],
             note=msg["note"],
         )
-    except (DifficultyServiceError, StateRepositoryError, ValueError) as err:
+    except (DifficultyServiceError, StateRepositoryError) as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     connection.send_result(msg["id"], item)
