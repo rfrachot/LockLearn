@@ -24,6 +24,7 @@ from .core.review_policy import ReviewPolicyV1
 from .core.reviews import ReviewEventService
 from .core.selection import SelectionConstraintService
 from .core.session_selection import SessionSelectionService
+from .core.stats import StatsService
 from .core.sessions import SessionService
 from .core.signals import SignalPolicy
 from .core.tracks import TrackService
