@@ -182,7 +182,7 @@ async def test_v1_state_migrates_out_of_place_with_backup_and_preserves_rows(
     try:
         migrated = sqlite3.connect(state_path)
         try:
-            assert migrated.execute("SELECT version FROM schema_version").fetchone() == (2,)
+            assert migrated.execute("SELECT version FROM schema_version").fetchone() == (DB_SCHEMA_VERSION,)
             assert migrated.execute("SELECT id, type, strategy FROM sessions").fetchone() == (
                 "legacy-session",
                 "learn",
@@ -338,5 +338,56 @@ async def test_cross_domain_integrity_audit_detects_raw_invalid_state(tmp_path: 
                 "reason": "missing_card_identity",
             },
         )
+    finally:
+        await storage.async_close()
+
+
+async def test_v2_state_migrates_to_v3_and_accepts_leech_state(tmp_path: Path) -> None:
+    from custom_components.locklearn.storage.schema import STATE_SCHEMA
+
+    state_path = tmp_path / "state" / "state.db"
+    state_path.parent.mkdir(parents=True)
+    v2_schema = STATE_SCHEMA.replace(
+        "state IN ('new', 'learning', 'review', 'relearning', 'leech')",
+        "state IN ('new', 'learning', 'review', 'relearning')",
+    )
+    connection = sqlite3.connect(state_path)
+    try:
+        connection.executescript(v2_schema)
+        connection.execute("INSERT INTO schema_version(version) VALUES (2)")
+        connection.execute(
+            """INSERT INTO progress(
+                   profile_id, track_id, card_key, state, updated_at_utc
+               ) VALUES ('profile-v2', 'track-v2', 'card-v2', 'review', ?)""",
+            ("2026-09-23T20:00:00+00:00",),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    storage = SQLiteStorage(StoragePaths(state_path, tmp_path / "content" / "current.db"))
+    await storage.async_open()
+    try:
+        migrated = sqlite3.connect(state_path)
+        try:
+            assert migrated.execute("SELECT version FROM schema_version").fetchone() == (
+                DB_SCHEMA_VERSION,
+            )
+            assert migrated.execute(
+                "SELECT state FROM progress WHERE card_key = 'card-v2'"
+            ).fetchone() == ("review",)
+            migrated.execute(
+                """UPDATE progress SET state = 'leech'
+                   WHERE profile_id = 'profile-v2'
+                     AND track_id = 'track-v2'
+                     AND card_key = 'card-v2'"""
+            )
+            migrated.commit()
+            assert migrated.execute(
+                "SELECT state FROM progress WHERE card_key = 'card-v2'"
+            ).fetchone() == ("leech",)
+        finally:
+            migrated.close()
+        assert state_path.with_name("state.db.pre-migration-v2.bak").is_file()
     finally:
         await storage.async_close()
