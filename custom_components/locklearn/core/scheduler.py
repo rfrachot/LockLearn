@@ -514,6 +514,8 @@ class SchedulerService:
                 minimum_gap_seconds=provisional.minimum_gap_seconds,
                 maximum_notifications_per_hour=provisional.maximum_notifications_per_hour,
                 quiet_hours=provisional.quiet_hours,
+                receptive_when=provisional.receptive_when,
+                defer_window_minutes=provisional.defer_window_minutes,
             )
         return provisional, daily_push_budget
 
