@@ -76,7 +76,7 @@
 - **P3.6** — Quiz engine, distractors and corrective feedback (complete)
 - **P3.7** — Panel free-text grading and content-quality feedback (complete)
 - **P3.8** — Persistent sessions, concurrency and cross-client resume (local gate PASS; real HA qualification pending)
-- **P3.9** — Fatigue-aware session selection and interleaving
+- **P3.9** — Fatigue-aware session selection and interleaving (implemented; quality gate pending)
 - **P3.10** — Known-already, suspend/bury and calibration
 - **P3.11** — Leech detection, confusion matrix and personal annotations
 - **P3.12** — Undo, integrity rebuild and algorithmic recompute
