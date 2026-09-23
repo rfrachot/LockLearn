@@ -53,9 +53,7 @@ class LeechPolicyV1:
         recent = events[:LEECH_RECENT_ATTEMPTS_V1]
         failures = sum(str(event.get("result")) in _FAILURE_RESULTS for event in recent)
         relapses = sum(self._is_verified_relapse(event) for event in events)
-        trigger_failures = (
-            len(recent) >= LEECH_RECENT_ATTEMPTS_V1 and failures >= LEECH_FAILURES_V1
-        )
+        trigger_failures = len(recent) >= LEECH_RECENT_ATTEMPTS_V1 and failures >= LEECH_FAILURES_V1
         trigger_relapses = relapses >= LEECH_RELAPSES_V1
         detected = trigger_failures or trigger_relapses
         score = max(
