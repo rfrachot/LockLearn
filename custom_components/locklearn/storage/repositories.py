@@ -2121,8 +2121,9 @@ class UserAnnotationsRepository:
             raise StateRepositoryError("annotation must target exactly one item or card")
         if not note.strip():
             raise StateRepositoryError("annotation note must not be empty")
-        if learning_item_id is not None and not await self._storage.async_validate_learning_item_reference(
-            learning_item_id
+        if (
+            learning_item_id is not None
+            and not await self._storage.async_validate_learning_item_reference(learning_item_id)
         ):
             raise ContentReferenceError(
                 f"unknown active learning item reference: {learning_item_id}"
