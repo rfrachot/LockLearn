@@ -808,7 +808,6 @@ async def ws_calibration_sample(
     connection.send_result(msg["id"], sample.as_dict())
 
 
-
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "locklearn/difficulties/list",
