@@ -19,8 +19,8 @@ from ..core.integrity import IntegrityServiceError
 from ..core.profiles import ProfileValidationError
 from ..core.progress_state import ProgressUserStateError
 from ..core.session_selection import SessionSelectionError
-from ..core.stats import StatsServiceError
 from ..core.sessions import SessionQuestion, SessionValidationError
+from ..core.stats import StatsServiceError
 from ..core.tracks import TrackValidationError
 from ..runtime import LockLearnRuntime
 from ..storage.database import SessionNotFoundError, StaleSessionError
@@ -815,9 +815,7 @@ async def ws_calibration_sample(
         vol.Required("type"): "locklearn/stats/get",
         vol.Required("profile_id"): str,
         vol.Optional("track_id"): str,
-        vol.Optional("recent_verified_limit", default=30): vol.All(
-            int, vol.Range(min=1, max=200)
-        ),
+        vol.Optional("recent_verified_limit", default=30): vol.All(int, vol.Range(min=1, max=200)),
         vol.Optional("calibration_days", default=7): vol.All(int, vol.Range(min=1, max=90)),
         vol.Optional("confusion_limit", default=10): vol.All(int, vol.Range(min=1, max=100)),
     }
