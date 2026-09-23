@@ -173,7 +173,7 @@ class SelectionConstraintService:
         state: str,
         settings: dict[str, Any],
     ) -> tuple[str | None, datetime | None]:
-        if state not in {"new", "review"}:
+        if state not in {"new", "review", "leech"}:
             return None, None
         last_raw = context["sibling_last_interaction_at_utc"]
         if last_raw is None:
