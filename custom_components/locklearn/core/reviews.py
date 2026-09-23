@@ -126,7 +126,7 @@ class ReviewEventService:
             "created_at_utc": now.isoformat(),
         }
         resolved_post_state = dict(post_state_snapshot)
-        if self._leech_policy._is_trusted_verified(current_for_leech):
+        if self._leech_policy.is_trusted_verified(current_for_leech):
             history = await self._events.async_recent_verified_card_events(
                 profile_id=profile_id,
                 track_id=track_id,
