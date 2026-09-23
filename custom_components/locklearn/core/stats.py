@@ -166,12 +166,18 @@ class StatsService:
             "relearning": 0,
             "leech": 0,
         }
+        tomorrow_local = local_now.date() + timedelta(days=1)
+        due_deadline = datetime.combine(
+            tomorrow_local,
+            time.min,
+            tzinfo=ZoneInfo(timezone_name),
+        ).astimezone(UTC)
         due_today = 0
         for candidate in candidates:
             state = str(candidate["state"])
             if state in state_counts:
                 state_counts[state] += 1
-            if self._candidate_due(candidate, now=now):
+            if self._candidate_due(candidate, now=now, due_before=due_deadline):
                 due_today += 1
 
         recent_correct = sum(str(event["result"]) == "correct" for event in recent_verified)
@@ -381,10 +387,19 @@ class StatsService:
             last_timezone = timezone_by_date.get(day, last_timezone)
             zone = ZoneInfo(last_timezone)
             start = datetime.combine(day, time.min, tzinfo=zone).astimezone(UTC)
+            end = datetime.combine(
+                day + timedelta(days=1),
+                time.min,
+                tzinfo=zone,
+            ).astimezone(UTC)
             due_keys: set[tuple[str, str]] = set()
             for key, history in histories.items():
                 snapshot = self._snapshot_before(history, start)
-                if snapshot is not None and self._snapshot_due(snapshot, at=start):
+                if snapshot is not None and self._snapshot_due(
+                    snapshot,
+                    active_at=start,
+                    due_before=end,
+                ):
                     due_keys.add(key)
             treated = {
                 (str(event["track_id"]), str(event["card_key"]))
@@ -471,20 +486,30 @@ class StatsService:
         return latest
 
     @staticmethod
-    def _snapshot_due(snapshot: dict[str, Any], *, at: datetime) -> bool:
+    def _snapshot_due(
+        snapshot: dict[str, Any],
+        *,
+        active_at: datetime,
+        due_before: datetime,
+    ) -> bool:
         if str(snapshot.get("state")) not in {"learning", "review", "relearning", "leech"}:
             return False
         if str(snapshot.get("content_status", "active")) != "active":
             return False
-        if not StatsService._effective_user_active(snapshot, now=at):
+        if not StatsService._effective_user_active(snapshot, now=active_at):
             return False
         due = snapshot.get("next_due_at_utc")
         if not isinstance(due, str) or not due:
             return False
-        return StatsService._parse_time(due) <= at
+        return StatsService._parse_time(due) < due_before
 
     @staticmethod
-    def _candidate_due(candidate: dict[str, Any], *, now: datetime) -> bool:
+    def _candidate_due(
+        candidate: dict[str, Any],
+        *,
+        now: datetime,
+        due_before: datetime,
+    ) -> bool:
         if str(candidate.get("state")) not in {"learning", "review", "relearning", "leech"}:
             return False
         if not StatsService._effective_user_active(candidate, now=now):
@@ -492,7 +517,7 @@ class StatsService:
         due = candidate.get("next_due_at_utc")
         if not isinstance(due, str) or not due:
             return False
-        return StatsService._parse_time(due) <= now
+        return StatsService._parse_time(due) < due_before
 
     @staticmethod
     def _effective_user_active(row: dict[str, Any], *, now: datetime) -> bool:
