@@ -720,7 +720,6 @@ async def ws_content_report(
     )
 
 
-
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "locklearn/progress/set_user_state",
