@@ -5,9 +5,9 @@
 P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.7 are complete. P1 and P2 are
 closed PASS. P3 is in progress on `feat/p3-sessions`. P3.8 has passed its local
 gate but remains blocked on the final real-HA answer/undo/second-user evidence.
-P3.9 is implemented and now awaits the full repository quality gate; its public
-backend selection path supplies the real prepared question needed to resume the
-P3.8 qualification without a test-only fixture.
+P3.9 is closed PASS. Its public backend selection path supplies the real prepared
+question needed to resume the remaining P3.8 real-HA qualification without a
+test-only fixture.
 
 P1.6 replaces the provisional P0 content table with normalized content schema
 v1 for the P1.1–P1.5 domain: datasets/versions, Concepts, Terms,
@@ -1090,7 +1090,7 @@ available. Do not change P3.8 from `LOCAL GATE PASS — real HA qualification
 pending` until those checks succeed.
 
 
-## P3.9 implementation pending repository gate
+## P3.9 closure
 
 P3.9 now owns backend session candidate ranking while P3.5 remains the reusable
 eligibility layer.
@@ -1123,14 +1123,13 @@ No state/content schema migration was added. No frontend, scheduler/P4,
 P3.10 known/suspend/bury/calibration, P3.11 leech/annotations or P3.12
 pedagogical undo work is included.
 
-Required gate before marking P3.9 PASS:
-- `python3 -m ruff format --check .`
-- `python3 -m ruff check .`
-- `python3 -m mypy custom_components datasets tests`
-- `python3 datasets/tools/validate_resources.py`
-- `python3 -m pytest -q --tb=short`
+Final development-checkout gate on 2026-09-23:
+- `python3 -m ruff format --check .`: PASS, 192 files already formatted.
+- `python3 -m ruff check .`: PASS.
+- `python3 -m mypy custom_components datasets tests`: PASS, 106 source files.
+- `python3 datasets/tools/validate_resources.py`: PASS.
+- `python3 -m pytest -q --tb=short`: PASS, 287 tests in 6.88 s.
 
-The current ChatGPT execution environment could not clone the private repository
-because its container has no outbound DNS and GitHub Actions does not run on
-ordinary pushes to this feature branch. Do not claim the repository gate is
-green until it is executed in the development checkout or an authorized CI run.
+P3.9 is closed PASS. Next action is to return to the remaining P3.8 real-HA
+qualification now that public `session/start` can provide a real backend-owned
+question.
