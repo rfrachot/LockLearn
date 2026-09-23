@@ -3076,6 +3076,249 @@ class ContentReportsRepository:
         return await self._storage._async_reader(read)
 
 
+class SchedulerRepository:
+    """Persist profile scheduler configuration and materialized slots."""
+
+    def __init__(self, storage: RepositoryStorage) -> None:
+        self._storage = storage
+
+    @staticmethod
+    def _config_dict(row: tuple[Any, ...]) -> dict[str, Any]:
+        keys = (
+            "profile_id",
+            "version",
+            "timezone",
+            "active_days_json",
+            "active_windows_json",
+            "minimum_gap_seconds",
+            "maximum_notifications_per_hour",
+            "quiet_hours_json",
+            "receptive_when",
+            "defer_window_minutes",
+            "updated_at_utc",
+        )
+        result = dict(zip(keys, row, strict=True))
+        result["active_days"] = json.loads(result.pop("active_days_json"))
+        result["active_windows"] = json.loads(result.pop("active_windows_json"))
+        result["quiet_hours"] = json.loads(result.pop("quiet_hours_json"))
+        return result
+
+    async def async_get_config(self, profile_id: str) -> dict[str, Any] | None:
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT profile_id, version, timezone, active_days_json,
+                          active_windows_json, minimum_gap_seconds,
+                          maximum_notifications_per_hour, quiet_hours_json,
+                          receptive_when, defer_window_minutes, updated_at_utc
+                   FROM scheduler_config
+                   WHERE profile_id = ?""",
+                (profile_id,),
+            ).fetchone()
+            return None if row is None else self._config_dict(row)
+
+        return await self._storage._async_reader(read)
+
+    async def async_sync_config(
+        self,
+        *,
+        profile_id: str,
+        timezone: str,
+        active_days: tuple[int, ...],
+        active_windows: tuple[tuple[str, str], ...],
+        minimum_gap_seconds: int,
+        maximum_notifications_per_hour: int,
+        quiet_hours: tuple[str, str],
+        receptive_when: str | None,
+        defer_window_minutes: int,
+        updated_at_utc: str,
+    ) -> dict[str, Any]:
+        active_days_json = json.dumps(list(active_days), separators=(",", ":"))
+        active_windows_json = json.dumps(
+            [{"start": start, "end": end} for start, end in active_windows],
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        quiet_hours_json = json.dumps(
+            {"start": quiet_hours[0], "end": quiet_hours[1]},
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                current = connection.execute(
+                    """SELECT version, timezone, active_days_json, active_windows_json,
+                              minimum_gap_seconds, maximum_notifications_per_hour,
+                              quiet_hours_json, receptive_when, defer_window_minutes
+                       FROM scheduler_config
+                       WHERE profile_id = ?""",
+                    (profile_id,),
+                ).fetchone()
+                semantic = (
+                    timezone,
+                    active_days_json,
+                    active_windows_json,
+                    minimum_gap_seconds,
+                    maximum_notifications_per_hour,
+                    quiet_hours_json,
+                    receptive_when,
+                    defer_window_minutes,
+                )
+                if current is None:
+                    version = 1
+                    connection.execute(
+                        """INSERT INTO scheduler_config(
+                               profile_id, version, timezone, active_days_json,
+                               active_windows_json, minimum_gap_seconds,
+                               maximum_notifications_per_hour, quiet_hours_json,
+                               receptive_when, defer_window_minutes, updated_at_utc
+                           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            profile_id,
+                            version,
+                            *semantic,
+                            updated_at_utc,
+                        ),
+                    )
+                elif tuple(current[1:]) != semantic:
+                    version = int(current[0]) + 1
+                    connection.execute(
+                        """UPDATE scheduler_config
+                           SET version = ?, timezone = ?, active_days_json = ?,
+                               active_windows_json = ?, minimum_gap_seconds = ?,
+                               maximum_notifications_per_hour = ?, quiet_hours_json = ?,
+                               receptive_when = ?, defer_window_minutes = ?,
+                               updated_at_utc = ?
+                           WHERE profile_id = ?""",
+                        (
+                            version,
+                            *semantic,
+                            updated_at_utc,
+                            profile_id,
+                        ),
+                    )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+        config = await self.async_get_config(profile_id)
+        if config is None:
+            raise StateRepositoryError("scheduler config could not be reloaded")
+        return config
+
+    async def async_materialize_day(
+        self,
+        *,
+        profile_id: str,
+        scheduler_config_version: int,
+        seed: str,
+        start_utc: str,
+        end_utc: str,
+        now_utc: str,
+        slots: tuple[dict[str, Any], ...],
+        updated_at_utc: str,
+    ) -> tuple[dict[str, Any], ...]:
+        """Insert missing slots while never rewriting already materialized rows."""
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                for slot in slots:
+                    connection.execute(
+                        """INSERT OR IGNORE INTO scheduled_slots(
+                               slot_id, profile_id, track_id, target_id, slot_type,
+                               scheduled_for_utc, status, scheduler_config_version,
+                               seed, created_at_utc, updated_at_utc
+                           ) VALUES (?, ?, NULL, NULL, ?, ?, 'scheduled', ?, ?, ?, ?)""",
+                        (
+                            slot["slot_id"],
+                            profile_id,
+                            slot["slot_type"],
+                            slot["scheduled_for_utc"],
+                            scheduler_config_version,
+                            seed,
+                            now_utc,
+                            updated_at_utc,
+                        ),
+                    )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+        return await self.async_list_slots(
+            profile_id=profile_id,
+            start_utc=start_utc,
+            end_utc=end_utc,
+        )
+
+    async def async_list_slots(
+        self,
+        *,
+        profile_id: str,
+        start_utc: str,
+        end_utc: str,
+    ) -> tuple[dict[str, Any], ...]:
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT slot_id, profile_id, track_id, target_id, slot_type,
+                          scheduled_for_utc, status, scheduler_config_version,
+                          seed, created_at_utc, updated_at_utc
+                   FROM scheduled_slots
+                   WHERE profile_id = ?
+                     AND scheduled_for_utc >= ?
+                     AND scheduled_for_utc < ?
+                   ORDER BY scheduled_for_utc, slot_id""",
+                (profile_id, start_utc, end_utc),
+            ).fetchall()
+            keys = (
+                "slot_id",
+                "profile_id",
+                "track_id",
+                "target_id",
+                "slot_type",
+                "scheduled_for_utc",
+                "status",
+                "scheduler_config_version",
+                "seed",
+                "created_at_utc",
+                "updated_at_utc",
+            )
+            return tuple(dict(zip(keys, row, strict=True)) for row in rows)
+
+        return await self._storage._async_reader(read)
+
+    async def async_set_slot_status(
+        self,
+        slot_id: str,
+        status: str,
+        *,
+        updated_at_utc: str,
+    ) -> bool:
+        """Small status primitive used by P4.1 tests and later notification stages."""
+        allowed = {"scheduled", "deferred", "sent", "consumed", "expired", "cancelled"}
+        if status not in allowed:
+            raise ValueError("invalid scheduled slot status")
+
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                """UPDATE scheduled_slots
+                   SET status = ?, updated_at_utc = ?
+                   WHERE slot_id = ?""",
+                (status, updated_at_utc, slot_id),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(write)
+
+
 class SettingsRepository:
     """Small JSON settings store with deterministic serialization."""
 
@@ -3119,6 +3362,7 @@ class StateRepositories:
     review_events: ReviewEventsRepository
     user_annotations: UserAnnotationsRepository
     content_reports: ContentReportsRepository
+    scheduler: SchedulerRepository
     settings: SettingsRepository
 
     @classmethod
@@ -3130,5 +3374,6 @@ class StateRepositories:
             review_events=ReviewEventsRepository(storage),
             user_annotations=UserAnnotationsRepository(storage),
             content_reports=ContentReportsRepository(storage),
+            scheduler=SchedulerRepository(storage),
             settings=SettingsRepository(storage),
         )
