@@ -4,7 +4,7 @@
 
 P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.13 are complete. P1 and P2 are
 closed PASS. P3 remains in progress on `feat/p3-sessions`. P3.10–P3.13 are
-PASS.
+PASS. P3.14 implementation is complete and pending simulation/repository gates.
 P3.8 and P3.9 are PASS. P3.8's targeted real-HA qualification ran on 2026-09-23
 at `417ff41df90cf137e2751320d72e3166bdc0793b` after HACS explicitly
 redownloaded `feat/p3-sessions` and HA restarted. It exercised public P3.9
@@ -75,14 +75,30 @@ P3.13 gate on 2026-09-23: Ruff format PASS (210 files), Ruff lint PASS, mypy
 PASS (119 sources), resource registries PASS and pytest PASS (313 tests in
 8.71 s).
 
+P3.14 adds a deterministic 180-day quality simulator using the actual
+LearningStateMachine, ReviewPolicyV1 and LeechPolicyV1. Production preset
+new-card quotas are reused (child 3, standard 8, intensive 15 cards/day).
+Declared positive-bench review capacities are 30/80/150 cards/day respectively
+and are simulation assumptions only; no runtime default has changed. The matrix
+covers typical, mixed and bursty learners plus an explicit negative-control
+stress case. Detectors cover sustained due backlog, >7-day starvation,
+short-step cap exhaustion/relearning oscillation, box-6+ over-promotion below
+75% verified accuracy, and excessive p95 daily interactions.
+`tests/backend/test_srs_simulation.py` checks reproducibility, preset coverage,
+required-scenario sustainability and negative-control sensitivity.
+`scripts/p3_14_srs_simulation.py` prints JSON and exits non-zero if a required
+scenario fails or the negative control unexpectedly passes. ADR-0035 records
+the methodology. Do not tune SRS/preset defaults or mark P3.14 PASS until the
+simulation output and normal repository gate are both green.
+
 The only unavailable supplemental proof is real viewer/outsider ACL: one HA
 development-user token is configured, and no second usable token exists in the
 declared repository environment. This is documented as
 `viewer/outsider real-HA ACL remains BLOCKED — second HA development-user token unavailable`,
 but is not a P3.8 formal exit blocker. `scripts/p3_8_real_ha_qualification.py`
 is the secret-safe public-API harness; it adds no runtime endpoint, fixture or
-development-mode behavior. Next concrete action: do not extend P3.8–P3.13; start the separately scoped
-P3.14 work package when requested.
+development-mode behavior. Next concrete action: run the P3.14 simulation script and full repository gate.
+If both are green, document the measured matrix and close the P3 exit gate.
 
 Final post-qualification gate in `.venv`: Ruff format PASS (193 files), Ruff
 lint PASS, mypy PASS (106 sources), resource registries PASS and pytest PASS
