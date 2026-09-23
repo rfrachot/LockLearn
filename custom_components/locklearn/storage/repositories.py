@@ -1770,6 +1770,173 @@ class ReviewEventsRepository:
             tuple(snapshot[column] for column in cls._PROGRESS_COLUMNS),
         )
 
+    @staticmethod
+    def _undone_ids_in_connection(
+        connection: sqlite3.Connection,
+        *,
+        profile_id: str,
+    ) -> set[str]:
+        undone: set[str] = set()
+        rows = connection.execute(
+            """SELECT payload_json FROM audit_events
+               WHERE event_type = 'progress_undo' AND profile_id = ?""",
+            (profile_id,),
+        ).fetchall()
+        for (payload,) in rows:
+            decoded = json.loads(str(payload))
+            target = decoded.get("target_event_id")
+            if isinstance(target, str):
+                undone.add(target)
+        return undone
+
+    @classmethod
+    def _rebuild_stats_day_in_connection(
+        cls,
+        connection: sqlite3.Connection,
+        *,
+        profile_id: str,
+        track_id: str,
+        local_date: str,
+    ) -> bool:
+        """Replace one stats_daily row from canonical non-undone ReviewEvents."""
+        connection.execute(
+            """DELETE FROM stats_daily
+               WHERE profile_id = ? AND track_id = ? AND local_date = ?""",
+            (profile_id, track_id, local_date),
+        )
+        undone_ids = cls._undone_ids_in_connection(
+            connection,
+            profile_id=profile_id,
+        )
+        rows = connection.execute(
+            """SELECT id, timezone_name, utc_offset_minutes, policy_version,
+                      mode, result, hint_used, retrieval_occurred, signal_quality,
+                      question_type, pre_state_snapshot, post_state_snapshot,
+                      presentation_to_answer_ms
+               FROM review_events
+               WHERE profile_id = ? AND track_id = ? AND local_date = ?
+               ORDER BY created_at_utc, id""",
+            (profile_id, track_id, local_date),
+        ).fetchall()
+        if not rows:
+            return False
+
+        item: dict[str, Any] | None = None
+        for row in rows:
+            event_id = str(row[0])
+            mode = str(row[4])
+            if event_id in undone_ids or mode == "undo_compensation":
+                continue
+            if item is None:
+                item = {
+                    "timezone_name": str(row[1]),
+                    "utc_offset_minutes": int(row[2]),
+                    "policy_version": int(row[3]),
+                    "learning_exposures": 0,
+                    "verified_retrievals": 0,
+                    "self_known": 0,
+                    "verified_correct": 0,
+                    "verified_wrong": 0,
+                    "quiz_total": 0,
+                    "free_text_total": 0,
+                    "hints_used": 0,
+                    "new_cards": set(),
+                    "reviewed_cards": set(),
+                    "relearning_cards": set(),
+                    "leech_cards": set(),
+                    "active_seconds": 0,
+                }
+            item["timezone_name"] = str(row[1])
+            item["utc_offset_minutes"] = int(row[2])
+            item["policy_version"] = int(row[3])
+            result = str(row[5])
+            retrieval = bool(row[7])
+            quality = str(row[8])
+            question_type = str(row[9])
+            pre = json.loads(str(row[10]))
+            post = json.loads(str(row[11]))
+            if mode == "introduction":
+                item["learning_exposures"] += 1
+                item["new_cards"].add(str(post["card_key"]))
+            trusted_verified = (
+                retrieval
+                and mode
+                in {
+                    "verified_mcq",
+                    "verified_free_text",
+                    "verified_cloze",
+                    "exam_retrieval",
+                }
+                and quality in {"verified", "weak", "medium", "strong"}
+                and result in {"correct", "wrong", "idk"}
+            )
+            if trusted_verified:
+                item["verified_retrievals"] += 1
+                if result == "correct":
+                    item["verified_correct"] += 1
+                else:
+                    item["verified_wrong"] += 1
+            if mode == "self_assessment_after_retrieval" and result in {
+                "correct",
+                "known",
+                "knew",
+                "easy",
+                "hard",
+            }:
+                item["self_known"] += 1
+            if question_type in {"mcq", "cloze", "cloze_mcq"}:
+                item["quiz_total"] += 1
+            if question_type == "free_text":
+                item["free_text_total"] += 1
+            if bool(row[6]):
+                item["hints_used"] += 1
+            if str(pre.get("state")) in {"review", "leech"} and retrieval:
+                item["reviewed_cards"].add(str(post["card_key"]))
+            if (
+                str(pre.get("state")) == "relearning"
+                or str(post.get("state")) == "relearning"
+            ):
+                item["relearning_cards"].add(str(post["card_key"]))
+            if str(post.get("state")) == "leech":
+                item["leech_cards"].add(str(post["card_key"]))
+            if row[12] is not None:
+                item["active_seconds"] += max(0, int(row[12]) // 1000)
+
+        if item is None:
+            return False
+        connection.execute(
+            """INSERT INTO stats_daily(
+                   profile_id, track_id, local_date, timezone_name,
+                   utc_offset_minutes, policy_version, learning_exposures,
+                   verified_retrievals, self_known, verified_correct,
+                   verified_wrong, quiz_total, free_text_total, hints_used,
+                   new_cards, reviewed_cards, relearning_cards, leech_cards,
+                   active_seconds
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                profile_id,
+                track_id,
+                local_date,
+                item["timezone_name"],
+                item["utc_offset_minutes"],
+                item["policy_version"],
+                item["learning_exposures"],
+                item["verified_retrievals"],
+                item["self_known"],
+                item["verified_correct"],
+                item["verified_wrong"],
+                item["quiz_total"],
+                item["free_text_total"],
+                item["hints_used"],
+                len(item["new_cards"]),
+                len(item["reviewed_cards"]),
+                len(item["relearning_cards"]),
+                len(item["leech_cards"]),
+                item["active_seconds"],
+            ),
+        )
+        return True
+
     async def async_append_with_projection(self, event: ReviewEventRecord) -> None:
         """Append one event and materialize its post-state in one transaction."""
         valid = await self._storage.async_validate_card_reference(
@@ -1847,6 +2014,12 @@ class ReviewEventsRepository:
                     ),
                 )
                 self._upsert_progress(connection, event.post_state_snapshot)
+                self._rebuild_stats_day_in_connection(
+                    connection,
+                    profile_id=event.profile_id,
+                    track_id=event.track_id,
+                    local_date=event.local_date,
+                )
                 connection.commit()
             except Exception:
                 if connection.in_transaction:
@@ -1960,11 +2133,12 @@ class ReviewEventsRepository:
         card_key: str | None = None,
         limit: int = 50,
     ) -> tuple[dict[str, Any], ...]:
-        """Aggregate expected/chosen answer confusions from canonical events."""
+        """Aggregate expected/chosen answer confusions from non-undone events."""
         if limit < 1:
             raise ValueError("limit must be >= 1")
 
         def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            undone = self._undone_ids_in_connection(connection, profile_id=profile_id)
             clauses = [
                 "profile_id = ?",
                 "retrieval_occurred = 1",
@@ -1980,24 +2154,31 @@ class ReviewEventsRepository:
             if card_key is not None:
                 clauses.append("card_key = ?")
                 params.append(card_key)
-            params.append(limit)
             rows = connection.execute(
-                f"""SELECT card_key, expected_answer_id, answer_id, COUNT(*) AS confusion_count
+                f"""SELECT id, card_key, expected_answer_id, answer_id
                     FROM review_events
                     WHERE {" AND ".join(clauses)}
-                    GROUP BY card_key, expected_answer_id, answer_id
-                    ORDER BY confusion_count DESC, card_key, expected_answer_id, answer_id
-                    LIMIT ?""",
+                    ORDER BY created_at_utc, id""",
                 tuple(params),
             ).fetchall()
+            counts: dict[tuple[str, str, str], int] = {}
+            for row in rows:
+                if str(row[0]) in undone:
+                    continue
+                key = (str(row[1]), str(row[2]), str(row[3]))
+                counts[key] = counts.get(key, 0) + 1
+            ordered = sorted(
+                counts.items(),
+                key=lambda item: (-item[1], item[0][0], item[0][1], item[0][2]),
+            )[:limit]
             return tuple(
                 {
-                    "card_key": str(row[0]),
-                    "expected_answer_id": str(row[1]),
-                    "chosen_answer_id": str(row[2]),
-                    "count": int(row[3]),
+                    "card_key": key[0],
+                    "expected_answer_id": key[1],
+                    "chosen_answer_id": key[2],
+                    "count": count,
                 }
-                for row in rows
+                for key, count in ordered
             )
 
         return await self._storage._async_reader(read)
@@ -2265,11 +2446,13 @@ class ReviewEventsRepository:
             try:
                 connection.execute("BEGIN IMMEDIATE")
                 target = connection.execute(
-                    "SELECT 1 FROM review_events WHERE id = ? AND profile_id = ?",
+                    """SELECT local_date FROM review_events
+                       WHERE id = ? AND profile_id = ?""",
                     (target_event_id, event.profile_id),
                 ).fetchone()
                 if target is None:
                     raise StateRepositoryError("undo target no longer exists")
+                target_local_date = str(target[0])
                 for (payload,) in connection.execute(
                     """SELECT payload_json FROM audit_events
                        WHERE event_type = 'progress_undo' AND profile_id = ?""",
@@ -2359,6 +2542,13 @@ class ReviewEventsRepository:
                        ) VALUES ('progress_undo', ?, ?, ?, ?)""",
                     (actor_user_id, event.profile_id, audit_payload, event.created_at_utc),
                 )
+                for affected_date in {target_local_date, event.local_date}:
+                    self._rebuild_stats_day_in_connection(
+                        connection,
+                        profile_id=event.profile_id,
+                        track_id=event.track_id,
+                        local_date=affected_date,
+                    )
                 connection.commit()
             except Exception:
                 if connection.in_transaction:
@@ -2466,144 +2656,24 @@ class ReviewEventsRepository:
                     params.append(track_id)
                 where = "" if not clauses else " WHERE " + " AND ".join(clauses)
                 connection.execute(f"DELETE FROM stats_daily{where}", tuple(params))
-                undone_ids: set[str] = set()
-                audit_rows = connection.execute(
-                    """SELECT payload_json FROM audit_events
-                       WHERE event_type = 'progress_undo'"""
-                    + (" AND profile_id = ?" if profile_id is not None else ""),
-                    () if profile_id is None else (profile_id,),
-                ).fetchall()
-                for (payload,) in audit_rows:
-                    decoded = json.loads(str(payload))
-                    target = decoded.get("target_event_id")
-                    if isinstance(target, str):
-                        undone_ids.add(target)
-
                 rows = connection.execute(
-                    f"""SELECT id, profile_id, track_id, local_date, timezone_name,
-                               utc_offset_minutes, policy_version, mode, result,
-                               hint_used, retrieval_occurred, signal_quality,
-                               question_type, pre_state_snapshot, post_state_snapshot,
-                               presentation_to_answer_ms
+                    f"""SELECT DISTINCT profile_id, track_id, local_date
                         FROM review_events{where}
-                        ORDER BY created_at_utc, id""",
+                        ORDER BY profile_id, track_id, local_date""",
                     tuple(params),
                 ).fetchall()
-                aggregates: dict[tuple[str, str, str], dict[str, Any]] = {}
-                for row in rows:
-                    event_id = str(row[0])
-                    mode = str(row[7])
-                    if event_id in undone_ids or mode == "undo_compensation":
-                        continue
-                    key = (str(row[1]), str(row[2]), str(row[3]))
-                    item = aggregates.setdefault(
-                        key,
-                        {
-                            "timezone_name": str(row[4]),
-                            "utc_offset_minutes": int(row[5]),
-                            "policy_version": int(row[6]),
-                            "learning_exposures": 0,
-                            "verified_retrievals": 0,
-                            "self_known": 0,
-                            "verified_correct": 0,
-                            "verified_wrong": 0,
-                            "quiz_total": 0,
-                            "free_text_total": 0,
-                            "hints_used": 0,
-                            "new_cards": set(),
-                            "reviewed_cards": set(),
-                            "relearning_cards": set(),
-                            "leech_cards": set(),
-                            "active_seconds": 0,
-                        },
-                    )
-                    result = str(row[8])
-                    retrieval = bool(row[10])
-                    quality = str(row[11])
-                    question_type = str(row[12])
-                    pre = json.loads(str(row[13]))
-                    post = json.loads(str(row[14]))
-                    if mode == "introduction":
-                        item["learning_exposures"] += 1
-                        item["new_cards"].add(str(post["card_key"]))
-                    trusted_verified = (
-                        retrieval
-                        and mode
-                        in {
-                            "verified_mcq",
-                            "verified_free_text",
-                            "verified_cloze",
-                            "exam_retrieval",
-                        }
-                        and quality in {"verified", "weak", "medium", "strong"}
-                        and result in {"correct", "wrong", "idk"}
-                    )
-                    if trusted_verified:
-                        item["verified_retrievals"] += 1
-                        if result == "correct":
-                            item["verified_correct"] += 1
-                        else:
-                            item["verified_wrong"] += 1
-                    if mode == "self_assessment_after_retrieval" and result in {
-                        "correct",
-                        "known",
-                        "knew",
-                        "easy",
-                        "hard",
-                    }:
-                        item["self_known"] += 1
-                    if question_type in {"mcq", "cloze", "cloze_mcq"}:
-                        item["quiz_total"] += 1
-                    if question_type == "free_text":
-                        item["free_text_total"] += 1
-                    if bool(row[9]):
-                        item["hints_used"] += 1
-                    if str(pre.get("state")) in {"review", "leech"} and retrieval:
-                        item["reviewed_cards"].add(str(post["card_key"]))
-                    if (
-                        str(pre.get("state")) == "relearning"
-                        or str(post.get("state")) == "relearning"
-                    ):
-                        item["relearning_cards"].add(str(post["card_key"]))
-                    if str(post.get("state")) == "leech":
-                        item["leech_cards"].add(str(post["card_key"]))
-                    if row[15] is not None:
-                        item["active_seconds"] += max(0, int(row[15]) // 1000)
-
-                for (p_id, t_id, local_date), item in aggregates.items():
-                    connection.execute(
-                        """INSERT INTO stats_daily(
-                               profile_id, track_id, local_date, timezone_name,
-                               utc_offset_minutes, policy_version, learning_exposures,
-                               verified_retrievals, self_known, verified_correct,
-                               verified_wrong, quiz_total, free_text_total, hints_used,
-                               new_cards, reviewed_cards, relearning_cards, leech_cards,
-                               active_seconds
-                           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (
-                            p_id,
-                            t_id,
-                            local_date,
-                            item["timezone_name"],
-                            item["utc_offset_minutes"],
-                            item["policy_version"],
-                            item["learning_exposures"],
-                            item["verified_retrievals"],
-                            item["self_known"],
-                            item["verified_correct"],
-                            item["verified_wrong"],
-                            item["quiz_total"],
-                            item["free_text_total"],
-                            item["hints_used"],
-                            len(item["new_cards"]),
-                            len(item["reviewed_cards"]),
-                            len(item["relearning_cards"]),
-                            len(item["leech_cards"]),
-                            item["active_seconds"],
-                        ),
+                rebuilt = 0
+                for p_id, t_id, local_date in rows:
+                    rebuilt += int(
+                        self._rebuild_stats_day_in_connection(
+                            connection,
+                            profile_id=str(p_id),
+                            track_id=str(t_id),
+                            local_date=str(local_date),
+                        )
                     )
                 connection.commit()
-                return len(aggregates)
+                return rebuilt
             except Exception:
                 if connection.in_transaction:
                     connection.rollback()
