@@ -15,6 +15,7 @@ from ..core.content import GradingOutcome, GradingPolicyKind
 from ..core.content_reports import ContentReportError
 from ..core.grading import FreeTextGradingResult
 from ..core.profiles import ProfileValidationError
+from ..core.progress_state import ProgressUserStateError
 from ..core.session_selection import SessionSelectionError
 from ..core.sessions import SessionQuestion, SessionValidationError
 from ..core.tracks import TrackValidationError
@@ -719,6 +720,94 @@ async def ws_content_report(
     )
 
 
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/progress/set_user_state",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("card_key"): str,
+        vol.Required("user_state"): vol.In(("active", "known_already", "suspended", "buried")),
+        vol.Optional("suspend_until_utc"): vol.Any(str, None),
+    }
+)
+@websocket_api.async_response
+async def ws_progress_set_user_state(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Set user-owned card state without fabricating a ReviewEvent."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.MANAGE_PROGRESS,
+    ):
+        return
+    track = await runtime.storage.repositories.tracks.async_get(msg["track_id"])
+    if track is None or str(track["profile_id"]) != profile_id:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Track not found")
+        return
+    try:
+        result = await runtime.progress_state.async_set_user_state(
+            actor_user_id=connection.user.id,
+            profile_id=profile_id,
+            track_id=msg["track_id"],
+            card_key=msg["card_key"],
+            user_state=msg["user_state"],
+            suspend_until_utc=msg.get("suspend_until_utc"),
+        )
+    except (ProgressUserStateError, ContentReferenceError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/calibration/sample",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Optional("sample_size", default=30): vol.All(int, vol.Range(min=20, max=40)),
+    }
+)
+@websocket_api.async_response
+async def ws_calibration_sample(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return a bounded read-only initial calibration sample."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.MANAGE_PROGRESS,
+    ):
+        return
+    track = await runtime.storage.repositories.tracks.async_get(msg["track_id"])
+    if track is None or str(track["profile_id"]) != profile_id:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Track not found")
+        return
+    try:
+        sample = await runtime.progress_state.async_calibration_sample(
+            profile_id=profile_id,
+            track_id=msg["track_id"],
+            sample_size=msg["sample_size"],
+        )
+    except ProgressUserStateError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], sample.as_dict())
+
+
 @websocket_api.websocket_command({vol.Required("type"): "locklearn/admin/storage/status"})
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -1102,6 +1191,8 @@ COMMANDS = (
     ws_packs_list,
     ws_datasets_list,
     ws_content_report,
+    ws_progress_set_user_state,
+    ws_calibration_sample,
     ws_admin_storage_status,
     ws_session_start,
     ws_session_get,
