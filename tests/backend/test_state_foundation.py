@@ -183,7 +183,9 @@ async def test_v1_state_migrates_out_of_place_with_backup_and_preserves_rows(
     try:
         migrated = sqlite3.connect(state_path)
         try:
-            assert migrated.execute("SELECT version FROM schema_version").fetchone() == (DB_SCHEMA_VERSION,)
+            assert migrated.execute("SELECT version FROM schema_version").fetchone() == (
+                DB_SCHEMA_VERSION,
+            )
             assert migrated.execute("SELECT id, type, strategy FROM sessions").fetchone() == (
                 "legacy-session",
                 "learn",
