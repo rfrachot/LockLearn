@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from ..storage.repositories import ReviewEventRecord
+from ..storage.repositories import ReviewEventRecord, StateRepositoryError
 from .clock import Clock, SystemClock
 from .learning import LearningStateMachine
 from .leeches import LeechPolicyV1
@@ -21,6 +22,12 @@ class IntegrityServiceError(ValueError):
 
 
 class IntegrityEventsRepository(Protocol):
+    async def async_undone_event_ids(
+        self,
+        *,
+        profile_id: str | None = None,
+    ) -> frozenset[str]: ...
+
     async def async_latest_undo_candidate(
         self,
         *,
@@ -227,11 +234,14 @@ class IntegrityService:
             timezone_name=timezone_name,
             utc_offset_minutes=0 if offset is None else int(offset.total_seconds() // 60),
         )
-        await self._events.async_append_undo_compensation(
-            event,
-            target_event_id=str(target["id"]),
-            actor_user_id=actor_user_id,
-        )
+        try:
+            await self._events.async_append_undo_compensation(
+                event,
+                target_event_id=str(target["id"]),
+                actor_user_id=actor_user_id,
+            )
+        except StateRepositoryError as err:
+            raise IntegrityServiceError(str(err)) from err
         return {
             "target_event_id": str(target["id"]),
             "compensation_event_id": event.id,
@@ -278,6 +288,7 @@ class IntegrityService:
             profile_id=profile_id,
             track_id=track_id,
         )
+        undone_ids = await self._events.async_undone_event_ids(profile_id=profile_id)
         if not events:
             return RecomputeReport(
                 target_policy_version=target_policy_version,
@@ -318,8 +329,12 @@ class IntegrityService:
                 current = dict(event["pre_state_snapshot"])
 
             mode = str(event["mode"])
+            if str(event["id"]) in undone_ids:
+                if key not in states:
+                    states[key] = dict(event["pre_state_snapshot"])
+                controls += 1
+                continue
             if mode == "undo_compensation":
-                states[key] = dict(event["post_state_snapshot"])
                 controls += 1
                 continue
             if mode == "leech_reactivation":
