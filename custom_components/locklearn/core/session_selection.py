@@ -396,21 +396,22 @@ class SessionSelectionService:
         selected_review: int,
         target_review: int,
     ) -> list[_Candidate]:
-        for state in ("relearning", "learning"):
+        for state in ("relearning", "learning", "review", "leech"):
             pool = [c for c in available if c.state == state]
             if pool:
                 return pool
 
         reviews = [c for c in available if c.state == "review"]
+        leeches = [c for c in available if c.state == "leech"]
         new = [c for c in available if c.state == "new"]
         if not new or position >= final_quarter_start or selected_new >= new_target:
-            return reviews
+            return reviews or leeches
         remaining_pre_final_slots = max(0, final_quarter_start - position)
         remaining_new = max(0, new_target - selected_new)
         if remaining_new >= remaining_pre_final_slots:
             return new
         if not reviews or target_review <= 0:
-            return new
+            return new if new else leeches
 
         new_progress = selected_new / max(1, new_target)
         review_progress = selected_review / target_review
@@ -441,7 +442,8 @@ class SessionSelectionService:
             "relearning": 0,
             "learning": 1,
             "review": 2,
-            "new": 3,
+            "leech": 3,
+            "new": 4,
         }[candidate.state]
         return (
             priority,
@@ -470,7 +472,7 @@ class SessionSelectionService:
     ) -> bool:
         if candidate.state == "new":
             return session_type.strip().lower() in _NEW_SESSION_TYPES
-        if candidate.state not in {"learning", "review", "relearning"}:
+        if candidate.state not in {"learning", "review", "relearning", "leech"}:
             return False
         if candidate.next_due_at_utc is None:
             return False
