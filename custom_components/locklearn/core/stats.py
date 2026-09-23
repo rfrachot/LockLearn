@@ -15,7 +15,6 @@ _VERIFIED_MODES = frozenset(
     {"verified_mcq", "verified_free_text", "verified_cloze", "exam_retrieval"}
 )
 _TRUSTED_QUALITIES = frozenset({"verified", "weak", "medium", "strong"})
-_FAILURE_RESULTS = frozenset({"wrong", "idk"})
 _SELF_KNOWN_RESULTS = frozenset({"correct", "known", "knew", "easy", "hard"})
 
 
@@ -146,6 +145,7 @@ class StatsService:
             profile_id=profile_id,
             track_id=track_id,
         )
+        selected_track_ids = {str(track["track_id"]) for track in tracks}
         events = await self._events.async_list_scope_events(
             profile_id=profile_id,
             track_id=track_id,
@@ -185,7 +185,8 @@ class StatsService:
         mastery_values = [
             self._review_policy.mastery(dict(snapshot), at=now)
             for snapshot in progress
-            if str(snapshot["content_status"]) == "active"
+            if str(snapshot["track_id"]) in selected_track_ids
+            and str(snapshot["content_status"]) == "active"
             and self._effective_user_active(snapshot, now=now)
         ]
         mastery = None if not mastery_values else round(sum(mastery_values) / len(mastery_values), 6)
@@ -193,6 +194,7 @@ class StatsService:
         calibration = await self._calibration(
             profile_id=profile_id,
             events=effective_events,
+            track_id=track_id,
             timezone_name=timezone_name,
             local_today=local_now.date(),
             days=calibration_days,
@@ -260,6 +262,7 @@ class StatsService:
         *,
         profile_id: str,
         events: tuple[dict[str, Any], ...],
+        track_id: str | None,
         timezone_name: str,
         local_today: date,
         days: int,
@@ -275,6 +278,8 @@ class StatsService:
         )
         for audit in audits:
             if str(audit.get("user_state")) != "known_already":
+                continue
+            if track_id is not None and str(audit.get("track_id")) != track_id:
                 continue
             card_key = audit.get("card_key")
             created = audit.get("created_at_utc")
