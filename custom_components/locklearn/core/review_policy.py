@@ -94,10 +94,11 @@ class ReviewPolicyV1:
             + int(snapshot.get("verified_wrong_count", 0)),
             interval_days=DEFAULT_BOX_INTERVAL_DAYS[target_box] * self._difficulty(snapshot),
         )
+        was_leech = snapshot.get("state") == "leech"
         post = dict(snapshot)
         post.update(
             {
-                "state": "review",
+                "state": "leech" if was_leech else "review",
                 "box": target_box,
                 "next_due_at_utc": (now + timedelta(days=interval)).isoformat(),
                 "streak_correct": 0,
@@ -221,8 +222,11 @@ class ReviewPolicyV1:
         )
         if verified:
             demoted["last_verified_at_utc"] = now.isoformat()
+        was_leech = snapshot.get("state") == "leech"
         relearning = self._learning.enter_relearning(demoted)
         post = dict(relearning.post_state)
+        if was_leech:
+            post["state"] = "leech"
         post["mastery"] = self.mastery(post, at=now)
         return ReviewTransition(
             pre_state=dict(snapshot),
@@ -315,5 +319,5 @@ class ReviewPolicyV1:
 
     @staticmethod
     def _require_review(snapshot: dict[str, Any]) -> None:
-        if snapshot.get("state") != "review":
-            raise ReviewPolicyError("long-review transition requires state 'review'")
+        if snapshot.get("state") not in {"review", "leech"}:
+            raise ReviewPolicyError("long-review transition requires state 'review' or 'leech'")
