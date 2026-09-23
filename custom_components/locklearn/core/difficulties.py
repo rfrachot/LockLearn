@@ -147,6 +147,10 @@ class DifficultyService:
         card_key: str | None = None,
     ) -> dict[str, Any]:
         """Create one private exportable note/mnemonic."""
+        if (learning_item_id is None) == (card_key is None):
+            raise DifficultyServiceError("annotation must target exactly one item or card")
+        if not note.strip():
+            raise DifficultyServiceError("annotation note must not be empty")
         now = self._clock.now().isoformat()
         return await self._annotations.async_upsert(
             annotation_id=self._id_factory(),
@@ -166,6 +170,8 @@ class DifficultyService:
         note: str,
     ) -> dict[str, Any]:
         """Update note text without changing its target identity."""
+        if not note.strip():
+            raise DifficultyServiceError("annotation note must not be empty")
         existing = await self._annotations.async_get(
             annotation_id=annotation_id,
             profile_id=profile_id,
