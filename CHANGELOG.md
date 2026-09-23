@@ -5,6 +5,14 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P4.1 deterministic profile-level scheduler previews and materialized generic
+  notification slots honoring active days/windows, quiet hours, minimum gaps,
+  hourly limits and Profile push budgets.
+- Authoritative `scheduled_slots` behavior: existing materialized rows are never
+  rewritten by later scheduler config changes, and pedagogical content remains a
+  send-time decision.
+- Profile-ACL-protected `locklearn/scheduler/preview`, scheduler documentation
+  and ADR-0036 defining the P4.1/P4.2+ boundary.
 - P3.14 deterministic ~180-day SRS simulation using the production learning,
   review and leech policy primitives across child/standard/intensive presets.
 - Sustainability detectors for due-queue explosion, starvation, relearning
