@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from custom_components.locklearn.const import DB_SCHEMA_VERSION
 from custom_components.locklearn.storage.database import (
     SQLiteStorage,
     StaleSessionError,
@@ -91,7 +92,7 @@ async def test_storage_diagnostic_is_private_and_off_event_loop(storage: SQLiteS
         "integrity_check": ["ok"],
         "journal_mode": "wal",
         "reader_off_event_loop": True,
-        "schema_version": 2,
+        "schema_version": DB_SCHEMA_VERSION,
         "session_answer_count": 0,
         "session_count": 1,
         "writer_initialized": True,
