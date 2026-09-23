@@ -5,6 +5,16 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P3.9 backend-owned session candidate preparation with due short-step priority,
+  Track content-weight interleaving, profile-local new-card quotas and explainable
+  selection metadata (implementation complete; full repository gate pending).
+- Bounded-session final-quarter protection for new cards plus prospective
+  sibling/confusable guards across the prepared sequence.
+- Advisory fatigue detection from the ten most recent trusted verified
+  ReviewEvents, exposing finish/recognition-only/continue without mutating SRS
+  history.
+- ADR-0030 documenting the P3.5 eligibility/P3.9 ranking boundary, read-only
+  selection contract and fatigue evidence policy.
 - P3.8 persistent resumable sessions with stored strategy/settings, prepared
   question state, immutable answer attempts and active content-generation pinning
   (local gate PASS; real HA qualification pending).
