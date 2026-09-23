@@ -76,6 +76,7 @@ class SimulationScenario:
 class DailySimulationSample:
     day: int
     introduced: int
+    new_throttled: int
     due_opening: int
     reviews_treated: int
     interactions: int
@@ -96,6 +97,8 @@ class SimulationReport:
     max_new_per_day_cards: int
     max_reviews_per_day_cards: int
     introduced_cards: int
+    throttled_new_cards: int
+    throttled_new_days: int
     verified_reviews: int
     verified_correct: int
     verified_wrong: int
@@ -126,6 +129,8 @@ class SimulationReport:
             "max_new_per_day_cards": self.max_new_per_day_cards,
             "max_reviews_per_day_cards": self.max_reviews_per_day_cards,
             "introduced_cards": self.introduced_cards,
+            "throttled_new_cards": self.throttled_new_cards,
+            "throttled_new_days": self.throttled_new_days,
             "verified_reviews": self.verified_reviews,
             "verified_correct": self.verified_correct,
             "verified_wrong": self.verified_wrong,
@@ -242,6 +247,8 @@ class LongHorizonSRSSimulator:
         verified_wrong = 0
         oscillation_cards: set[str] = set()
         starvation_days = 0
+        throttled_new_cards = 0
+        throttled_new_days = 0
 
         for day_index in range(scenario.horizon_days):
             day_start = start + timedelta(days=day_index)
@@ -337,7 +344,13 @@ class LongHorizonSRSSimulator:
                         oscillation_cards.add(str(card["card_key"]))
                         relearning_cap_hits += 1
 
-            introduced = min(max_new, corpus_cards - next_new_index)
+            requested_new = min(max_new, corpus_cards - next_new_index)
+            available_new_slots = max(0, review_capacity - due_opening)
+            introduced = min(requested_new, available_new_slots)
+            new_throttled = requested_new - introduced
+            if new_throttled:
+                throttled_new_cards += new_throttled
+                throttled_new_days += 1
             for _ in range(introduced):
                 card = cards[next_new_index]
                 next_new_index += 1
@@ -368,6 +381,7 @@ class LongHorizonSRSSimulator:
                 DailySimulationSample(
                     day=day_index + 1,
                     introduced=introduced,
+                    new_throttled=new_throttled,
                     due_opening=due_opening,
                     reviews_treated=treated,
                     interactions=interactions,
@@ -381,8 +395,10 @@ class LongHorizonSRSSimulator:
         overpromoted = sum(
             1
             for card in active_cards
-            if int(card.get("box", 0))
-            > min(7, 1 + int(card.get("verified_correct_count", 0)))
+            if int(card.get("box", 0)) > min(
+                7,
+                1 + int(card.get("verified_correct_count", 0)),
+            )
         )
         max_box = max((int(card.get("box", 0)) for card in active_cards), default=0)
         final_backlog = daily[-1].backlog_end
@@ -419,6 +435,8 @@ class LongHorizonSRSSimulator:
             max_new_per_day_cards=max_new,
             max_reviews_per_day_cards=review_capacity,
             introduced_cards=next_new_index,
+            throttled_new_cards=throttled_new_cards,
+            throttled_new_days=throttled_new_days,
             verified_reviews=verified_reviews,
             verified_correct=verified_correct,
             verified_wrong=verified_wrong,
@@ -564,4 +582,3 @@ class LongHorizonSRSSimulator:
         if due is None or due >= at:
             return 0
         return max(0, int((at - due).total_seconds() // 86400))
-
