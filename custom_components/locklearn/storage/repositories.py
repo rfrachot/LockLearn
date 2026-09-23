@@ -2135,6 +2135,37 @@ class ReviewEventsRepository:
 
         return await self._storage._async_reader(read)
 
+    async def async_undone_event_ids(
+        self,
+        *,
+        profile_id: str | None = None,
+    ) -> frozenset[str]:
+        """Return canonical ReviewEvent ids explicitly undone by compensation."""
+
+        def read(connection: sqlite3.Connection) -> frozenset[str]:
+            if profile_id is None:
+                rows = connection.execute(
+                    """SELECT payload_json FROM audit_events
+                       WHERE event_type = 'progress_undo'
+                       ORDER BY id"""
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """SELECT payload_json FROM audit_events
+                       WHERE event_type = 'progress_undo' AND profile_id = ?
+                       ORDER BY id""",
+                    (profile_id,),
+                ).fetchall()
+            ids: set[str] = set()
+            for (payload,) in rows:
+                decoded = json.loads(str(payload))
+                target = decoded.get("target_event_id")
+                if isinstance(target, str):
+                    ids.add(target)
+            return frozenset(ids)
+
+        return await self._storage._async_reader(read)
+
     async def async_latest_undo_candidate(
         self,
         *,
@@ -2233,23 +2264,37 @@ class ReviewEventsRepository:
         def write(connection: sqlite3.Connection) -> None:
             try:
                 connection.execute("BEGIN IMMEDIATE")
-                current = connection.execute(
-                    """SELECT post_state_snapshot
-                       FROM review_events
-                       WHERE profile_id = ? AND track_id = ? AND card_key = ?
-                       ORDER BY created_at_utc DESC, id DESC
-                       LIMIT 1""",
+                target = connection.execute(
+                    "SELECT 1 FROM review_events WHERE id = ? AND profile_id = ?",
+                    (target_event_id, event.profile_id),
+                ).fetchone()
+                if target is None:
+                    raise StateRepositoryError("undo target no longer exists")
+                for (payload,) in connection.execute(
+                    """SELECT payload_json FROM audit_events
+                       WHERE event_type = 'progress_undo' AND profile_id = ?""",
+                    (event.profile_id,),
+                ).fetchall():
+                    decoded = json.loads(str(payload))
+                    if decoded.get("target_event_id") == target_event_id:
+                        raise StateRepositoryError("progress mutation was already undone")
+
+                current_row = connection.execute(
+                    f"""SELECT {",".join(self._PROGRESS_COLUMNS)}
+                        FROM progress
+                        WHERE profile_id = ? AND track_id = ? AND card_key = ?""",
                     (event.profile_id, event.track_id, event.card_key),
                 ).fetchone()
-                current_progress = connection.execute(
-                    """SELECT state, box, seen_count, verified_correct_count,
-                              verified_wrong_count, next_due_at_utc
-                       FROM progress
-                       WHERE profile_id = ? AND track_id = ? AND card_key = ?""",
-                    (event.profile_id, event.track_id, event.card_key),
-                ).fetchone()
-                if current is None or current_progress is None:
+                if current_row is None:
                     raise StateRepositoryError("undo target has no current progress")
+                current_progress = dict(
+                    zip(self._PROGRESS_COLUMNS, current_row, strict=True)
+                )
+                if any(
+                    current_progress[column] != event.pre_state_snapshot.get(column)
+                    for column in self._PROGRESS_COLUMNS
+                ):
+                    raise StateRepositoryError("progress changed during undo")
                 connection.execute(
                     """INSERT INTO review_events(
                            id, profile_id, track_id, learning_item_id,
@@ -2331,7 +2376,7 @@ class ReviewEventsRepository:
         profile_id: str | None = None,
         track_id: str | None = None,
     ) -> int:
-        """Replace a scoped Progress projection while preserving user/content overlays."""
+        """Replace Progress while preserving independent user/content overlays."""
         if track_id is not None and profile_id is None:
             raise ValueError("track-scoped replacement requires profile_id")
 
@@ -2348,21 +2393,23 @@ class ReviewEventsRepository:
                     params.append(track_id)
                 where = "" if not clauses else " WHERE " + " AND ".join(clauses)
 
-                overlays: dict[tuple[str, str, str], tuple[str, str | None, str]] = {}
-                rows = connection.execute(
-                    f"""SELECT profile_id, track_id, card_key, user_state,
-                               suspend_until_utc, content_status
+                existing_rows = connection.execute(
+                    f"""SELECT {",".join(self._PROGRESS_COLUMNS)}
                         FROM progress{where}""",
                     tuple(params),
                 ).fetchall()
-                for row in rows:
-                    overlays[(str(row[0]), str(row[1]), str(row[2]))] = (
-                        str(row[3]),
-                        None if row[4] is None else str(row[4]),
-                        str(row[5]),
+                existing: dict[tuple[str, str, str], dict[str, Any]] = {}
+                for row in existing_rows:
+                    snapshot = dict(zip(self._PROGRESS_COLUMNS, row, strict=True))
+                    key = (
+                        str(snapshot["profile_id"]),
+                        str(snapshot["track_id"]),
+                        str(snapshot["card_key"]),
                     )
+                    existing[key] = snapshot
 
                 connection.execute(f"DELETE FROM progress{where}", tuple(params))
+                inserted: set[tuple[str, str, str]] = set()
                 for raw in snapshots:
                     snapshot = dict(raw)
                     key = (
@@ -2370,14 +2417,27 @@ class ReviewEventsRepository:
                         str(snapshot["track_id"]),
                         str(snapshot["card_key"]),
                     )
-                    overlay = overlays.get(key)
-                    if overlay is not None:
-                        snapshot["user_state"] = overlay[0]
-                        snapshot["suspend_until_utc"] = overlay[1]
-                        snapshot["content_status"] = overlay[2]
+                    previous = existing.get(key)
+                    if previous is not None:
+                        snapshot["user_state"] = previous["user_state"]
+                        snapshot["suspend_until_utc"] = previous["suspend_until_utc"]
+                        snapshot["content_status"] = previous["content_status"]
                     self._upsert_progress(connection, snapshot)
+                    inserted.add(key)
+
+                for key, previous in existing.items():
+                    if key in inserted:
+                        continue
+                    if (
+                        previous["user_state"] != "active"
+                        or previous["suspend_until_utc"] is not None
+                        or previous["content_status"] != "active"
+                    ):
+                        self._upsert_progress(connection, previous)
+                        inserted.add(key)
+
                 connection.commit()
-                return len(snapshots)
+                return len(inserted)
             except Exception:
                 if connection.in_transaction:
                     connection.rollback()
@@ -2408,8 +2468,21 @@ class ReviewEventsRepository:
                     params.append(track_id)
                 where = "" if not clauses else " WHERE " + " AND ".join(clauses)
                 connection.execute(f"DELETE FROM stats_daily{where}", tuple(params))
+                undone_ids: set[str] = set()
+                audit_rows = connection.execute(
+                    """SELECT payload_json FROM audit_events
+                       WHERE event_type = 'progress_undo'"""
+                    + (" AND profile_id = ?" if profile_id is not None else ""),
+                    () if profile_id is None else (profile_id,),
+                ).fetchall()
+                for (payload,) in audit_rows:
+                    decoded = json.loads(str(payload))
+                    target = decoded.get("target_event_id")
+                    if isinstance(target, str):
+                        undone_ids.add(target)
+
                 rows = connection.execute(
-                    f"""SELECT profile_id, track_id, local_date, timezone_name,
+                    f"""SELECT id, profile_id, track_id, local_date, timezone_name,
                                utc_offset_minutes, policy_version, mode, result,
                                hint_used, retrieval_occurred, signal_quality,
                                question_type, pre_state_snapshot, post_state_snapshot,
@@ -2420,13 +2493,17 @@ class ReviewEventsRepository:
                 ).fetchall()
                 aggregates: dict[tuple[str, str, str], dict[str, Any]] = {}
                 for row in rows:
-                    key = (str(row[0]), str(row[1]), str(row[2]))
+                    event_id = str(row[0])
+                    mode = str(row[7])
+                    if event_id in undone_ids or mode == "undo_compensation":
+                        continue
+                    key = (str(row[1]), str(row[2]), str(row[3]))
                     item = aggregates.setdefault(
                         key,
                         {
-                            "timezone_name": str(row[3]),
-                            "utc_offset_minutes": int(row[4]),
-                            "policy_version": int(row[5]),
+                            "timezone_name": str(row[4]),
+                            "utc_offset_minutes": int(row[5]),
+                            "policy_version": int(row[6]),
                             "learning_exposures": 0,
                             "verified_retrievals": 0,
                             "self_known": 0,
@@ -2442,13 +2519,12 @@ class ReviewEventsRepository:
                             "active_seconds": 0,
                         },
                     )
-                    mode = str(row[6])
-                    result = str(row[7])
-                    retrieval = bool(row[9])
-                    quality = str(row[10])
-                    question_type = str(row[11])
-                    pre = json.loads(str(row[12]))
-                    post = json.loads(str(row[13]))
+                    result = str(row[8])
+                    retrieval = bool(row[10])
+                    quality = str(row[11])
+                    question_type = str(row[12])
+                    pre = json.loads(str(row[13]))
+                    post = json.loads(str(row[14]))
                     if mode == "introduction":
                         item["learning_exposures"] += 1
                         item["new_cards"].add(str(post["card_key"]))
@@ -2482,7 +2558,7 @@ class ReviewEventsRepository:
                         item["quiz_total"] += 1
                     if question_type == "free_text":
                         item["free_text_total"] += 1
-                    if bool(row[8]):
+                    if bool(row[9]):
                         item["hints_used"] += 1
                     if str(pre.get("state")) in {"review", "leech"} and retrieval:
                         item["reviewed_cards"].add(str(post["card_key"]))
@@ -2490,8 +2566,8 @@ class ReviewEventsRepository:
                         item["relearning_cards"].add(str(post["card_key"]))
                     if str(post.get("state")) == "leech":
                         item["leech_cards"].add(str(post["card_key"]))
-                    if row[14] is not None:
-                        item["active_seconds"] += max(0, int(row[14]) // 1000)
+                    if row[15] is not None:
+                        item["active_seconds"] += max(0, int(row[15]) // 1000)
 
                 for (p_id, t_id, local_date), item in aggregates.items():
                     connection.execute(
