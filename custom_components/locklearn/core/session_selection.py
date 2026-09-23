@@ -278,7 +278,9 @@ class SessionSelectionService:
         if max_new <= 0:
             return 0
 
-        local_date = self._clock.now().astimezone(ZoneInfo(str(profile["timezone"]))).date().isoformat()
+        local_date = (
+            self._clock.now().astimezone(ZoneInfo(str(profile["timezone"]))).date().isoformat()
+        )
         introduced = await self._reviews.async_count_introductions(
             profile_id=profile_id,
             track_id=track_id,
