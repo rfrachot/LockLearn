@@ -2537,7 +2537,7 @@ class ReviewEventsRepository:
                             "verified_cloze",
                             "exam_retrieval",
                         }
-                        and quality in {"weak", "medium", "strong"}
+                        and quality in {"verified", "weak", "medium", "strong"}
                         and result in {"correct", "wrong", "idk"}
                     )
                     if trusted_verified:
