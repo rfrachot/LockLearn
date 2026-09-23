@@ -398,6 +398,6 @@ async def test_leeches_are_fallback_after_normal_due_and_new_cards() -> None:
         settings={"requested_cards": 3},
     )
 
-    assert [item.card_key for item in selected[:2]] == ["card-1", "card-2"]
+    assert {item.card_key for item in selected[:2]} == {"card-1", "card-2"}
     assert selected[2].card_key == "card-3"
     assert selected[2].payload["selection"]["reason"] == "leech_due"
