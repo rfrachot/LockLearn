@@ -219,6 +219,7 @@ class LongHorizonSRSSimulator:
 
     _MAX_SHORT_STEP_ATTEMPTS_PER_CARD_DAY = 12
     _STARVATION_THRESHOLD_DAYS = 7
+    _OSCILLATION_CARD_RATIO = 0.01
 
     def run(self, scenario: SimulationScenario) -> SimulationReport:
         if scenario.horizon_days < 1:
@@ -245,7 +246,7 @@ class LongHorizonSRSSimulator:
         verified_reviews = 0
         verified_correct = 0
         verified_wrong = 0
-        oscillation_cards: set[str] = set()
+        short_step_cap_hits: dict[str, int] = {}
         starvation_days = 0
         throttled_new_cards = 0
         throttled_new_days = 0
@@ -341,7 +342,8 @@ class LongHorizonSRSSimulator:
                     )
                     interactions += short_interactions
                     if hit_cap:
-                        oscillation_cards.add(str(card["card_key"]))
+                        card_key = str(card["card_key"])
+                        short_step_cap_hits[card_key] = short_step_cap_hits.get(card_key, 0) + 1
                         relearning_cap_hits += 1
 
             requested_new = min(max_new, corpus_cards - next_new_index)
@@ -369,7 +371,8 @@ class LongHorizonSRSSimulator:
                 )
                 interactions += short_interactions
                 if hit_cap:
-                    oscillation_cards.add(str(card["card_key"]))
+                    card_key = str(card["card_key"])
+                    short_step_cap_hits[card_key] = short_step_cap_hits.get(card_key, 0) + 1
 
             backlog_end = sum(
                 1
@@ -395,7 +398,8 @@ class LongHorizonSRSSimulator:
         overpromoted = sum(
             1
             for card in active_cards
-            if int(card.get("box", 0)) > min(
+            if int(card.get("box", 0))
+            > min(
                 7,
                 1 + int(card.get("verified_correct_count", 0)),
             )
@@ -410,13 +414,20 @@ class LongHorizonSRSSimulator:
         p95_interactions = interaction_values[p95_index]
         peak_interactions = max(interaction_values)
         max_overdue_days = max(sample.max_overdue_days for sample in daily)
+        cap_hit_cards = len(short_step_cap_hits)
+        repeated_cap_hit_cards = sum(hits >= 2 for hits in short_step_cap_hits.values())
+        oscillation_ratio = cap_hit_cards / max(1, next_new_index)
+        systemic_oscillation = (
+            repeated_cap_hit_cards > 0
+            or oscillation_ratio >= self._OSCILLATION_CARD_RATIO
+        )
 
         warnings: list[str] = []
         if final_backlog > review_capacity * 2 or mean_last_30_backlog > review_capacity:
             warnings.append("due_queue_explosion")
         if max_overdue_days > self._STARVATION_THRESHOLD_DAYS:
             warnings.append("review_starvation")
-        if oscillation_cards:
+        if systemic_oscillation:
             warnings.append("relearning_oscillation")
         if overpromoted:
             warnings.append("over_promotion")
@@ -450,7 +461,7 @@ class LongHorizonSRSSimulator:
             p95_daily_interactions=p95_interactions,
             max_overdue_days=max_overdue_days,
             starvation_days=starvation_days,
-            relearning_oscillation_cards=len(oscillation_cards),
+            relearning_oscillation_cards=cap_hit_cards,
             overpromoted_cards=overpromoted,
             leech_cards=sum(str(card["state"]) == "leech" for card in active_cards),
             max_box=max_box,
