@@ -42,7 +42,10 @@ class SyntheticLearnerPattern:
                 raise ValueError(f"{name} must be within [0, 1]")
         if self.burst_period_days is not None and self.burst_period_days < 1:
             raise ValueError("burst_period_days must be >= 1")
-        if self.burst_review_success_rate is not None and not 0 <= self.burst_review_success_rate <= 1:
+        if (
+            self.burst_review_success_rate is not None
+            and not 0 <= self.burst_review_success_rate <= 1
+        ):
             raise ValueError("burst_review_success_rate must be within [0, 1]")
 
 
