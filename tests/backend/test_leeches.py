@@ -207,7 +207,12 @@ async def test_leech_detection_confusions_mnemonic_and_reactivation(tmp_path: Pa
                 verified_wrong_count=wrong,
             )
             event = await reviews.async_record(
-                **identity,
+                profile_id=identity["profile_id"],
+                track_id=identity["track_id"],
+                learning_item_id=identity["learning_item_id"],
+                prompt_facet_id=identity["prompt_facet_id"],
+                answer_facet_id=identity["answer_facet_id"],
+                card_key=identity["card_key"],
                 mode="verified_mcq",
                 question_type="mcq",
                 result=result,
