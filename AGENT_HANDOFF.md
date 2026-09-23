@@ -82,8 +82,9 @@ Declared positive-bench review capacities are 30/80/150 cards/day respectively
 and are simulation assumptions only; no runtime default has changed. The matrix
 covers typical, mixed and bursty learners plus an explicit negative-control
 stress case. Detectors cover sustained due backlog, >7-day starvation,
-short-step cap exhaustion/relearning oscillation, box-6+ over-promotion below
-75% verified accuracy, and excessive p95 daily interactions.
+short-step cap exhaustion/relearning oscillation, box promotion beyond
+accumulated verified-success evidence, and excessive p95 daily interactions
+after accounting for expected short-step work.
 `tests/backend/test_srs_simulation.py` checks reproducibility, preset coverage,
 required-scenario sustainability and negative-control sensitivity.
 `scripts/p3_14_srs_simulation.py` prints JSON and exits non-zero if a required
