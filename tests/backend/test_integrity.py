@@ -9,6 +9,7 @@ from pathlib import Path
 
 from custom_components.locklearn.core.integrity import IntegrityService
 from custom_components.locklearn.core.profiles import ProfileService
+from custom_components.locklearn.core.progress_state import ProgressUserStateService
 from custom_components.locklearn.core.reviews import ReviewEventService
 from custom_components.locklearn.core.tracks import TrackService
 from custom_components.locklearn.storage import SQLiteStorage, StoragePaths
@@ -379,5 +380,76 @@ async def test_stats_rebuild_is_independent_projection(tmp_path: Path) -> None:
             ("2026-09-23", 1, 1, 0),
             ("2026-09-24", 1, 0, 1),
         ]
+    finally:
+        await storage.async_close()
+
+
+async def test_snapshot_rebuild_preserves_overlay_only_progress_row(tmp_path: Path) -> None:
+    storage, _reviews, integrity, _clock, identity = await _setup(tmp_path)
+    try:
+        progress_state = ProgressUserStateService(
+            storage.repositories.tracks,
+            storage.repositories.progress,
+            dataset_generation=lambda: (
+                storage.content_generations.active_metadata.generation_id
+            ),
+        )
+        await progress_state.async_set_user_state(
+            actor_user_id="owner",
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            card_key=identity["card_key"],
+            user_state="known_already",
+        )
+
+        result = await integrity.async_rebuild_progress(profile_id=identity["profile_id"])
+        assert result == {"rebuilt_cards": 1}
+        preserved = await storage.repositories.progress.async_get(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            card_key=identity["card_key"],
+        )
+        assert preserved is not None
+        assert preserved["state"] == "new"
+        assert preserved["user_state"] == "known_already"
+        assert preserved["seen_count"] == 0
+    finally:
+        await storage.async_close()
+
+
+async def test_stats_rebuild_excludes_undone_response(tmp_path: Path) -> None:
+    storage, reviews, integrity, clock, identity = await _setup(tmp_path)
+    try:
+        pre = _snapshot(identity, box=1)
+        first = _snapshot(
+            identity,
+            box=2,
+            seen_count=2,
+            verified_correct_count=1,
+        )
+        await _record(reviews, identity, pre=pre, post=first)
+        clock.current = datetime(2026, 9, 24, 20, 0, tzinfo=UTC)
+        second = _snapshot(
+            identity,
+            box=1,
+            seen_count=3,
+            verified_correct_count=1,
+            verified_wrong_count=1,
+        )
+        await _record(reviews, identity, pre=first, post=second, result="wrong")
+        clock.current = datetime(2026, 9, 24, 20, 1, tzinfo=UTC)
+        await integrity.async_undo_last(
+            actor_user_id="owner",
+            profile_id=identity["profile_id"],
+        )
+
+        result = await integrity.async_rebuild_stats(profile_id=identity["profile_id"])
+        assert result == {"rebuilt_days": 1}
+        with sqlite3.connect(storage.paths.state_db) as connection:
+            rows = connection.execute(
+                """SELECT local_date, verified_retrievals, verified_correct, verified_wrong
+                   FROM stats_daily ORDER BY local_date"""
+            ).fetchall()
+        assert rows == [("2026-09-23", 1, 1, 0)]
     finally:
         await storage.async_close()
