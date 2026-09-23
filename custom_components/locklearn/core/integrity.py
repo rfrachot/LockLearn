@@ -482,11 +482,7 @@ class IntegrityService:
         mode = SignalMode(str(event["mode"]))
         result = str(event["result"]).strip().lower()
         quality_raw = str(event["signal_quality"])
-        quality = (
-            SignalQuality.STRONG
-            if quality_raw == "verified"
-            else SignalQuality(quality_raw)
-        )
+        quality = SignalQuality.STRONG if quality_raw == "verified" else SignalQuality(quality_raw)
         positive = result in {"correct", "known", "knew", "easy", "hard"}
         negative = result in {"wrong", "review", "again", "idk"}
         outcome = (
@@ -505,7 +501,8 @@ class IntegrityService:
         trusted = (
             verified_mode
             and bool(event["retrieval_occurred"])
-            and quality in {
+            and quality
+            in {
                 SignalQuality.WEAK,
                 SignalQuality.MEDIUM,
                 SignalQuality.STRONG,
