@@ -8,8 +8,7 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.locklearn.const import DOMAIN
-from custom_components.locklearn.core.sessions import SessionQuestion
-from tests.backend.content_db_helpers import ITEM_A, card_identity, create_package, facet_ids
+from tests.backend.content_db_helpers import ITEM_A, card_identity, create_package
 
 
 async def test_storage_status_is_admin_only_and_privacy_safe(
