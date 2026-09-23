@@ -2,9 +2,9 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.13 are complete. P1 and P2 are
-closed PASS. P3 remains in progress on `feat/p3-sessions`. P3.10–P3.13 are
-PASS. P3.14 implementation is complete and pending simulation/repository gates.
+P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.14 are complete. P1, P2 and P3
+are closed PASS. The completed P3 work remains on `feat/p3-sessions` pending
+the normal branch/merge workflow.
 P3.8 and P3.9 are PASS. P3.8's targeted real-HA qualification ran on 2026-09-23
 at `417ff41df90cf137e2751320d72e3166bdc0793b` after HACS explicitly
 redownloaded `feat/p3-sessions` and HA restarted. It exercised public P3.9
@@ -104,10 +104,11 @@ new cards and max overdue age one day at 0.818412 verified accuracy.
 standard_bursty remained bounded at 48 / 97 with 112 deferred new cards and max
 overdue one day. The explicit stress negative control remained unsustainable
 and triggered due_queue_explosion, relearning_oscillation and
-unrealistic_daily_workload, proving detector sensitivity. The same run had
-Ruff lint PASS, mypy PASS (121 sources), resource registries PASS and pytest
-PASS (318 tests in 15.01 s). One Ruff format-only wrap was fixed afterward.
-Run the final repository gate; if green, close P3.14 and the full P3 phase
+unrealistic_daily_workload, proving detector sensitivity. The qualification run had Ruff lint PASS, mypy PASS (121 sources), resource
+registries PASS and pytest PASS (318 tests). The final repository gate after the
+format-only fix passed on 2026-09-23: Ruff format PASS (214 files), Ruff lint
+PASS, mypy PASS (121 sources), resource registries PASS and pytest PASS
+(318 tests in 15.14 s). P3.14 and the full P3 phase are therefore closed PASS
 without changing SRS/preset defaults.
 
 The only unavailable supplemental proof is real viewer/outsider ACL: one HA
@@ -116,8 +117,8 @@ declared repository environment. This is documented as
 `viewer/outsider real-HA ACL remains BLOCKED — second HA development-user token unavailable`,
 but is not a P3.8 formal exit blocker. `scripts/p3_8_real_ha_qualification.py`
 is the secret-safe public-API harness; it adds no runtime endpoint, fixture or
-development-mode behavior. Next concrete action: run the P3.14 simulation script and full repository gate.
-If both are green, document the measured matrix and close the P3 exit gate.
+development-mode behavior. Next concrete action: start the separately scoped P4.1 work package
+(materialized scheduler slots and deterministic generation) when requested.
 
 Final post-qualification gate in `.venv`: Ruff format PASS (193 files), Ruff
 lint PASS, mypy PASS (106 sources), resource registries PASS and pytest PASS
