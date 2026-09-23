@@ -117,6 +117,10 @@ class DifficultyService:
                     "recommended_remediation": (
                         "create_personal_mnemonic" if not annotations else "edit_personal_mnemonic"
                     ),
+                    "targeted_session_settings": {
+                        "leeches_only": True,
+                        "requested_cards": 20,
+                    },
                 }
             )
             result.append(item)
