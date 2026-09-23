@@ -2,9 +2,8 @@
 
 ## Current state
 
-P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.9 are complete. P1 and P2 are
-closed PASS. P3 remains in progress on `feat/p3-sessions`. P3.10 implementation
-is complete and pending the repository quality gate before PASS.
+P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.10 are complete. P1 and P2 are
+closed PASS. P3 remains in progress on `feat/p3-sessions`. P3.10 is PASS.
 P3.8 and P3.9 are PASS. P3.8's targeted real-HA qualification ran on 2026-09-23
 at `417ff41df90cf137e2751320d72e3166bdc0793b` after HACS explicitly
 redownloaded `feat/p3-sessions` and HA restarted. It exercised public P3.9
@@ -21,8 +20,9 @@ user state itself so an expired buried card becomes logically active without a
 hidden write. The initial calibration sampler is deterministic/read-only,
 accepts requested sizes 20–40 and creates no Progress rows. ADR-0031 records
 that P3.12 owns preservation/replay of these non-pedagogical overlays during
-rebuild/recompute. New backend and WebSocket ACL tests are present; run the
-normal full gate before marking P3.10 PASS.
+rebuild/recompute. Backend and WebSocket ACL tests are present. Final P3.10 gate on 2026-09-23:
+Ruff format PASS (197 files), Ruff lint PASS, mypy PASS (109 sources), resource
+registries PASS and pytest PASS (292 tests in 7.12 s).
 
 The only unavailable supplemental proof is real viewer/outsider ACL: one HA
 development-user token is configured, and no second usable token exists in the
@@ -30,8 +30,8 @@ declared repository environment. This is documented as
 `viewer/outsider real-HA ACL remains BLOCKED — second HA development-user token unavailable`,
 but is not a P3.8 formal exit blocker. `scripts/p3_8_real_ha_qualification.py`
 is the secret-safe public-API harness; it adds no runtime endpoint, fixture or
-development-mode behavior. Next concrete action: do not extend P3.8/P3.9;
-start the separately scoped P3.10 work package when requested.
+development-mode behavior. Next concrete action: do not extend P3.8–P3.10; start the separately scoped
+P3.11 work package when requested.
 
 Final post-qualification gate in `.venv`: Ruff format PASS (193 files), Ruff
 lint PASS, mypy PASS (106 sources), resource registries PASS and pytest PASS
