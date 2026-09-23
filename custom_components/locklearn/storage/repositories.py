@@ -1920,10 +1920,7 @@ class ReviewEventsRepository:
                 item["hints_used"] += 1
             if str(pre.get("state")) in {"review", "leech"} and retrieval:
                 item["reviewed_cards"].add(str(post["card_key"]))
-            if (
-                str(pre.get("state")) == "relearning"
-                or str(post.get("state")) == "relearning"
-            ):
+            if str(pre.get("state")) == "relearning" or str(post.get("state")) == "relearning":
                 item["relearning_cards"].add(str(post["card_key"]))
             if str(post.get("state")) == "leech":
                 item["leech_cards"].add(str(post["card_key"]))
