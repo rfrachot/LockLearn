@@ -5,6 +5,16 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P3.14 deterministic ~180-day SRS simulation using the production learning,
+  review and leech policy primitives across child/standard/intensive presets.
+- Sustainability detectors for due-queue explosion, starvation, relearning
+  oscillation, over-promotion and unrealistic p95 daily workload, plus an
+  explicit negative-control stress scenario.
+- Executable `scripts/p3_14_srs_simulation.py` quality gate and deterministic
+  backend tests suitable for CI.
+- ADR-0035 documenting simulation assumptions, detector thresholds and the rule
+  that production defaults are tuned only from measured before/after evidence.
+
 - P3.13 live `stats_daily` materialization on committed ReviewEvents with
   undo-aware per-day repair using the same rebuild primitive.
 - Private `locklearn/stats/get` dashboard backend for due-today, current
