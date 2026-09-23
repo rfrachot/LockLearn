@@ -214,8 +214,6 @@ class LongHorizonSRSSimulator:
 
     _MAX_SHORT_STEP_ATTEMPTS_PER_CARD_DAY = 12
     _STARVATION_THRESHOLD_DAYS = 7
-    _OVERPROMOTION_MIN_BOX = 6
-    _OVERPROMOTION_MAX_ACCURACY = 0.75
 
     def run(self, scenario: SimulationScenario) -> SimulationReport:
         if scenario.horizon_days < 1:
@@ -253,8 +251,7 @@ class LongHorizonSRSSimulator:
             due_long = [
                 card
                 for card in cards[:next_new_index]
-                if str(card["state"]) in {"review", "leech"}
-                and self._is_due(card, at=day_start)
+                if str(card["state"]) in {"review", "leech"} and self._is_due(card, at=day_start)
             ]
             due_long.sort(
                 key=lambda card: (
@@ -265,10 +262,7 @@ class LongHorizonSRSSimulator:
             )
             due_opening = len(due_long)
             max_overdue = max(
-                (
-                    self._overdue_days(card, at=day_start)
-                    for card in due_long
-                ),
+                (self._overdue_days(card, at=day_start) for card in due_long),
                 default=0,
             )
             if max_overdue > self._STARVATION_THRESHOLD_DAYS:
@@ -387,8 +381,8 @@ class LongHorizonSRSSimulator:
         overpromoted = sum(
             1
             for card in active_cards
-            if int(card.get("box", 0)) >= self._OVERPROMOTION_MIN_BOX
-            and self._verified_accuracy(card) < self._OVERPROMOTION_MAX_ACCURACY
+            if int(card.get("box", 0))
+            > min(7, 1 + int(card.get("verified_correct_count", 0)))
         )
         max_box = max((int(card.get("box", 0)) for card in active_cards), default=0)
         final_backlog = daily[-1].backlog_end
@@ -410,7 +404,8 @@ class LongHorizonSRSSimulator:
             warnings.append("relearning_oscillation")
         if overpromoted:
             warnings.append("over_promotion")
-        workload_budget = review_capacity + max_new * 5
+        ideal_daily_interactions = review_capacity + max_new * 4
+        workload_budget = ideal_daily_interactions + math.ceil(review_capacity * 0.5)
         if p95_interactions > workload_budget:
             warnings.append("unrealistic_daily_workload")
 
@@ -428,9 +423,7 @@ class LongHorizonSRSSimulator:
             verified_correct=verified_correct,
             verified_wrong=verified_wrong,
             verified_accuracy=(
-                None
-                if verified_reviews == 0
-                else round(verified_correct / verified_reviews, 6)
+                None if verified_reviews == 0 else round(verified_correct / verified_reviews, 6)
             ),
             final_backlog=final_backlog,
             max_backlog=max_backlog,
@@ -572,9 +565,3 @@ class LongHorizonSRSSimulator:
             return 0
         return max(0, int((at - due).total_seconds() // 86400))
 
-    @staticmethod
-    def _verified_accuracy(card: dict[str, Any]) -> float:
-        correct = int(card.get("verified_correct_count", 0))
-        wrong = int(card.get("verified_wrong_count", 0))
-        total = correct + wrong
-        return 0.0 if total == 0 else correct / total
