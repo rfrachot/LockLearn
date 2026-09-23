@@ -301,7 +301,11 @@ class SessionSelectionService:
         due = [c for c in candidates if c.state != "new"]
         new = [c for c in candidates if c.state == "new"]
         due_target = min(len({c.learning_item_id for c in due}), requested_cards)
-        new_target = min(new_quota, len(new), max(0, requested_cards - due_target))
+        new_target = min(
+            new_quota,
+            len({candidate.learning_item_id for candidate in new}),
+            max(0, requested_cards - due_target),
+        )
         final_quarter_start = ceil(requested_cards * 0.75)
         strict_due_count = min(
             requested_cards,
@@ -326,7 +330,7 @@ class SessionSelectionService:
         selected_new = 0
         selected_review = 0
         target_review = min(
-            sum(c.state == "review" for c in due),
+            len({c.learning_item_id for c in due if c.state == "review"}),
             max(0, requested_cards - strict_due_count - new_target),
         )
 
@@ -401,6 +405,10 @@ class SessionSelectionService:
         new = [c for c in available if c.state == "new"]
         if not new or position >= final_quarter_start or selected_new >= new_target:
             return reviews
+        remaining_pre_final_slots = max(0, final_quarter_start - position)
+        remaining_new = max(0, new_target - selected_new)
+        if remaining_new >= remaining_pre_final_slots:
+            return new
         if not reviews or target_review <= 0:
             return new
 
@@ -419,7 +427,10 @@ class SessionSelectionService:
         selected_new: int,
         new_target: int,
     ) -> bool:
-        if candidate.learning_item_id in selected_items:
+        if (
+            candidate.state in {"new", "review"}
+            and candidate.learning_item_id in selected_items
+        ):
             return False
         if candidate.state != "new":
             return True
