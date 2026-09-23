@@ -1192,7 +1192,7 @@ class TracksRepository:
             pack_version_id = str(pin[0])
 
             rows = connection.execute(
-                """SELECT rule.card_key, card.learning_item_id,
+                """SELECT DISTINCT rule.card_key, card.learning_item_id,
                           card.prompt_facet_id, card.answer_facet_id,
                           item.content_type,
                           COALESCE(progress.state, 'new') AS progress_state,
