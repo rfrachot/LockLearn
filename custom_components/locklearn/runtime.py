@@ -20,6 +20,7 @@ from .core.quiz import QuizEngine
 from .core.review_policy import ReviewPolicyV1
 from .core.reviews import ReviewEventService
 from .core.selection import SelectionConstraintService
+from .core.session_selection import SessionSelectionService
 from .core.sessions import SessionService
 from .core.signals import SignalPolicy
 from .core.tracks import TrackService
@@ -52,6 +53,7 @@ class LockLearnRuntime:
     review_policy: ReviewPolicyV1
     signal_policy: SignalPolicy
     selection: SelectionConstraintService
+    session_selection: SessionSelectionService
     reviews: ReviewEventService
     datasets: DatasetManager
 
@@ -102,6 +104,13 @@ class LockLearnRuntime:
                 with suppress(Exception):
                     await datasets.async_install_bundled(bundled)
             review_policy = ReviewPolicyV1()
+            selection = SelectionConstraintService(storage.repositories.tracks)
+            session_selection = SessionSelectionService(
+                storage.repositories.tracks,
+                storage.repositories.profiles,
+                storage.repositories.review_events,
+                selection,
+            )
             return cls(
                 storage=storage,
                 sessions=SessionService(storage),
@@ -121,7 +130,8 @@ class LockLearnRuntime:
                 quiz=QuizEngine(),
                 review_policy=review_policy,
                 signal_policy=SignalPolicy(review_policy),
-                selection=SelectionConstraintService(storage.repositories.tracks),
+                selection=selection,
+                session_selection=session_selection,
                 reviews=ReviewEventService(
                     storage.repositories.review_events,
                     storage.repositories.profiles,
