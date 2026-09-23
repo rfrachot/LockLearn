@@ -1497,6 +1497,34 @@ class ProgressRepository:
 
         return await self._storage._async_reader(read)
 
+    async def async_list_scope(
+        self,
+        *,
+        profile_id: str,
+        track_id: str | None = None,
+    ) -> tuple[dict[str, Any], ...]:
+        """List materialized Progress rows for statistics and integrity views."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            clauses = ["profile_id = ?"]
+            params: list[Any] = [profile_id]
+            if track_id is not None:
+                clauses.append("track_id = ?")
+                params.append(track_id)
+            rows = connection.execute(
+                f"""SELECT {",".join(ReviewEventsRepository._PROGRESS_COLUMNS)}
+                    FROM progress
+                    WHERE {" AND ".join(clauses)}
+                    ORDER BY track_id, card_key""",
+                tuple(params),
+            ).fetchall()
+            return tuple(
+                dict(zip(ReviewEventsRepository._PROGRESS_COLUMNS, row, strict=True))
+                for row in rows
+            )
+
+        return await self._storage._async_reader(read)
+
     async def async_set_user_state(
         self,
         *,
@@ -2180,6 +2208,91 @@ class ReviewEventsRepository:
                 }
                 for key, count in ordered
             )
+
+        return await self._storage._async_reader(read)
+
+    async def async_stats_daily(
+        self,
+        *,
+        profile_id: str,
+        track_id: str | None = None,
+        since_local_date: str | None = None,
+    ) -> tuple[dict[str, Any], ...]:
+        """Read materialized daily statistics without rewriting historical dates."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            clauses = ["profile_id = ?"]
+            params: list[Any] = [profile_id]
+            if track_id is not None:
+                clauses.append("track_id = ?")
+                params.append(track_id)
+            if since_local_date is not None:
+                clauses.append("local_date >= ?")
+                params.append(since_local_date)
+            rows = connection.execute(
+                f"""SELECT profile_id, track_id, local_date, timezone_name,
+                           utc_offset_minutes, policy_version, learning_exposures,
+                           verified_retrievals, self_known, verified_correct,
+                           verified_wrong, quiz_total, free_text_total, hints_used,
+                           new_cards, reviewed_cards, relearning_cards, leech_cards,
+                           active_seconds
+                    FROM stats_daily
+                    WHERE {" AND ".join(clauses)}
+                    ORDER BY local_date, track_id""",
+                tuple(params),
+            ).fetchall()
+            keys = (
+                "profile_id",
+                "track_id",
+                "local_date",
+                "timezone_name",
+                "utc_offset_minutes",
+                "policy_version",
+                "learning_exposures",
+                "verified_retrievals",
+                "self_known",
+                "verified_correct",
+                "verified_wrong",
+                "quiz_total",
+                "free_text_total",
+                "hints_used",
+                "new_cards",
+                "reviewed_cards",
+                "relearning_cards",
+                "leech_cards",
+                "active_seconds",
+            )
+            return tuple(dict(zip(keys, row, strict=True)) for row in rows)
+
+        return await self._storage._async_reader(read)
+
+    async def async_progress_user_state_audit(
+        self,
+        *,
+        profile_id: str,
+        since_utc: str | None = None,
+    ) -> tuple[dict[str, Any], ...]:
+        """Return private P3.10 user-state audit events for metacognitive stats."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            clauses = ["event_type = 'progress_user_state'", "profile_id = ?"]
+            params: list[Any] = [profile_id]
+            if since_utc is not None:
+                clauses.append("created_at_utc >= ?")
+                params.append(since_utc)
+            rows = connection.execute(
+                f"""SELECT payload_json, created_at_utc
+                    FROM audit_events
+                    WHERE {" AND ".join(clauses)}
+                    ORDER BY created_at_utc, id""",
+                tuple(params),
+            ).fetchall()
+            result: list[dict[str, Any]] = []
+            for payload, created_at in rows:
+                item = json.loads(str(payload))
+                item["created_at_utc"] = str(created_at)
+                result.append(item)
+            return tuple(result)
 
         return await self._storage._async_reader(read)
 
