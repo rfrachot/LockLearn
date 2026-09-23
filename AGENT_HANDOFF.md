@@ -1049,3 +1049,38 @@ P3.8 is considered LOCAL GATE PASS. Before beginning P3.9, run one targeted
 real-Home-Assistant qualification covering WebSocket reconnect/resume,
 same-version concurrent answer CAS, pause/resume/complete, subscription cleanup
 on disconnect and state persistence across integration reload.
+
+
+## P3.8 real Home Assistant qualification blocked
+
+On 2026-09-23, `feat/p3-sessions` at
+`7857143376c317f955bfd783196aeb5effea0982` was installed on the development
+instance through HACS and loaded after a Core restart. The real state database
+migrated from schema 1 to schema 2 with the pre-existing three sessions and
+three answer rows preserved.
+
+The full local gate remained green: Ruff format/lint PASS, mypy PASS (104 source
+files), resource registries PASS and pytest PASS (280 tests in 6.77 s).
+
+Real HA PASS evidence covers Profile/Track bootstrap, persistent session
+metadata/settings, independent WebSocket clients, one-winner lifecycle CAS,
+winner-only subscription events, pause/resume/stale rejection, disconnect and
+cross-client reconstruction, real Config Entry reload, removal of pre-reload
+subscriptions, completion and incompatible-mutation rejection. Storage remained
+healthy (`integrity_check=ok`, zero FK violations, WAL, reader off event loop),
+one panel/entry remained, and HA `system_log` contained no LockLearn error.
+Temporary qualification data was deleted and the original session/answer counts
+were restored.
+
+The qualification is **BLOCKED**, not PASS: public P3.8 `session/start`
+correctly accepts no client-prepared questions and P3.9 selection does not yet
+exist, so the mandatory real-HA concurrent `session/answer` race and immutable
+answer-row proof could not be executed. Viewer/outsider real ACL was also not
+run because only one HA token is configured; it remains harness-only evidence.
+See `docs/P3_8_REAL_HA_QUALIFICATION.md` for the exact matrix.
+
+Next action: without beginning P3.9 or exposing client-supplied questions,
+provide a non-shipping backend-owned live-runtime fixture for one valid prepared
+question, rerun answer CAS/subscription/reload, and optionally supply a second
+development-user token for real viewer/outsider ACL. Do not change P3.8 from
+`LOCAL GATE PASS — real HA qualification pending` until that succeeds.
