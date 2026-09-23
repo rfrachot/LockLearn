@@ -126,50 +126,153 @@ def _unlink_sqlite_files(path: Path) -> None:
 
 
 def _migrate_state_database(path: Path, schema: str, current: int, target: int) -> None:
-    if (current, target) != (1, 2):
+    if current == 1 and target >= 2:
+        candidate = path.with_name(f".{path.name}.v2-migration")
+        _unlink_sqlite_files(candidate)
+        connection = sqlite3.connect(candidate)
+        try:
+            _configure_state_connection(connection)
+            connection.executescript(schema)
+            connection.execute("ATTACH DATABASE ? AS legacy", (str(path),))
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute("INSERT INTO schema_version(version) VALUES (2)")
+            connection.execute(
+                """INSERT INTO sessions(
+                       id, profile_id, track_id, status, version, current_position,
+                       started_at_utc, last_activity_at_utc
+                   )
+                   SELECT id, profile_id, track_id, status, version, current_position,
+                          started_at_utc, last_activity_at_utc
+                   FROM legacy.sessions"""
+            )
+            connection.execute(
+                """INSERT INTO session_answers(
+                       id, session_id, question_id, answer_json, resulting_version, created_at_utc
+                   )
+                   SELECT id, session_id, question_id, answer_json, resulting_version, created_at_utc
+                   FROM legacy.session_answers"""
+            )
+            connection.execute(
+                """INSERT INTO progress(
+                       profile_id, track_id, card_key, state, next_due_at_utc
+                   )
+                   SELECT profile_id, track_id, card_key, state, next_due_at_utc
+                   FROM legacy.progress"""
+            )
+            connection.execute(
+                """INSERT INTO audit_events(
+                       id, event_type, actor_user_id, profile_id, payload_json, created_at_utc
+                   )
+                   SELECT id, event_type, actor_user_id, profile_id, payload_json, created_at_utc
+                   FROM legacy.audit_events"""
+            )
+            connection.commit()
+            connection.execute("DETACH DATABASE legacy")
+            if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                raise RuntimeError("Migrated state database failed integrity_check")
+            if connection.execute("PRAGMA foreign_key_check").fetchall():
+                raise RuntimeError("Migrated state database failed foreign_key_check")
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            if connection.in_transaction:
+                connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+        os.replace(candidate, path)
+        _unlink_sqlite_files(candidate)
+        current = 2
+
+    if current == target:
+        return
+
+    if (current, target) != (2, 3):
         raise RuntimeError(f"No state migration path from {current} to {target}")
 
-    candidate = path.with_name(f".{path.name}.v2-migration")
-    _unlink_sqlite_files(candidate)
-    connection = sqlite3.connect(candidate)
+    connection = sqlite3.connect(path)
     try:
         _configure_state_connection(connection)
-        connection.executescript(schema)
-        connection.execute("ATTACH DATABASE ? AS legacy", (str(path),))
         connection.execute("BEGIN IMMEDIATE")
-        connection.execute("INSERT INTO schema_version(version) VALUES (2)")
         connection.execute(
-            """INSERT INTO sessions(
-                   id, profile_id, track_id, status, version, current_position,
-                   started_at_utc, last_activity_at_utc
-               )
-               SELECT id, profile_id, track_id, status, version, current_position,
-                      started_at_utc, last_activity_at_utc
-               FROM legacy.sessions"""
+            """CREATE TABLE progress_v3 (
+                profile_id TEXT NOT NULL,
+                track_id TEXT NOT NULL,
+                card_key TEXT NOT NULL,
+                learning_item_id TEXT,
+                prompt_facet_id TEXT,
+                answer_facet_id TEXT,
+                state TEXT NOT NULL CHECK (
+                    state IN ('new', 'learning', 'review', 'relearning', 'leech')
+                ),
+                mastery REAL NOT NULL DEFAULT 0 CHECK (mastery >= 0 AND mastery <= 1),
+                box INTEGER NOT NULL DEFAULT 0 CHECK (box >= 0),
+                seen_count INTEGER NOT NULL DEFAULT 0 CHECK (seen_count >= 0),
+                verified_correct_count INTEGER NOT NULL DEFAULT 0
+                    CHECK (verified_correct_count >= 0),
+                verified_wrong_count INTEGER NOT NULL DEFAULT 0 CHECK (verified_wrong_count >= 0),
+                self_known_count INTEGER NOT NULL DEFAULT 0 CHECK (self_known_count >= 0),
+                self_review_count INTEGER NOT NULL DEFAULT 0 CHECK (self_review_count >= 0),
+                first_seen_at_utc TEXT,
+                last_seen_at_utc TEXT,
+                last_result TEXT,
+                next_due_at_utc TEXT,
+                streak_correct INTEGER NOT NULL DEFAULT 0 CHECK (streak_correct >= 0),
+                leech_score REAL NOT NULL DEFAULT 0 CHECK (leech_score >= 0),
+                difficulty_factor REAL NOT NULL DEFAULT 1 CHECK (difficulty_factor > 0),
+                last_verified_at_utc TEXT,
+                verified_success_since_box INTEGER NOT NULL DEFAULT 0
+                    CHECK (verified_success_since_box >= 0),
+                user_state TEXT NOT NULL DEFAULT 'active'
+                    CHECK (user_state IN ('active', 'known_already', 'suspended', 'buried')),
+                suspend_until_utc TEXT,
+                example_rotation_index INTEGER NOT NULL DEFAULT 0
+                    CHECK (example_rotation_index >= 0),
+                content_status TEXT NOT NULL DEFAULT 'active'
+                    CHECK (content_status IN ('active', 'removed', 'superseded')),
+                policy_version INTEGER NOT NULL DEFAULT 1 CHECK (policy_version >= 1),
+                dataset_generation TEXT,
+                normalization_version INTEGER CHECK (
+                    normalization_version IS NULL OR normalization_version >= 1
+                ),
+                updated_at_utc TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY(profile_id, track_id, card_key),
+                CHECK (
+                    (learning_item_id IS NULL AND prompt_facet_id IS NULL AND answer_facet_id IS NULL)
+                    OR (
+                        learning_item_id IS NOT NULL
+                        AND prompt_facet_id IS NOT NULL
+                        AND answer_facet_id IS NOT NULL
+                    )
+                )
+            )"""
         )
         connection.execute(
-            """INSERT INTO session_answers(
-                   id, session_id, question_id, answer_json, resulting_version, created_at_utc
-               )
-               SELECT id, session_id, question_id, answer_json, resulting_version, created_at_utc
-               FROM legacy.session_answers"""
+            """INSERT INTO progress_v3
+               SELECT profile_id, track_id, card_key, learning_item_id,
+                      prompt_facet_id, answer_facet_id, state, mastery, box,
+                      seen_count, verified_correct_count, verified_wrong_count,
+                      self_known_count, self_review_count, first_seen_at_utc,
+                      last_seen_at_utc, last_result, next_due_at_utc,
+                      streak_correct, leech_score, difficulty_factor,
+                      last_verified_at_utc, verified_success_since_box,
+                      user_state, suspend_until_utc, example_rotation_index,
+                      content_status, policy_version, dataset_generation,
+                      normalization_version, updated_at_utc
+               FROM progress"""
+        )
+        connection.execute("DROP TABLE progress")
+        connection.execute("ALTER TABLE progress_v3 RENAME TO progress")
+        connection.execute(
+            """CREATE INDEX progress_due
+               ON progress(profile_id, track_id, state, next_due_at_utc)"""
         )
         connection.execute(
-            """INSERT INTO progress(
-                   profile_id, track_id, card_key, state, next_due_at_utc
-               )
-               SELECT profile_id, track_id, card_key, state, next_due_at_utc
-               FROM legacy.progress"""
+            """CREATE INDEX progress_content_identity
+               ON progress(card_key, learning_item_id, prompt_facet_id, answer_facet_id)"""
         )
-        connection.execute(
-            """INSERT INTO audit_events(
-                   id, event_type, actor_user_id, profile_id, payload_json, created_at_utc
-               )
-               SELECT id, event_type, actor_user_id, profile_id, payload_json, created_at_utc
-               FROM legacy.audit_events"""
-        )
+        connection.execute("UPDATE schema_version SET version = 3")
         connection.commit()
-        connection.execute("DETACH DATABASE legacy")
         if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
             raise RuntimeError("Migrated state database failed integrity_check")
         if connection.execute("PRAGMA foreign_key_check").fetchall():
@@ -181,9 +284,6 @@ def _migrate_state_database(path: Path, schema: str, current: int, target: int) 
         raise
     finally:
         connection.close()
-
-    os.replace(candidate, path)
-    _unlink_sqlite_files(candidate)
 
 
 class SQLiteStorage:
