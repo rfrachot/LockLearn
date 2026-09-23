@@ -15,7 +15,8 @@ from ..core.content import GradingOutcome, GradingPolicyKind
 from ..core.content_reports import ContentReportError
 from ..core.grading import FreeTextGradingResult
 from ..core.profiles import ProfileValidationError
-from ..core.sessions import SessionValidationError
+from ..core.session_selection import SessionSelectionError
+from ..core.sessions import SessionQuestion, SessionValidationError
 from ..core.tracks import TrackValidationError
 from ..runtime import LockLearnRuntime
 from ..storage.database import SessionNotFoundError, StaleSessionError
@@ -67,6 +68,22 @@ def _paginate(
         "items": page,
         "cursor": str(next_offset) if next_offset < len(items) else None,
     }
+
+
+async def _with_fatigue_advice(
+    runtime: LockLearnRuntime,
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    """Decorate a session response with non-mutating P3.9 fatigue advice."""
+    enriched = dict(state)
+    settings = state.get("settings")
+    advice = await runtime.session_selection.async_fatigue_advice(
+        str(state["id"]),
+        settings=dict(settings) if isinstance(settings, dict) else {},
+        active=str(state.get("status")) == "active",
+    )
+    enriched["fatigue_advice"] = advice.as_dict()
+    return enriched
 
 
 async def _require_profile_permission(
@@ -749,14 +766,38 @@ async def ws_session_start(
             connection.send_error(msg["id"], ERR_NOT_FOUND, "Track not found")
             return
     try:
+        prepared_questions: tuple[SessionQuestion, ...] = ()
+        if track_id is not None:
+            selected = await runtime.session_selection.async_prepare(
+                profile_id=profile_id,
+                track_id=track_id,
+                session_type=msg["session_type"],
+                settings=msg["settings"],
+            )
+            prepared_questions = tuple(
+                SessionQuestion(
+                    question_id=f"q-{position + 1}-{candidate.card_key}",
+                    card_key=candidate.card_key,
+                    learning_item_id=candidate.learning_item_id,
+                    prompt_facet_id=candidate.prompt_facet_id,
+                    answer_facet_id=candidate.answer_facet_id,
+                    payload=dict(candidate.payload),
+                )
+                for position, candidate in enumerate(selected)
+            )
+        else:
+            runtime.session_selection.validate_session_settings(msg["settings"])
+
         state = await runtime.sessions.async_start(
             profile_id,
             track_id,
             session_type=msg["session_type"],
             strategy=msg["strategy"],
             settings=msg["settings"],
+            questions=prepared_questions,
         )
-    except SessionValidationError as err:
+        state = await _with_fatigue_advice(runtime, state)
+    except (SessionSelectionError, SessionValidationError) as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     connection.send_result(msg["id"], state)
@@ -785,7 +826,7 @@ async def ws_session_get(
     )
     if state is None:
         return
-    connection.send_result(msg["id"], state)
+    connection.send_result(msg["id"], await _with_fatigue_advice(runtime, state))
 
 
 @websocket_api.websocket_command(
@@ -829,7 +870,7 @@ async def ws_session_answer(
     except StaleSessionError:
         connection.send_error(msg["id"], ERR_STALE_SESSION, "The session changed on another client")
         return
-    connection.send_result(msg["id"], state)
+    connection.send_result(msg["id"], await _with_fatigue_advice(runtime, state))
 
 
 @websocket_api.websocket_command(
