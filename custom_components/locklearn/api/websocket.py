@@ -1040,7 +1040,6 @@ async def ws_leeches_reactivate(
     connection.send_result(msg["id"], state)
 
 
-
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "locklearn/progress/undo_last",
