@@ -418,8 +418,7 @@ class LongHorizonSRSSimulator:
         repeated_cap_hit_cards = sum(hits >= 2 for hits in short_step_cap_hits.values())
         oscillation_ratio = cap_hit_cards / max(1, next_new_index)
         systemic_oscillation = (
-            repeated_cap_hit_cards > 0
-            or oscillation_ratio >= self._OSCILLATION_CARD_RATIO
+            repeated_cap_hit_cards > 0 or oscillation_ratio >= self._OSCILLATION_CARD_RATIO
         )
 
         warnings: list[str] = []
