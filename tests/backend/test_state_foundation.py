@@ -16,6 +16,7 @@ from custom_components.locklearn.storage import (
     StoragePaths,
     TrackRecord,
 )
+from custom_components.locklearn.storage.schema import STATE_SCHEMA
 from tests.backend.content_db_helpers import ITEM_A, card_identity, create_package, facet_ids
 
 _OLD_STATE_SCHEMA = """
@@ -343,8 +344,6 @@ async def test_cross_domain_integrity_audit_detects_raw_invalid_state(tmp_path: 
 
 
 async def test_v2_state_migrates_to_v3_and_accepts_leech_state(tmp_path: Path) -> None:
-    from custom_components.locklearn.storage.schema import STATE_SCHEMA
-
     state_path = tmp_path / "state" / "state.db"
     state_path.parent.mkdir(parents=True)
     v2_schema = STATE_SCHEMA.replace(
