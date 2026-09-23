@@ -293,3 +293,72 @@ async def test_streak_uses_due_goal_neutral_day_and_one_grace_day(tmp_path: Path
         assert payload["streak"]["today"]["treated_due"] == 0
     finally:
         await storage.async_close()
+
+
+async def test_historical_daily_timezone_is_not_rewritten_after_profile_change(
+    tmp_path: Path,
+) -> None:
+    storage, reviews, stats, clock, identity = await _setup(
+        tmp_path,
+        now=datetime(2026, 9, 21, 21, 30, tzinfo=UTC),
+    )
+    try:
+        pre = _snapshot(
+            identity,
+            seen=1,
+            correct=0,
+            wrong=0,
+            due="2026-09-21T20:00:00+00:00",
+        )
+        first = _snapshot(
+            identity,
+            seen=2,
+            correct=1,
+            wrong=0,
+            due="2026-09-22T20:00:00+00:00",
+        )
+        await _record(
+            reviews,
+            identity,
+            pre=pre,
+            post=first,
+            mode="verified_mcq",
+            result="correct",
+            retrieval=True,
+            quality="medium",
+        )
+
+        profiles = ProfileService(storage.repositories.profiles, clock=clock)
+        await profiles.async_update_profile(
+            profile_id=identity["profile_id"],
+            timezone="Asia/Tokyo",
+        )
+        clock.current = datetime(2026, 9, 22, 0, 30, tzinfo=UTC)
+        second = _snapshot(
+            identity,
+            seen=3,
+            correct=2,
+            wrong=0,
+            due="2026-09-23T20:00:00+00:00",
+        )
+        await _record(
+            reviews,
+            identity,
+            pre=first,
+            post=second,
+            mode="verified_mcq",
+            result="correct",
+            retrieval=True,
+            quality="medium",
+        )
+
+        payload = await stats.async_get(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+        )
+        assert [(row["local_date"], row["timezone_name"]) for row in payload["daily"]] == [
+            ("2026-09-21", "Europe/Paris"),
+            ("2026-09-22", "Asia/Tokyo"),
+        ]
+    finally:
+        await storage.async_close()
