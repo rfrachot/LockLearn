@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 from .clock import Clock, SystemClock
 
