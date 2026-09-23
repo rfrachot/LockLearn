@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -94,8 +95,7 @@ async def test_preview_is_deterministic_and_obeys_windows_quiet_gap_and_hour_lim
         assert await storage.repositories.scheduler.async_get_config("profile-scheduler") is None
 
         local_times = [
-            datetime.fromisoformat(slot["scheduled_for_utc"])
-            .astimezone(__import__("zoneinfo").ZoneInfo("Europe/Paris"))
+            datetime.fromisoformat(slot["scheduled_for_utc"]).astimezone(ZoneInfo("Europe/Paris"))
             for slot in first["slots"]
         ]
         assert all(8 <= value.hour < 14 for value in local_times)
