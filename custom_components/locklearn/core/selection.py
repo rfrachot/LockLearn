@@ -71,7 +71,7 @@ class SelectionConstraintService:
         state: str,
     ) -> SelectionDecision:
         """Evaluate prerequisites and spacing for one selected Track card."""
-        if state not in {"new", "learning", "review", "relearning"}:
+        if state not in {"new", "learning", "review", "relearning", "leech"}:
             raise SelectionConstraintError(f"unsupported progress state: {state}")
 
         track = await self._tracks.async_get(track_id)
@@ -119,7 +119,7 @@ class SelectionConstraintService:
     @staticmethod
     def confusable_distractors_allowed(state: str) -> bool:
         """Confusable distractors are reserved for stabilized long-review cards."""
-        if state not in {"new", "learning", "review", "relearning"}:
+        if state not in {"new", "learning", "review", "relearning", "leech"}:
             raise SelectionConstraintError(f"unsupported progress state: {state}")
         return state == "review"
 
