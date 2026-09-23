@@ -127,7 +127,7 @@ class _Constraints:
         assert track_id == "track-1"
         assert card_key
         assert learning_item_id
-        assert state in {"new", "learning", "review", "relearning"}
+        assert state in {"new", "learning", "review", "relearning", "leech"}
         return SelectionDecision(eligible=True, reasons=())
 
 
@@ -379,3 +379,25 @@ async def test_user_owned_state_filters_sessions_and_expired_burial_reactivates(
     )
 
     assert [item.card_key for item in selected] == ["card-1", "card-5"]
+
+
+@pytest.mark.asyncio
+async def test_leeches_are_fallback_after_normal_due_and_new_cards() -> None:
+    due = "2026-09-23T10:00:00+00:00"
+    candidates = (
+        _candidate(1, state="review", content_type="vocabulary", due=due),
+        _candidate(2, state="new", content_type="grammar"),
+        _candidate(3, state="leech", content_type="kanji", due=due),
+    )
+    service = _service(candidates)
+
+    selected = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="bounded",
+        settings={"requested_cards": 3},
+    )
+
+    assert [item.card_key for item in selected[:2]] == ["card-1", "card-2"]
+    assert selected[2].card_key == "card-3"
+    assert selected[2].payload["selection"]["reason"] == "leech_due"
