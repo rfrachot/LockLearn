@@ -3,7 +3,8 @@
 ## Current state
 
 P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.9 are complete. P1 and P2 are
-closed PASS. P3 remains in progress on `feat/p3-sessions` for P3.10 onward.
+closed PASS. P3 remains in progress on `feat/p3-sessions`. P3.10 implementation
+is complete and pending the repository quality gate before PASS.
 P3.8 and P3.9 are PASS. P3.8's targeted real-HA qualification ran on 2026-09-23
 at `417ff41df90cf137e2751320d72e3166bdc0793b` after HACS explicitly
 redownloaded `feat/p3-sessions` and HA restarted. It exercised public P3.9
@@ -11,6 +12,17 @@ selection into a real question, simultaneous two-client answer CAS (one primary
 winner, one `locklearn/stale_session` loser, one immutable answer), navigation
 undo, reconnect, Config Entry reload/subscription cleanup, storage diagnostics
 and public cleanup. The baseline three sessions/three answers was restored.
+
+P3.10 adds user-owned card state without a DB migration: `active`,
+`known_already`, indefinite `suspended`, and timed `buried`. State changes
+are audited as `progress_user_state` rather than ReviewEvents, preserve SRS
+counters/due state and remain independent from content_status. P3.9 now filters
+user state itself so an expired buried card becomes logically active without a
+hidden write. The initial calibration sampler is deterministic/read-only,
+accepts requested sizes 20–40 and creates no Progress rows. ADR-0031 records
+that P3.12 owns preservation/replay of these non-pedagogical overlays during
+rebuild/recompute. New backend and WebSocket ACL tests are present; run the
+normal full gate before marking P3.10 PASS.
 
 The only unavailable supplemental proof is real viewer/outsider ACL: one HA
 development-user token is configured, and no second usable token exists in the
