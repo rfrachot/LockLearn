@@ -12,6 +12,7 @@ from homeassistant.helpers import issue_registry as ir
 from .const import DOMAIN
 from .core.acl import ProfileACLService
 from .core.content_reports import ContentReportService
+from .core.difficulties import DifficultyService
 from .core.grading import FreeTextGrader
 from .core.operations import OperationRegistry
 from .core.planning import LearningPlanService
@@ -51,6 +52,7 @@ class LockLearnRuntime:
     progress_state: ProgressUserStateService
     grading: FreeTextGrader
     content_reports: ContentReportService
+    difficulties: DifficultyService
     quiz: QuizEngine
     review_policy: ReviewPolicyV1
     signal_policy: SignalPolicy
@@ -113,6 +115,10 @@ class LockLearnRuntime:
                 storage.repositories.review_events,
                 selection,
             )
+            reviews = ReviewEventService(
+                storage.repositories.review_events,
+                storage.repositories.profiles,
+            )
             return cls(
                 storage=storage,
                 sessions=SessionService(storage),
@@ -136,15 +142,18 @@ class LockLearnRuntime:
                     storage.repositories.content_reports,
                     storage.repositories.tracks,
                 ),
+                difficulties=DifficultyService(
+                    storage.repositories.progress,
+                    storage.repositories.review_events,
+                    storage.repositories.user_annotations,
+                    reviews,
+                ),
                 quiz=QuizEngine(),
                 review_policy=review_policy,
                 signal_policy=SignalPolicy(review_policy),
                 selection=selection,
                 session_selection=session_selection,
-                reviews=ReviewEventService(
-                    storage.repositories.review_events,
-                    storage.repositories.profiles,
-                ),
+                reviews=reviews,
                 datasets=datasets,
             )
         except Exception:
