@@ -22,7 +22,7 @@ from ..core.sessions import SessionQuestion, SessionValidationError
 from ..core.tracks import TrackValidationError
 from ..runtime import LockLearnRuntime
 from ..storage.database import SessionNotFoundError, StaleSessionError
-from ..storage.repositories import CardReference, ContentReferenceError
+from ..storage.repositories import CardReference, ContentReferenceError, StateRepositoryError
 
 ERR_FORBIDDEN = "locklearn/forbidden"
 ERR_NOT_FOUND = "locklearn/not_found"
@@ -931,7 +931,7 @@ async def ws_annotations_create(
             learning_item_id=msg.get("learning_item_id"),
             card_key=msg.get("card_key"),
         )
-    except (DifficultyServiceError, ContentReferenceError, ValueError) as err:
+    except (DifficultyServiceError, ContentReferenceError, StateRepositoryError, ValueError) as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     connection.send_result(msg["id"], item)
@@ -964,7 +964,7 @@ async def ws_annotations_update(
             annotation_id=msg["annotation_id"],
             note=msg["note"],
         )
-    except (DifficultyServiceError, ValueError) as err:
+    except (DifficultyServiceError, StateRepositoryError, ValueError) as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     connection.send_result(msg["id"], item)
