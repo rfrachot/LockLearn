@@ -9,7 +9,7 @@ from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
 from .clock import Clock, SystemClock
-from .selection import SelectionDecision
+from .selection import SelectionConstraintError, SelectionDecision
 
 FATIGUE_WINDOW_SIZE = 10
 DEFAULT_FATIGUE_ACCURACY_THRESHOLD = 0.6
@@ -175,13 +175,16 @@ class SessionSelectionService:
                 continue
             if not self._state_available(candidate, now=now, session_type=session_type):
                 continue
-            decision = await self._constraints.async_evaluate(
-                profile_id=profile_id,
-                track_id=track_id,
-                card_key=candidate.card_key,
-                learning_item_id=candidate.learning_item_id,
-                state=candidate.state,
-            )
+            try:
+                decision = await self._constraints.async_evaluate(
+                    profile_id=profile_id,
+                    track_id=track_id,
+                    card_key=candidate.card_key,
+                    learning_item_id=candidate.learning_item_id,
+                    state=candidate.state,
+                )
+            except SelectionConstraintError as err:
+                raise SessionSelectionError(str(err)) from err
             if decision.eligible:
                 candidates.append(candidate)
 
