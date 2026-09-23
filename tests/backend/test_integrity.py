@@ -390,9 +390,7 @@ async def test_snapshot_rebuild_preserves_overlay_only_progress_row(tmp_path: Pa
         progress_state = ProgressUserStateService(
             storage.repositories.tracks,
             storage.repositories.progress,
-            dataset_generation=lambda: (
-                storage.content_generations.active_metadata.generation_id
-            ),
+            dataset_generation=lambda: storage.content_generations.active_metadata.generation_id,
         )
         await progress_state.async_set_user_state(
             actor_user_id="owner",
