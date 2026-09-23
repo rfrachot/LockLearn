@@ -162,7 +162,7 @@ async def test_two_websocket_clients_get_cas_and_subscription(
             "type": "locklearn/session/answer",
             "session_id": session_id,
             "expected_version": 2,
-            "question_id": "question-1",
+            "question_id": question_id,
             "answer": {"choice": "b"},
         }
     )
