@@ -46,9 +46,7 @@ class DifficultiesAnnotationRepository(Protocol):
         created_at_utc: str,
         updated_at_utc: str,
     ) -> dict[str, Any]: ...
-    async def async_get(
-        self, *, annotation_id: str, profile_id: str
-    ) -> dict[str, Any] | None: ...
+    async def async_get(self, *, annotation_id: str, profile_id: str) -> dict[str, Any] | None: ...
     async def async_list(
         self,
         *,
@@ -186,9 +184,7 @@ class DifficultyService:
             annotation_id=annotation_id,
             profile_id=profile_id,
             learning_item_id=(
-                None
-                if existing["learning_item_id"] is None
-                else str(existing["learning_item_id"])
+                None if existing["learning_item_id"] is None else str(existing["learning_item_id"])
             ),
             card_key=None if existing["card_key"] is None else str(existing["card_key"]),
             note=note,
@@ -270,9 +266,7 @@ class DifficultyService:
             policy_version=int(pre["policy_version"]),
             dataset_generation=str(pre["dataset_generation"]),
             normalization_version=(
-                None
-                if pre["normalization_version"] is None
-                else int(pre["normalization_version"])
+                None if pre["normalization_version"] is None else int(pre["normalization_version"])
             ),
             pre_state_snapshot=pre,
             post_state_snapshot=post,
