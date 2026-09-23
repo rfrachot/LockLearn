@@ -419,7 +419,9 @@ class StatsService:
                     max(goal_minimum, math.ceil(due_count * goal_fraction)),
                 )
             )
-            status = "neutral" if due_count == 0 else "success" if len(treated) >= target else "missed"
+            status = (
+                "neutral" if due_count == 0 else "success" if len(treated) >= target else "missed"
+            )
             statuses[day] = {
                 "due_opening": due_count,
                 "treated_due": len(treated),
