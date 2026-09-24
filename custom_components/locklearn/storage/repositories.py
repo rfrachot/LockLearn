@@ -1277,7 +1277,13 @@ class TracksRepository:
                           COALESCE(progress.state, 'new') AS progress_state,
                           progress.next_due_at_utc, pack_item.position,
                           COALESCE(progress.user_state, 'active') AS user_state,
-                          progress.suspend_until_utc
+                          progress.suspend_until_utc,
+                          COALESCE(progress.difficulty_factor, 1.0),
+                          progress.last_verified_at_utc,
+                          progress.last_seen_at_utc,
+                          COALESCE(progress.self_known_count, 0),
+                          COALESCE(progress.verified_correct_count, 0),
+                          COALESCE(progress.verified_wrong_count, 0)
                    FROM track_card_rules AS rule
                    JOIN content.card_definitions AS card
                      ON card.card_key = rule.card_key
@@ -1323,6 +1329,12 @@ class TracksRepository:
                     "pack_position": int(row[7]),
                     "user_state": str(row[8]),
                     "suspend_until_utc": None if row[9] is None else str(row[9]),
+                    "difficulty_factor": float(row[10]),
+                    "last_verified_at_utc": None if row[11] is None else str(row[11]),
+                    "last_seen_at_utc": None if row[12] is None else str(row[12]),
+                    "self_known_count": int(row[13]),
+                    "verified_correct_count": int(row[14]),
+                    "verified_wrong_count": int(row[15]),
                     "confusable_group_ids": tuple(confusable_by_item.get(str(row[1]), ())),
                 }
                 for row in rows
@@ -2108,6 +2120,29 @@ class ReviewEventsRepository:
                 (profile_id, track_id, local_date),
             ).fetchone()
             return 0 if row is None else int(row[0])
+
+        return await self._storage._async_reader(read)
+
+    async def async_introduced_card_keys(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        local_date: str,
+    ) -> frozenset[str]:
+        """Return cards introduced on one Profile-local date."""
+
+        def read(connection: sqlite3.Connection) -> frozenset[str]:
+            rows = connection.execute(
+                """SELECT DISTINCT card_key
+                   FROM review_events
+                   WHERE profile_id = ?
+                     AND track_id = ?
+                     AND local_date = ?
+                     AND mode = 'introduction'""",
+                (profile_id, track_id, local_date),
+            ).fetchall()
+            return frozenset(str(row[0]) for row in rows)
 
         return await self._storage._async_reader(read)
 
