@@ -2,11 +2,10 @@
 
 ## Current state
 
-P4.8 implementation is pushed on `feat/p4-scheduler` and is **pending
-qualification**, not yet closed PASS. It registers the five V1 Home Assistant
-services, enforces normal Profile ACL with user context and the existing audited
-unattended allowlist without user context, and wires Companion action/clear
-events into persistent state.
+P4.8 is closed PASS on `feat/p4-scheduler`. It registers the five V1 Home
+Assistant services, enforces normal Profile ACL with user context and the
+existing audited unattended allowlist without user context, and wires Companion
+action/clear events into persistent state.
 
 Mobile action IDs are decoded to a P4.6 token plus content-free semantic. The
 token must atomically reach `consumed` before the processor reloads canonical
@@ -32,15 +31,14 @@ normalized content model still lacks a fully generic runtime facet-to-rendered-
 text mapping for every bidirectional CardDefinition, so P4.8 deliberately does
 not invent a lossy resolver. ADR-0043 records this boundary.
 
-Tests cover replay exact-once, post-commit output uniqueness, untrusted
-shared-device gate behavior, new-teaser IDK introduction semantics, service
-registration/unload, unattended snooze audit, unattended start-session denial,
-user send-now/pause/resume/start-session delegation, Companion clear without
-ReviewEvent, and observation-only output events.
+Final P4.8 qualification on 2026-09-24: Ruff format PASS (243 files), Ruff lint
+PASS, mypy PASS (139 sources), resource registries PASS and pytest PASS
+(374 tests in 18.93 s). The preceding gate had already passed all tests and
+registries; the final remediation was limited to the reported Ruff formatting/
+lint findings and explicit mypy-safe identity/transition typing.
 
-Next concrete action: run the normal repository gate on current
-`feat/p4-scheduler`, remediate findings, then decide P4.8 closure from the
-measured gate.
+P4.9 is not started. Next concrete action: begin P4.9 automation blueprints when
+requested.
 
 P4.7 is closed PASS on `feat/p4-scheduler`. It adds capability-aware
 notification renderers, same-tag two-step reveal with fresh P4.6 tokens,
