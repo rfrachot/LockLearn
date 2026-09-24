@@ -115,3 +115,35 @@ P4.3 Profile/target/device capacity and active-session suppression. The actual
 same-day or previous-day CardDefinition is deliberately left to P4.5 send-time
 selection.
 
+
+## P4.5 notification selection, pending and backoff
+
+A materialized Track slot receives its CardDefinition only when it is actually
+ready to send. The binding is persisted on the slot as immutable content
+identity plus a machine-readable selection reason; rendered learned text is
+never copied into `state.db`.
+
+V1 selection priority is:
+
+1. relearning due;
+2. review due;
+3. due leech/difficult recoverable;
+4. calibration needed;
+5. at most two new learning teasers per Profile-local day.
+
+Normal future reviews are not pulled forward merely to fill a slot. Quiz slots
+never introduce a new teaser.
+
+Routine slots use the same send-time binding: pre-sleep restricts the pool to
+cards introduced today, while morning-first-review restricts it to yesterday's
+introductions.
+
+The default pending policy is `skip_if_pending`: if the same Profile/target
+already has an unanswered sent slot, the later slot expires as
+`pending_existing`. Missed unsent slots expire rather than catch up.
+
+Recent expirations and explicit clears reduce only notification-channel
+capacity: three consecutive failures apply a 75 % budget multiplier, six apply
+50 %, and successful interactions restore 25 points at a time. These outcomes
+never mutate Progress or ReviewEvent.
+
