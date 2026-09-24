@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
-
-from custom_components.locklearn.core import clock as clock_module
-from custom_components.locklearn.core import selection as selection_module
 
 
 DEFAULT_NEW_TEASER_BUDGET = 2
@@ -16,6 +13,25 @@ DEFAULT_NEW_TEASER_BUDGET = 2
 
 class NotificationSelectionError(ValueError):
     """Raised when a notification slot cannot be selected safely."""
+
+
+class NotificationClock(Protocol):
+    """Clock contract used by send-time notification selection."""
+
+    def now(self) -> datetime: ...
+
+
+class _SystemClock:
+    """Default aware UTC clock without importing another LockLearn module."""
+
+    def now(self) -> datetime:
+        return datetime.now(UTC)
+
+
+class NotificationConstraintDecision(Protocol):
+    """Structural result contract from P3.5 selection constraints."""
+
+    eligible: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,7 +99,7 @@ class NotificationConstraintEvaluator(Protocol):
         card_key: str,
         learning_item_id: str,
         state: str,
-    ) -> selection_module.SelectionDecision: ...
+    ) -> NotificationConstraintDecision: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,7 +184,7 @@ class NotificationSelectionService:
         scheduler: NotificationSchedulerRepository,
         constraints: NotificationConstraintEvaluator,
         *,
-        clock: clock_module.Clock | None = None,
+        clock: NotificationClock | None = None,
         teaser_budget: int = DEFAULT_NEW_TEASER_BUDGET,
     ) -> None:
         if teaser_budget < 0:
@@ -178,7 +194,7 @@ class NotificationSelectionService:
         self._reviews = reviews
         self._scheduler = scheduler
         self._constraints = constraints
-        self._clock = clock or clock_module.SystemClock()
+        self._clock = clock or _SystemClock()
         self._teaser_budget = teaser_budget
 
     async def async_select_for_slot(self, slot_id: str) -> NotificationSelection | None:
@@ -285,7 +301,7 @@ class NotificationSelectionService:
                     learning_item_id=candidate.learning_item_id,
                     state=candidate.state,
                 )
-            except selection_module.SelectionConstraintError as err:
+            except ValueError as err:
                 raise NotificationSelectionError(str(err)) from err
             if decision.eligible:
                 eligible.append(candidate)
