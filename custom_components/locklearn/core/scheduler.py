@@ -709,6 +709,11 @@ class SchedulerService:
         delivered_at_utc: datetime | None = None,
     ) -> dict[str, Any]:
         """Record delivery-only receptivity features, never an SRS result."""
+        decision = await self.async_prepare_delivery(slot_id)
+        if not bool(decision["ready"]):
+            raise SchedulerValidationError(
+                f"slot is not receptive for delivery: {decision['reason']}"
+            )
         slot = await self._scheduler.async_get_slot(slot_id)
         if slot is None:
             raise SchedulerValidationError("slot does not exist")
