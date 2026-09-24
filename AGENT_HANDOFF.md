@@ -2,19 +2,22 @@
 
 ## Current state
 
-P4.1 implementation is now on `feat/p4-scheduler` from the final P3 HEAD
+P4.1 is closed PASS on `feat/p4-scheduler`, cut from the final P3 HEAD
 `146b48a3bf0f8331feecff20d4784029d290b7bb`. It adds deterministic
 profile-level scheduler generation, a persistent SchedulerRepository,
 `locklearn/scheduler/preview`, backend tests, `docs/SCHEDULER.md` and
-ADR-0036. Materialized `scheduled_slots` are append/idempotent authority after
-creation; config version changes never rewrite an existing row. P4.1 slots are
-generic time opportunities only: Track, target and CardDefinition selection are
-left to P4.3/P4.5 send-time policy. Cross-midnight active windows and temporal
-reconciliation remain explicitly P4.2.
+accepted ADR-0036. Materialized `scheduled_slots` are append/idempotent
+authority after creation; config version changes never rewrite an existing row.
+P4.1 slots are generic time opportunities only: Track, target and CardDefinition
+selection are left to P4.3/P4.5 send-time policy. Cross-midnight active windows
+and temporal reconciliation remain explicitly P4.2.
 
-Repository quality gates for this P4.1 implementation still need to be run in a
-development checkout. Do not mark ADR-0036 accepted or P4.1 PASS until Ruff
-format/lint, mypy, resource validation and pytest are green.
+Final P4.1 development-checkout gate on 2026-09-24:
+Ruff format PASS (218 files), Ruff lint PASS, mypy PASS (123 sources), resource
+registries PASS and pytest PASS (321 tests in 15.39 s). No state schema migration
+was required because `scheduler_config` and `scheduled_slots` already existed
+in the state schema foundation. Next concrete action: begin P4.2 timezone, DST,
+restart and clock-jump reconciliation.
 
 P0.1–P0.7, P1.1–P1.11, P2.1–P2.6 and P3.1–P3.14 are complete. P1, P2 and P3
 are closed PASS. The completed P3 work remains on `feat/p3-sessions` pending
