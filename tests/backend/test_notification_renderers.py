@@ -12,8 +12,8 @@ from custom_components.locklearn.notifications.renderers import (
     CHANNEL_LEARNING,
     CHANNEL_QUIZ,
     CHANNEL_RELEARNING,
-    NotificationRenderMode,
     NotificationRenderer,
+    NotificationRenderMode,
     QuizOption,
     decode_action_id,
     effective_lockscreen_visibility,
@@ -172,6 +172,7 @@ def test_binary_quiz_uses_three_actions_and_full_mcq_hands_off_to_panel() -> Non
     assert len(binary.data["actions"]) == 3
     assert binary.data["channel"] == CHANNEL_QUIZ
     assert binary.panel_required is False
+    assert binary.action_semantics is not None
     assert set(binary.action_semantics.values()) == {
         "choice:rest",
         "choice:wait",
