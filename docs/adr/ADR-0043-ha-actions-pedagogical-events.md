@@ -2,8 +2,7 @@
 
 ## Status
 
-Proposed for P4.8. Mark Accepted only after the normal repository quality gate
-passes.
+Accepted for P4.8 on 2026-09-24 after the full repository quality gate passed.
 
 ## Context
 
@@ -181,3 +180,22 @@ does not persist learned text in state.db merely to work around that boundary.
 - `send_now` is a durable immediate scheduler request rather than a content
   bypass;
 - no state schema migration is required for P4.8.
+
+## Final qualification gate — 2026-09-24
+
+After the targeted Ruff/mypy remediation, the development checkout passed the
+complete repository gate:
+
+- Ruff format: PASS, 243 files already formatted;
+- Ruff lint: PASS;
+- mypy: PASS, 139 source files;
+- resource registries: PASS;
+- pytest: PASS, 374 tests in 18.93 s.
+
+The prior failing gate had already passed all 374 tests and the resource
+registries; its remaining findings were limited to formatting/lint and typing in
+the new P4.8 code/tests. The remediation made review-event identity arguments
+explicit, separated short-step and long-review transition typing, and applied
+the reported mechanical style fixes without changing the P4.8 authority model.
+
+P4.8 is closed PASS. P4.9 remains unstarted.
