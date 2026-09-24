@@ -125,7 +125,7 @@ class LockLearnRuntime:
                 storage.repositories.review_events,
                 storage.repositories.profiles,
             )
-            return cls(
+            runtime = cls(
                 storage=storage,
                 sessions=SessionService(storage),
                 operations=OperationRegistry(),
@@ -175,9 +175,12 @@ class LockLearnRuntime:
                 scheduler=SchedulerService(
                     storage.repositories.profiles,
                     storage.repositories.scheduler,
+                    storage.repositories.settings,
                 ),
                 datasets=datasets,
             )
+            await runtime.scheduler.async_reconcile(reason="startup")
+            return runtime
         except Exception:
             await storage.async_close()
             raise
