@@ -1053,6 +1053,15 @@ async def test_receptive_when_false_defers_without_receptivity_or_srs_signal(
             track_id=None,
         ) == ()
 
+        clock.set(datetime(2026, 9, 24, 8, 10, tzinfo=UTC))
+        reconciled = await service.async_reconcile(reason="timer")
+        assert reconciled.expired_slots == 0
+        still_deferred = await storage.repositories.scheduler.async_get_slot(
+            "slot-receptive"
+        )
+        assert still_deferred is not None
+        assert still_deferred["status"] == "deferred"
+
         clock.set(datetime(2026, 9, 24, 8, 31, tzinfo=UTC))
         exhausted = await service.async_prepare_delivery("slot-receptive")
         assert exhausted["ready"] is False
