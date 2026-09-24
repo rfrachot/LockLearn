@@ -5,6 +5,14 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P4.7 capability-aware learning/quiz notification renderers with same-tag
+  reveal, direct-exposure fallback, bounded mobile quiz and panel handoff.
+- Distinct learning/quiz/relearning channels, private-by-default visibility and
+  explicit Profile labeling on shared devices.
+- Stable target delivery through dynamic mobile_app route resolution, plain
+  direct-exposure fallback and persistent target-unavailable Repairs.
+- Private recent-unrecorded-mobile-response warning surface derived only from
+  expired action attempts, plus ADR-0042.
 - P4.6 persistent single-use notification interactions with cryptographically
   random stage tokens, durable expiry/status and atomic replay-safe consumption.
 - Profile ANSWER ACL validation whenever Companion supplies HA user context,
