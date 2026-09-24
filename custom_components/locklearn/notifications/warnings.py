@@ -42,11 +42,7 @@ class NotificationWarningService:
         return {
             "profile_id": profile_id,
             "warning": bool(items),
-            "message_key": (
-                "recent_unrecorded_mobile_responses"
-                if items
-                else None
-            ),
+            "message_key": ("recent_unrecorded_mobile_responses" if items else None),
             "count": len(items),
             "items": list(items),
             "since_utc": since.isoformat(),
