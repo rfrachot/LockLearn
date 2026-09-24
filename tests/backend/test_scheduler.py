@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from homeassistant.core import HomeAssistant
 import pytest
+from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.locklearn.const import DATA_RUNTIME, DOMAIN
@@ -1066,9 +1066,7 @@ async def test_receptive_when_false_defers_without_receptivity_or_srs_signal(
         assert exhausted["reason"] == "not_receptive_defer_window_exhausted"
         assert exhausted["defer_exhausted"] is True
         assert (
-            await storage.repositories.scheduler.async_get_receptivity_sample(
-                "slot-receptive"
-            )
+            await storage.repositories.scheduler.async_get_receptivity_sample("slot-receptive")
             is None
         )
     finally:
@@ -1145,10 +1143,13 @@ async def test_delivery_collects_observational_receptivity_features_only(
         assert action["answered"] is True
         assert action["cleared"] is False
         assert action["delivery_to_action_ms"] == 2500
-        assert await storage.repositories.review_events.async_list_scope_events(
-            profile_id="profile-scheduler",
-            track_id=None,
-        ) == ()
+        assert (
+            await storage.repositories.review_events.async_list_scope_events(
+                profile_id="profile-scheduler",
+                track_id=None,
+            )
+            == ()
+        )
     finally:
         await storage.async_close()
 
