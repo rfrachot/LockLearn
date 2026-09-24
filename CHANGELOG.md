@@ -5,6 +5,14 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P4.3 deterministic smooth weighted round-robin allocation of Profile slots
+  across active Tracks using Track priority and explicit learning/quiz demand.
+- Stable notification-target persistence primitives plus per-target and shared
+  physical-device daily/hour/gap capacity enforcement.
+- Active-session Track suppression and a three-day persistent-capacity Repair
+  with automatic recovery clearing.
+- Track scheduler demand configuration through the authenticated Track
+  WebSocket CRUD surface and ADR-0038 documenting arbitration boundaries.
 - P4.2 explicit civil-time scheduler mapping for DST spring-forward gaps,
   fall-back duplicate hours and cross-midnight active windows.
 - Persistent scheduler UTC high-watermark with Config Entry startup/reload,
