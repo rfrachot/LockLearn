@@ -898,7 +898,7 @@ async def test_capacity_repair_requires_three_distinct_infeasible_days(
                 "daily_push_budget": 3,
                 "quiet_hours": {"start": "22:00", "end": "07:00"},
                 "scheduler": {
-                    "active_days": [3, 4, 5],
+                    "active_days": [3, 4, 5, 6],
                     "active_windows": [{"start": "08:00", "end": "18:00"}],
                     "minimum_gap_seconds": 0,
                     "maximum_notifications_per_hour": 3,
@@ -951,6 +951,33 @@ async def test_capacity_repair_requires_three_distinct_infeasible_days(
             "capacity": "1",
         }
         assert cleared == []
+
+        await _target(
+            storage,
+            target_id="target-2",
+            device_registry_id="device-2",
+            daily_push_budget=1,
+            minimum_gap_seconds=0,
+            maximum_notifications_per_hour=3,
+            now=clock.now(),
+        )
+        await _target(
+            storage,
+            target_id="target-3",
+            device_registry_id="device-3",
+            daily_push_budget=1,
+            minimum_gap_seconds=0,
+            maximum_notifications_per_hour=3,
+            now=clock.now(),
+        )
+        recovered = await service.async_generate(
+            profile_id="profile-scheduler",
+            local_date=date(2026, 9, 27),
+        )
+        assert recovered["allocation"]["unmet_demand"] == 0
+        assert cleared == [
+            "scheduler_configuration_infeasible_profile-scheduler"
+        ]
     finally:
         await storage.async_close()
 
