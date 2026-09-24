@@ -30,7 +30,9 @@ _DEFAULT_QUIET_HOURS = ("22:00", "08:00")
 _SCHEDULER_TIME_STATE_KEY = "scheduler_time_state_v1"
 _CAPACITY_STATE_PREFIX = "scheduler_capacity_state_v1:"
 _CAPACITY_REPAIR_DAYS = 3
-_ROUTINE_SLOT_TYPES = frozenset({"pre_sleep_consolidation", "morning_first_review", "manual_send_now"})
+_ROUTINE_SLOT_TYPES = frozenset(
+    {"pre_sleep_consolidation", "morning_first_review", "manual_send_now"}
+)
 
 
 class SchedulerValidationError(ValueError):
