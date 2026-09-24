@@ -2,6 +2,32 @@
 
 ## Current state
 
+P4.9 implementation is pushed on `feat/p4-scheduler` and is **pending
+qualification**, not yet closed PASS. It ships three Home Assistant automation
+blueprints under `blueprints/automation/locklearn/`: correct/wrong light
+feedback, daily-goal scene reward, and repeated-failure encouragement with an
+optional `locklearn.pause_track` action.
+
+Blueprints consume only the stable P4.8 event/service surface. They do not read
+prompt/answer/translation/user-response content or Card/LearningItem identity.
+The repeated-failure blueprint fires only when `consecutive_wrong` equals the
+configured threshold, avoiding repeated encouragement on every later failure.
+Its optional Track pause deliberately re-enters P4.8 unattended authorization;
+event-triggered automations therefore require
+`allow_unattended_actions=true` for automatic pause.
+
+Repository tests load each YAML with Home Assistant's actual Blueprint model and
+`AUTOMATION_BLUEPRINT_SCHEMA`, verify the exact asset set/source URLs, constrain
+referenced LockLearn events/services to documented interfaces, and reject access
+to private content-bearing event fields.
+
+`docs/AUTOMATION_BLUEPRINTS.md` documents explicit Blueprint import. The custom
+integration does not silently copy blueprint files into the HA config directory.
+
+Next concrete action: run the standard repository gate on current
+`feat/p4-scheduler`, remediate any findings, then close P4.9 and the P4 exit
+gate if green.
+
 P4.8 is closed PASS on `feat/p4-scheduler`. It registers the five V1 Home
 Assistant services, enforces normal Profile ACL with user context and the
 existing audited unattended allowlist without user context, and wires Companion
