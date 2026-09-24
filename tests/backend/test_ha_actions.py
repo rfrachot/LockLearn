@@ -100,9 +100,7 @@ async def test_companion_clear_closes_state_without_review_event(
     assert slot["status"] == "expired"
     assert slot["expired_reason"] == "cleared"
 
-    sample = await runtime.storage.repositories.scheduler.async_get_receptivity_sample(
-        "slot-clear"
-    )
+    sample = await runtime.storage.repositories.scheduler.async_get_receptivity_sample("slot-clear")
     assert sample is not None
     assert sample["cleared"] is True
 
@@ -352,11 +350,6 @@ async def test_locklearn_output_events_are_observation_only(
         )
         == ()
     )
-    assert (
-        await runtime.storage.repositories.progress.async_list_scope(
-            profile_id=profile_id
-        )
-        == ()
-    )
+    assert await runtime.storage.repositories.progress.async_list_scope(profile_id=profile_id) == ()
 
     assert await hass.config_entries.async_unload(entry.entry_id)
