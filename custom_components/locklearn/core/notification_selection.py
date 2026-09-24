@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
-
 DEFAULT_NEW_TEASER_BUDGET = 2
 
 
