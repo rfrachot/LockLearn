@@ -5,6 +5,14 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P4.4 send-time Home Assistant `receptive_when` evaluation with bounded,
+  pedagogically neutral slot deferral.
+- Persistent V1 receptivity samples for local weekday/hour, delivered, cleared,
+  answered and delivery-to-action latency without automatic schedule learning.
+- Opt-in HA entity hooks for `pre_sleep_consolidation` and
+  `morning_first_review` routine slots, preserving P4.3 capacity constraints.
+- State schema v4 migration for deferred-slot metadata and receptivity samples,
+  plus ADR-0039.
 - P4.3 deterministic smooth weighted round-robin allocation of Profile slots
   across active Tracks using Track priority and explicit learning/quiz demand.
 - Stable notification-target persistence primitives plus per-target and shared
