@@ -253,6 +253,21 @@ class ProfilesRepository:
 
         return await self._storage._async_reader(read)
 
+    async def async_list_active(self) -> tuple[dict[str, Any], ...]:
+        """List active Profiles for internal scheduler hooks."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT profile_id, name, preset, timezone, status, settings_json,
+                          created_at_utc, updated_at_utc
+                   FROM profiles
+                   WHERE status = 'active'
+                   ORDER BY profile_id"""
+            ).fetchall()
+            return tuple(_profile_dict(row) for row in rows)
+
+        return await self._storage._async_reader(read)
+
     async def async_list_for_ha_user(self, ha_user_id: str) -> tuple[dict[str, Any], ...]:
         def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
             rows = connection.execute(
