@@ -147,13 +147,8 @@ async def test_concurrent_replay_has_exactly_one_claim_winner(tmp_path: Path) ->
             NotificationActionDisposition.CONSUMED,
             NotificationActionDisposition.REPLAYED,
         }
-        assert (
-            sum(result.may_apply_pedagogical_result for result in (first, second))
-            == 1
-        )
-        stored = await storage.repositories.notification_interactions.async_get_by_token(
-            "token-1"
-        )
+        assert sum(result.may_apply_pedagogical_result for result in (first, second)) == 1
+        stored = await storage.repositories.notification_interactions.async_get_by_token("token-1")
         assert stored is not None
         assert stored["status"] == "consumed"
         assert stored["action_id"] == "reveal"
@@ -189,9 +184,7 @@ async def test_expired_then_replayed_action_can_never_apply_result(tmp_path: Pat
         assert replayed.disposition is NotificationActionDisposition.REPLAYED
         assert not expired.may_apply_pedagogical_result
         assert not replayed.may_apply_pedagogical_result
-        stored = await storage.repositories.notification_interactions.async_get_by_token(
-            "token-1"
-        )
+        stored = await storage.repositories.notification_interactions.async_get_by_token("token-1")
         assert stored is not None
         assert stored["status"] == "expired"
         assert stored["consumed_at_utc"] is None
@@ -216,9 +209,7 @@ async def test_user_context_is_enforced_when_available(tmp_path: Path) -> None:
             action_id="reveal",
             actor_user_id="viewer-user",
         )
-        pending = await storage.repositories.notification_interactions.async_get_by_token(
-            "token-1"
-        )
+        pending = await storage.repositories.notification_interactions.async_get_by_token("token-1")
         assert forbidden.disposition is NotificationActionDisposition.FORBIDDEN
         assert pending is not None
         assert pending["status"] == "pending"
