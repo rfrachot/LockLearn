@@ -20,7 +20,7 @@ describe("frontend protocol", () => {
           panel_path: "/locklearn",
           authenticated_user_id: "user-1",
           personal_profile: null,
-        } as T;
+        } as unknown as T;
       },
     };
 
@@ -63,7 +63,7 @@ describe("frontend protocol", () => {
               },
             ],
             cursor: "1",
-          } as T;
+          } as unknown as T;
         }
         return {
           items: [
@@ -77,7 +77,7 @@ describe("frontend protocol", () => {
             },
           ],
           cursor: null,
-        } as T;
+        } as unknown as T;
       },
     };
 
