@@ -7,8 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
-from .clock import Clock, SystemClock
-from .selection import SelectionConstraintError, SelectionDecision
+from . import clock as clock_module, selection as selection_module
 
 
 DEFAULT_NEW_TEASER_BUDGET = 2
@@ -83,7 +82,7 @@ class NotificationConstraintEvaluator(Protocol):
         card_key: str,
         learning_item_id: str,
         state: str,
-    ) -> SelectionDecision: ...
+    ) -> selection_module.SelectionDecision: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,7 +167,7 @@ class NotificationSelectionService:
         scheduler: NotificationSchedulerRepository,
         constraints: NotificationConstraintEvaluator,
         *,
-        clock: Clock | None = None,
+        clock: clock_module.Clock | None = None,
         teaser_budget: int = DEFAULT_NEW_TEASER_BUDGET,
     ) -> None:
         if teaser_budget < 0:
@@ -178,7 +177,7 @@ class NotificationSelectionService:
         self._reviews = reviews
         self._scheduler = scheduler
         self._constraints = constraints
-        self._clock = clock or SystemClock()
+        self._clock = clock or clock_module.SystemClock()
         self._teaser_budget = teaser_budget
 
     async def async_select_for_slot(self, slot_id: str) -> NotificationSelection | None:
@@ -285,7 +284,7 @@ class NotificationSelectionService:
                     learning_item_id=candidate.learning_item_id,
                     state=candidate.state,
                 )
-            except SelectionConstraintError as err:
+            except selection_module.SelectionConstraintError as err:
                 raise NotificationSelectionError(str(err)) from err
             if decision.eligible:
                 eligible.append(candidate)
