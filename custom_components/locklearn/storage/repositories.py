@@ -3294,6 +3294,57 @@ class SchedulerRepository:
 
         return await self._storage._async_reader(read)
 
+    async def async_cancel_superseded_future_slots(
+        self,
+        *,
+        profile_id: str,
+        active_config_version: int,
+        not_before_utc: str,
+        updated_at_utc: str,
+    ) -> int:
+        """Cancel only future unsent slots from an older scheduler config version."""
+
+        def write(connection: sqlite3.Connection) -> int:
+            cursor = connection.execute(
+                """UPDATE scheduled_slots
+                   SET status = 'cancelled', updated_at_utc = ?
+                   WHERE profile_id = ?
+                     AND scheduler_config_version <> ?
+                     AND scheduled_for_utc >= ?
+                     AND status IN ('scheduled', 'deferred')""",
+                (
+                    updated_at_utc,
+                    profile_id,
+                    active_config_version,
+                    not_before_utc,
+                ),
+            )
+            connection.commit()
+            return cursor.rowcount
+
+        return await self._storage._async_writer(write)
+
+    async def async_expire_before(
+        self,
+        *,
+        before_utc: str,
+        updated_at_utc: str,
+    ) -> int:
+        """Expire overdue unsent slots during restart/clock reconciliation."""
+
+        def write(connection: sqlite3.Connection) -> int:
+            cursor = connection.execute(
+                """UPDATE scheduled_slots
+                   SET status = 'expired', updated_at_utc = ?
+                   WHERE scheduled_for_utc < ?
+                     AND status IN ('scheduled', 'deferred')""",
+                (updated_at_utc, before_utc),
+            )
+            connection.commit()
+            return cursor.rowcount
+
+        return await self._storage._async_writer(write)
+
     async def async_set_slot_status(
         self,
         slot_id: str,
