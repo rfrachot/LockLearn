@@ -69,6 +69,28 @@ class TrackRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class NotificationTargetRecord:
+    """Stable notification target state backed by the HA device registry identity."""
+
+    target_id: str
+    profile_id: str
+    device_registry_id: str
+    platform: str
+    friendly_name: str
+    created_at_utc: str
+    updated_at_utc: str
+    capabilities: dict[str, Any] | None = None
+    last_resolved_notify_service: str | None = None
+    shared_device: bool = False
+    lockscreen_visibility: str = "private"
+    enabled: bool = True
+    minimum_gap_seconds: int | None = None
+    maximum_notifications_per_hour: int | None = None
+    daily_push_budget: int | None = None
+    adaptive_backoff: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class CardReference:
     card_key: str
     learning_item_id: str
@@ -3076,6 +3098,114 @@ class ContentReportsRepository:
         return await self._storage._async_reader(read)
 
 
+class NotificationTargetsRepository:
+    """Persistence primitives for stable Profile notification targets."""
+
+    def __init__(self, storage: RepositoryStorage) -> None:
+        self._storage = storage
+
+    @staticmethod
+    def _target_dict(row: tuple[Any, ...]) -> dict[str, Any]:
+        keys = (
+            "target_id",
+            "profile_id",
+            "device_registry_id",
+            "platform",
+            "capabilities_json",
+            "friendly_name",
+            "last_resolved_notify_service",
+            "shared_device",
+            "lockscreen_visibility",
+            "enabled",
+            "minimum_gap_seconds",
+            "maximum_notifications_per_hour",
+            "daily_push_budget",
+            "adaptive_backoff_json",
+            "created_at_utc",
+            "updated_at_utc",
+        )
+        result = dict(zip(keys, row, strict=True))
+        result["capabilities"] = json.loads(result.pop("capabilities_json"))
+        result["adaptive_backoff"] = json.loads(result.pop("adaptive_backoff_json"))
+        result["shared_device"] = bool(result["shared_device"])
+        result["enabled"] = bool(result["enabled"])
+        return result
+
+    async def async_insert(self, target: NotificationTargetRecord) -> None:
+        """Insert one stable Profile target."""
+        capabilities_json = json.dumps(
+            target.capabilities or {},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        adaptive_backoff_json = json.dumps(
+            target.adaptive_backoff or {},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> None:
+            connection.execute(
+                """INSERT INTO notification_targets(
+                       target_id, profile_id, device_registry_id, platform,
+                       capabilities_json, friendly_name, last_resolved_notify_service,
+                       shared_device, lockscreen_visibility, enabled,
+                       minimum_gap_seconds, maximum_notifications_per_hour,
+                       daily_push_budget, adaptive_backoff_json,
+                       created_at_utc, updated_at_utc
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    target.target_id,
+                    target.profile_id,
+                    target.device_registry_id,
+                    target.platform,
+                    capabilities_json,
+                    target.friendly_name,
+                    target.last_resolved_notify_service,
+                    int(target.shared_device),
+                    target.lockscreen_visibility,
+                    int(target.enabled),
+                    target.minimum_gap_seconds,
+                    target.maximum_notifications_per_hour,
+                    target.daily_push_budget,
+                    adaptive_backoff_json,
+                    target.created_at_utc,
+                    target.updated_at_utc,
+                ),
+            )
+            connection.commit()
+
+        await self._storage._async_writer(write)
+
+    async def async_list_for_profile(
+        self,
+        profile_id: str,
+        *,
+        enabled_only: bool = True,
+    ) -> tuple[dict[str, Any], ...]:
+        """List Profile targets in stable target_id order."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            enabled_clause = "AND enabled = 1" if enabled_only else ""
+            rows = connection.execute(
+                f"""SELECT target_id, profile_id, device_registry_id, platform,
+                           capabilities_json, friendly_name, last_resolved_notify_service,
+                           shared_device, lockscreen_visibility, enabled,
+                           minimum_gap_seconds, maximum_notifications_per_hour,
+                           daily_push_budget, adaptive_backoff_json,
+                           created_at_utc, updated_at_utc
+                    FROM notification_targets
+                    WHERE profile_id = ? {enabled_clause}
+                    ORDER BY target_id""",
+                (profile_id,),
+            ).fetchall()
+            return tuple(self._target_dict(row) for row in rows)
+
+        return await self._storage._async_reader(read)
+
+
 class SchedulerRepository:
     """Persist profile scheduler configuration and materialized slots."""
 
@@ -3233,10 +3363,12 @@ class SchedulerRepository:
                                slot_id, profile_id, track_id, target_id, slot_type,
                                scheduled_for_utc, status, scheduler_config_version,
                                seed, created_at_utc, updated_at_utc
-                           ) VALUES (?, ?, NULL, NULL, ?, ?, 'scheduled', ?, ?, ?, ?)""",
+                           ) VALUES (?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?)""",
                         (
                             slot["slot_id"],
                             profile_id,
+                            slot.get("track_id"),
+                            slot.get("target_id"),
                             slot["slot_type"],
                             slot["scheduled_for_utc"],
                             scheduler_config_version,
@@ -3345,6 +3477,25 @@ class SchedulerRepository:
 
         return await self._storage._async_writer(write)
 
+    async def async_active_session_track_ids(
+        self,
+        profile_id: str,
+    ) -> frozenset[str]:
+        """Return Tracks currently suppressed by an active Profile session."""
+
+        def read(connection: sqlite3.Connection) -> frozenset[str]:
+            rows = connection.execute(
+                """SELECT DISTINCT track_id
+                   FROM sessions
+                   WHERE profile_id = ?
+                     AND status = 'active'
+                     AND track_id IS NOT NULL""",
+                (profile_id,),
+            ).fetchall()
+            return frozenset(str(row[0]) for row in rows)
+
+        return await self._storage._async_reader(read)
+
     async def async_set_slot_status(
         self,
         slot_id: str,
@@ -3413,6 +3564,7 @@ class StateRepositories:
     review_events: ReviewEventsRepository
     user_annotations: UserAnnotationsRepository
     content_reports: ContentReportsRepository
+    notification_targets: NotificationTargetsRepository
     scheduler: SchedulerRepository
     settings: SettingsRepository
 
@@ -3425,6 +3577,7 @@ class StateRepositories:
             review_events=ReviewEventsRepository(storage),
             user_annotations=UserAnnotationsRepository(storage),
             content_reports=ContentReportsRepository(storage),
+            notification_targets=NotificationTargetsRepository(storage),
             scheduler=SchedulerRepository(storage),
             settings=SettingsRepository(storage),
         )
