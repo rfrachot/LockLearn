@@ -790,16 +790,12 @@ class SchedulerService:
             end_utc=end_utc.isoformat(),
         )
         active_slots = tuple(
-            slot
-            for slot in existing
-            if str(slot["status"]) not in {"cancelled", "expired"}
+            slot for slot in existing if str(slot["status"]) not in {"cancelled", "expired"}
         )
         if len(active_slots) >= daily_push_budget:
             raise SchedulerValidationError("profile daily push budget is exhausted")
 
-        active_session_tracks = await self._scheduler.async_active_session_track_ids(
-            profile_id
-        )
+        active_session_tracks = await self._scheduler.async_active_session_track_ids(profile_id)
         tracks = tuple(
             track
             for track in await self._tracks.async_list_for_profile(profile_id)
@@ -839,9 +835,7 @@ class SchedulerService:
             existing_target_id = existing_slot.get("target_id")
             if isinstance(existing_target_id, str):
                 existing_by_target.setdefault(existing_target_id, []).append(
-                    datetime.fromisoformat(
-                        str(existing_slot["scheduled_for_utc"])
-                    ).astimezone(UTC)
+                    datetime.fromisoformat(str(existing_slot["scheduled_for_utc"])).astimezone(UTC)
                 )
         device_usage: dict[str, tuple[datetime, ...]] = {}
         for target in targets:
@@ -871,9 +865,7 @@ class SchedulerService:
             target_existing_usage=existing_by_target,
             target_new_usage={target: [] for target in targets_by_id},
             device_existing_usage=device_usage,
-            device_new_usage={
-                str(target["device_registry_id"]): [] for target in targets
-            },
+            device_new_usage={str(target["device_registry_id"]): [] for target in targets},
             config=config,
         )
         if selected_target_id is None:
