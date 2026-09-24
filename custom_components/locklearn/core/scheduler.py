@@ -725,7 +725,7 @@ class SchedulerService:
 
         expired_slots = await self._scheduler.async_expire_before(
             before_utc=effective.isoformat(),
-            updated_at_utc=observed.isoformat(),
+            updated_at_utc=effective.isoformat(),
         )
         await self._settings.async_set(
             _SCHEDULER_TIME_STATE_KEY,
