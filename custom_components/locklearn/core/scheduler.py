@@ -718,6 +718,8 @@ class SchedulerService:
             kind = "clock_backward"
         elif reason == "startup":
             kind = "restart"
+        elif reason == "timer" and observed - previous > timedelta(minutes=5):
+            kind = "clock_forward"
         else:
             kind = "advance"
 
