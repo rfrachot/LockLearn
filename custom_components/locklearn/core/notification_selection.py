@@ -189,7 +189,11 @@ class NotificationSelectionService:
         track = await self._tracks.async_get(track_id)
         if profile is None or str(profile["status"]) != "active":
             return None
-        if track is None or str(track["profile_id"]) != profile_id or str(track["status"]) != "active":
+        if (
+            track is None
+            or str(track["profile_id"]) != profile_id
+            or str(track["status"]) != "active"
+        ):
             return None
 
         now = self._clock.now()
