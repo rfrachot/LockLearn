@@ -1165,7 +1165,10 @@ class SchedulerService:
             target_existing = tuple(target_existing_usage.get(target_id, ()))
             target_new = tuple(target_new_usage.get(target_id, ()))
             target_usage = (*target_existing, *target_new)
-            daily_budget_raw = target.get("effective_daily_push_budget")
+            daily_budget_raw = target.get(
+                "effective_daily_push_budget",
+                target.get("daily_push_budget"),
+            )
             daily_budget = 10**9 if daily_budget_raw is None else int(daily_budget_raw)
             if len(target_usage) >= daily_budget:
                 continue
