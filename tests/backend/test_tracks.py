@@ -116,6 +116,41 @@ async def test_direction_configuration_resolves_to_exact_card_rules(tmp_path: Pa
         await storage.async_close()
 
 
+async def test_track_scheduler_settings_are_validated_and_persisted(tmp_path: Path) -> None:
+    storage = await _storage_with_v1(tmp_path)
+    service = TrackService(
+        storage.repositories.tracks,
+        clock=_FixedClock(),
+        id_factory=lambda: "track-scheduler",
+    )
+    try:
+        track = await service.async_create_track(
+            profile_id="profile-1",
+            name="Scheduled",
+            pack_version_id="locklearn:pack-version:v1",
+            source_language="en",
+            target_language="fr",
+            scheduler_settings={
+                "learning_count": 3,
+                "quiz_count": 1,
+                "target_ids": ["target-b", "target-a", "target-b"],
+            },
+        )
+        assert track["settings"]["scheduler"] == {
+            "learning_count": 3,
+            "quiz_count": 1,
+            "target_ids": ["target-b", "target-a"],
+        }
+
+        with pytest.raises(TrackValidationError, match="learning_count"):
+            await service.async_update_track(
+                track_id="track-scheduler",
+                scheduler_settings={"learning_count": -1},
+            )
+    finally:
+        await storage.async_close()
+
+
 async def test_explicit_card_selection_is_limited_to_pinned_pack(tmp_path: Path) -> None:
     storage = await _storage_with_v1(tmp_path)
     service = TrackService(
