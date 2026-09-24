@@ -267,10 +267,7 @@ def _valid_after(
     maximum_notifications_per_hour: int,
 ) -> bool:
     all_existing = (*occupied, *selected)
-    if any(
-        abs((candidate - item).total_seconds()) < minimum_gap_seconds
-        for item in all_existing
-    ):
+    if any(abs((candidate - item).total_seconds()) < minimum_gap_seconds for item in all_existing):
         return False
     bucket = _hour_bucket(candidate, timezone)
     return (
@@ -466,9 +463,7 @@ class SchedulerService:
             end_utc=end_utc.isoformat(),
         )
         current_version = tuple(
-            slot
-            for slot in existing
-            if int(slot["scheduler_config_version"]) == config.version
+            slot for slot in existing if int(slot["scheduler_config_version"]) == config.version
         )
         remaining_budget = max(0, daily_push_budget - len(current_version))
         occupied = tuple(
