@@ -2,6 +2,32 @@
 
 ## Current state
 
+P4.2 implementation is now on `feat/p4-scheduler` after the P4.1 PASS
+(`508e67c4e6f411fe0974ca1e5064e88cdd456eb9`). The scheduler now resolves
+Profile-local wall-clock minutes explicitly through `zoneinfo`: nonexistent
+spring-forward minutes are skipped, duplicated fall-back minutes expose both
+real UTC instants while sharing one local-hour capacity bucket, and
+cross-midnight active windows use the weekday on which the window starts.
+
+A private `scheduler_time_state_v1` settings record persists a monotonic UTC
+high-watermark. Config Entry setup/reload runs startup reconciliation; backward
+NTP corrections cannot reopen already-passed time, forward timer jumps are
+classified, and overdue unsent scheduled/deferred rows are expired without
+rewriting sent/consumed history. Profile timezone changes create a normal new
+scheduler config version, cancel only older future unsent rows and generate in
+the new timezone. No state schema migration was required.
+
+P4.2 tests cover spring-forward nonexistent time, fall-back duplicated hour,
+cross-midnight windows, backward and forward clock jumps, restart idempotence,
+real Config Entry reload persistence and timezone changes. ADR-0037 and
+`docs/SCHEDULER.md` document the boundary. P4.3+ arbitration, receptivity,
+ordinary missed/pending/backoff policy and notification interactions remain out
+of scope.
+
+Repository quality gates still need to run in the development checkout. Do not
+mark ADR-0037 accepted or P4.2 PASS until Ruff format/lint, mypy, resource
+validation and pytest are green.
+
 P4.1 is closed PASS on `feat/p4-scheduler`, cut from the final P3 HEAD
 `146b48a3bf0f8331feecff20d4784029d290b7bb`. It adds deterministic
 profile-level scheduler generation, a persistent SchedulerRepository,
