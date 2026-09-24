@@ -3257,6 +3257,47 @@ class NotificationTargetsRepository:
 
         await self._storage._async_writer(write)
 
+    async def async_get(self, target_id: str) -> dict[str, Any] | None:
+        """Return one stable notification target by LockLearn target identity."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT target_id, profile_id, device_registry_id, platform,
+                          capabilities_json, friendly_name, last_resolved_notify_service,
+                          shared_device, lockscreen_visibility, enabled,
+                          minimum_gap_seconds, maximum_notifications_per_hour,
+                          daily_push_budget, adaptive_backoff_json,
+                          created_at_utc, updated_at_utc
+                   FROM notification_targets
+                   WHERE target_id = ?""",
+                (target_id,),
+            ).fetchone()
+            return None if row is None else self._target_dict(row)
+
+        return await self._storage._async_reader(read)
+
+    async def async_set_last_resolved_service(
+        self,
+        *,
+        target_id: str,
+        service: str,
+        updated_at_utc: str,
+    ) -> bool:
+        """Persist diagnostics-only route metadata without changing target identity."""
+
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                """UPDATE notification_targets
+                   SET last_resolved_notify_service = ?,
+                       updated_at_utc = ?
+                   WHERE target_id = ?""",
+                (service, updated_at_utc, target_id),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(write)
+
     async def async_list_for_profile(
         self,
         profile_id: str,
