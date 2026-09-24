@@ -58,7 +58,10 @@ class NotificationSchedulerRepository(Protocol):
         self,
         *,
         slot_id: str,
-        card: NotificationCardReference,
+        card_key: str,
+        learning_item_id: str,
+        prompt_facet_id: str,
+        answer_facet_id: str,
         selection_reason: str,
         updated_at_utc: str,
     ) -> bool: ...
@@ -251,7 +254,10 @@ class NotificationSelectionService:
         chosen, reason = ranked[0]
         changed = await self._scheduler.async_bind_content_selection(
             slot_id=slot_id,
-            card=chosen.card,
+            card_key=chosen.card.card_key,
+            learning_item_id=chosen.card.learning_item_id,
+            prompt_facet_id=chosen.card.prompt_facet_id,
+            answer_facet_id=chosen.card.answer_facet_id,
             selection_reason=reason,
             updated_at_utc=now.isoformat(),
         )
