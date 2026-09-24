@@ -347,6 +347,52 @@ async def test_backward_clock_jump_uses_persisted_high_watermark(tmp_path: Path)
         await storage.async_close()
 
 
+async def test_forward_clock_jump_expires_overdue_unsent_slots(tmp_path: Path) -> None:
+    clock = FixedClock(datetime(2026, 9, 24, 8, 0, tzinfo=UTC))
+    storage = await _storage(tmp_path, clock)
+    try:
+        await _profile(
+            storage,
+            now=clock.now(),
+            settings={
+                "daily_push_budget": 2,
+                "quiet_hours": {"start": "22:00", "end": "07:00"},
+                "scheduler": {
+                    "active_days": [3],
+                    "active_windows": [{"start": "08:00", "end": "20:00"}],
+                    "minimum_gap_seconds": 0,
+                    "maximum_notifications_per_hour": 2,
+                },
+            },
+        )
+        service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=clock,
+        )
+        generated = await service.async_generate(
+            profile_id="profile-scheduler",
+            local_date=date(2026, 9, 24),
+        )
+        slots = generated["materialized_slots"]
+        earliest = min(datetime.fromisoformat(slot["scheduled_for_utc"]) for slot in slots)
+
+        clock.set(earliest + timedelta(hours=6))
+        jumped = await service.async_reconcile(reason="timer")
+        assert jumped.kind == "clock_forward"
+        assert jumped.expired_slots >= 1
+
+        refreshed = await storage.repositories.scheduler.async_list_slots(
+            profile_id="profile-scheduler",
+            start_utc="2026-09-23T22:00:00+00:00",
+            end_utc="2026-09-24T22:00:00+00:00",
+        )
+        assert any(slot["status"] == "expired" for slot in refreshed)
+    finally:
+        await storage.async_close()
+
+
 async def test_restart_expires_overdue_unsent_slots_without_touching_consumed(
     tmp_path: Path,
 ) -> None:
