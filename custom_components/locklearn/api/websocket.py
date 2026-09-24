@@ -253,6 +253,7 @@ async def ws_profiles_create(
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     profile["role"] = ProfileRole.OWNER.value
+    await runtime.scheduler_ha.async_refresh()
     connection.send_result(msg["id"], profile)
 
 
@@ -296,6 +297,7 @@ async def ws_profiles_update(
     profile["role"] = await runtime.storage.repositories.profiles.async_get_role(
         profile_id, connection.user.id
     )
+    await runtime.scheduler_ha.async_refresh()
     connection.send_result(msg["id"], profile)
 
 
@@ -324,6 +326,7 @@ async def ws_profiles_delete(
     if not await runtime.profiles.async_delete_profile(profile_id):
         connection.send_error(msg["id"], ERR_NOT_FOUND, "Profile not found")
         return
+    await runtime.scheduler_ha.async_refresh()
     connection.send_result(msg["id"])
 
 
