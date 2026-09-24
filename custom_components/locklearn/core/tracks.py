@@ -58,9 +58,7 @@ class TrackService:
         allowed = {"learning_count", "quiz_count", "target_ids"}
         unknown = set(settings) - allowed
         if unknown:
-            raise TrackValidationError(
-                f"unsupported track scheduler settings: {sorted(unknown)!r}"
-            )
+            raise TrackValidationError(f"unsupported track scheduler settings: {sorted(unknown)!r}")
         normalized: dict[str, Any] = {}
         for field in ("learning_count", "quiz_count"):
             value = settings.get(field, 0)
