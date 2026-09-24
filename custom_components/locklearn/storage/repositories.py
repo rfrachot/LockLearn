@@ -90,6 +90,34 @@ class NotificationTargetRecord:
     adaptive_backoff: dict[str, Any] | None = None
 
 
+
+@dataclass(frozen=True, slots=True)
+class NotificationInteractionRecord:
+    """Persistent single-use action capability for one notification stage."""
+
+    interaction_id: str
+    token: str
+    profile_id: str
+    target_id: str
+    stage: str
+    created_at_utc: str
+    expires_at_utc: str
+    tag: str | None = None
+    track_id: str | None = None
+    card_key: str | None = None
+    status: str = "pending"
+    consumed_at_utc: str | None = None
+    action_id: str | None = None
+    payload: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationInteractionConsumeResult:
+    """Atomic notification action claim returned by the state repository."""
+
+    disposition: str
+    interaction: dict[str, Any] | None = None
+
 @dataclass(frozen=True, slots=True)
 class CardReference:
     card_key: str
@@ -3256,6 +3284,319 @@ class NotificationTargetsRepository:
         return await self._storage._async_reader(read)
 
 
+
+class NotificationInteractionsRepository:
+    """Persist and atomically consume single-use notification interactions."""
+
+    _SELECT_COLUMNS = (
+        "interaction_id",
+        "token",
+        "tag",
+        "profile_id",
+        "track_id",
+        "target_id",
+        "card_key",
+        "stage",
+        "status",
+        "created_at_utc",
+        "expires_at_utc",
+        "consumed_at_utc",
+        "action_id",
+        "payload_json",
+    )
+
+    def __init__(self, storage: RepositoryStorage) -> None:
+        self._storage = storage
+
+    @classmethod
+    def _interaction_dict(cls, row: tuple[Any, ...]) -> dict[str, Any]:
+        result = dict(zip(cls._SELECT_COLUMNS, row, strict=True))
+        result["payload"] = json.loads(str(result.pop("payload_json")))
+        return result
+
+    @staticmethod
+    def _audit_action(
+        connection: sqlite3.Connection,
+        *,
+        event_type: str,
+        actor_user_id: str | None,
+        profile_id: str | None,
+        interaction: dict[str, Any] | None,
+        reason: str,
+        created_at_utc: str,
+    ) -> None:
+        payload: dict[str, Any] = {"reason": reason}
+        if interaction is not None:
+            payload.update(
+                {
+                    "interaction_id": interaction["interaction_id"],
+                    "target_id": interaction["target_id"],
+                    "stage": interaction["stage"],
+                    "status": interaction["status"],
+                }
+            )
+        connection.execute(
+            """INSERT INTO audit_events(
+                   event_type, actor_user_id, profile_id, payload_json, created_at_utc
+               ) VALUES (?, ?, ?, ?, ?)""",
+            (
+                event_type,
+                actor_user_id,
+                profile_id,
+                json.dumps(
+                    payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+                created_at_utc,
+            ),
+        )
+
+    async def async_insert(self, interaction: NotificationInteractionRecord) -> None:
+        """Insert one pending interaction after state-domain identity checks."""
+        payload_json = json.dumps(
+            interaction.payload or {},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                target = connection.execute(
+                    """SELECT profile_id
+                       FROM notification_targets
+                       WHERE target_id = ?""",
+                    (interaction.target_id,),
+                ).fetchone()
+                if target is None or str(target[0]) != interaction.profile_id:
+                    raise StateRepositoryError(
+                        "notification interaction target does not belong to profile"
+                    )
+                if interaction.track_id is not None:
+                    track = connection.execute(
+                        "SELECT profile_id FROM tracks WHERE track_id = ?",
+                        (interaction.track_id,),
+                    ).fetchone()
+                    if track is None or str(track[0]) != interaction.profile_id:
+                        raise StateRepositoryError(
+                            "notification interaction track does not belong to profile"
+                        )
+                connection.execute(
+                    """INSERT INTO notification_interactions(
+                           interaction_id, token, tag, profile_id, track_id,
+                           target_id, card_key, stage, status, created_at_utc,
+                           expires_at_utc, consumed_at_utc, action_id, payload_json
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        interaction.interaction_id,
+                        interaction.token,
+                        interaction.tag,
+                        interaction.profile_id,
+                        interaction.track_id,
+                        interaction.target_id,
+                        interaction.card_key,
+                        interaction.stage,
+                        interaction.status,
+                        interaction.created_at_utc,
+                        interaction.expires_at_utc,
+                        interaction.consumed_at_utc,
+                        interaction.action_id,
+                        payload_json,
+                    ),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+
+    async def async_get_by_token(self, token: str) -> dict[str, Any] | None:
+        """Resolve an opaque interaction token for internal action handling."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                f"""SELECT {",".join(self._SELECT_COLUMNS)}
+                    FROM notification_interactions
+                    WHERE token = ?""",
+                (token,),
+            ).fetchone()
+            return None if row is None else self._interaction_dict(row)
+
+        return await self._storage._async_reader(read)
+
+    async def async_audit_rejection(
+        self,
+        *,
+        token: str,
+        actor_user_id: str | None,
+        reason: str,
+        created_at_utc: str,
+    ) -> None:
+        """Audit a rejected action without persisting the bearer token."""
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    f"""SELECT {",".join(self._SELECT_COLUMNS)}
+                        FROM notification_interactions
+                        WHERE token = ?""",
+                    (token,),
+                ).fetchone()
+                interaction = None if row is None else self._interaction_dict(row)
+                self._audit_action(
+                    connection,
+                    event_type="notification_action_rejected",
+                    actor_user_id=actor_user_id,
+                    profile_id=(
+                        None if interaction is None else str(interaction["profile_id"])
+                    ),
+                    interaction=interaction,
+                    reason=reason,
+                    created_at_utc=created_at_utc,
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+
+    async def async_consume(
+        self,
+        *,
+        token: str,
+        action_id: str,
+        actor_user_id: str | None,
+        action_at_utc: str,
+    ) -> NotificationInteractionConsumeResult:
+        """Atomically claim a live pending token once and audit the attempt."""
+
+        def write(connection: sqlite3.Connection) -> NotificationInteractionConsumeResult:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    f"""SELECT {",".join(self._SELECT_COLUMNS)}
+                        FROM notification_interactions
+                        WHERE token = ?""",
+                    (token,),
+                ).fetchone()
+                if row is None:
+                    self._audit_action(
+                        connection,
+                        event_type="notification_action_rejected",
+                        actor_user_id=actor_user_id,
+                        profile_id=None,
+                        interaction=None,
+                        reason="unknown_token",
+                        created_at_utc=action_at_utc,
+                    )
+                    connection.commit()
+                    return NotificationInteractionConsumeResult("not_found")
+
+                interaction = self._interaction_dict(row)
+                profile_id = str(interaction["profile_id"])
+                if interaction["status"] != "pending":
+                    self._audit_action(
+                        connection,
+                        event_type="notification_action_rejected",
+                        actor_user_id=actor_user_id,
+                        profile_id=profile_id,
+                        interaction=interaction,
+                        reason="replayed",
+                        created_at_utc=action_at_utc,
+                    )
+                    connection.commit()
+                    return NotificationInteractionConsumeResult("replayed")
+
+                is_live = connection.execute(
+                    """SELECT CASE
+                           WHEN julianday(expires_at_utc) > julianday(?) THEN 1
+                           ELSE 0
+                       END
+                       FROM notification_interactions
+                       WHERE interaction_id = ?""",
+                    (action_at_utc, interaction["interaction_id"]),
+                ).fetchone()
+                if is_live is None or int(is_live[0]) != 1:
+                    connection.execute(
+                        """UPDATE notification_interactions
+                           SET status = 'expired'
+                           WHERE interaction_id = ? AND status = 'pending'""",
+                        (interaction["interaction_id"],),
+                    )
+                    interaction["status"] = "expired"
+                    self._audit_action(
+                        connection,
+                        event_type="notification_action_rejected",
+                        actor_user_id=actor_user_id,
+                        profile_id=profile_id,
+                        interaction=interaction,
+                        reason="expired",
+                        created_at_utc=action_at_utc,
+                    )
+                    connection.commit()
+                    return NotificationInteractionConsumeResult("expired")
+
+                cursor = connection.execute(
+                    """UPDATE notification_interactions
+                       SET status = 'consumed',
+                           consumed_at_utc = ?,
+                           action_id = ?
+                       WHERE interaction_id = ?
+                         AND status = 'pending'
+                         AND julianday(expires_at_utc) > julianday(?)""",
+                    (
+                        action_at_utc,
+                        action_id,
+                        interaction["interaction_id"],
+                        action_at_utc,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    self._audit_action(
+                        connection,
+                        event_type="notification_action_rejected",
+                        actor_user_id=actor_user_id,
+                        profile_id=profile_id,
+                        interaction=interaction,
+                        reason="replayed",
+                        created_at_utc=action_at_utc,
+                    )
+                    connection.commit()
+                    return NotificationInteractionConsumeResult("replayed")
+
+                interaction["status"] = "consumed"
+                interaction["consumed_at_utc"] = action_at_utc
+                interaction["action_id"] = action_id
+                self._audit_action(
+                    connection,
+                    event_type="notification_action_consumed",
+                    actor_user_id=actor_user_id,
+                    profile_id=profile_id,
+                    interaction=interaction,
+                    reason="consumed",
+                    created_at_utc=action_at_utc,
+                )
+                connection.commit()
+                return NotificationInteractionConsumeResult(
+                    "consumed",
+                    interaction=interaction,
+                )
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        return await self._storage._async_writer(write)
+
+
 class SchedulerRepository:
     """Persist profile scheduler configuration and materialized slots."""
 
@@ -4067,6 +4408,7 @@ class StateRepositories:
     user_annotations: UserAnnotationsRepository
     content_reports: ContentReportsRepository
     notification_targets: NotificationTargetsRepository
+    notification_interactions: NotificationInteractionsRepository
     scheduler: SchedulerRepository
     settings: SettingsRepository
 
@@ -4080,6 +4422,7 @@ class StateRepositories:
             user_annotations=UserAnnotationsRepository(storage),
             content_reports=ContentReportsRepository(storage),
             notification_targets=NotificationTargetsRepository(storage),
+            notification_interactions=NotificationInteractionsRepository(storage),
             scheduler=SchedulerRepository(storage),
             settings=SettingsRepository(storage),
         )
