@@ -3681,25 +3681,44 @@ class SchedulerRepository:
 
         def write(connection: sqlite3.Connection) -> bool:
             column = "cleared" if action == "cleared" else "answered"
-            cursor = connection.execute(
-                f"""UPDATE receptivity_samples
-                    SET {column} = 1,
-                        delivery_to_action_ms = CASE
-                            WHEN delivery_to_action_ms IS NULL
-                                THEN ?
-                            ELSE MIN(delivery_to_action_ms, ?)
-                        END,
-                        updated_at_utc = ?
-                    WHERE slot_id = ?""",
-                (
-                    delivery_to_action_ms,
-                    delivery_to_action_ms,
-                    action_at_utc,
-                    slot_id,
-                ),
-            )
-            connection.commit()
-            return cursor.rowcount == 1
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                cursor = connection.execute(
+                    f"""UPDATE receptivity_samples
+                        SET {column} = 1,
+                            delivery_to_action_ms = CASE
+                                WHEN delivery_to_action_ms IS NULL
+                                    THEN ?
+                                ELSE MIN(delivery_to_action_ms, ?)
+                            END,
+                            updated_at_utc = ?
+                        WHERE slot_id = ?""",
+                    (
+                        delivery_to_action_ms,
+                        delivery_to_action_ms,
+                        action_at_utc,
+                        slot_id,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    connection.rollback()
+                    return False
+                if action == "cleared":
+                    connection.execute(
+                        """UPDATE scheduled_slots
+                           SET status = 'expired',
+                               expired_reason = 'cleared',
+                               updated_at_utc = ?
+                           WHERE slot_id = ?
+                             AND status = 'sent'""",
+                        (action_at_utc, slot_id),
+                    )
+                connection.commit()
+                return True
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
 
         return await self._storage._async_writer(write)
 
