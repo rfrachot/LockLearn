@@ -83,3 +83,35 @@ days raises the `scheduler_configuration_infeasible` Home Assistant Repair.
 A later feasible day clears it. Preview is side-effect free and never advances
 the Repair streak.
 
+
+## P4.4 send-time receptivity and routine hooks
+
+`receptive_when` is a native Home Assistant template evaluated only when a
+materialized slot is about to be sent. If it is absent, context filtering is
+bypassed. If it is false, LockLearn defers the slot no later than
+`scheduled_for_utc + defer_window_minutes`; this never creates a ReviewEvent or
+SRS failure.
+
+Actual delivery initializes an observational receptivity sample with Profile
+timezone, weekday, local hour and delivery state. Later clear/answer observations
+may attach `delivery_to_action_ms`. V1 stores these features only; it does not
+learn or move future schedule windows automatically.
+
+Profiles may opt into routine entity hooks:
+
+```json
+{
+  "scheduler": {
+    "routine_triggers": {
+      "pre_sleep_consolidation": ["binary_sensor.in_bed"],
+      "morning_first_review": ["input_boolean.morning_routine"]
+    }
+  }
+}
+```
+
+A transition to `on` creates a content-free routine slot while still honoring
+P4.3 Profile/target/device capacity and active-session suppression. The actual
+same-day or previous-day CardDefinition is deliberately left to P4.5 send-time
+selection.
+
