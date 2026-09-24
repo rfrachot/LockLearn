@@ -33,6 +33,7 @@ async def test_setup_unload_and_reload_have_no_duplicate_panel(hass: HomeAssista
     initial_scheduler_time = await runtime.storage.repositories.settings.async_get(
         "scheduler_time_state_v1"
     )
+    assert isinstance(initial_scheduler_time, dict)
     assert initial_scheduler_time["kind"] == "initial"
 
     assert await hass.config_entries.async_unload(entry.entry_id)
@@ -48,6 +49,7 @@ async def test_setup_unload_and_reload_have_no_duplicate_panel(hass: HomeAssista
     reloaded_scheduler_time = await reloaded_runtime.storage.repositories.settings.async_get(
         "scheduler_time_state_v1"
     )
+    assert isinstance(reloaded_scheduler_time, dict)
     assert reloaded_scheduler_time["kind"] == "restart"
     assert (
         reloaded_scheduler_time["high_watermark_utc"]
