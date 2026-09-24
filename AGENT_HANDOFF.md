@@ -2,9 +2,8 @@
 
 ## Current state
 
-P4.3 implementation is now on `feat/p4-scheduler` after the P4.2 PASS
-(`c88f89131cbf4ee04ce04b0fb964a1d3307acfba`). Newly generated Profile
-slots can now be allocated to active Tracks and stable notification targets
+P4.3 is closed PASS on `feat/p4-scheduler` after P4.2. Newly generated
+Profile slots can be allocated to active Tracks and stable notification targets
 without selecting a CardDefinition. Track `settings.scheduler` carries
 `learning_count`, `quiz_count` and optional `target_ids`, exposed through
 the existing authenticated Track WebSocket create/update commands.
@@ -19,18 +18,16 @@ slots remain authoritative and are never retrofitted with Track/target identity.
 Persistent infeasibility is tracked by distinct local day. Three consecutive
 generated days with unmet non-suppressed demand create the
 `scheduler_configuration_infeasible` HA Repair; a later feasible day clears
-it. Preview remains side-effect free. ADR-0038 and `docs/SCHEDULER.md`
-document the boundary. No state schema migration was required.
+it. Preview remains side-effect free. ADR-0038 is accepted. No state schema
+migration was required.
 
-P4.3 tests cover weighted no-starvation, target daily capacity, shared physical
-device capacity across Profiles, active-session suppression, Track scheduler
-settings/WebSocket persistence and Repair creation/recovery. P4.4+ receptivity,
-routine hooks, send-time CardDefinition selection, missed/pending/backoff and
-notification interactions remain out of scope.
+Final P4.3 development-checkout gate on 2026-09-24: Ruff format PASS (220 files),
+Ruff lint PASS, mypy PASS (123 sources), resource registries PASS and pytest PASS
+(334 tests in 16.18 s).
 
-Repository quality gates still need to run in the development checkout. Do not
-mark ADR-0038 accepted or P4.3 PASS until Ruff format/lint, mypy, resource
-validation and pytest are green.
+Next concrete action: begin P4.4 context-aware receptivity and routine slots.
+P4.5+ send-time CardDefinition selection, missed/pending/backoff and notification
+interaction behavior remain out of scope until their dedicated work packages.
 
 P4.2 is closed PASS on `feat/p4-scheduler` after P4.1. The scheduler
 resolves Profile-local wall-clock minutes explicitly through `zoneinfo`:
