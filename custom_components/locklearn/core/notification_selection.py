@@ -7,9 +7,9 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
-from ..storage.repositories import CardReference
 from .clock import Clock, SystemClock
 from .selection import SelectionConstraintError, SelectionDecision
+from ..storage.repositories import CardReference
 
 
 DEFAULT_NEW_TEASER_BUDGET = 2
@@ -227,9 +227,8 @@ class NotificationSelectionService:
             if not candidates:
                 return None
 
-        teaser_allowed = (
-            str(slot["slot_type"]) == "learning"
-            and await self._teaser_available(profile_id=profile_id, profile=profile, now=now)
+        teaser_allowed = str(slot["slot_type"]) == "learning" and await self._teaser_available(
+            profile_id=profile_id, profile=profile, now=now
         )
         ranked = self._rank_candidates(
             candidates,
