@@ -1469,6 +1469,71 @@ async def test_missed_slot_expires_without_catchup_or_srs_mutation(tmp_path: Pat
         await storage.async_close()
 
 
+async def test_cleared_notification_closes_pending_without_srs_result(
+    tmp_path: Path,
+) -> None:
+    clock = FixedClock(datetime(2026, 9, 24, 8, 0, tzinfo=UTC))
+    storage = await _storage(tmp_path, clock)
+    try:
+        await _profile(storage, now=clock.now(), settings={"daily_push_budget": 1})
+        await _target(
+            storage,
+            daily_push_budget=1,
+            minimum_gap_seconds=0,
+            maximum_notifications_per_hour=1,
+            now=clock.now(),
+        )
+        await storage.repositories.scheduler.async_materialize_day(
+            profile_id="profile-scheduler",
+            scheduler_config_version=1,
+            seed="cleared",
+            start_utc="2026-09-24T00:00:00+00:00",
+            end_utc="2026-09-25T00:00:00+00:00",
+            now_utc=clock.now().isoformat(),
+            slots=(
+                {
+                    "slot_id": "slot-cleared",
+                    "track_id": None,
+                    "target_id": "target-1",
+                    "slot_type": "learning",
+                    "scheduled_for_utc": clock.now().isoformat(),
+                },
+            ),
+            updated_at_utc=clock.now().isoformat(),
+        )
+        service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=clock,
+        )
+        await service.async_record_delivery(slot_id="slot-cleared")
+        sample = await service.async_record_receptivity_action(
+            slot_id="slot-cleared",
+            action="cleared",
+            action_at_utc=clock.now() + timedelta(seconds=2),
+        )
+
+        assert sample["cleared"] is True
+        slot = await storage.repositories.scheduler.async_get_slot("slot-cleared")
+        assert slot is not None
+        assert slot["status"] == "expired"
+        assert slot["expired_reason"] == "cleared"
+        assert not await storage.repositories.scheduler.async_has_pending_for_target(
+            profile_id="profile-scheduler",
+            target_id="target-1",
+            exclude_slot_id="unused",
+        )
+        assert await storage.repositories.review_events.async_list_scope_events(
+            profile_id="profile-scheduler",
+            track_id=None,
+        ) == ()
+    finally:
+        await storage.async_close()
+
+
 async def test_adaptive_backoff_reduces_then_restores_target_budget(tmp_path: Path) -> None:
     clock = FixedClock(datetime(2026, 9, 24, 5, 0, tzinfo=UTC))
     storage = await _storage(tmp_path, clock)
