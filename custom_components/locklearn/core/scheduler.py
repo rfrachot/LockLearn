@@ -792,14 +792,20 @@ class SchedulerService:
         if len(active_slots) >= daily_push_budget:
             raise SchedulerValidationError("profile daily push budget is exhausted")
 
+        active_session_tracks = await self._scheduler.async_active_session_track_ids(
+            profile_id
+        )
         tracks = tuple(
             track
             for track in await self._tracks.async_list_for_profile(profile_id)
             if str(track["status"]) == "active"
+            and str(track["track_id"]) not in active_session_tracks
         )
         if track_id is None:
-            selected_track_id = (
-                None if not tracks else str(sorted(tracks, key=lambda item: str(item["track_id"]))[0]["track_id"])
+            if not tracks:
+                raise SchedulerValidationError("routine has no eligible active track")
+            selected_track_id = str(
+                sorted(tracks, key=lambda item: str(item["track_id"]))[0]["track_id"]
             )
         else:
             matching = next(
@@ -807,16 +813,66 @@ class SchedulerService:
                 None,
             )
             if matching is None:
-                raise SchedulerValidationError("routine track is not active in profile")
+                raise SchedulerValidationError(
+                    "routine track is unavailable or has an active session"
+                )
             selected_track_id = track_id
 
         targets = await self._notification_targets.async_list_for_profile(profile_id)
+        targets_by_id = {str(target["target_id"]): target for target in targets}
         if target_id is None:
-            selected_target_id = None if not targets else str(targets[0]["target_id"])
+            candidate_target_ids = tuple(sorted(targets_by_id))
         else:
-            if not any(str(target["target_id"]) == target_id for target in targets):
+            if target_id not in targets_by_id:
                 raise SchedulerValidationError("routine target is not enabled in profile")
-            selected_target_id = target_id
+            candidate_target_ids = (target_id,)
+        if not candidate_target_ids:
+            raise SchedulerValidationError("routine has no enabled notification target")
+
+        existing_by_target: dict[str, list[datetime]] = {}
+        for existing_slot in active_slots:
+            existing_target_id = existing_slot.get("target_id")
+            if isinstance(existing_target_id, str):
+                existing_by_target.setdefault(existing_target_id, []).append(
+                    datetime.fromisoformat(
+                        str(existing_slot["scheduled_for_utc"])
+                    ).astimezone(UTC)
+                )
+        device_usage: dict[str, tuple[datetime, ...]] = {}
+        for target in targets:
+            device_registry_id = str(target["device_registry_id"])
+            if device_registry_id in device_usage:
+                continue
+            device_usage[device_registry_id] = tuple(
+                datetime.fromisoformat(str(item["scheduled_for_utc"])).astimezone(UTC)
+                for item in await self._scheduler.async_list_device_slots(
+                    device_registry_id=device_registry_id,
+                    start_utc=start_utc.isoformat(),
+                    end_utc=end_utc.isoformat(),
+                )
+                if str(item["status"]) not in {"cancelled", "expired"}
+            )
+        routine_demand = TrackDemand(
+            track_id=selected_track_id,
+            priority=1,
+            learning_count=1,
+            quiz_count=0,
+            target_ids=candidate_target_ids,
+        )
+        selected_target_id = self._select_target(
+            demand=routine_demand,
+            scheduled_for_utc=now,
+            targets_by_id=targets_by_id,
+            target_existing_usage=existing_by_target,
+            target_new_usage={target: [] for target in targets_by_id},
+            device_existing_usage=device_usage,
+            device_new_usage={
+                str(target["device_registry_id"]): [] for target in targets
+            },
+            config=config,
+        )
+        if selected_target_id is None:
+            raise SchedulerValidationError("routine target capacity is unavailable")
 
         slot_id = self._routine_slot_id(
             profile_id=profile_id,
