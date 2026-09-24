@@ -1048,6 +1048,10 @@ async def test_receptive_when_false_defers_without_receptivity_or_srs_signal(
             )
             is None
         )
+        assert await storage.repositories.review_events.async_list_scope_events(
+            profile_id="profile-scheduler",
+            track_id=None,
+        ) == ()
 
         clock.set(datetime(2026, 9, 24, 8, 31, tzinfo=UTC))
         exhausted = await service.async_prepare_delivery("slot-receptive")
@@ -1201,6 +1205,65 @@ async def test_routine_hook_materializes_bounded_content_free_slots(tmp_path: Pa
             )
     finally:
         await storage.async_close()
+
+
+async def test_runtime_receptive_when_uses_home_assistant_template(
+    hass: HomeAssistant,
+) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    runtime = hass.data[DOMAIN][DATA_RUNTIME]
+    now = await runtime.scheduler.async_effective_now()
+    await runtime.storage.repositories.profiles.async_insert(
+        ProfileRecord(
+            profile_id="profile-receptive-ha",
+            name="Receptive",
+            preset="custom",
+            timezone="Europe/Paris",
+            settings={
+                "daily_push_budget": 1,
+                "scheduler": {
+                    "receptive_when": (
+                        "{{ is_state('binary_sensor.locklearn_receptive', 'on') }}"
+                    ),
+                    "defer_window_minutes": 0,
+                },
+            },
+            created_at_utc=now.isoformat(),
+            updated_at_utc=now.isoformat(),
+        )
+    )
+    await runtime.storage.repositories.scheduler.async_materialize_day(
+        profile_id="profile-receptive-ha",
+        scheduler_config_version=1,
+        seed="ha-template",
+        start_utc=(now - timedelta(hours=1)).isoformat(),
+        end_utc=(now + timedelta(hours=1)).isoformat(),
+        now_utc=now.isoformat(),
+        slots=(
+            {
+                "slot_id": "slot-ha-template",
+                "track_id": None,
+                "target_id": None,
+                "slot_type": "learning",
+                "scheduled_for_utc": now.isoformat(),
+            },
+        ),
+        updated_at_utc=now.isoformat(),
+    )
+
+    hass.states.async_set("binary_sensor.locklearn_receptive", "off")
+    blocked = await runtime.scheduler.async_prepare_delivery("slot-ha-template")
+    assert blocked["ready"] is False
+    assert blocked["reason"] == "not_receptive_defer_window_exhausted"
+
+    hass.states.async_set("binary_sensor.locklearn_receptive", "on")
+    ready = await runtime.scheduler.async_prepare_delivery("slot-ha-template")
+    assert ready["ready"] is True
+    assert ready["reason"] == "receptive"
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 async def test_ha_entity_routine_bridge_triggers_on_transition_to_on(
