@@ -60,3 +60,40 @@ truth.
 The P2 state foundation already reserved the complete
 `notification_interactions` table required by P4.6, so P4.6 adds repository
 and service behavior without changing state schema version 5.
+
+
+## P4.7 capability-aware rendering and delivery
+
+Learning notifications prefer prompt-first retrieval. Proven actionable targets
+receive prompt-only Reveal/I-don't-know actions, then a second stage with the
+same visible tag, `alert_once=true`, answer/explanation and post-retrieval
+self-assessment actions. The second stage always uses a fresh P4.6 interaction
+token even when the notification tag is reused.
+
+If actionable prompt-first delivery is unavailable, the renderer uses direct
+exposure and labels the pedagogical path `exposure_only`. Existing SignalPolicy
+semantics keep that path neutral for box promotion.
+
+Notification quiz is deliberately bounded to two answer choices plus
+I-don't-know when the target proves at least three visible actions. Larger MCQ or
+insufficient capability uses a panel handoff instead.
+
+Android channel names are separated for learning/teaser, quiz/review and
+relearning. Shared devices include the LockLearn Profile name in the visible
+title. Default visibility is private, including child/shared usage; visibility
+remains only an OS preference and never authorizes additional content.
+
+Delivery resolves the persisted `device_registry_id` to the current mobile_app
+notify action at send time. Dynamic service names are diagnostic metadata only.
+Actionable payloads require a platform-data-capable route. Direct-exposure
+fallback may use the generic notify entity as a plain message with Companion data
+removed.
+
+A missing or failing target raises the
+`notification_target_unavailable` Repair and is not recorded as sent.
+
+The private WebSocket command
+`locklearn/notifications/unrecorded_responses` exposes recent action attempts
+that arrived after interaction expiry. It is based on P4.6 rejection audit
+events with `reason=expired`, so merely ignored notifications do not create a
+false lost-response warning.
