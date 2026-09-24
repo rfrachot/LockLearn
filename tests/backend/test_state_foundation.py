@@ -461,3 +461,78 @@ async def test_v3_state_migrates_to_v4_with_receptivity_state(tmp_path: Path) ->
         assert state_path.with_name("state.db.pre-migration-v3.bak").is_file()
     finally:
         await storage.async_close()
+
+
+async def test_v4_state_migrates_to_v5_with_notification_selection_state(
+    tmp_path: Path,
+) -> None:
+    state_path = tmp_path / "state-v4" / "state.db"
+    state_path.parent.mkdir(parents=True)
+    v4_schema = STATE_SCHEMA
+    for line in (
+        "    card_key TEXT,\n",
+        "    learning_item_id TEXT,\n",
+        "    prompt_facet_id TEXT,\n",
+        "    answer_facet_id TEXT,\n",
+        "    selection_reason TEXT,\n",
+        "    expired_reason TEXT,\n",
+    ):
+        v4_schema = v4_schema.replace(line, "")
+
+    connection = sqlite3.connect(state_path)
+    try:
+        connection.executescript(v4_schema)
+        connection.execute("INSERT INTO schema_version(version) VALUES (4)")
+        connection.execute(
+            """INSERT INTO profiles(
+                   profile_id, name, preset, timezone, status, settings_json,
+                   created_at_utc, updated_at_utc
+               ) VALUES (
+                   'profile-v4', 'Legacy', 'standard', 'Europe/Paris', 'active',
+                   '{}', '2026-09-24T05:00:00+00:00', '2026-09-24T05:00:00+00:00'
+               )"""
+        )
+        connection.execute(
+            """INSERT INTO scheduled_slots(
+                   slot_id, profile_id, slot_type, scheduled_for_utc,
+                   deferred_until_utc, defer_reason, status,
+                   scheduler_config_version, seed, created_at_utc, updated_at_utc
+               ) VALUES (
+                   'slot-v4', 'profile-v4', 'learning',
+                   '2026-09-24T08:00:00+00:00', NULL, NULL, 'scheduled',
+                   1, 'seed', '2026-09-24T05:00:00+00:00',
+                   '2026-09-24T05:00:00+00:00'
+               )"""
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    storage = SQLiteStorage(StoragePaths(state_path, tmp_path / "content-v5" / "current.db"))
+    await storage.async_open()
+    try:
+        migrated = sqlite3.connect(state_path)
+        try:
+            assert migrated.execute("SELECT version FROM schema_version").fetchone() == (
+                DB_SCHEMA_VERSION,
+            )
+            columns = {
+                str(row[1])
+                for row in migrated.execute("PRAGMA table_info(scheduled_slots)").fetchall()
+            }
+            assert {
+                "card_key",
+                "learning_item_id",
+                "prompt_facet_id",
+                "answer_facet_id",
+                "selection_reason",
+                "expired_reason",
+            } <= columns
+            assert migrated.execute(
+                "SELECT slot_id FROM scheduled_slots WHERE slot_id = 'slot-v4'"
+            ).fetchone() == ("slot-v4",)
+        finally:
+            migrated.close()
+        assert state_path.with_name("state.db.pre-migration-v4.bak").is_file()
+    finally:
+        await storage.async_close()
