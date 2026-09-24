@@ -110,7 +110,10 @@ class FakeScheduler:
         self,
         *,
         slot_id: str,
-        card: Any,
+        card_key: str,
+        learning_item_id: str,
+        prompt_facet_id: str,
+        answer_facet_id: str,
         selection_reason: str,
         updated_at_utc: str,
     ) -> bool:
@@ -121,10 +124,10 @@ class FakeScheduler:
         self.bind_count += 1
         self.slot.update(
             {
-                "card_key": card.card_key,
-                "learning_item_id": card.learning_item_id,
-                "prompt_facet_id": card.prompt_facet_id,
-                "answer_facet_id": card.answer_facet_id,
+                "card_key": card_key,
+                "learning_item_id": learning_item_id,
+                "prompt_facet_id": prompt_facet_id,
+                "answer_facet_id": answer_facet_id,
                 "selection_reason": selection_reason,
             }
         )
