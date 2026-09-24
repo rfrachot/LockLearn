@@ -109,7 +109,9 @@ class NotificationActionProcessor:
         payload = dict(interaction.get("payload") or {})
         await self._record_receptivity(payload)
 
-        if semantic == "reveal":
+        if semantic == "reveal" or (
+            semantic == "idk" and payload.get("selection_reason") == "teaser_new"
+        ):
             event = await self._apply_introduction_if_needed(interaction, payload)
             return NotificationActionOutcome(
                 claim.disposition,
