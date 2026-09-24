@@ -1292,6 +1292,31 @@ async def test_ha_entity_routine_bridge_triggers_on_transition_to_on(
             updated_at_utc=now.isoformat(),
         )
     )
+    await runtime.storage.repositories.tracks.async_insert(
+        TrackRecord(
+            track_id="track-routine-ha",
+            profile_id="profile-routine-ha",
+            name="Routine track",
+            priority=1,
+            settings={"scheduler": {"learning_count": 0, "quiz_count": 0}},
+            created_at_utc=now.isoformat(),
+            updated_at_utc=now.isoformat(),
+        )
+    )
+    await runtime.storage.repositories.notification_targets.async_insert(
+        NotificationTargetRecord(
+            target_id="target-routine-ha",
+            profile_id="profile-routine-ha",
+            device_registry_id="device-routine-ha",
+            platform="android",
+            friendly_name="Routine target",
+            daily_push_budget=2,
+            minimum_gap_seconds=0,
+            maximum_notifications_per_hour=2,
+            created_at_utc=now.isoformat(),
+            updated_at_utc=now.isoformat(),
+        )
+    )
     await runtime.scheduler_ha.async_refresh()
 
     hass.states.async_set("input_boolean.locklearn_bedtime", "off")
