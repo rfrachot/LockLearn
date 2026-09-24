@@ -19,7 +19,7 @@ class NotificationSelectionError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
-class NotificationNotificationCardReference:
+class NotificationCardReference:
     """Minimal immutable CardDefinition identity needed by notification policy."""
 
     card_key: str
