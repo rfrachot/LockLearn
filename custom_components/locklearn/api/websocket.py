@@ -1622,6 +1622,43 @@ async def ws_operation_cancel(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "locklearn/notifications/unrecorded_responses",
+        vol.Required("profile_id"): str,
+        vol.Optional("lookback_hours", default=168): vol.All(int, vol.Range(min=1, max=720)),
+        vol.Optional("limit", default=20): vol.All(int, vol.Range(min=1, max=100)),
+    }
+)
+@websocket_api.async_response
+async def ws_notification_unrecorded_responses(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return the private recent-unrecorded-mobile-response warning surface."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.READ,
+    ):
+        return
+    try:
+        result = await runtime.notification_warnings.async_recent_unrecorded(
+            profile_id=profile_id,
+            lookback_hours=msg["lookback_hours"],
+            limit=msg["limit"],
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "locklearn/scheduler/preview",
         vol.Required("profile_id"): str,
         vol.Optional("local_date"): str,
@@ -1687,6 +1724,7 @@ COMMANDS = (
     ws_admin_rebuild_stats,
     ws_admin_recompute_progress,
     ws_admin_storage_status,
+    ws_notification_unrecorded_responses,
     ws_scheduler_preview,
     ws_session_start,
     ws_session_get,
