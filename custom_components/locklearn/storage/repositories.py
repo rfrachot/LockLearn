@@ -3416,6 +3416,8 @@ class SchedulerRepository:
             rows = connection.execute(
                 """SELECT slot_id, profile_id, track_id, target_id, slot_type,
                           scheduled_for_utc, deferred_until_utc, defer_reason,
+                          card_key, learning_item_id, prompt_facet_id,
+                          answer_facet_id, selection_reason, expired_reason,
                           status, scheduler_config_version, seed,
                           created_at_utc, updated_at_utc
                    FROM scheduled_slots
@@ -3434,6 +3436,12 @@ class SchedulerRepository:
                 "scheduled_for_utc",
                 "deferred_until_utc",
                 "defer_reason",
+                "card_key",
+                "learning_item_id",
+                "prompt_facet_id",
+                "answer_facet_id",
+                "selection_reason",
+                "expired_reason",
                 "status",
                 "scheduler_config_version",
                 "seed",
@@ -3457,7 +3465,10 @@ class SchedulerRepository:
             rows = connection.execute(
                 """SELECT slot.slot_id, slot.profile_id, slot.track_id, slot.target_id,
                           slot.slot_type, slot.scheduled_for_utc,
-                          slot.deferred_until_utc, slot.defer_reason, slot.status,
+                          slot.deferred_until_utc, slot.defer_reason,
+                          slot.card_key, slot.learning_item_id, slot.prompt_facet_id,
+                          slot.answer_facet_id, slot.selection_reason,
+                          slot.expired_reason, slot.status,
                           slot.scheduler_config_version, slot.seed,
                           slot.created_at_utc, slot.updated_at_utc
                    FROM scheduled_slots AS slot
@@ -3478,6 +3489,12 @@ class SchedulerRepository:
                 "scheduled_for_utc",
                 "deferred_until_utc",
                 "defer_reason",
+                "card_key",
+                "learning_item_id",
+                "prompt_facet_id",
+                "answer_facet_id",
+                "selection_reason",
+                "expired_reason",
                 "status",
                 "scheduler_config_version",
                 "seed",
@@ -3495,6 +3512,8 @@ class SchedulerRepository:
             row = connection.execute(
                 """SELECT slot_id, profile_id, track_id, target_id, slot_type,
                           scheduled_for_utc, deferred_until_utc, defer_reason,
+                          card_key, learning_item_id, prompt_facet_id,
+                          answer_facet_id, selection_reason, expired_reason,
                           status, scheduler_config_version, seed,
                           created_at_utc, updated_at_utc
                    FROM scheduled_slots
@@ -3512,6 +3531,12 @@ class SchedulerRepository:
                 "scheduled_for_utc",
                 "deferred_until_utc",
                 "defer_reason",
+                "card_key",
+                "learning_item_id",
+                "prompt_facet_id",
+                "answer_facet_id",
+                "selection_reason",
+                "expired_reason",
                 "status",
                 "scheduler_config_version",
                 "seed",
@@ -3675,6 +3700,156 @@ class SchedulerRepository:
             for key in ("delivered", "cleared", "answered"):
                 result[key] = bool(result[key])
             return result
+
+        return await self._storage._async_reader(read)
+
+    async def async_bind_content_selection(
+        self,
+        *,
+        slot_id: str,
+        card: CardReference,
+        selection_reason: str,
+        updated_at_utc: str,
+    ) -> bool:
+        """Persist one send-time CardDefinition decision exactly once."""
+
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                """UPDATE scheduled_slots
+                   SET card_key = ?,
+                       learning_item_id = ?,
+                       prompt_facet_id = ?,
+                       answer_facet_id = ?,
+                       selection_reason = ?,
+                       updated_at_utc = ?
+                   WHERE slot_id = ?
+                     AND status IN ('scheduled', 'deferred')
+                     AND card_key IS NULL""",
+                (
+                    card.card_key,
+                    card.learning_item_id,
+                    card.prompt_facet_id,
+                    card.answer_facet_id,
+                    selection_reason,
+                    updated_at_utc,
+                    slot_id,
+                ),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(write)
+
+    async def async_has_pending_for_target(
+        self,
+        *,
+        profile_id: str,
+        target_id: str,
+        exclude_slot_id: str,
+    ) -> bool:
+        """Return whether the target already has an unanswered sent notification."""
+
+        def read(connection: sqlite3.Connection) -> bool:
+            row = connection.execute(
+                """SELECT 1
+                   FROM scheduled_slots
+                   WHERE profile_id = ?
+                     AND target_id = ?
+                     AND slot_id <> ?
+                     AND status = 'sent'
+                   LIMIT 1""",
+                (profile_id, target_id, exclude_slot_id),
+            ).fetchone()
+            return row is not None
+
+        return await self._storage._async_reader(read)
+
+    async def async_expire_slot(
+        self,
+        *,
+        slot_id: str,
+        reason: str,
+        updated_at_utc: str,
+    ) -> bool:
+        """Expire one unsent slot with an explicit channel-policy reason."""
+
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                """UPDATE scheduled_slots
+                   SET status = 'expired',
+                       expired_reason = ?,
+                       updated_at_utc = ?
+                   WHERE slot_id = ?
+                     AND status IN ('scheduled', 'deferred')""",
+                (reason, updated_at_utc, slot_id),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(write)
+
+    async def async_count_selected_teasers(
+        self,
+        *,
+        profile_id: str,
+        start_utc: str,
+        end_utc: str,
+    ) -> int:
+        """Count V1 teaser selections in one Profile-local day."""
+
+        def read(connection: sqlite3.Connection) -> int:
+            row = connection.execute(
+                """SELECT COUNT(*)
+                   FROM scheduled_slots
+                   WHERE profile_id = ?
+                     AND scheduled_for_utc >= ?
+                     AND scheduled_for_utc < ?
+                     AND selection_reason = 'teaser_new'
+                     AND status NOT IN ('cancelled')""",
+                (profile_id, start_utc, end_utc),
+            ).fetchone()
+            return 0 if row is None else int(row[0])
+
+        return await self._storage._async_reader(read)
+
+    async def async_channel_outcomes(
+        self,
+        *,
+        profile_id: str,
+        target_id: str,
+        limit: int = 12,
+    ) -> tuple[str, ...]:
+        """Return recent channel-only outcomes, newest first."""
+        if limit < 1:
+            return ()
+
+        def read(connection: sqlite3.Connection) -> tuple[str, ...]:
+            rows = connection.execute(
+                """SELECT slot.status, slot.expired_reason,
+                          COALESCE(sample.cleared, 0), COALESCE(sample.answered, 0)
+                   FROM scheduled_slots AS slot
+                   LEFT JOIN receptivity_samples AS sample
+                     ON sample.slot_id = slot.slot_id
+                   WHERE slot.profile_id = ?
+                     AND slot.target_id = ?
+                     AND slot.status IN ('sent', 'consumed', 'expired')
+                   ORDER BY slot.updated_at_utc DESC, slot.slot_id DESC
+                   LIMIT ?""",
+                (profile_id, target_id, limit),
+            ).fetchall()
+            result: list[str] = []
+            for status, expired_reason, cleared, answered in rows:
+                if bool(answered):
+                    result.append("answered")
+                elif bool(cleared):
+                    result.append("cleared")
+                elif str(status) == "expired":
+                    result.append("expired")
+                elif str(status) == "consumed":
+                    result.append("consumed")
+                else:
+                    result.append("pending")
+            return tuple(result)
 
         return await self._storage._async_reader(read)
 
