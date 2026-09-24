@@ -70,3 +70,19 @@ or quiz-result event cannot mutate Progress or create a ReviewEvent.
 Automations that react to LockLearn events may perform ordinary Home Assistant
 effects (lights, media, notifications, etc.), but must call an authenticated
 LockLearn service if they want to request a LockLearn state change.
+
+
+## P4.9 example automation blueprints
+
+Three importable Home Assistant automation blueprints are versioned under
+`blueprints/automation/locklearn/`:
+
+- correct/wrong quiz light feedback;
+- daily-goal scene reward;
+- repeated-failure encouragement with optional Track pause.
+
+They use only the documented P4.8 event/service surface and do not consume
+learning content. The optional pause remains subject to the P4.8 unattended
+authorization/audit boundary.
+
+See `docs/AUTOMATION_BLUEPRINTS.md` for import instructions and privacy details.
