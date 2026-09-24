@@ -30,6 +30,10 @@
     "scheduler_configuration_infeasible": {
       "title": "Capacité du scheduler insuffisante",
       "description": "Le profil {profile_id} demande {requested} créneaux de notification par jour, mais seulement {capacity} sont actuellement allouables. Ajustez la demande des parcours, les budgets des appareils ou les fenêtres du scheduler."
+    },
+    "notification_target_unavailable": {
+      "title": "Cible de notification indisponible",
+      "description": "LockLearn ne peut actuellement ni résoudre ni envoyer vers {friendly_name} ({target_id}). La notification n’est pas enregistrée comme envoyée."
     }
   }
 }
