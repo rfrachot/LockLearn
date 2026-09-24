@@ -251,9 +251,7 @@ class NotificationSelectionService:
         teaser_allowed = str(slot["slot_type"]) in {
             "learning",
             "manual_send_now",
-        } and await self._teaser_available(
-            profile_id=profile_id, profile=profile, now=now
-        )
+        } and await self._teaser_available(profile_id=profile_id, profile=profile, now=now)
         ranked = self._rank_candidates(
             candidates,
             now=now,
