@@ -9,10 +9,12 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.locklearn.const import DOMAIN
+from custom_components.locklearn.const import DATA_RUNTIME, DOMAIN
 from custom_components.locklearn.core.scheduler import SchedulerService
 from custom_components.locklearn.storage import (
     NotificationTargetRecord,
@@ -976,6 +978,281 @@ async def test_capacity_repair_requires_three_distinct_infeasible_days(
         assert cleared == ["scheduler_configuration_infeasible_profile-scheduler"]
     finally:
         await storage.async_close()
+
+
+async def test_receptive_when_false_defers_without_receptivity_or_srs_signal(
+    tmp_path: Path,
+) -> None:
+    clock = FixedClock(datetime(2026, 9, 24, 8, 0, tzinfo=UTC))
+    storage = await _storage(tmp_path, clock)
+
+    async def not_receptive(_expression: str) -> bool:
+        return False
+
+    try:
+        await _profile(
+            storage,
+            now=clock.now(),
+            settings={
+                "daily_push_budget": 1,
+                "scheduler": {
+                    "receptive_when": "{{ false }}",
+                    "defer_window_minutes": 30,
+                },
+            },
+        )
+        await storage.repositories.scheduler.async_materialize_day(
+            profile_id="profile-scheduler",
+            scheduler_config_version=1,
+            seed="receptive",
+            start_utc="2026-09-24T00:00:00+00:00",
+            end_utc="2026-09-25T00:00:00+00:00",
+            now_utc=clock.now().isoformat(),
+            slots=(
+                {
+                    "slot_id": "slot-receptive",
+                    "track_id": None,
+                    "target_id": None,
+                    "slot_type": "learning",
+                    "scheduled_for_utc": clock.now().isoformat(),
+                },
+            ),
+            updated_at_utc=clock.now().isoformat(),
+        )
+        service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=clock,
+            receptive_evaluator=not_receptive,
+        )
+
+        decision = await service.async_prepare_delivery("slot-receptive")
+        assert decision == {
+            "slot_id": "slot-receptive",
+            "ready": False,
+            "status": "deferred",
+            "reason": "receptive_when_false",
+            "deferred_until_utc": "2026-09-24T08:30:00+00:00",
+            "defer_exhausted": False,
+        }
+        slot = await storage.repositories.scheduler.async_get_slot("slot-receptive")
+        assert slot is not None
+        assert slot["status"] == "deferred"
+        assert slot["defer_reason"] == "receptive_when_false"
+        assert (
+            await storage.repositories.scheduler.async_get_receptivity_sample(
+                "slot-receptive"
+            )
+            is None
+        )
+
+        clock.set(datetime(2026, 9, 24, 8, 31, tzinfo=UTC))
+        exhausted = await service.async_prepare_delivery("slot-receptive")
+        assert exhausted["ready"] is False
+        assert exhausted["reason"] == "not_receptive_defer_window_exhausted"
+        assert exhausted["defer_exhausted"] is True
+        assert (
+            await storage.repositories.scheduler.async_get_receptivity_sample(
+                "slot-receptive"
+            )
+            is None
+        )
+    finally:
+        await storage.async_close()
+
+
+async def test_delivery_collects_observational_receptivity_features_only(
+    tmp_path: Path,
+) -> None:
+    clock = FixedClock(datetime(2026, 9, 24, 8, 15, tzinfo=UTC))
+    storage = await _storage(tmp_path, clock)
+
+    async def receptive(_expression: str) -> bool:
+        return True
+
+    try:
+        await _profile(
+            storage,
+            now=clock.now(),
+            settings={
+                "daily_push_budget": 1,
+                "scheduler": {
+                    "receptive_when": "{{ true }}",
+                    "defer_window_minutes": 30,
+                },
+            },
+        )
+        await storage.repositories.scheduler.async_materialize_day(
+            profile_id="profile-scheduler",
+            scheduler_config_version=1,
+            seed="receptive",
+            start_utc="2026-09-24T00:00:00+00:00",
+            end_utc="2026-09-25T00:00:00+00:00",
+            now_utc=clock.now().isoformat(),
+            slots=(
+                {
+                    "slot_id": "slot-delivered",
+                    "track_id": None,
+                    "target_id": None,
+                    "slot_type": "quiz",
+                    "scheduled_for_utc": clock.now().isoformat(),
+                },
+            ),
+            updated_at_utc=clock.now().isoformat(),
+        )
+        service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=clock,
+            receptive_evaluator=receptive,
+        )
+
+        decision = await service.async_prepare_delivery("slot-delivered")
+        assert decision["ready"] is True
+        assert decision["reason"] == "receptive"
+
+        delivered = await service.async_record_delivery(slot_id="slot-delivered")
+        assert delivered["timezone_name"] == "Europe/Paris"
+        assert delivered["weekday"] == 3
+        assert delivered["local_hour"] == 10
+        assert delivered["delivered"] is True
+        assert delivered["cleared"] is False
+        assert delivered["answered"] is False
+        assert delivered["delivery_to_action_ms"] is None
+
+        action = await service.async_record_receptivity_action(
+            slot_id="slot-delivered",
+            action="answered",
+            action_at_utc=clock.now() + timedelta(milliseconds=2500),
+        )
+        assert action["answered"] is True
+        assert action["cleared"] is False
+        assert action["delivery_to_action_ms"] == 2500
+        assert await storage.repositories.review_events.async_list_scope_events(
+            profile_id="profile-scheduler",
+            track_id=None,
+        ) == ()
+    finally:
+        await storage.async_close()
+
+
+async def test_routine_hook_materializes_bounded_content_free_slots(tmp_path: Path) -> None:
+    clock = FixedClock(datetime(2026, 9, 24, 19, 0, tzinfo=UTC))
+    storage = await _storage(tmp_path, clock)
+    try:
+        await _profile(
+            storage,
+            now=clock.now(),
+            settings={"daily_push_budget": 2},
+        )
+        await _track(
+            storage,
+            track_id="track-routine",
+            priority=1,
+            learning_count=0,
+            now=clock.now(),
+        )
+        await _target(
+            storage,
+            target_id="target-routine",
+            daily_push_budget=2,
+            minimum_gap_seconds=0,
+            maximum_notifications_per_hour=2,
+            now=clock.now(),
+        )
+        service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=clock,
+        )
+
+        bedtime = await service.async_trigger_routine(
+            profile_id="profile-scheduler",
+            routine_type="pre_sleep_consolidation",
+        )
+        assert bedtime["slot_type"] == "pre_sleep_consolidation"
+        assert bedtime["track_id"] == "track-routine"
+        assert bedtime["target_id"] == "target-routine"
+        assert "card_key" not in bedtime
+
+        morning = await service.async_trigger_routine(
+            profile_id="profile-scheduler",
+            routine_type="morning_first_review",
+        )
+        assert morning["slot_type"] == "morning_first_review"
+
+        with pytest.raises(
+            ValueError,
+            match="profile daily push budget is exhausted",
+        ):
+            await service.async_trigger_routine(
+                profile_id="profile-scheduler",
+                routine_type="pre_sleep_consolidation",
+                track_id="track-routine",
+            )
+    finally:
+        await storage.async_close()
+
+
+async def test_ha_entity_routine_bridge_triggers_on_transition_to_on(
+    hass: HomeAssistant,
+) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    runtime = hass.data[DOMAIN][DATA_RUNTIME]
+    now = await runtime.scheduler.async_effective_now()
+    await runtime.storage.repositories.profiles.async_insert(
+        ProfileRecord(
+            profile_id="profile-routine-ha",
+            name="Routine",
+            preset="custom",
+            timezone="Europe/Paris",
+            settings={
+                "daily_push_budget": 2,
+                "scheduler": {
+                    "routine_triggers": {
+                        "pre_sleep_consolidation": ["input_boolean.locklearn_bedtime"]
+                    }
+                },
+            },
+            created_at_utc=now.isoformat(),
+            updated_at_utc=now.isoformat(),
+        )
+    )
+    await runtime.scheduler_ha.async_refresh()
+
+    hass.states.async_set("input_boolean.locklearn_bedtime", "off")
+    await hass.async_block_till_done()
+    hass.states.async_set("input_boolean.locklearn_bedtime", "on")
+    await hass.async_block_till_done()
+
+    slots = await runtime.storage.repositories.scheduler.async_list_slots(
+        profile_id="profile-routine-ha",
+        start_utc=(now - timedelta(days=1)).isoformat(),
+        end_utc=(now + timedelta(days=1)).isoformat(),
+    )
+    assert [slot["slot_type"] for slot in slots] == ["pre_sleep_consolidation"]
+
+    hass.states.async_set("input_boolean.locklearn_bedtime", "on")
+    await hass.async_block_till_done()
+    repeated = await runtime.storage.repositories.scheduler.async_list_slots(
+        profile_id="profile-routine-ha",
+        start_utc=(now - timedelta(days=1)).isoformat(),
+        end_utc=(now + timedelta(days=1)).isoformat(),
+    )
+    assert len(repeated) == 1
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 async def test_preview_websocket_is_profile_acl_read_only(
