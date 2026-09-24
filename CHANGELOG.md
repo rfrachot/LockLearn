@@ -5,6 +5,14 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P4.6 persistent single-use notification interactions with cryptographically
+  random stage tokens, durable expiry/status and atomic replay-safe consumption.
+- Profile ANSWER ACL validation whenever Companion supplies HA user context,
+  with token-only correlation fallback for qualified context-less action paths.
+- Privacy-minimal audit for consumed, expired, replayed, unknown and forbidden
+  notification actions without persisting bearer tokens in audit payloads.
+- P4.6 notification protocol documentation and ADR-0041; no state schema bump
+  because the reserved V1 interaction table already satisfies the contract.
 - P4.5 send-time CardDefinition selection with explicit relearning/review/
   difficult/calibration/teaser priority and idempotent slot binding.
 - Default `skip_if_pending`, explicit missed/no-candidate expiry reasons and
