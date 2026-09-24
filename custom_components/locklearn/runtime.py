@@ -7,7 +7,9 @@ from contextlib import suppress
 from dataclasses import dataclass
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import TemplateError
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.template import Template, result_as_boolean
 
 from .const import DOMAIN
 from .core.acl import ProfileACLService
@@ -22,7 +24,7 @@ from .core.progress_state import ProgressUserStateService
 from .core.quiz import QuizEngine
 from .core.review_policy import ReviewPolicyV1
 from .core.reviews import ReviewEventService
-from .core.scheduler import SchedulerService
+from .core.scheduler import SchedulerService, SchedulerValidationError
 from .core.selection import SelectionConstraintService
 from .core.session_selection import SessionSelectionService
 from .core.sessions import SessionService
@@ -38,6 +40,7 @@ from .datasets.manager import (
 )
 from .datasets.policy import OfficialRegistryPolicy
 from .datasets.transport import HomeAssistantDatasetTransport
+from .scheduler_ha import SchedulerHomeAssistantBridge
 from .storage import SQLiteStorage, StoragePaths
 
 
@@ -65,6 +68,7 @@ class LockLearnRuntime:
     stats: StatsService
     reviews: ReviewEventService
     scheduler: SchedulerService
+    scheduler_ha: SchedulerHomeAssistantBridge
     datasets: DatasetManager
 
     @classmethod
@@ -97,6 +101,15 @@ class LockLearnRuntime:
         async def clear_issue(issue_id: str) -> None:
             ir.async_delete_issue(hass, DOMAIN, issue_id)
 
+        async def evaluate_receptive_when(expression: str) -> bool:
+            try:
+                rendered = Template(expression, hass).async_render(parse_result=False)
+            except TemplateError as err:
+                raise SchedulerValidationError(
+                    f"receptive_when template failed: {err}"
+                ) from err
+            return result_as_boolean(rendered)
+
         try:
             datasets = DatasetManager(
                 storage=storage,
@@ -124,6 +137,21 @@ class LockLearnRuntime:
             reviews = ReviewEventService(
                 storage.repositories.review_events,
                 storage.repositories.profiles,
+            )
+            scheduler = SchedulerService(
+                storage.repositories.profiles,
+                storage.repositories.tracks,
+                storage.repositories.notification_targets,
+                storage.repositories.scheduler,
+                storage.repositories.settings,
+                issue_callback=report_issue,
+                issue_clear_callback=clear_issue,
+                receptive_evaluator=evaluate_receptive_when,
+            )
+            scheduler_ha = SchedulerHomeAssistantBridge(
+                hass,
+                storage.repositories.profiles,
+                scheduler,
             )
             runtime = cls(
                 storage=storage,
@@ -172,18 +200,12 @@ class LockLearnRuntime:
                     review_policy=review_policy,
                 ),
                 reviews=reviews,
-                scheduler=SchedulerService(
-                    storage.repositories.profiles,
-                    storage.repositories.tracks,
-                    storage.repositories.notification_targets,
-                    storage.repositories.scheduler,
-                    storage.repositories.settings,
-                    issue_callback=report_issue,
-                    issue_clear_callback=clear_issue,
-                ),
+                scheduler=scheduler,
+                scheduler_ha=scheduler_ha,
                 datasets=datasets,
             )
             await runtime.scheduler.async_reconcile(reason="startup")
+            await runtime.scheduler_ha.async_start()
             return runtime
         except Exception:
             await storage.async_close()
@@ -191,6 +213,7 @@ class LockLearnRuntime:
 
     async def async_close(self) -> None:
         """Cancel callbacks/operations, then drain and close SQLite."""
+        self.scheduler_ha.close()
         self.sessions.close()
         await self.operations.async_close()
         await self.storage.async_close()
