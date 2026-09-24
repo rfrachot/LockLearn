@@ -2,6 +2,39 @@
 
 ## Current state
 
+P5.1 implementation is pushed on `feat/p5-frontend` and is **pending
+qualification**, not yet closed PASS. P4 remains frozen on
+`feat/p4-scheduler`.
+
+The P0 Lit/Vite prototype has been promoted into a versioned frontend shell.
+`locklearn/bootstrap` now returns frontend protocol, backend version and panel
+path before any product data is loaded. The compiled frontend fails closed on a
+protocol mismatch and offers an explicit hard browser reload.
+
+The shell loads visible Profiles through paginated Home Assistant WebSocket
+calls only, implements stable `/locklearn/<route>` history routing for all V1
+sections, and derives navigation visibility from backend-returned Profile roles.
+This is presentation only; backend ACL remains authoritative. Settings is hidden
+unless at least one visible Profile is owned by the current HA user.
+
+Custom-element registration is version-aware. A matching existing
+`locklearn-panel` is reused; an unknown/mismatched constructor is never
+redefined and instead produces a full-page reload-required overlay.
+
+The panel module URL now includes both integration version and the SHA-256 prefix
+of the committed bundle. Frontend CI rebuilds with Vite and fails if the
+committed HACS bundle differs.
+
+Source/tests/docs are pushed, but the committed
+`custom_components/locklearn/frontend/locklearn-panel.js` still needs the local
+Vite build from this branch. P5.1 must not be closed until npm typecheck/tests,
+Vite build/bundle diff, the Python gate and preferably a real HA panel reload
+check are green.
+
+Next concrete action: checkout/pull `feat/p5-frontend`, run the full frontend
+and backend gate, commit/push the Vite-generated bundled artifact if it changed,
+then remediate any findings. Do not start P5.2 before P5.1 PASS.
+
 P4.9 and the complete P4 phase are closed PASS on `feat/p4-scheduler`.
 P4.9 ships three Home Assistant automation blueprints under
 `blueprints/automation/locklearn/`: correct/wrong light feedback, daily-goal
