@@ -5,6 +5,15 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P4.2 explicit civil-time scheduler mapping for DST spring-forward gaps,
+  fall-back duplicate hours and cross-midnight active windows.
+- Persistent scheduler UTC high-watermark with Config Entry startup/reload,
+  backward/forward clock-jump reconciliation and overdue unsent-slot expiry
+  without catch-up floods.
+- Timezone-change reconciliation that preserves sent/consumed history, cancels
+  only future unsent slots from older config versions and regenerates against
+  the new Profile timezone.
+- ADR-0037 documenting timezone, DST, restart and clock-jump semantics.
 - P4.1 deterministic profile-level scheduler previews and materialized generic
   notification slots honoring active days/windows, quiet hours, minimum gaps,
   hourly limits and Profile push budgets.
