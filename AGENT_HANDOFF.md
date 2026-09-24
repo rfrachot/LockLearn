@@ -2,6 +2,36 @@
 
 ## Current state
 
+P4.4 implementation is now on `feat/p4-scheduler` after the P4.3 PASS
+(`7048b06940fd671ffd64e5522180461dcf8de1c4`). Send-time
+`receptive_when` is evaluated through native Home Assistant templates via an
+injected runtime adapter. False context defers only until the original
+`scheduled_for_utc + defer_window_minutes` deadline and never writes a
+ReviewEvent or SRS failure.
+
+State schema v4 adds `scheduled_slots.deferred_until_utc`,
+`scheduled_slots.defer_reason` and `receptivity_samples`. Actual delivery
+records Profile-local weekday/hour and delivered state; cleared/answered actions
+can later attach the first delivery-to-action latency. These samples are
+observational only and V1 never uses them to auto-learn preferred schedule
+hours.
+
+Profiles may opt into `settings.scheduler.routine_triggers` for
+`pre_sleep_consolidation` and `morning_first_review`. The HA bridge listens
+only to configured entities, fires on transition to `on`, refreshes after
+Profile CRUD and detaches on unload. Routine slots remain content-free and still
+respect P4.3 Profile/target/device capacity plus active-session suppression.
+P4.5 owns the later same-day/previous-day CardDefinition selection.
+
+Tests cover v3→v4 migration, false/true receptivity, bounded defer exhaustion,
+absence of pedagogical mutation, weekday/hour/latency feature collection,
+content-free routine slots, native HA template evaluation and a real HA entity
+state-change routine hook. ADR-0039 documents the boundary.
+
+Repository quality gates still need to run in the development checkout. Do not
+mark ADR-0039 accepted or P4.4 PASS until Ruff format/lint, mypy, resource
+validation and pytest are green.
+
 P4.3 is closed PASS on `feat/p4-scheduler` after P4.2. Newly generated
 Profile slots can be allocated to active Tracks and stable notification targets
 without selecting a CardDefinition. Track `settings.scheduler` carries
