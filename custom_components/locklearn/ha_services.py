@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
 from uuid import uuid4
 
 import voluptuous as vol
@@ -150,9 +149,7 @@ async def _send_now(hass: HomeAssistant, call: ServiceCall) -> None:
         )
         decision = await runtime.scheduler.async_prepare_delivery(str(slot["slot_id"]))
         if not bool(decision["ready"]):
-            raise HomeAssistantError(
-                f"Immediate notification is not ready: {decision['reason']}"
-            )
+            raise HomeAssistantError(f"Immediate notification is not ready: {decision['reason']}")
     except SchedulerValidationError as err:
         raise HomeAssistantError(str(err)) from err
 
