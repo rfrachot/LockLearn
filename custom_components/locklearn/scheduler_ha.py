@@ -79,7 +79,7 @@ class SchedulerHomeAssistantBridge:
             self._handle_state_change,
         )
 
-    def _handle_state_change(self, event: Event[Any]) -> None:
+    async def _handle_state_change(self, event: Event[Any]) -> None:
         entity_id = str(event.data.get("entity_id", "")).lower()
         old_state = event.data.get("old_state")
         new_state = event.data.get("new_state")
@@ -88,10 +88,7 @@ class SchedulerHomeAssistantBridge:
         if old_state is not None and str(old_state.state).lower() == "on":
             return
         for profile_id, routine_type in self._routes.get(entity_id, ()):
-            self._hass.async_create_task(
-                self._async_trigger(profile_id, routine_type),
-                f"locklearn routine {routine_type} for {profile_id}",
-            )
+            await self._async_trigger(profile_id, routine_type)
 
     async def _async_trigger(self, profile_id: str, routine_type: str) -> None:
         try:
