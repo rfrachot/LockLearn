@@ -53,6 +53,7 @@ class SchedulerHomeAssistantBridge:
             for routine_type, raw_entities in raw_triggers.items():
                 if routine_type not in _ROUTINE_TYPES:
                     continue
+                entities: tuple[str, ...]
                 if isinstance(raw_entities, str):
                     entities = (raw_entities,)
                 elif isinstance(raw_entities, (list, tuple)):
@@ -67,10 +68,7 @@ class SchedulerHomeAssistantBridge:
                     normalized = entity_id.strip().lower()
                     routes.setdefault(normalized, []).append((profile_id, str(routine_type)))
 
-        self._routes = {
-            entity_id: tuple(sorted(items))
-            for entity_id, items in routes.items()
-        }
+        self._routes = {entity_id: tuple(sorted(items)) for entity_id, items in routes.items()}
         if not self._routes:
             return
         self._unsub = async_track_state_change_event(
