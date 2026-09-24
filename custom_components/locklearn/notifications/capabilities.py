@@ -70,7 +70,7 @@ class TargetCapabilities:
         platform: str,
         shared_device: bool,
         values: dict[str, Any] | None,
-    ) -> "TargetCapabilities":
+    ) -> TargetCapabilities:
         """Parse persisted tri-state capability JSON without optimistic defaults."""
         raw = dict(values or {})
 
@@ -108,11 +108,7 @@ class TargetCapabilities:
                 if raw.get("tested_app_version") is not None
                 else None
             ),
-            tested_at_utc=(
-                str(raw["tested_at_utc"])
-                if raw.get("tested_at_utc") is not None
-                else None
-            ),
+            tested_at_utc=(str(raw["tested_at_utc"]) if raw.get("tested_at_utc") is not None else None),
         )
 
     def learning_mode(self) -> LearningNotificationMode:
