@@ -2,6 +2,41 @@
 
 ## Current state
 
+P4.5 implementation is now on `feat/p4-scheduler` after the P4.4 PASS
+(`ac51159cd5bc2191c750a12a41d031b5b93f0966`). Send-time notification
+content is selected by a dedicated `NotificationSelectionService` only after
+pending and receptivity checks. The chosen CardDefinition identity and
+selection reason are persisted on the materialized slot; rendered learned text
+is not copied into `state.db`, and retries return the same binding.
+
+General ranking is relearning due → review due → due leech/difficult recoverable
+→ calibration-needed → bounded new teaser. Future reviews are not pulled
+forward just to fill a slot. New teasers are learning-only and limited to two
+per Profile-local day. Pre-sleep routine slots restrict to today's
+introductions; morning-first-review restricts to yesterday's introductions.
+
+Default pending policy is `skip_if_pending`: a later slot for a Profile/target
+with an unanswered sent slot expires as `pending_existing`. Missed slots
+expire rather than catch up, defer exhaustion becomes
+`missed_not_receptive`, and no-candidate expiry is neutral system state.
+Explicit clear closes the sent slot without writing SRS evidence.
+
+Adaptive channel backoff uses recent target/Profile outcomes: 3 consecutive
+expiry/clear outcomes reduce effective daily capacity to 75 %, 6 reduce it to
+50 %, and successful answered/consumed outcomes restore 25 points per step.
+Backoff changes only notification capacity; Progress/ReviewEvent remain
+untouched.
+
+State schema v5 adds CardDefinition identity, `selection_reason` and
+`expired_reason` to `scheduled_slots`, with backup-first v4→v5 migration.
+Tests cover ranking/idempotence, teaser bound, routine date filtering,
+skip-if-pending, missed expiry without catch-up/SRS mutation, adaptive backoff
+reduction/recovery and v4→v5 migration. ADR-0040 documents the boundary.
+
+Repository quality gates still need to run in the development checkout. Do not
+mark ADR-0040 accepted or P4.5 PASS until Ruff format/lint, mypy, resource
+validation and pytest are green.
+
 P4.4 is closed PASS on `feat/p4-scheduler` after P4.3.
 Send-time `receptive_when` is evaluated through native Home Assistant templates
 via an injected runtime adapter. False context defers only until the original
