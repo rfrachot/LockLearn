@@ -178,10 +178,9 @@ async def test_direct_exposure_can_use_plain_notify_entity_fallback(
         assert route.service == "notify.send_message"
         assert route.target == {"entity_id": entity.entity_id}
         assert len(calls) == 1
-        assert calls[0].data == {
-            "title": "LockLearn",
-            "message": "休\n\nrepos",
-        }
+        assert calls[0].data["title"] == "LockLearn"
+        assert calls[0].data["message"] == "休\n\nrepos"
+        assert "data" not in calls[0].data
     finally:
         await storage.async_close()
 
