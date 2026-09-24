@@ -2,8 +2,7 @@
 
 ## Current state
 
-P4.6 implementation is pushed on `feat/p4-scheduler` and is **pending
-qualification**, not yet closed PASS. It adds a persistent
+P4.6 is closed PASS on `feat/p4-scheduler`. It adds a persistent
 NotificationInteraction repository/service over the existing state-schema-v5
 table, cryptographically random per-stage tokens, transactional single-use
 consumption, Profile ANSWER ACL when HA user context is present, context-less
@@ -11,19 +10,17 @@ token fallback for the P0-qualified Companion case, and privacy-minimal
 consumed/rejected action audit. Expired, replayed, unknown and forbidden actions
 return no pedagogical claim.
 
-No DB migration is required. P4.7 remains responsible for renderers/action
+No DB migration was required. P4.7 remains responsible for renderers/action
 semantics and must create a fresh token for each actionable stage; only a P4.6
 `consumed` result may reach ReviewEvent/Progress mutation.
 
-Tests cover persistence, concurrent replay, expiry, ACL, missing user context,
-secret-safe audit and cross-Profile target rejection. The normal repository gate
-still needs to run in a checkout with project dependencies; the chat execution
-environment could not clone GitHub due unavailable DNS. Do not mark P4.6
-complete or ADR-0041 Accepted until Ruff/mypy/resource/pytest are green.
+Final P4.6 qualification on 2026-09-24: Ruff lint PASS, mypy PASS (128 sources),
+resource registries PASS and pytest PASS (357 tests in 17.16 s). Ruff format
+initially reported only three mechanical formatting diffs in the new P4.6 files;
+those exact formatting changes were applied afterward with no semantic change.
 
-Next concrete action: run the standard repository gate on current
-`feat/p4-scheduler`, remediate any findings, then close P4.6 PASS and begin
-P4.7 notification renderers/privacy-safe target behavior.
+Next concrete action: begin P4.7 notification renderers and privacy-safe target
+behavior.
 
 P4.5 is closed PASS on `feat/p4-scheduler` after P4.4. Send-time
 notification content is selected by `NotificationSelectionService` only after
