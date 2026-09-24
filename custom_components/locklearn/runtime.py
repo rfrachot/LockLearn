@@ -41,6 +41,7 @@ from .datasets.manager import (
 )
 from .datasets.policy import OfficialRegistryPolicy
 from .datasets.transport import HomeAssistantDatasetTransport
+from .notifications.interactions import NotificationInteractionService
 from .scheduler_ha import SchedulerHomeAssistantBridge
 from .storage import SQLiteStorage, StoragePaths
 
@@ -68,6 +69,7 @@ class LockLearnRuntime:
     session_selection: SessionSelectionService
     stats: StatsService
     reviews: ReviewEventService
+    notification_interactions: NotificationInteractionService
     scheduler: SchedulerService
     scheduler_ha: SchedulerHomeAssistantBridge
     datasets: DatasetManager
@@ -126,6 +128,7 @@ class LockLearnRuntime:
                 with suppress(Exception):
                     await datasets.async_install_bundled(bundled)
             review_policy = ReviewPolicyV1()
+            acl = ProfileACLService(storage.repositories.profiles)
             selection = SelectionConstraintService(storage.repositories.tracks)
             session_selection = SessionSelectionService(
                 storage.repositories.tracks,
@@ -165,7 +168,7 @@ class LockLearnRuntime:
                 sessions=SessionService(storage),
                 operations=OperationRegistry(),
                 profiles=ProfileService(storage.repositories.profiles),
-                acl=ProfileACLService(storage.repositories.profiles),
+                acl=acl,
                 tracks=TrackService(storage.repositories.tracks),
                 planning=LearningPlanService(
                     storage.repositories.tracks,
@@ -207,6 +210,10 @@ class LockLearnRuntime:
                     review_policy=review_policy,
                 ),
                 reviews=reviews,
+                notification_interactions=NotificationInteractionService(
+                    storage.repositories.notification_interactions,
+                    acl,
+                ),
                 scheduler=scheduler,
                 scheduler_ha=scheduler_ha,
                 datasets=datasets,
