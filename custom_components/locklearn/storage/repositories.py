@@ -3400,8 +3400,9 @@ class SchedulerRepository:
         def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
             rows = connection.execute(
                 """SELECT slot_id, profile_id, track_id, target_id, slot_type,
-                          scheduled_for_utc, status, scheduler_config_version,
-                          seed, created_at_utc, updated_at_utc
+                          scheduled_for_utc, deferred_until_utc, defer_reason,
+                          status, scheduler_config_version, seed,
+                          created_at_utc, updated_at_utc
                    FROM scheduled_slots
                    WHERE profile_id = ?
                      AND scheduled_for_utc >= ?
@@ -3416,6 +3417,8 @@ class SchedulerRepository:
                 "target_id",
                 "slot_type",
                 "scheduled_for_utc",
+                "deferred_until_utc",
+                "defer_reason",
                 "status",
                 "scheduler_config_version",
                 "seed",
@@ -3438,7 +3441,8 @@ class SchedulerRepository:
         def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
             rows = connection.execute(
                 """SELECT slot.slot_id, slot.profile_id, slot.track_id, slot.target_id,
-                          slot.slot_type, slot.scheduled_for_utc, slot.status,
+                          slot.slot_type, slot.scheduled_for_utc,
+                          slot.deferred_until_utc, slot.defer_reason, slot.status,
                           slot.scheduler_config_version, slot.seed,
                           slot.created_at_utc, slot.updated_at_utc
                    FROM scheduled_slots AS slot
@@ -3457,6 +3461,8 @@ class SchedulerRepository:
                 "target_id",
                 "slot_type",
                 "scheduled_for_utc",
+                "deferred_until_utc",
+                "defer_reason",
                 "status",
                 "scheduler_config_version",
                 "seed",
@@ -3464,6 +3470,196 @@ class SchedulerRepository:
                 "updated_at_utc",
             )
             return tuple(dict(zip(keys, row, strict=True)) for row in rows)
+
+        return await self._storage._async_reader(read)
+
+    async def async_get_slot(self, slot_id: str) -> dict[str, Any] | None:
+        """Return one materialized scheduler slot."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT slot_id, profile_id, track_id, target_id, slot_type,
+                          scheduled_for_utc, deferred_until_utc, defer_reason,
+                          status, scheduler_config_version, seed,
+                          created_at_utc, updated_at_utc
+                   FROM scheduled_slots
+                   WHERE slot_id = ?""",
+                (slot_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            keys = (
+                "slot_id",
+                "profile_id",
+                "track_id",
+                "target_id",
+                "slot_type",
+                "scheduled_for_utc",
+                "deferred_until_utc",
+                "defer_reason",
+                "status",
+                "scheduler_config_version",
+                "seed",
+                "created_at_utc",
+                "updated_at_utc",
+            )
+            return dict(zip(keys, row, strict=True))
+
+        return await self._storage._async_reader(read)
+
+    async def async_defer_slot(
+        self,
+        *,
+        slot_id: str,
+        deferred_until_utc: str,
+        reason: str,
+        updated_at_utc: str,
+    ) -> bool:
+        """Defer an unsent slot without recording a pedagogical outcome."""
+
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                """UPDATE scheduled_slots
+                   SET status = 'deferred',
+                       deferred_until_utc = ?,
+                       defer_reason = ?,
+                       updated_at_utc = ?
+                   WHERE slot_id = ?
+                     AND status IN ('scheduled', 'deferred')""",
+                (deferred_until_utc, reason, updated_at_utc, slot_id),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(write)
+
+    async def async_mark_slot_sent(
+        self,
+        *,
+        slot_id: str,
+        delivered_at_utc: str,
+        timezone_name: str,
+        weekday: int,
+        local_hour: int,
+    ) -> bool:
+        """Mark delivery and initialize the V1 receptivity feature sample."""
+
+        def write(connection: sqlite3.Connection) -> bool:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                slot = connection.execute(
+                    """SELECT profile_id, target_id, status
+                       FROM scheduled_slots
+                       WHERE slot_id = ?""",
+                    (slot_id,),
+                ).fetchone()
+                if slot is None or str(slot[2]) not in {"scheduled", "deferred"}:
+                    connection.rollback()
+                    return False
+                connection.execute(
+                    """UPDATE scheduled_slots
+                       SET status = 'sent',
+                           deferred_until_utc = NULL,
+                           defer_reason = NULL,
+                           updated_at_utc = ?
+                       WHERE slot_id = ?""",
+                    (delivered_at_utc, slot_id),
+                )
+                connection.execute(
+                    """INSERT INTO receptivity_samples(
+                           slot_id, profile_id, target_id, delivered_at_utc,
+                           timezone_name, weekday, local_hour, delivered,
+                           cleared, answered, delivery_to_action_ms, updated_at_utc
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, 0, NULL, ?)
+                       ON CONFLICT(slot_id) DO NOTHING""",
+                    (
+                        slot_id,
+                        str(slot[0]),
+                        None if slot[1] is None else str(slot[1]),
+                        delivered_at_utc,
+                        timezone_name,
+                        weekday,
+                        local_hour,
+                        delivered_at_utc,
+                    ),
+                )
+                connection.commit()
+                return True
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        return await self._storage._async_writer(write)
+
+    async def async_record_receptivity_action(
+        self,
+        *,
+        slot_id: str,
+        action: str,
+        action_at_utc: str,
+        delivery_to_action_ms: int,
+    ) -> bool:
+        """Update only observational receptivity features for a delivered slot."""
+        if action not in {"cleared", "answered"}:
+            raise ValueError("unsupported receptivity action")
+
+        def write(connection: sqlite3.Connection) -> bool:
+            column = "cleared" if action == "cleared" else "answered"
+            cursor = connection.execute(
+                f"""UPDATE receptivity_samples
+                    SET {column} = 1,
+                        delivery_to_action_ms = CASE
+                            WHEN delivery_to_action_ms IS NULL
+                                THEN ?
+                            ELSE MIN(delivery_to_action_ms, ?)
+                        END,
+                        updated_at_utc = ?
+                    WHERE slot_id = ?""",
+                (
+                    delivery_to_action_ms,
+                    delivery_to_action_ms,
+                    action_at_utc,
+                    slot_id,
+                ),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(write)
+
+    async def async_get_receptivity_sample(self, slot_id: str) -> dict[str, Any] | None:
+        """Read one observational receptivity sample for tests/diagnostics."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT slot_id, profile_id, target_id, delivered_at_utc,
+                          timezone_name, weekday, local_hour, delivered,
+                          cleared, answered, delivery_to_action_ms, updated_at_utc
+                   FROM receptivity_samples
+                   WHERE slot_id = ?""",
+                (slot_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            keys = (
+                "slot_id",
+                "profile_id",
+                "target_id",
+                "delivered_at_utc",
+                "timezone_name",
+                "weekday",
+                "local_hour",
+                "delivered",
+                "cleared",
+                "answered",
+                "delivery_to_action_ms",
+                "updated_at_utc",
+            )
+            result = dict(zip(keys, row, strict=True))
+            for key in ("delivered", "cleared", "answered"):
+                result[key] = bool(result[key])
+            return result
 
         return await self._storage._async_reader(read)
 
