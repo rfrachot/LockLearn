@@ -30,6 +30,10 @@ async def test_setup_unload_and_reload_have_no_duplicate_panel(hass: HomeAssista
     state_path = Path(runtime.storage.paths.state_db)
     assert state_path.is_file()
     assert "custom_components" not in state_path.parts
+    initial_scheduler_time = await runtime.storage.repositories.settings.async_get(
+        "scheduler_time_state_v1"
+    )
+    assert initial_scheduler_time["kind"] == "initial"
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
@@ -40,5 +44,14 @@ async def test_setup_unload_and_reload_have_no_duplicate_panel(hass: HomeAssista
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.LOADED
     assert PANEL_URL_PATH in hass.data["frontend_panels"]
+    reloaded_runtime = hass.data[DOMAIN][DATA_RUNTIME]
+    reloaded_scheduler_time = await reloaded_runtime.storage.repositories.settings.async_get(
+        "scheduler_time_state_v1"
+    )
+    assert reloaded_scheduler_time["kind"] == "restart"
+    assert (
+        reloaded_scheduler_time["high_watermark_utc"]
+        >= initial_scheduler_time["high_watermark_utc"]
+    )
 
     assert await hass.config_entries.async_unload(entry.entry_id)
