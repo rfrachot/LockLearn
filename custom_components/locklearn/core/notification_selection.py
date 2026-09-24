@@ -7,8 +7,6 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
-from custom_components.locklearn.storage.repositories import CardReference
-
 from .clock import Clock, SystemClock
 from .selection import SelectionConstraintError, SelectionDecision
 
@@ -18,6 +16,16 @@ DEFAULT_NEW_TEASER_BUDGET = 2
 
 class NotificationSelectionError(ValueError):
     """Raised when a notification slot cannot be selected safely."""
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationNotificationCardReference:
+    """Minimal immutable CardDefinition identity needed by notification policy."""
+
+    card_key: str
+    learning_item_id: str
+    prompt_facet_id: str
+    answer_facet_id: str
 
 
 class NotificationTracksRepository(Protocol):
@@ -50,7 +58,7 @@ class NotificationSchedulerRepository(Protocol):
         self,
         *,
         slot_id: str,
-        card: CardReference,
+        card: NotificationCardReference,
         selection_reason: str,
         updated_at_utc: str,
     ) -> bool: ...
@@ -79,7 +87,7 @@ class NotificationConstraintEvaluator(Protocol):
 class NotificationSelection:
     """Persisted send-time CardDefinition decision."""
 
-    card: CardReference
+    card: NotificationCardReference
     reason: str
 
     def as_dict(self) -> dict[str, str]:
@@ -137,8 +145,8 @@ class _Candidate:
         )
 
     @property
-    def card(self) -> CardReference:
-        return CardReference(
+    def card(self) -> NotificationCardReference:
+        return NotificationCardReference(
             card_key=self.card_key,
             learning_item_id=self.learning_item_id,
             prompt_facet_id=self.prompt_facet_id,
@@ -431,7 +439,7 @@ class NotificationSelectionService:
         if not all(isinstance(value, str) and value for value in fields):
             raise NotificationSelectionError("slot has incomplete content selection")
         return NotificationSelection(
-            card=CardReference(
+            card=NotificationCardReference(
                 card_key=card_key,
                 learning_item_id=str(fields[0]),
                 prompt_facet_id=str(fields[1]),
