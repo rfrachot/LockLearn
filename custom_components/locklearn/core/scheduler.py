@@ -724,7 +724,7 @@ class SchedulerService:
                 }
 
         selection: dict[str, str] | None = None
-        if self._notification_selection is not None:
+        if self._notification_selection is not None and isinstance(slot.get("track_id"), str):
             try:
                 selected = await self._notification_selection.async_select_for_slot(slot_id)
             except NotificationSelectionError as err:
