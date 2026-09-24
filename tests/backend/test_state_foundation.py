@@ -400,8 +400,17 @@ async def test_v3_state_migrates_to_v4_with_receptivity_state(tmp_path: Path) ->
     state_path = tmp_path / "state-v3" / "state.db"
     state_path.parent.mkdir(parents=True)
     v3_schema = STATE_SCHEMA.replace(
-        "    deferred_until_utc TEXT,\n    defer_reason TEXT,\n",
+        """    deferred_until_utc TEXT,
+    defer_reason TEXT,
+    card_key TEXT,
+    learning_item_id TEXT,
+    prompt_facet_id TEXT,
+    answer_facet_id TEXT,
+    selection_reason TEXT,
+    expired_reason TEXT,
+""",
         "",
+        1,
     )
     receptivity_start = v3_schema.index("CREATE TABLE IF NOT EXISTS receptivity_samples (")
     receptivity_end = v3_schema.index(
@@ -468,16 +477,21 @@ async def test_v4_state_migrates_to_v5_with_notification_selection_state(
 ) -> None:
     state_path = tmp_path / "state-v4" / "state.db"
     state_path.parent.mkdir(parents=True)
-    v4_schema = STATE_SCHEMA
-    for line in (
-        "    card_key TEXT,\n",
-        "    learning_item_id TEXT,\n",
-        "    prompt_facet_id TEXT,\n",
-        "    answer_facet_id TEXT,\n",
-        "    selection_reason TEXT,\n",
-        "    expired_reason TEXT,\n",
-    ):
-        v4_schema = v4_schema.replace(line, "")
+    v4_schema = STATE_SCHEMA.replace(
+        """    deferred_until_utc TEXT,
+    defer_reason TEXT,
+    card_key TEXT,
+    learning_item_id TEXT,
+    prompt_facet_id TEXT,
+    answer_facet_id TEXT,
+    selection_reason TEXT,
+    expired_reason TEXT,
+""",
+        """    deferred_until_utc TEXT,
+    defer_reason TEXT,
+""",
+        1,
+    )
 
     connection = sqlite3.connect(state_path)
     try:
