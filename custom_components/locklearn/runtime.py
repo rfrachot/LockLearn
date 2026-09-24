@@ -174,8 +174,12 @@ class LockLearnRuntime:
                 reviews=reviews,
                 scheduler=SchedulerService(
                     storage.repositories.profiles,
+                    storage.repositories.tracks,
+                    storage.repositories.notification_targets,
                     storage.repositories.scheduler,
                     storage.repositories.settings,
+                    issue_callback=report_issue,
+                    issue_clear_callback=clear_issue,
                 ),
                 datasets=datasets,
             )
