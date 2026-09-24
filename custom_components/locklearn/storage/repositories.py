@@ -3720,9 +3720,14 @@ class SchedulerRepository:
             cursor = connection.execute(
                 """UPDATE scheduled_slots
                    SET status = 'expired', updated_at_utc = ?
-                   WHERE scheduled_for_utc < ?
-                     AND status IN ('scheduled', 'deferred')""",
-                (updated_at_utc, before_utc),
+                   WHERE (
+                       (status = 'scheduled' AND scheduled_for_utc < ?)
+                       OR (
+                           status = 'deferred'
+                           AND COALESCE(deferred_until_utc, scheduled_for_utc) < ?
+                       )
+                   )""",
+                (updated_at_utc, before_utc, before_utc),
             )
             connection.commit()
             return cursor.rowcount
