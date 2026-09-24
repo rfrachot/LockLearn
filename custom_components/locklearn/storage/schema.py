@@ -298,6 +298,12 @@ CREATE TABLE IF NOT EXISTS scheduled_slots (
     scheduled_for_utc TEXT NOT NULL,
     deferred_until_utc TEXT,
     defer_reason TEXT,
+    card_key TEXT,
+    learning_item_id TEXT,
+    prompt_facet_id TEXT,
+    answer_facet_id TEXT,
+    selection_reason TEXT,
+    expired_reason TEXT,
     status TEXT NOT NULL CHECK (
         status IN ('scheduled', 'deferred', 'sent', 'consumed', 'expired', 'cancelled')
     ),
