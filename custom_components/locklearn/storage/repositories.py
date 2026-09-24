@@ -3806,11 +3806,15 @@ class SchedulerRepository:
         def read(connection: sqlite3.Connection) -> bool:
             row = connection.execute(
                 """SELECT 1
-                   FROM scheduled_slots
-                   WHERE profile_id = ?
-                     AND target_id = ?
-                     AND slot_id <> ?
-                     AND status = 'sent'
+                   FROM scheduled_slots AS slot
+                   LEFT JOIN receptivity_samples AS sample
+                     ON sample.slot_id = slot.slot_id
+                   WHERE slot.profile_id = ?
+                     AND slot.target_id = ?
+                     AND slot.slot_id <> ?
+                     AND slot.status = 'sent'
+                     AND COALESCE(sample.answered, 0) = 0
+                     AND COALESCE(sample.cleared, 0) = 0
                    LIMIT 1""",
                 (profile_id, target_id, exclude_slot_id),
             ).fetchone()
