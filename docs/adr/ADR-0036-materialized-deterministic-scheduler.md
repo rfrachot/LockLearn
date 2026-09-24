@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed for P4.1 on 2026-09-24 pending repository quality gates.
+Accepted for P4.1 on 2026-09-24 after the full repository quality gate passed.
 
 ## Context
 
@@ -75,3 +75,19 @@ Rejected. Preview, tests and operational diagnosis need reproducible generation.
 - The deterministic seed is useful only for future/preview generation, never as
   authority over an existing row.
 - P4.2 remains responsible for the difficult temporal reconciliation cases.
+
+
+## Final qualification gate — 2026-09-24
+
+The final development-checkout gate passed:
+
+- Ruff format: PASS, 218 files already formatted;
+- Ruff lint: PASS;
+- mypy: PASS, 123 source files;
+- resource registries: PASS;
+- pytest: PASS, 321 tests in 15.39 s.
+
+P4.1 is therefore closed PASS. No state schema migration was required because
+`scheduler_config` and `scheduled_slots` were already present in the released
+state schema foundation. Temporal reconciliation remains explicitly owned by
+P4.2.
