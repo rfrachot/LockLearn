@@ -3783,10 +3783,10 @@ class SchedulerRepository:
                      AND status IN ('scheduled', 'deferred')
                      AND card_key IS NULL""",
                 (
-                    card.card_key,
-                    card.learning_item_id,
-                    card.prompt_facet_id,
-                    card.answer_facet_id,
+                    card_key,
+                    learning_item_id,
+                    prompt_facet_id,
+                    answer_facet_id,
                     selection_reason,
                     updated_at_utc,
                     slot_id,
