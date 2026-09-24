@@ -2,8 +2,8 @@
 
 ## Status
 
-Proposed for P4.7. Mark Accepted only after the normal repository quality gate
-passes.
+Accepted for P4.7 on 2026-09-24 after the repository quality gate passed with
+only mechanical Ruff/mypy remediation.
 
 ## Context
 
@@ -141,3 +141,16 @@ was ignored.
 - delivery follows current HA routes and raises a Repair on target failure;
 - recent unrecorded mobile responses become visible without exposing content;
 - no state schema migration is required for P4.7.
+
+## Final qualification gate — 2026-09-24
+
+The development checkout reported:
+
+- Ruff format: three mechanical formatting differences;
+- Ruff lint: four fixable import/__all__/annotation issues;
+- mypy: one test-only optionality error on `action_semantics`;
+- resource registries: PASS;
+- pytest: PASS, 367 tests in 18.01 s.
+
+The exact Ruff formatting/import fixes and the single test typing assertion were
+then applied without semantic runtime change. P4.7 is therefore closed PASS.
