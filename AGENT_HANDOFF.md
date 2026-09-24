@@ -2,6 +2,36 @@
 
 ## Current state
 
+P4.3 implementation is now on `feat/p4-scheduler` after the P4.2 PASS
+(`c88f89131cbf4ee04ce04b0fb964a1d3307acfba`). Newly generated Profile
+slots can now be allocated to active Tracks and stable notification targets
+without selecting a CardDefinition. Track `settings.scheduler` carries
+`learning_count`, `quiz_count` and optional `target_ids`, exposed through
+the existing authenticated Track WebSocket create/update commands.
+
+Scarce demand uses deterministic smooth weighted round-robin weighted by Track
+`priority`; high priority therefore receives proportionally more slots without
+greedy starvation. Target daily budgets, minimum gaps and local-hour limits are
+enforced, and physical `device_registry_id` usage is shared across Tracks and
+Profiles. Active sessions suppress only their own Track. Existing materialized
+slots remain authoritative and are never retrofitted with Track/target identity.
+
+Persistent infeasibility is tracked by distinct local day. Three consecutive
+generated days with unmet non-suppressed demand create the
+`scheduler_configuration_infeasible` HA Repair; a later feasible day clears
+it. Preview remains side-effect free. ADR-0038 and `docs/SCHEDULER.md`
+document the boundary. No state schema migration was required.
+
+P4.3 tests cover weighted no-starvation, target daily capacity, shared physical
+device capacity across Profiles, active-session suppression, Track scheduler
+settings/WebSocket persistence and Repair creation/recovery. P4.4+ receptivity,
+routine hooks, send-time CardDefinition selection, missed/pending/backoff and
+notification interactions remain out of scope.
+
+Repository quality gates still need to run in the development checkout. Do not
+mark ADR-0038 accepted or P4.3 PASS until Ruff format/lint, mypy, resource
+validation and pytest are green.
+
 P4.2 is closed PASS on `feat/p4-scheduler` after P4.1. The scheduler
 resolves Profile-local wall-clock minutes explicitly through `zoneinfo`:
 nonexistent spring-forward minutes are skipped, duplicated fall-back minutes
