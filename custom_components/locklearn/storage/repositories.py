@@ -3426,6 +3426,47 @@ class SchedulerRepository:
 
         return await self._storage._async_reader(read)
 
+    async def async_list_device_slots(
+        self,
+        *,
+        device_registry_id: str,
+        start_utc: str,
+        end_utc: str,
+    ) -> tuple[dict[str, Any], ...]:
+        """List materialized slots sharing one physical device identity."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT slot.slot_id, slot.profile_id, slot.track_id, slot.target_id,
+                          slot.slot_type, slot.scheduled_for_utc, slot.status,
+                          slot.scheduler_config_version, slot.seed,
+                          slot.created_at_utc, slot.updated_at_utc
+                   FROM scheduled_slots AS slot
+                   JOIN notification_targets AS target
+                     ON target.target_id = slot.target_id
+                   WHERE target.device_registry_id = ?
+                     AND slot.scheduled_for_utc >= ?
+                     AND slot.scheduled_for_utc < ?
+                   ORDER BY slot.scheduled_for_utc, slot.slot_id""",
+                (device_registry_id, start_utc, end_utc),
+            ).fetchall()
+            keys = (
+                "slot_id",
+                "profile_id",
+                "track_id",
+                "target_id",
+                "slot_type",
+                "scheduled_for_utc",
+                "status",
+                "scheduler_config_version",
+                "seed",
+                "created_at_utc",
+                "updated_at_utc",
+            )
+            return tuple(dict(zip(keys, row, strict=True)) for row in rows)
+
+        return await self._storage._async_reader(read)
+
     async def async_cancel_superseded_future_slots(
         self,
         *,
