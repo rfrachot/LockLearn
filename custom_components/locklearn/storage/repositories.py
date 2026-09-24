@@ -90,7 +90,6 @@ class NotificationTargetRecord:
     adaptive_backoff: dict[str, Any] | None = None
 
 
-
 @dataclass(frozen=True, slots=True)
 class NotificationInteractionRecord:
     """Persistent single-use action capability for one notification stage."""
@@ -117,6 +116,7 @@ class NotificationInteractionConsumeResult:
 
     disposition: str
     interaction: dict[str, Any] | None = None
+
 
 @dataclass(frozen=True, slots=True)
 class CardReference:
@@ -3453,9 +3453,7 @@ class NotificationInteractionsRepository:
                     connection,
                     event_type="notification_action_rejected",
                     actor_user_id=actor_user_id,
-                    profile_id=(
-                        None if interaction is None else str(interaction["profile_id"])
-                    ),
+                    profile_id=(None if interaction is None else str(interaction["profile_id"])),
                     interaction=interaction,
                     reason=reason,
                     created_at_utc=created_at_utc,
