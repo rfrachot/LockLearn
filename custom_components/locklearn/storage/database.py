@@ -337,6 +337,43 @@ def _migrate_state_database(path: Path, schema: str, current: int, target: int) 
             connection.close()
         current = 4
 
+    if current == 4 and target >= 5:
+        connection = sqlite3.connect(path)
+        try:
+            _configure_state_connection(connection)
+            connection.execute("BEGIN IMMEDIATE")
+            columns = {
+                str(row[1])
+                for row in connection.execute("PRAGMA table_info(scheduled_slots)").fetchall()
+            }
+            additions = (
+                ("card_key", "TEXT"),
+                ("learning_item_id", "TEXT"),
+                ("prompt_facet_id", "TEXT"),
+                ("answer_facet_id", "TEXT"),
+                ("selection_reason", "TEXT"),
+                ("expired_reason", "TEXT"),
+            )
+            for column_name, column_type in additions:
+                if column_name not in columns:
+                    connection.execute(
+                        f"ALTER TABLE scheduled_slots ADD COLUMN {column_name} {column_type}"
+                    )
+            connection.execute("UPDATE schema_version SET version = 5")
+            connection.commit()
+            if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                raise RuntimeError("Migrated state database failed integrity_check")
+            if connection.execute("PRAGMA foreign_key_check").fetchall():
+                raise RuntimeError("Migrated state database failed foreign_key_check")
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            if connection.in_transaction:
+                connection.rollback()
+            raise
+        finally:
+            connection.close()
+        current = 5
+
     if current != target:
         raise RuntimeError(f"No state migration path from {current} to {target}")
 
