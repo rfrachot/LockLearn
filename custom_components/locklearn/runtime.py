@@ -42,6 +42,7 @@ from .datasets.manager import (
 from .datasets.policy import OfficialRegistryPolicy
 from .datasets.transport import HomeAssistantDatasetTransport
 from .notifications.interactions import NotificationInteractionService
+from .notifications.warnings import NotificationWarningService
 from .scheduler_ha import SchedulerHomeAssistantBridge
 from .storage import SQLiteStorage, StoragePaths
 
@@ -70,6 +71,7 @@ class LockLearnRuntime:
     stats: StatsService
     reviews: ReviewEventService
     notification_interactions: NotificationInteractionService
+    notification_warnings: NotificationWarningService
     scheduler: SchedulerService
     scheduler_ha: SchedulerHomeAssistantBridge
     datasets: DatasetManager
@@ -213,6 +215,9 @@ class LockLearnRuntime:
                 notification_interactions=NotificationInteractionService(
                     storage.repositories.notification_interactions,
                     acl,
+                ),
+                notification_warnings=NotificationWarningService(
+                    storage.repositories.notification_warnings,
                 ),
                 scheduler=scheduler,
                 scheduler_ha=scheduler_ha,
