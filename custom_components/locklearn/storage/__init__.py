@@ -16,6 +16,8 @@ from .database import SQLiteStorage, StoragePaths
 from .repositories import (
     CardReference,
     ContentReferenceError,
+    NotificationInteractionConsumeResult,
+    NotificationInteractionRecord,
     NotificationTargetRecord,
     ProfileMemberRecord,
     ProfileRecord,
@@ -37,6 +39,8 @@ __all__ = [
     "ContentReferenceError",
     "ContentValidationError",
     "GenerationMetadata",
+    "NotificationInteractionConsumeResult",
+    "NotificationInteractionRecord",
     "NotificationTargetRecord",
     "ProfileMemberRecord",
     "ProfileRecord",
