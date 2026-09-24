@@ -17,6 +17,7 @@ from .core.content_reports import ContentReportService
 from .core.difficulties import DifficultyService
 from .core.grading import FreeTextGrader
 from .core.integrity import IntegrityService
+from .core.notification_selection import NotificationSelectionService
 from .core.operations import OperationRegistry
 from .core.planning import LearningPlanService
 from .core.profiles import ProfileService
@@ -136,12 +137,20 @@ class LockLearnRuntime:
                 storage.repositories.review_events,
                 storage.repositories.profiles,
             )
+            notification_selection = NotificationSelectionService(
+                storage.repositories.tracks,
+                storage.repositories.profiles,
+                storage.repositories.review_events,
+                storage.repositories.scheduler,
+                selection,
+            )
             scheduler = SchedulerService(
                 storage.repositories.profiles,
                 storage.repositories.tracks,
                 storage.repositories.notification_targets,
                 storage.repositories.scheduler,
                 storage.repositories.settings,
+                notification_selection,
                 issue_callback=report_issue,
                 issue_clear_callback=clear_issue,
                 receptive_evaluator=evaluate_receptive_when,
