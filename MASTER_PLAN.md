@@ -90,7 +90,7 @@
 - **P4.3** — Multi-track/multi-target arbitration and capacity Repairs (complete)
 - **P4.4** — Context-aware receptivity and routine slots (complete)
 - **P4.5** — Notification selection policy, missed/pending/backoff (complete)
-- **P4.6** — Persistent notification interactions and replay protection
+- **P4.6** — Persistent notification interactions and replay protection (complete)
 - **P4.7** — Notification renderers and privacy-safe target behavior
 - **P4.8** — HA services/actions and pedagogical events
 - **P4.9** — Automation blueprints
