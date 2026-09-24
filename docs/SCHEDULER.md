@@ -57,3 +57,29 @@ future unsent rows from older versions, and generates new opportunities using
 the new timezone. P4.5 remains responsible for ordinary missed/pending/backoff
 policy.
 
+
+## P4.3 Track and target arbitration
+
+When Tracks declare notification demand, newly generated Profile slots are
+allocated with deterministic smooth weighted round-robin using Track
+`priority`. Track scheduler settings contain `learning_count`, `quiz_count`
+and optional `target_ids`; omitted target IDs inherit all enabled Profile
+targets.
+
+Target constraints are applied before a slot is materialized:
+
+- daily push budget;
+- minimum gap;
+- maximum notifications per local hour;
+- the same physical-device constraints across every target sharing a
+  `device_registry_id`, including another Profile.
+
+An active session suppresses only its own Track's notification demand. The slot
+still does not contain a CardDefinition: P4.5 chooses pedagogical content at
+send time.
+
+A Profile with unmet non-suppressed demand for three consecutive generated local
+days raises the `scheduler_configuration_infeasible` Home Assistant Repair.
+A later feasible day clears it. Preview is side-effect free and never advances
+the Repair streak.
+
