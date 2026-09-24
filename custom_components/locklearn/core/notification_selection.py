@@ -197,11 +197,11 @@ class NotificationSelectionService:
             profile_id=profile_id,
             track_id=track_id,
         )
-        candidates = [
-            _Candidate.from_row(row)
-            for row in raw_candidates
-            if self._user_state_available(_Candidate.from_row(row), now=now)
-        ]
+        candidates: list[_Candidate] = []
+        for row in raw_candidates:
+            candidate = _Candidate.from_row(row)
+            if self._user_state_available(candidate, now=now):
+                candidates.append(candidate)
         candidates = await self._eligible_candidates(
             profile_id=profile_id,
             track_id=track_id,
