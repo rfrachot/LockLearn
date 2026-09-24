@@ -865,9 +865,7 @@ async def test_active_session_suppresses_only_its_track(tmp_path: Path) -> None:
             local_date=date(2026, 9, 24),
         )
         assert {slot["track_id"] for slot in preview["slots"]} == {"track-free"}
-        assert preview["allocation"]["suppressed_active_session_tracks"] == [
-            "track-session"
-        ]
+        assert preview["allocation"]["suppressed_active_session_tracks"] == ["track-session"]
     finally:
         await storage.async_close()
 
@@ -975,9 +973,7 @@ async def test_capacity_repair_requires_three_distinct_infeasible_days(
             local_date=date(2026, 9, 27),
         )
         assert recovered["allocation"]["unmet_demand"] == 0
-        assert cleared == [
-            "scheduler_configuration_infeasible_profile-scheduler"
-        ]
+        assert cleared == ["scheduler_configuration_infeasible_profile-scheduler"]
     finally:
         await storage.async_close()
 
