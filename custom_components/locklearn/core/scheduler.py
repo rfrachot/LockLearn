@@ -17,6 +17,10 @@ from ..storage.repositories import (
     TracksRepository,
 )
 from .clock import Clock, SystemClock
+from .notification_selection import (
+    NotificationSelectionError,
+    NotificationSelectionService,
+)
 
 _DEFAULT_ACTIVE_DAYS = tuple(range(7))
 _DEFAULT_ACTIVE_WINDOWS = (("08:00", "20:00"),)
@@ -454,6 +458,7 @@ class SchedulerService:
         notification_targets: NotificationTargetsRepository,
         scheduler: SchedulerRepository,
         settings: SettingsRepository,
+        notification_selection: NotificationSelectionService | None = None,
         *,
         clock: Clock | None = None,
         issue_callback: Callable[[str, str, Mapping[str, str]], Awaitable[None]] | None = None,
@@ -465,6 +470,7 @@ class SchedulerService:
         self._notification_targets = notification_targets
         self._scheduler = scheduler
         self._settings = settings
+        self._notification_selection = notification_selection
         self._clock = clock or SystemClock()
         self._issue_callback = issue_callback
         self._issue_clear_callback = issue_clear_callback
@@ -514,6 +520,7 @@ class SchedulerService:
             local_date=resolved_date,
             drafts=drafts,
             existing_slots=current_version,
+            profile_daily_budget=daily_push_budget,
         )
         payload = self._preview_payload(
             config=config,
@@ -594,6 +601,7 @@ class SchedulerService:
             local_date=resolved_date,
             drafts=drafts,
             existing_slots=current_version,
+            profile_daily_budget=daily_push_budget,
         )
         await self._async_update_capacity_repair(
             profile_id=profile_id,
@@ -626,7 +634,7 @@ class SchedulerService:
         return payload
 
     async def async_prepare_delivery(self, slot_id: str) -> dict[str, Any]:
-        """Evaluate send-time receptivity without selecting pedagogical content."""
+        """Apply pending, receptivity and send-time content-selection policy."""
         slot = await self._scheduler.async_get_slot(slot_id)
         if slot is None:
             raise SchedulerValidationError("slot does not exist")
@@ -638,12 +646,32 @@ class SchedulerService:
                 "reason": "not_pending",
             }
 
-        profile = await self._profiles.async_get(str(slot["profile_id"]))
+        profile_id = str(slot["profile_id"])
+        target_id = slot.get("target_id")
+        now = await self.async_effective_now()
+        if isinstance(target_id, str) and target_id:
+            if await self._scheduler.async_has_pending_for_target(
+                profile_id=profile_id,
+                target_id=target_id,
+                exclude_slot_id=slot_id,
+            ):
+                await self._scheduler.async_expire_slot(
+                    slot_id=slot_id,
+                    reason="pending_existing",
+                    updated_at_utc=now.isoformat(),
+                )
+                return {
+                    "slot_id": slot_id,
+                    "ready": False,
+                    "status": "expired",
+                    "reason": "pending_existing",
+                }
+
+        profile = await self._profiles.async_get(profile_id)
         if profile is None:
             raise SchedulerValidationError("slot profile does not exist")
-        persisted = await self._scheduler.async_get_config(str(slot["profile_id"]))
+        persisted = await self._scheduler.async_get_config(profile_id)
         config, _daily_budget = self._resolve_config(profile, persisted)
-        now = await self.async_effective_now()
 
         deferred_until_raw = slot.get("deferred_until_utc")
         if isinstance(deferred_until_raw, str):
@@ -657,49 +685,74 @@ class SchedulerService:
                     "deferred_until_utc": deferred_until.isoformat(),
                 }
 
-        if config.receptive_when is None:
-            return {
-                "slot_id": slot_id,
-                "ready": True,
-                "status": str(slot["status"]),
-                "reason": "receptive_condition_absent",
-            }
-        if self._receptive_evaluator is None:
-            raise SchedulerValidationError("receptive_when evaluator is unavailable")
+        if config.receptive_when is not None:
+            if self._receptive_evaluator is None:
+                raise SchedulerValidationError("receptive_when evaluator is unavailable")
+            receptive = await self._receptive_evaluator(config.receptive_when)
+            if not receptive:
+                scheduled_for = datetime.fromisoformat(
+                    str(slot["scheduled_for_utc"])
+                ).astimezone(UTC)
+                deadline = scheduled_for + timedelta(minutes=config.defer_window_minutes)
+                if config.defer_window_minutes <= 0 or now >= deadline:
+                    await self._scheduler.async_expire_slot(
+                        slot_id=slot_id,
+                        reason="missed_not_receptive",
+                        updated_at_utc=now.isoformat(),
+                    )
+                    return {
+                        "slot_id": slot_id,
+                        "ready": False,
+                        "status": "expired",
+                        "reason": "missed_not_receptive",
+                        "defer_exhausted": True,
+                    }
 
-        receptive = await self._receptive_evaluator(config.receptive_when)
-        if receptive:
-            return {
-                "slot_id": slot_id,
-                "ready": True,
-                "status": str(slot["status"]),
-                "reason": "receptive",
-            }
+                await self._scheduler.async_defer_slot(
+                    slot_id=slot_id,
+                    deferred_until_utc=deadline.isoformat(),
+                    reason="receptive_when_false",
+                    updated_at_utc=now.isoformat(),
+                )
+                return {
+                    "slot_id": slot_id,
+                    "ready": False,
+                    "status": "deferred",
+                    "reason": "receptive_when_false",
+                    "deferred_until_utc": deadline.isoformat(),
+                    "defer_exhausted": False,
+                }
 
-        scheduled_for = datetime.fromisoformat(str(slot["scheduled_for_utc"])).astimezone(UTC)
-        deadline = scheduled_for + timedelta(minutes=config.defer_window_minutes)
-        if config.defer_window_minutes <= 0 or now >= deadline:
-            return {
-                "slot_id": slot_id,
-                "ready": False,
-                "status": str(slot["status"]),
-                "reason": "not_receptive_defer_window_exhausted",
-                "defer_exhausted": True,
-            }
+        selection: dict[str, str] | None = None
+        if self._notification_selection is not None:
+            try:
+                selected = await self._notification_selection.async_select_for_slot(slot_id)
+            except NotificationSelectionError as err:
+                raise SchedulerValidationError(str(err)) from err
+            if selected is None:
+                await self._scheduler.async_expire_slot(
+                    slot_id=slot_id,
+                    reason="no_candidate",
+                    updated_at_utc=now.isoformat(),
+                )
+                return {
+                    "slot_id": slot_id,
+                    "ready": False,
+                    "status": "expired",
+                    "reason": "no_candidate",
+                }
+            selection = selected.as_dict()
 
-        await self._scheduler.async_defer_slot(
-            slot_id=slot_id,
-            deferred_until_utc=deadline.isoformat(),
-            reason="receptive_when_false",
-            updated_at_utc=now.isoformat(),
-        )
         return {
             "slot_id": slot_id,
-            "ready": False,
-            "status": "deferred",
-            "reason": "receptive_when_false",
-            "deferred_until_utc": deadline.isoformat(),
-            "defer_exhausted": False,
+            "ready": True,
+            "status": str(slot["status"]),
+            "reason": (
+                "receptive_condition_absent"
+                if config.receptive_when is None
+                else "receptive"
+            ),
+            "selection": selection,
         }
 
     async def async_record_delivery(
@@ -819,7 +872,12 @@ class SchedulerService:
                 )
             selected_track_id = track_id
 
-        targets = await self._notification_targets.async_list_for_profile(profile_id)
+        raw_targets = await self._notification_targets.async_list_for_profile(profile_id)
+        targets = await self._async_targets_with_backoff(
+            profile_id=profile_id,
+            targets=raw_targets,
+            profile_daily_budget=profile_daily_budget,
+        )
         targets_by_id = {str(target["target_id"]): target for target in targets}
         if target_id is None:
             candidate_target_ids = tuple(sorted(targets_by_id))
@@ -927,6 +985,7 @@ class SchedulerService:
         local_date: date,
         drafts: tuple[SchedulerSlotDraft, ...],
         existing_slots: tuple[dict[str, Any], ...],
+        profile_daily_budget: int,
     ) -> tuple[tuple[SchedulerSlotDraft, ...], dict[str, Any]]:
         """Allocate future Profile slots across Tracks and stable targets."""
         tracks = tuple(
@@ -1074,6 +1133,10 @@ class SchedulerService:
             "unmet_demand": max(0, requested_demand - allocated_demand),
             "allocatable_slots": len(drafts),
             "suppressed_active_session_tracks": sorted(suppressed),
+            "target_backoff": {
+                str(target["target_id"]): float(target["backoff_factor"])
+                for target in targets
+            },
         }
 
     @staticmethod
@@ -1102,7 +1165,7 @@ class SchedulerService:
             target_existing = tuple(target_existing_usage.get(target_id, ()))
             target_new = tuple(target_new_usage.get(target_id, ()))
             target_usage = (*target_existing, *target_new)
-            daily_budget_raw = target.get("daily_push_budget")
+            daily_budget_raw = target.get("effective_daily_push_budget")
             daily_budget = 10**9 if daily_budget_raw is None else int(daily_budget_raw)
             if len(target_usage) >= daily_budget:
                 continue
@@ -1148,6 +1211,61 @@ class SchedulerService:
                 continue
             return target_id
         return None
+
+    async def _async_targets_with_backoff(
+        self,
+        *,
+        profile_id: str,
+        targets: tuple[dict[str, Any], ...],
+        profile_daily_budget: int,
+    ) -> tuple[dict[str, Any], ...]:
+        """Apply channel-only adaptive backoff without touching SRS state."""
+        adjusted: list[dict[str, Any]] = []
+        for target in targets:
+            target_id = str(target["target_id"])
+            outcomes = await self._scheduler.async_channel_outcomes(
+                profile_id=profile_id,
+                target_id=target_id,
+            )
+            factor = self._backoff_factor(outcomes)
+            base_raw = target.get("daily_push_budget")
+            base_budget = profile_daily_budget if base_raw is None else int(base_raw)
+            effective = 0 if base_budget <= 0 else max(1, int(base_budget * factor))
+            item = dict(target)
+            item["backoff_factor"] = factor
+            item["effective_daily_push_budget"] = effective
+            adjusted.append(item)
+        return tuple(adjusted)
+
+    @staticmethod
+    def _backoff_factor(outcomes: tuple[str, ...]) -> float:
+        """Map recent expiry/clear streaks to a V1 channel budget multiplier."""
+        filtered = tuple(
+            outcome
+            for outcome in outcomes
+            if outcome in {"expired", "cleared", "answered", "consumed"}
+        )
+        if not filtered:
+            return 1.0
+
+        recovery = 0
+        index = 0
+        while index < len(filtered) and filtered[index] in {"answered", "consumed"}:
+            recovery += 1
+            index += 1
+
+        failures = 0
+        while index < len(filtered) and filtered[index] in {"expired", "cleared"}:
+            failures += 1
+            index += 1
+
+        if failures >= 6:
+            base = 0.5
+        elif failures >= 3:
+            base = 0.75
+        else:
+            base = 1.0
+        return min(1.0, base + recovery * 0.25)
 
     async def _async_update_capacity_repair(
         self,
