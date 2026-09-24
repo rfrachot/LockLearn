@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from custom_components.locklearn.core.acl import ProfileACLService
 from custom_components.locklearn.core.profiles import ProfileService
 from custom_components.locklearn.core.review_policy import ReviewPolicyV1
 from custom_components.locklearn.core.reviews import ReviewEventService
@@ -210,10 +211,7 @@ async def _setup(
     )
     interactions = NotificationInteractionService(
         storage.repositories.notification_interactions,
-        __import__(
-            "custom_components.locklearn.core.acl",
-            fromlist=["ProfileACLService"],
-        ).ProfileACLService(storage.repositories.profiles),
+        ProfileACLService(storage.repositories.profiles),
         clock=clock,
         id_factory=lambda: "interaction-p48",
         token_factory=lambda: "token-p48",
