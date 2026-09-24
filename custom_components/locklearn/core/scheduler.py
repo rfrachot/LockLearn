@@ -56,10 +56,10 @@ class SchedulerSlotDraft:
     profile_id: str
     slot_type: str
     scheduled_for_utc: str
-    track_id: str | None = None
-    target_id: str | None = None
     scheduler_config_version: int
     seed: str
+    track_id: str | None = None
+    target_id: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         """Return the storage/API representation without pedagogical content."""
@@ -716,15 +716,15 @@ class SchedulerService:
         device_new_usage: dict[str, list[datetime]] = {
             str(target["device_registry_id"]): [] for target in targets
         }
-        sequence_index = 0
+        pending = list(sequence)
         for draft in drafts:
-            while sequence_index < len(sequence):
-                demand, slot_type = sequence[sequence_index]
+            chosen_index: int | None = None
+            chosen_target_id: str | None = None
+            when = datetime.fromisoformat(draft.scheduled_for_utc).astimezone(UTC)
+            for index, (demand, _slot_type) in enumerate(pending):
                 target_id = self._select_target(
                     demand=demand,
-                    scheduled_for_utc=datetime.fromisoformat(
-                        draft.scheduled_for_utc
-                    ).astimezone(UTC),
+                    scheduled_for_utc=when,
                     targets_by_id=targets_by_id,
                     target_existing_usage=existing_by_target,
                     target_new_usage=target_new_usage,
@@ -732,28 +732,30 @@ class SchedulerService:
                     device_new_usage=device_new_usage,
                     config=config,
                 )
-                if target_id is None:
-                    sequence_index += 1
-                    continue
-                target = targets_by_id[target_id]
-                when = datetime.fromisoformat(draft.scheduled_for_utc).astimezone(UTC)
-                target_new_usage[target_id].append(when)
-                device_new_usage[str(target["device_registry_id"])].append(when)
-                allocated.append(
-                    SchedulerSlotDraft(
-                        slot_id=draft.slot_id,
-                        profile_id=draft.profile_id,
-                        track_id=demand.track_id,
-                        target_id=target_id,
-                        slot_type=slot_type,
-                        scheduled_for_utc=draft.scheduled_for_utc,
-                        scheduler_config_version=draft.scheduler_config_version,
-                        seed=draft.seed,
-                    )
+                if target_id is not None:
+                    chosen_index = index
+                    chosen_target_id = target_id
+                    break
+            if chosen_index is None or chosen_target_id is None:
+                continue
+
+            demand, slot_type = pending.pop(chosen_index)
+            target = targets_by_id[chosen_target_id]
+            target_new_usage[chosen_target_id].append(when)
+            device_new_usage[str(target["device_registry_id"])].append(when)
+            allocated.append(
+                SchedulerSlotDraft(
+                    slot_id=draft.slot_id,
+                    profile_id=draft.profile_id,
+                    track_id=demand.track_id,
+                    target_id=chosen_target_id,
+                    slot_type=slot_type,
+                    scheduled_for_utc=draft.scheduled_for_utc,
+                    scheduler_config_version=draft.scheduler_config_version,
+                    seed=draft.seed,
                 )
-                sequence_index += 1
-                break
-            if sequence_index >= len(sequence):
+            )
+            if not pending:
                 break
 
         allocated_demand = len(allocated)
