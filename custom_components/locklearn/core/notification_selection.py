@@ -27,12 +27,6 @@ class _SystemClock:
         return datetime.now(ZoneInfo("UTC"))
 
 
-class NotificationConstraintDecision(Protocol):
-    """Structural result contract from P3.5 selection constraints."""
-
-    eligible: bool
-
-
 @dataclass(frozen=True, slots=True)
 class NotificationCardReference:
     """Minimal immutable CardDefinition identity needed by notification policy."""
@@ -98,7 +92,7 @@ class NotificationConstraintEvaluator(Protocol):
         card_key: str,
         learning_item_id: str,
         state: str,
-    ) -> NotificationConstraintDecision: ...
+    ) -> Any: ...
 
 
 @dataclass(frozen=True, slots=True)
