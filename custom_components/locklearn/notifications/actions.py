@@ -17,6 +17,7 @@ from ..storage.repositories import (
     NotificationTargetsRepository,
     ProgressRepository,
     ProfilesRepository,
+    ReviewEventsRepository,
     TracksRepository,
 )
 from .interactions import (
@@ -57,6 +58,7 @@ class NotificationActionProcessor:
         targets: NotificationTargetsRepository,
         scheduler: SchedulerService,
         reviews: ReviewEventService,
+        review_events: ReviewEventsRepository,
         signal_policy: SignalPolicy,
         review_policy: ReviewPolicyV1,
         stats: StatsService,
@@ -73,6 +75,7 @@ class NotificationActionProcessor:
         self._targets = targets
         self._scheduler = scheduler
         self._reviews = reviews
+        self._review_events = review_events
         self._signal_policy = signal_policy
         self._review_policy = review_policy
         self._stats = stats
@@ -224,7 +227,10 @@ class NotificationActionProcessor:
             profile_id=identity["profile_id"],
             track_id=identity["track_id"],
         )
-        post, signal_quality, scheduled_interval, elapsed = self._transition(
+        before_profile_stats = await self._stats.async_get(
+            profile_id=identity["profile_id"],
+        )
+        post, signal_quality, verified, short_step, scheduled_interval, elapsed = self._transition(
             pre=pre,
             mode=mode,
             result=result,
@@ -235,7 +241,8 @@ class NotificationActionProcessor:
             post,
             mode=mode,
             result=result,
-            verified=signal_quality in {"medium", "strong"},
+            verified=verified,
+            short_step=short_step,
         )
 
         event = await self._reviews.async_record(
@@ -260,12 +267,17 @@ class NotificationActionProcessor:
             profile_id=identity["profile_id"],
             track_id=identity["track_id"],
         )
+        after_profile_stats = await self._stats.async_get(
+            profile_id=identity["profile_id"],
+        )
         await self._emit_committed_events(
             interaction=interaction,
             identity=identity,
             event=event,
             before_stats=before_stats,
             after_stats=after_stats,
+            before_profile_stats=before_profile_stats,
+            after_profile_stats=after_profile_stats,
             answer_id=answer_id,
             expected_answer_id=expected_answer_id,
         )
@@ -279,7 +291,7 @@ class NotificationActionProcessor:
         result: str,
         shared_device: bool,
         shared_trusted: bool,
-    ) -> tuple[dict[str, Any], str, float | None, float | None]:
+    ) -> tuple[dict[str, Any], str, bool, bool, float | None, float | None]:
         state = str(pre["state"])
         if mode is SignalMode.SELF_ASSESSMENT_AFTER_RETRIEVAL:
             decision = self._signal_policy.evaluate(
@@ -311,12 +323,16 @@ class NotificationActionProcessor:
                 return (
                     dict(graduated.post_state),
                     decision.signal_quality.value,
+                    decision.verified,
+                    True,
                     graduated.scheduled_interval_days,
                     graduated.elapsed_days,
                 )
             return (
                 dict(transition.post_state),
                 decision.signal_quality.value,
+                decision.verified,
+                True,
                 None,
                 None,
             )
@@ -330,6 +346,8 @@ class NotificationActionProcessor:
         return (
             dict(transition.post_state),
             decision.signal_quality.value,
+            decision.verified,
+            False,
             transition.scheduled_interval_days,
             transition.elapsed_days,
         )
@@ -341,12 +359,13 @@ class NotificationActionProcessor:
         mode: SignalMode,
         result: str,
         verified: bool,
+        short_step: bool,
     ) -> None:
         if mode is SignalMode.SELF_ASSESSMENT_AFTER_RETRIEVAL:
             field = "self_known_count" if result in _POSITIVE_RESULTS else "self_review_count"
             post[field] = int(post.get(field, 0)) + 1
             return
-        if not verified:
+        if not verified or not short_step:
             return
         if result == "correct":
             post["verified_correct_count"] = int(post.get("verified_correct_count", 0)) + 1
@@ -450,6 +469,8 @@ class NotificationActionProcessor:
         event: Any,
         before_stats: dict[str, Any],
         after_stats: dict[str, Any],
+        before_profile_stats: dict[str, Any],
+        after_profile_stats: dict[str, Any],
         answer_id: str | None,
         expected_answer_id: str | None,
     ) -> None:
@@ -526,9 +547,10 @@ class NotificationActionProcessor:
         after_status = str(after_stats["streak"]["today"]["status"])
         if before_status != "success" and after_status == "success":
             self._event_emitter("locklearn_track_goal_reached", payload)
-            profile_stats = await self._stats.async_get(profile_id=identity["profile_id"])
-            if str(profile_stats["streak"]["today"]["status"]) == "success":
-                self._event_emitter("locklearn_daily_goal_reached", payload)
+        before_profile_status = str(before_profile_stats["streak"]["today"]["status"])
+        after_profile_status = str(after_profile_stats["streak"]["today"]["status"])
+        if before_profile_status != "success" and after_profile_status == "success":
+            self._event_emitter("locklearn_daily_goal_reached", payload)
 
     async def _result_counters(
         self,
@@ -538,7 +560,7 @@ class NotificationActionProcessor:
         session_id: str | None,
         stats: dict[str, Any],
     ) -> dict[str, Any]:
-        events = await self._reviews._events.async_list_scope_events(  # noqa: SLF001
+        events = await self._review_events.async_list_scope_events(
             profile_id=profile_id,
             track_id=track_id,
         )
