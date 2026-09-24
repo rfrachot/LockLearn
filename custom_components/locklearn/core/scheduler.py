@@ -484,18 +484,33 @@ class SchedulerService:
         timezone = ZoneInfo(config.timezone)
         resolved_date = local_date or now.astimezone(timezone).date()
         not_before = now if resolved_date == now.astimezone(timezone).date() else None
+        start_utc, end_utc = self._local_day_bounds(config.timezone, resolved_date)
+        existing = await self._scheduler.async_list_slots(
+            profile_id=profile_id,
+            start_utc=start_utc.isoformat(),
+            end_utc=end_utc.isoformat(),
+        )
+        current_version = tuple(
+            slot for slot in existing if int(slot["scheduler_config_version"]) == config.version
+        )
+        remaining_budget = max(0, daily_push_budget - len(current_version))
+        occupied = tuple(
+            datetime.fromisoformat(str(slot["scheduled_for_utc"])).astimezone(UTC)
+            for slot in current_version
+        )
         drafts = self._generate(
             config,
             local_date=resolved_date,
-            daily_push_budget=daily_push_budget,
+            daily_push_budget=remaining_budget,
             not_before_utc=not_before,
+            occupied=occupied,
         )
         drafts, allocation = await self._async_allocate(
             profile_id=profile_id,
             config=config,
             local_date=resolved_date,
             drafts=drafts,
-            existing_slots=(),
+            existing_slots=current_version,
         )
         payload = self._preview_payload(
             config=config,
