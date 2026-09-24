@@ -403,9 +403,7 @@ async def test_v3_state_migrates_to_v4_with_receptivity_state(tmp_path: Path) ->
         "    deferred_until_utc TEXT,\n    defer_reason TEXT,\n",
         "",
     )
-    receptivity_start = v3_schema.index(
-        "CREATE TABLE IF NOT EXISTS receptivity_samples ("
-    )
+    receptivity_start = v3_schema.index("CREATE TABLE IF NOT EXISTS receptivity_samples (")
     receptivity_end = v3_schema.index(
         "CREATE TABLE IF NOT EXISTS stats_daily (",
         receptivity_start,
@@ -449,9 +447,7 @@ async def test_v3_state_migrates_to_v4_with_receptivity_state(tmp_path: Path) ->
             )
             columns = {
                 str(row[1])
-                for row in migrated.execute(
-                    "PRAGMA table_info(scheduled_slots)"
-                ).fetchall()
+                for row in migrated.execute("PRAGMA table_info(scheduled_slots)").fetchall()
             }
             assert {"deferred_until_utc", "defer_reason"} <= columns
             assert migrated.execute(
