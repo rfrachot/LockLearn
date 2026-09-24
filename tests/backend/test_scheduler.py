@@ -1349,6 +1349,251 @@ async def test_ha_entity_routine_bridge_triggers_on_transition_to_on(
     assert await hass.config_entries.async_unload(entry.entry_id)
 
 
+async def test_skip_if_pending_expires_new_slot_without_srs_mutation(
+    tmp_path: Path,
+) -> None:
+    clock = FixedClock(datetime(2026, 9, 24, 8, 0, tzinfo=UTC))
+    storage = await _storage(tmp_path, clock)
+    try:
+        await _profile(storage, now=clock.now(), settings={"daily_push_budget": 2})
+        await _target(
+            storage,
+            daily_push_budget=2,
+            minimum_gap_seconds=0,
+            maximum_notifications_per_hour=2,
+            now=clock.now(),
+        )
+        await storage.repositories.scheduler.async_materialize_day(
+            profile_id="profile-scheduler",
+            scheduler_config_version=1,
+            seed="pending",
+            start_utc="2026-09-24T00:00:00+00:00",
+            end_utc="2026-09-25T00:00:00+00:00",
+            now_utc=clock.now().isoformat(),
+            slots=(
+                {
+                    "slot_id": "slot-pending-old",
+                    "track_id": None,
+                    "target_id": "target-1",
+                    "slot_type": "learning",
+                    "scheduled_for_utc": "2026-09-24T08:00:00+00:00",
+                },
+                {
+                    "slot_id": "slot-pending-new",
+                    "track_id": None,
+                    "target_id": "target-1",
+                    "slot_type": "learning",
+                    "scheduled_for_utc": "2026-09-24T09:00:00+00:00",
+                },
+            ),
+            updated_at_utc=clock.now().isoformat(),
+        )
+        assert await storage.repositories.scheduler.async_set_slot_status(
+            "slot-pending-old",
+            "sent",
+            updated_at_utc=clock.now().isoformat(),
+        )
+        service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=clock,
+        )
+
+        decision = await service.async_prepare_delivery("slot-pending-new")
+
+        assert decision == {
+            "slot_id": "slot-pending-new",
+            "ready": False,
+            "status": "expired",
+            "reason": "pending_existing",
+        }
+        slot = await storage.repositories.scheduler.async_get_slot("slot-pending-new")
+        assert slot is not None
+        assert slot["status"] == "expired"
+        assert slot["expired_reason"] == "pending_existing"
+        assert await storage.repositories.review_events.async_list_scope_events(
+            profile_id="profile-scheduler",
+            track_id=None,
+        ) == ()
+    finally:
+        await storage.async_close()
+
+
+async def test_missed_slot_expires_without_catchup_or_srs_mutation(tmp_path: Path) -> None:
+    clock = FixedClock(datetime(2026, 9, 24, 10, 0, tzinfo=UTC))
+    storage = await _storage(tmp_path, clock)
+    try:
+        await _profile(storage, now=clock.now(), settings={"daily_push_budget": 1})
+        await storage.repositories.scheduler.async_materialize_day(
+            profile_id="profile-scheduler",
+            scheduler_config_version=1,
+            seed="missed",
+            start_utc="2026-09-24T00:00:00+00:00",
+            end_utc="2026-09-25T00:00:00+00:00",
+            now_utc="2026-09-24T08:00:00+00:00",
+            slots=(
+                {
+                    "slot_id": "slot-missed",
+                    "track_id": None,
+                    "target_id": None,
+                    "slot_type": "learning",
+                    "scheduled_for_utc": "2026-09-24T09:00:00+00:00",
+                },
+            ),
+            updated_at_utc="2026-09-24T08:00:00+00:00",
+        )
+        service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=clock,
+        )
+
+        reconciled = await service.async_reconcile(reason="timer")
+
+        assert reconciled.expired_slots == 1
+        slot = await storage.repositories.scheduler.async_get_slot("slot-missed")
+        assert slot is not None
+        assert slot["status"] == "expired"
+        assert slot["expired_reason"] == "missed"
+        assert await storage.repositories.review_events.async_list_scope_events(
+            profile_id="profile-scheduler",
+            track_id=None,
+        ) == ()
+    finally:
+        await storage.async_close()
+
+
+async def test_adaptive_backoff_reduces_then_restores_target_budget(tmp_path: Path) -> None:
+    clock = FixedClock(datetime(2026, 9, 24, 5, 0, tzinfo=UTC))
+    storage = await _storage(tmp_path, clock)
+    try:
+        await _profile(
+            storage,
+            now=clock.now(),
+            settings={
+                "daily_push_budget": 4,
+                "quiet_hours": {"start": "22:00", "end": "07:00"},
+                "scheduler": {
+                    "active_days": [3],
+                    "active_windows": [{"start": "08:00", "end": "18:00"}],
+                    "minimum_gap_seconds": 0,
+                    "maximum_notifications_per_hour": 4,
+                },
+            },
+        )
+        await _track(
+            storage,
+            track_id="track-backoff",
+            priority=1,
+            learning_count=4,
+            now=clock.now(),
+        )
+        await _target(
+            storage,
+            target_id="target-1",
+            daily_push_budget=4,
+            minimum_gap_seconds=0,
+            maximum_notifications_per_hour=4,
+            now=clock.now(),
+        )
+
+        for index, day in enumerate((21, 22, 23), start=1):
+            slot_id = f"slot-expired-{index}"
+            await storage.repositories.scheduler.async_materialize_day(
+                profile_id="profile-scheduler",
+                scheduler_config_version=1,
+                seed=f"old-{index}",
+                start_utc=f"2026-09-{day:02d}T00:00:00+00:00",
+                end_utc=f"2026-09-{day + 1:02d}T00:00:00+00:00",
+                now_utc=f"2026-09-{day:02d}T08:00:00+00:00",
+                slots=(
+                    {
+                        "slot_id": slot_id,
+                        "track_id": "track-backoff",
+                        "target_id": "target-1",
+                        "slot_type": "learning",
+                        "scheduled_for_utc": f"2026-09-{day:02d}T09:00:00+00:00",
+                    },
+                ),
+                updated_at_utc=f"2026-09-{day:02d}T08:00:00+00:00",
+            )
+            assert await storage.repositories.scheduler.async_expire_slot(
+                slot_id=slot_id,
+                reason="missed",
+                updated_at_utc=f"2026-09-{day:02d}T10:00:00+00:00",
+            )
+
+        service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=clock,
+        )
+        reduced = await service.async_preview(
+            profile_id="profile-scheduler",
+            local_date=date(2026, 9, 24),
+        )
+        assert reduced["allocation"]["target_backoff"] == {"target-1": 0.75}
+        assert reduced["generated_slots"] == 3
+
+        await storage.repositories.scheduler.async_materialize_day(
+            profile_id="profile-scheduler",
+            scheduler_config_version=1,
+            seed="recovery",
+            start_utc="2026-09-23T00:00:00+00:00",
+            end_utc="2026-09-24T00:00:00+00:00",
+            now_utc="2026-09-23T18:00:00+00:00",
+            slots=(
+                {
+                    "slot_id": "slot-recovery",
+                    "track_id": None,
+                    "target_id": "target-1",
+                    "slot_type": "learning",
+                    "scheduled_for_utc": "2026-09-23T18:00:00+00:00",
+                },
+            ),
+            updated_at_utc="2026-09-23T18:00:00+00:00",
+        )
+        recovery_service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=FixedClock(datetime(2026, 9, 23, 18, 0, tzinfo=UTC)),
+        )
+        await recovery_service.async_record_delivery(
+            slot_id="slot-recovery",
+            delivered_at_utc=datetime(2026, 9, 23, 18, 0, tzinfo=UTC),
+        )
+        await recovery_service.async_record_receptivity_action(
+            slot_id="slot-recovery",
+            action="answered",
+            action_at_utc=datetime(2026, 9, 23, 18, 0, 2, tzinfo=UTC),
+        )
+
+        restored = await service.async_preview(
+            profile_id="profile-scheduler",
+            local_date=date(2026, 9, 24),
+        )
+        assert restored["allocation"]["target_backoff"] == {"target-1": 1.0}
+        assert restored["generated_slots"] == 4
+        assert await storage.repositories.review_events.async_list_scope_events(
+            profile_id="profile-scheduler",
+            track_id=None,
+        ) == ()
+    finally:
+        await storage.async_close()
+
+
 async def test_preview_websocket_is_profile_acl_read_only(
     hass: HomeAssistant,
     hass_ws_client: Any,
