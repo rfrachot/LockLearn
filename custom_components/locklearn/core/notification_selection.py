@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
-from ..storage.repositories import CardReference
+from custom_components.locklearn.storage.repositories import CardReference
+
 from .clock import Clock, SystemClock
 from .selection import SelectionConstraintError, SelectionDecision
 
