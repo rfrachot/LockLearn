@@ -126,6 +126,14 @@ class NotificationInteractionService:
         await self._repository.async_insert(interaction)
         return interaction
 
+    async def async_clear_tag(self, *, tag: str) -> dict[str, Any] | None:
+        """Clear one pending visible notification without producing learning state."""
+        resolved_tag = self._require_text("tag", tag)
+        return await self._repository.async_clear_by_tag(
+            tag=resolved_tag,
+            cleared_at_utc=self._utc_iso("cleared_at", self._clock.now()),
+        )
+
     async def async_consume_action(
         self,
         *,
