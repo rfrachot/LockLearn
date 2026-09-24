@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -171,9 +171,21 @@ async def _setup(
             clock=FixedClock(datetime(2026, 9, 23, 20, 0, tzinfo=UTC)),
             id_factory=lambda: "event-seed",
         )
-        snapshot = _snapshot(**identity)
+        snapshot = _snapshot(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            card_key=identity["card_key"],
+            learning_item_id=identity["learning_item_id"],
+            prompt_facet_id=identity["prompt_facet_id"],
+            answer_facet_id=identity["answer_facet_id"],
+        )
         await seed.async_record(
-            **identity,
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            learning_item_id=identity["learning_item_id"],
+            prompt_facet_id=identity["prompt_facet_id"],
+            answer_facet_id=identity["answer_facet_id"],
+            card_key=identity["card_key"],
             mode="verified_mcq",
             question_type="mcq",
             result="correct",
