@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
@@ -25,7 +25,7 @@ class _SystemClock:
     """Default aware UTC clock without importing another LockLearn module."""
 
     def now(self) -> datetime:
-        return datetime.now(UTC)
+        return datetime.now(ZoneInfo("UTC"))
 
 
 class NotificationConstraintDecision(Protocol):
