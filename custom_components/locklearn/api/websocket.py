@@ -425,6 +425,7 @@ async def ws_tracks_list(
         vol.Optional("priority", default=1): vol.All(int, vol.Range(min=1)),
         vol.Optional("content_weights"): dict,
         vol.Optional("explicit_card_keys"): [str],
+        vol.Optional("scheduler_settings"): dict,
     }
 )
 @websocket_api.async_response
@@ -455,6 +456,7 @@ async def ws_tracks_create(
             explicit_card_keys=(
                 None if "explicit_card_keys" not in msg else tuple(msg["explicit_card_keys"])
             ),
+            scheduler_settings=msg.get("scheduler_settings"),
         )
     except ContentReferenceError as err:
         connection.send_error(msg["id"], ERR_DATASET_UNAVAILABLE, str(err))
@@ -476,6 +478,7 @@ async def ws_tracks_create(
         vol.Optional("priority"): vol.All(int, vol.Range(min=1)),
         vol.Optional("content_weights"): dict,
         vol.Optional("explicit_card_keys"): [str],
+        vol.Optional("scheduler_settings"): dict,
     }
 )
 @websocket_api.async_response
@@ -508,6 +511,7 @@ async def ws_tracks_update(
             explicit_card_keys=(
                 None if "explicit_card_keys" not in msg else tuple(msg["explicit_card_keys"])
             ),
+            scheduler_settings=msg.get("scheduler_settings"),
         )
     except TrackValidationError as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
