@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Any, Mapping
+from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..storage.repositories import ProfilesRepository, SchedulerRepository
@@ -142,10 +143,7 @@ def _persisted_semantics(config: Mapping[str, Any]) -> tuple[Any, ...]:
     return (
         str(config["timezone"]),
         tuple(int(day) for day in config["active_days"]),
-        tuple(
-            (str(window["start"]), str(window["end"]))
-            for window in config["active_windows"]
-        ),
+        tuple((str(window["start"]), str(window["end"])) for window in config["active_windows"]),
         int(config["minimum_gap_seconds"]),
         int(config["maximum_notifications_per_hour"]),
         (
@@ -481,9 +479,7 @@ class SchedulerService:
         if isinstance(minimum_gap, bool) or not isinstance(minimum_gap, int) or minimum_gap < 0:
             raise SchedulerValidationError("minimum_gap_seconds must be an integer >= 0")
         if isinstance(max_per_hour, bool) or not isinstance(max_per_hour, int) or max_per_hour < 1:
-            raise SchedulerValidationError(
-                "maximum_notifications_per_hour must be an integer >= 1"
-            )
+            raise SchedulerValidationError("maximum_notifications_per_hour must be an integer >= 1")
 
         quiet_source = scheduler_settings.get("quiet_hours", settings.get("quiet_hours"))
         quiet_hours = _normalize_quiet_hours(quiet_source)
@@ -498,9 +494,7 @@ class SchedulerService:
 
         receptive_when_raw = scheduler_settings.get("receptive_when")
         receptive_when = (
-            None
-            if receptive_when_raw is None
-            else str(receptive_when_raw).strip() or None
+            None if receptive_when_raw is None else str(receptive_when_raw).strip() or None
         )
         defer_window_raw = scheduler_settings.get("defer_window_minutes", 0)
         if (
@@ -547,8 +541,7 @@ class SchedulerService:
             timezone=str(row["timezone"]),
             active_days=tuple(int(day) for day in row["active_days"]),
             active_windows=tuple(
-                (str(window["start"]), str(window["end"]))
-                for window in row["active_windows"]
+                (str(window["start"]), str(window["end"])) for window in row["active_windows"]
             ),
             minimum_gap_seconds=int(row["minimum_gap_seconds"]),
             maximum_notifications_per_hour=int(row["maximum_notifications_per_hour"]),
@@ -556,9 +549,7 @@ class SchedulerService:
                 str(row["quiet_hours"]["start"]),
                 str(row["quiet_hours"]["end"]),
             ),
-            receptive_when=(
-                None if row["receptive_when"] is None else str(row["receptive_when"])
-            ),
+            receptive_when=(None if row["receptive_when"] is None else str(row["receptive_when"])),
             defer_window_minutes=int(row["defer_window_minutes"]),
         )
 
