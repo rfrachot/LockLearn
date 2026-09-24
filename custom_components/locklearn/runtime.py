@@ -41,7 +41,9 @@ from .datasets.manager import (
 )
 from .datasets.policy import OfficialRegistryPolicy
 from .datasets.transport import HomeAssistantDatasetTransport
+from .notifications.actions import NotificationActionProcessor
 from .notifications.delivery import NotificationDeliveryService
+from .notifications.ha_bridge import NotificationHomeAssistantBridge
 from .notifications.interactions import NotificationInteractionService
 from .notifications.warnings import NotificationWarningService
 from .scheduler_ha import SchedulerHomeAssistantBridge
@@ -71,7 +73,9 @@ class LockLearnRuntime:
     session_selection: SessionSelectionService
     stats: StatsService
     reviews: ReviewEventService
+    notification_actions: NotificationActionProcessor
     notification_delivery: NotificationDeliveryService
+    notification_ha: NotificationHomeAssistantBridge
     notification_interactions: NotificationInteractionService
     notification_warnings: NotificationWarningService
     scheduler: SchedulerService
@@ -144,6 +148,18 @@ class LockLearnRuntime:
                 storage.repositories.review_events,
                 storage.repositories.profiles,
             )
+            signal_policy = SignalPolicy(review_policy)
+            stats = StatsService(
+                storage.repositories.profiles,
+                storage.repositories.tracks,
+                storage.repositories.progress,
+                storage.repositories.review_events,
+                review_policy=review_policy,
+            )
+            notification_interactions = NotificationInteractionService(
+                storage.repositories.notification_interactions,
+                acl,
+            )
             notification_selection = NotificationSelectionService(
                 storage.repositories.tracks,
                 storage.repositories.profiles,
@@ -165,6 +181,32 @@ class LockLearnRuntime:
             scheduler_ha = SchedulerHomeAssistantBridge(
                 hass,
                 storage.repositories.profiles,
+                scheduler,
+            )
+            notification_actions = NotificationActionProcessor(
+                notification_interactions,
+                storage.repositories.profiles,
+                storage.repositories.tracks,
+                storage.repositories.progress,
+                storage.repositories.notification_targets,
+                scheduler,
+                reviews,
+                storage.repositories.review_events,
+                signal_policy,
+                review_policy,
+                stats,
+                dataset_generation=lambda: (
+                    storage.content_generations.active_metadata.generation_id
+                ),
+                event_emitter=lambda event_type, data: hass.bus.async_fire(
+                    event_type,
+                    data,
+                ),
+            )
+            notification_ha = NotificationHomeAssistantBridge(
+                hass,
+                notification_interactions,
+                notification_actions,
                 scheduler,
             )
             runtime = cls(
@@ -203,27 +245,20 @@ class LockLearnRuntime:
                 ),
                 quiz=QuizEngine(),
                 review_policy=review_policy,
-                signal_policy=SignalPolicy(review_policy),
+                signal_policy=signal_policy,
                 selection=selection,
                 session_selection=session_selection,
-                stats=StatsService(
-                    storage.repositories.profiles,
-                    storage.repositories.tracks,
-                    storage.repositories.progress,
-                    storage.repositories.review_events,
-                    review_policy=review_policy,
-                ),
+                stats=stats,
                 reviews=reviews,
+                notification_actions=notification_actions,
                 notification_delivery=NotificationDeliveryService(
                     hass,
                     storage.repositories.notification_targets,
                     issue_callback=report_issue,
                     issue_clear_callback=clear_issue,
                 ),
-                notification_interactions=NotificationInteractionService(
-                    storage.repositories.notification_interactions,
-                    acl,
-                ),
+                notification_ha=notification_ha,
+                notification_interactions=notification_interactions,
                 notification_warnings=NotificationWarningService(
                     storage.repositories.notification_warnings,
                 ),
@@ -233,6 +268,7 @@ class LockLearnRuntime:
             )
             await runtime.scheduler.async_reconcile(reason="startup")
             await runtime.scheduler_ha.async_start()
+            await runtime.notification_ha.async_start()
             return runtime
         except Exception:
             await storage.async_close()
@@ -240,6 +276,7 @@ class LockLearnRuntime:
 
     async def async_close(self) -> None:
         """Cancel callbacks/operations, then drain and close SQLite."""
+        self.notification_ha.close()
         self.scheduler_ha.close()
         self.sessions.close()
         await self.operations.async_close()
