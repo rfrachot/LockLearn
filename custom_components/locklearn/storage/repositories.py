@@ -3879,7 +3879,14 @@ class SchedulerRepository:
                 elif bool(cleared):
                     result.append("cleared")
                 elif str(status) == "expired":
-                    result.append("expired")
+                    if str(expired_reason) in {
+                        "missed",
+                        "pending_existing",
+                        "missed_not_receptive",
+                    }:
+                        result.append("expired")
+                    else:
+                        result.append("neutral")
                 elif str(status) == "consumed":
                     result.append("consumed")
                 else:
@@ -3929,7 +3936,9 @@ class SchedulerRepository:
         def write(connection: sqlite3.Connection) -> int:
             cursor = connection.execute(
                 """UPDATE scheduled_slots
-                   SET status = 'expired', updated_at_utc = ?
+                   SET status = 'expired',
+                       expired_reason = COALESCE(expired_reason, 'missed'),
+                       updated_at_utc = ?
                    WHERE (
                        (status = 'scheduled' AND scheduled_for_utc < ?)
                        OR (
