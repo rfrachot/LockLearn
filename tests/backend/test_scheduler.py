@@ -1195,7 +1195,11 @@ async def test_routine_hook_materializes_bounded_content_free_slots(tmp_path: Pa
         assert bedtime["slot_type"] == "pre_sleep_consolidation"
         assert bedtime["track_id"] == "track-routine"
         assert bedtime["target_id"] == "target-routine"
-        assert "card_key" not in bedtime
+        assert bedtime["card_key"] is None
+        assert bedtime["learning_item_id"] is None
+        assert bedtime["prompt_facet_id"] is None
+        assert bedtime["answer_facet_id"] is None
+        assert bedtime["selection_reason"] is None
 
         morning = await service.async_trigger_routine(
             profile_id="profile-scheduler",
