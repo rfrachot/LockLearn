@@ -5,6 +5,12 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P5.1 versioned frontend bootstrap handshake, dependency-free panel routing,
+  permission-aware navigation visibility and explicit stale-bundle/full-reload UX.
+- Lit/Vite shell modules and frontend tests for protocol mismatch, paginated
+  Profile bootstrap, routing, navigation visibility and custom-element reuse.
+- Panel asset cache-busting by integration version plus committed bundle hash,
+  with CI verification that the Vite output matches the bundled HACS artifact.
 - P4.9 three importable Home Assistant automation blueprints for correct/wrong
   light feedback, daily-goal scene reward and repeated-failure encouragement with
   optional audited unattended Track pause.
