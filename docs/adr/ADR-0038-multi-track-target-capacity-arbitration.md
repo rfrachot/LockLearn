@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed for P4.3 on 2026-09-24 pending the full repository quality gate.
+Accepted for P4.3 on 2026-09-24 after the full repository quality gate passed.
 
 ## Context
 
@@ -120,3 +120,18 @@ persistent configuration problem.
   scheduled slot identity fields and settings store already exist.
 - P4.4 still owns receptivity/routine conditions.
 - P4.5 still owns which CardDefinition is sent and missed/pending/backoff policy.
+
+
+## Final qualification gate — 2026-09-24
+
+The final development-checkout gate passed:
+
+- Ruff format: PASS, 220 files already formatted;
+- Ruff lint: PASS;
+- mypy: PASS, 123 source files;
+- resource registries: PASS;
+- pytest: PASS, 334 tests in 16.18 s.
+
+P4.3 is therefore closed PASS. Multi-Track/target allocation remains a timing
+and capacity decision only; CardDefinition selection, receptivity and
+missed/pending notification policy remain owned by P4.4/P4.5.
