@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any, cast
 
 from homeassistant.components import automation
 from homeassistant.components.blueprint import models
@@ -38,8 +39,10 @@ FORBIDDEN_EVENT_FIELDS = {
 
 def test_blueprints_validate_with_home_assistant_schema() -> None:
     for path in BLUEPRINT_ROOT.glob("*.yaml"):
+        loaded = yaml_util.load_yaml(path)
+        assert isinstance(loaded, dict)
         models.Blueprint(
-            yaml_util.load_yaml(path),
+            cast(dict[str, Any], loaded),
             expected_domain="automation",
             path=str(path),
             schema=automation.config.AUTOMATION_BLUEPRINT_SCHEMA,
