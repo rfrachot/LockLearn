@@ -7,9 +7,9 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
-from ..storage.repositories import CardReference
 from .clock import Clock, SystemClock
 from .selection import SelectionConstraintError, SelectionDecision
+from ..storage.repositories import CardReference
 
 
 DEFAULT_NEW_TEASER_BUDGET = 2
