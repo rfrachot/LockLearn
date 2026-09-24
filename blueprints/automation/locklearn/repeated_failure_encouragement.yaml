@@ -1,0 +1,83 @@
+blueprint:
+  name: LockLearn - Repeated failure encouragement
+  description: >-
+    Show a content-free encouragement when a LockLearn Profile reaches an exact
+    consecutive-wrong threshold. Optionally pause that Track through
+    locklearn.pause_track. Automatic pause requires allow_unattended_actions to
+    be enabled for the Profile because event-triggered automations have no
+    trusted LockLearn user context.
+  domain: automation
+  author: LockLearn
+  source_url: https://github.com/rfrachot/LockLearn/blob/main/blueprints/automation/locklearn/repeated_failure_encouragement.yaml
+  input:
+    profile_id:
+      name: LockLearn Profile ID
+      description: Leave empty to react to every Profile visible to this Home Assistant automation.
+      default: ""
+      selector:
+        text:
+    consecutive_wrong:
+      name: Wrong answers before encouragement
+      default: 3
+      selector:
+        number:
+          min: 2
+          max: 20
+          step: 1
+          mode: box
+    notification_title:
+      name: Encouragement title
+      default: "LockLearn"
+      selector:
+        text:
+    notification_message:
+      name: Encouragement message
+      default: "A few answers in a row were difficult. A short pause may help."
+      selector:
+        text:
+    pause_track:
+      name: Pause the Track automatically
+      description: >-
+        Requires allow_unattended_actions for the LockLearn Profile. Leave off
+        if you only want the encouragement.
+      default: false
+      selector:
+        boolean:
+
+variables:
+  locklearn_profile_id: !input profile_id
+  wrong_threshold: !input consecutive_wrong
+  should_pause_track: !input pause_track
+  encouragement_title: !input notification_title
+  encouragement_message: !input notification_message
+
+triggers:
+  - trigger: event
+    event_type: locklearn_answered
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ locklearn_profile_id == ""
+         or trigger.event.data.profile_id == locklearn_profile_id }}
+  - condition: template
+    value_template: >-
+      {{ trigger.event.data.consecutive_wrong | int(0)
+         == wrong_threshold | int(3) }}
+
+actions:
+  - action: persistent_notification.create
+    data:
+      title: "{{ encouragement_title }}"
+      message: "{{ encouragement_message }}"
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ should_pause_track }}"
+        sequence:
+          - action: locklearn.pause_track
+            data:
+              profile_id: "{{ trigger.event.data.profile_id }}"
+              track_id: "{{ trigger.event.data.track_id }}"
+
+mode: single
