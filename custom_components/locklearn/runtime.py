@@ -21,8 +21,8 @@ from .core.profiles import ProfileService
 from .core.progress_state import ProgressUserStateService
 from .core.quiz import QuizEngine
 from .core.review_policy import ReviewPolicyV1
-from .core.scheduler import SchedulerService
 from .core.reviews import ReviewEventService
+from .core.scheduler import SchedulerService
 from .core.selection import SelectionConstraintService
 from .core.session_selection import SessionSelectionService
 from .core.sessions import SessionService
