@@ -121,6 +121,10 @@ base budget retains a minimum effective capacity of one slot.
 Backoff never changes ReviewEvent, Progress, boxes, difficulty, due dates or
 mastery.
 
+A day whose unmet demand is caused by an active adaptive-backoff multiplier does
+not advance the P4.3 persistent-capacity Repair streak. Backoff is deliberate
+channel throttling, not evidence that the configured scheduler is infeasible.
+
 ### Schema migration
 
 State schema v5 adds the CardDefinition identity, `selection_reason` and
