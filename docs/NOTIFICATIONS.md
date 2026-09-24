@@ -97,3 +97,24 @@ The private WebSocket command
 that arrived after interaction expiry. It is based on P4.6 rejection audit
 events with `reason=expired`, so merely ignored notifications do not create a
 false lost-response warning.
+
+
+## P4.8 Companion action/result pipeline
+
+Companion action events are decoded into the P4.6 single-use token and an opaque
+protocol semantic. Only the atomic `consumed` winner may reach canonical
+learning state.
+
+The processor reloads Profile, Track, CardDefinition identity, Progress and
+target trust state from repositories. New teaser Reveal/IDK remains an
+introduction/exposure; learning and relearning use their short-step machine;
+review/leech uses SignalPolicy and ReviewPolicy. Untrusted shared devices retain
+reduced signal quality.
+
+ReviewEvent and Progress commit before any `locklearn_*` result event is
+emitted. Output event payloads contain no learned text or user-entered answer by
+default. Firing a LockLearn result event back onto the Home Assistant bus has no
+write authority.
+
+`mobile_app_notification_cleared` may close the persistent interaction and
+scheduler/receptivity state but creates no pedagogical evidence.
