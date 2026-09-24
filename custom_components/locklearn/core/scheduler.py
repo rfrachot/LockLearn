@@ -606,7 +606,11 @@ class SchedulerService:
         await self._async_update_capacity_repair(
             profile_id=profile_id,
             local_date=resolved_date,
-            unmet_demand=int(allocation["unmet_demand"]),
+            unmet_demand=(
+                0
+                if bool(allocation.get("backoff_active", False))
+                else int(allocation["unmet_demand"])
+            ),
             requested_demand=int(allocation["requested_demand"]),
             allocatable_slots=int(allocation["allocated_demand"]),
             now_utc=now,
@@ -1059,6 +1063,9 @@ class SchedulerService:
                     str(target["target_id"]): float(target["backoff_factor"])
                     for target in targets
                 },
+                "backoff_active": any(
+                    float(target["backoff_factor"]) < 1.0 for target in targets
+                ),
             }
 
         sequence = _weighted_round_robin(tuple(demands))
@@ -1146,6 +1153,9 @@ class SchedulerService:
                 str(target["target_id"]): float(target["backoff_factor"])
                 for target in targets
             },
+            "backoff_active": any(
+                float(target["backoff_factor"]) < 1.0 for target in targets
+            ),
         }
 
     @staticmethod
