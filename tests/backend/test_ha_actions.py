@@ -308,3 +308,55 @@ async def test_user_services_delegate_to_scheduler_track_and_session_primitives(
     assert session_rows == [(profile_id, track_id, "active", 2)]
 
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_locklearn_output_events_are_observation_only(
+    hass: HomeAssistant,
+) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    runtime = hass.data[DOMAIN][DATA_RUNTIME]
+
+    profile = await runtime.profiles.async_create_profile(
+        name="P4.8 observational bus",
+        preset="standard",
+        timezone="Europe/Paris",
+        owner_ha_user_ids=("owner-observation",),
+    )
+    profile_id = str(profile["profile_id"])
+
+    hass.bus.async_fire(
+        "locklearn_answered",
+        {
+            "event_id": "attacker-controlled",
+            "interaction_id": "fake-interaction",
+            "profile_id": profile_id,
+            "track_id": "fake-track",
+            "card_key": "fake-card",
+            "result": "correct",
+        },
+    )
+    hass.bus.async_fire(
+        "locklearn_quiz_correct",
+        {
+            "event_id": "attacker-controlled-2",
+            "profile_id": profile_id,
+        },
+    )
+    await hass.async_block_till_done()
+
+    assert (
+        await runtime.storage.repositories.review_events.async_list_scope_events(
+            profile_id=profile_id
+        )
+        == ()
+    )
+    assert (
+        await runtime.storage.repositories.progress.async_list_scope(
+            profile_id=profile_id
+        )
+        == ()
+    )
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
