@@ -847,6 +847,13 @@ class SchedulerService:
                 *device_existing_usage.get(device_registry_id, ()),
                 *device_new_usage.get(device_registry_id, ()),
             )
+            if len(device_usage) >= daily_budget:
+                continue
+            if (
+                sum(1 for item in device_usage if _hour_bucket(item, timezone) == bucket)
+                >= max_hour
+            ):
+                continue
             if any(
                 abs((scheduled_for_utc - item).total_seconds()) < minimum_gap
                 for item in device_usage
