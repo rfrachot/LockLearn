@@ -93,7 +93,7 @@
 - **P4.6** — Persistent notification interactions and replay protection (complete)
 - **P4.7** — Notification renderers and privacy-safe target behavior (complete)
 - **P4.8** — HA services/actions and pedagogical events (complete)
-- **P4.9** — Automation blueprints
+- **P4.9** — Automation blueprints (complete)
 
 ### P5
 
