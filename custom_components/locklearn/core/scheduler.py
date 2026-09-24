@@ -72,6 +72,7 @@ class SchedulerReconciliation:
     observed_now_utc: datetime
     effective_now_utc: datetime
     previous_high_watermark_utc: datetime | None
+    expired_slots: int
     kind: str
     reason: str
 
@@ -85,6 +86,7 @@ class SchedulerReconciliation:
                 if self.previous_high_watermark_utc is None
                 else self.previous_high_watermark_utc.isoformat()
             ),
+            "expired_slots": self.expired_slots,
             "kind": self.kind,
             "reason": self.reason,
         }
@@ -248,6 +250,7 @@ def _minute_candidates(
             if not_before_utc is None or candidate >= not_before_utc:
                 candidates.append(candidate)
     return tuple(sorted(dict.fromkeys(candidates)))
+
 
 def _hour_bucket(candidate_utc: datetime, timezone: ZoneInfo) -> tuple[date, int]:
     local = candidate_utc.astimezone(timezone)
@@ -718,6 +721,10 @@ class SchedulerService:
         else:
             kind = "advance"
 
+        expired_slots = await self._scheduler.async_expire_before(
+            before_utc=effective.isoformat(),
+            updated_at_utc=observed.isoformat(),
+        )
         await self._settings.async_set(
             _SCHEDULER_TIME_STATE_KEY,
             {
@@ -732,6 +739,7 @@ class SchedulerService:
             observed_now_utc=observed,
             effective_now_utc=effective,
             previous_high_watermark_utc=previous,
+            expired_slots=expired_slots,
             kind=kind,
             reason=reason,
         )
