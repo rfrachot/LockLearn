@@ -3595,6 +3595,54 @@ class NotificationInteractionsRepository:
         return await self._storage._async_writer(write)
 
 
+
+class NotificationWarningsRepository:
+    """Read privacy-minimal notification warning surfaces for the dashboard."""
+
+    def __init__(self, storage: RepositoryStorage) -> None:
+        self._storage = storage
+
+    async def async_recent_unrecorded_mobile_responses(
+        self,
+        *,
+        profile_id: str,
+        since_utc: str,
+        limit: int = 20,
+    ) -> tuple[dict[str, Any], ...]:
+        """Return recent expired mobile action attempts that could not be confirmed."""
+        if limit < 1:
+            return ()
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT id, payload_json, created_at_utc
+                   FROM audit_events
+                   WHERE event_type = 'notification_action_rejected'
+                     AND profile_id = ?
+                     AND created_at_utc >= ?
+                   ORDER BY created_at_utc DESC, id DESC
+                   LIMIT ?""",
+                (profile_id, since_utc, limit),
+            ).fetchall()
+            result: list[dict[str, Any]] = []
+            for event_id, payload_json, created_at_utc in rows:
+                payload = json.loads(str(payload_json))
+                if payload.get("reason") != "expired":
+                    continue
+                result.append(
+                    {
+                        "audit_event_id": int(event_id),
+                        "interaction_id": payload.get("interaction_id"),
+                        "target_id": payload.get("target_id"),
+                        "stage": payload.get("stage"),
+                        "created_at_utc": str(created_at_utc),
+                    }
+                )
+            return tuple(result)
+
+        return await self._storage._async_reader(read)
+
+
 class SchedulerRepository:
     """Persist profile scheduler configuration and materialized slots."""
 
@@ -4407,6 +4455,7 @@ class StateRepositories:
     content_reports: ContentReportsRepository
     notification_targets: NotificationTargetsRepository
     notification_interactions: NotificationInteractionsRepository
+    notification_warnings: NotificationWarningsRepository
     scheduler: SchedulerRepository
     settings: SettingsRepository
 
@@ -4421,6 +4470,7 @@ class StateRepositories:
             content_reports=ContentReportsRepository(storage),
             notification_targets=NotificationTargetsRepository(storage),
             notification_interactions=NotificationInteractionsRepository(storage),
+            notification_warnings=NotificationWarningsRepository(storage),
             scheduler=SchedulerRepository(storage),
             settings=SettingsRepository(storage),
         )
