@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
-from . import clock as clock_module, selection as selection_module
+from custom_components.locklearn.core import clock as clock_module
+from custom_components.locklearn.core import selection as selection_module
 
 
 DEFAULT_NEW_TEASER_BUDGET = 2
