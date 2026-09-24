@@ -3325,7 +3325,6 @@ class NotificationTargetsRepository:
         return await self._storage._async_reader(read)
 
 
-
 class NotificationInteractionsRepository:
     """Persist and atomically consume single-use notification interactions."""
 
@@ -3634,7 +3633,6 @@ class NotificationInteractionsRepository:
                 raise
 
         return await self._storage._async_writer(write)
-
 
 
 class NotificationWarningsRepository:
