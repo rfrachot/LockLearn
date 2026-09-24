@@ -646,9 +646,7 @@ class SchedulerService:
         for track in tracks:
             settings = track.get("settings")
             scheduler_settings = (
-                settings.get("scheduler")
-                if isinstance(settings, Mapping)
-                else None
+                settings.get("scheduler") if isinstance(settings, Mapping) else None
             )
             if not isinstance(scheduler_settings, Mapping):
                 continue
@@ -725,9 +723,7 @@ class SchedulerService:
             )
 
         allocated: list[SchedulerSlotDraft] = []
-        target_new_usage: dict[str, list[datetime]] = {
-            target_id: [] for target_id in targets_by_id
-        }
+        target_new_usage: dict[str, list[datetime]] = {target_id: [] for target_id in targets_by_id}
         device_new_usage: dict[str, list[datetime]] = {
             str(target["device_registry_id"]): [] for target in targets
         }
@@ -810,17 +806,13 @@ class SchedulerService:
             target_new = tuple(target_new_usage.get(target_id, ()))
             target_usage = (*target_existing, *target_new)
             daily_budget_raw = target.get("daily_push_budget")
-            daily_budget = (
-                10**9 if daily_budget_raw is None else int(daily_budget_raw)
-            )
+            daily_budget = 10**9 if daily_budget_raw is None else int(daily_budget_raw)
             if len(target_usage) >= daily_budget:
                 continue
 
             minimum_gap_raw = target.get("minimum_gap_seconds")
             minimum_gap = (
-                config.minimum_gap_seconds
-                if minimum_gap_raw is None
-                else int(minimum_gap_raw)
+                config.minimum_gap_seconds if minimum_gap_raw is None else int(minimum_gap_raw)
             )
             if any(
                 abs((scheduled_for_utc - item).total_seconds()) < minimum_gap
@@ -830,9 +822,7 @@ class SchedulerService:
 
             max_hour_raw = target.get("maximum_notifications_per_hour")
             max_hour = (
-                config.maximum_notifications_per_hour
-                if max_hour_raw is None
-                else int(max_hour_raw)
+                config.maximum_notifications_per_hour if max_hour_raw is None else int(max_hour_raw)
             )
             timezone = ZoneInfo(config.timezone)
             bucket = _hour_bucket(scheduled_for_utc, timezone)
@@ -900,11 +890,7 @@ class SchedulerService:
             updated_at_utc=now_utc.isoformat(),
         )
 
-        if (
-            unmet_demand > 0
-            and count >= _CAPACITY_REPAIR_DAYS
-            and self._issue_callback is not None
-        ):
+        if unmet_demand > 0 and count >= _CAPACITY_REPAIR_DAYS and self._issue_callback is not None:
             await self._issue_callback(
                 issue_id,
                 "scheduler_configuration_infeasible",
