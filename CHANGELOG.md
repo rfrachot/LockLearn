@@ -5,6 +5,11 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P4.9 three importable Home Assistant automation blueprints for correct/wrong
+  light feedback, daily-goal scene reward and repeated-failure encouragement with
+  optional audited unattended Track pause.
+- Home Assistant Blueprint-schema validation plus stable event/service and
+  privacy-contract tests for shipped blueprint assets.
 - P4.8 native Home Assistant services for session start, immediate scheduler
   request, snooze and Track pause/resume with Profile ACL and audited unattended
   allowlist enforcement.
