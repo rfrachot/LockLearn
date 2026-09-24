@@ -111,6 +111,7 @@ async def test_state_v2_contains_full_foundation_and_required_hot_indexes(tmp_pa
                 "scheduler_config",
                 "scheduled_slots",
                 "notification_interactions",
+                "receptivity_samples",
                 "stats_daily",
                 "settings",
             } <= tables
@@ -127,6 +128,7 @@ async def test_state_v2_contains_full_foundation_and_required_hot_indexes(tmp_pa
                 "review_events_profile_created",
                 "scheduled_slots_profile_scheduled_status",
                 "notification_interactions_target_status_expires",
+                "receptivity_samples_profile_hour",
                 "sessions_profile_status_activity",
             } <= indexes
             assert connection.execute("PRAGMA foreign_key_list(progress)").fetchall() == []
@@ -390,5 +392,76 @@ async def test_v2_state_migrates_to_v3_and_accepts_leech_state(tmp_path: Path) -
         finally:
             migrated.close()
         assert state_path.with_name("state.db.pre-migration-v2.bak").is_file()
+    finally:
+        await storage.async_close()
+
+
+async def test_v3_state_migrates_to_v4_with_receptivity_state(tmp_path: Path) -> None:
+    state_path = tmp_path / "state-v3" / "state.db"
+    state_path.parent.mkdir(parents=True)
+    v3_schema = STATE_SCHEMA.replace(
+        "    deferred_until_utc TEXT,\n    defer_reason TEXT,\n",
+        "",
+    )
+    receptivity_start = v3_schema.index(
+        "CREATE TABLE IF NOT EXISTS receptivity_samples ("
+    )
+    receptivity_end = v3_schema.index(
+        "CREATE TABLE IF NOT EXISTS stats_daily (",
+        receptivity_start,
+    )
+    v3_schema = v3_schema[:receptivity_start] + v3_schema[receptivity_end:]
+
+    connection = sqlite3.connect(state_path)
+    try:
+        connection.executescript(v3_schema)
+        connection.execute("INSERT INTO schema_version(version) VALUES (3)")
+        connection.execute(
+            """INSERT INTO profiles(
+                   profile_id, name, preset, timezone, status, settings_json,
+                   created_at_utc, updated_at_utc
+               ) VALUES (
+                   'profile-v3', 'Legacy', 'standard', 'Europe/Paris', 'active',
+                   '{}', '2026-09-24T05:00:00+00:00', '2026-09-24T05:00:00+00:00'
+               )"""
+        )
+        connection.execute(
+            """INSERT INTO scheduled_slots(
+                   slot_id, profile_id, slot_type, scheduled_for_utc, status,
+                   scheduler_config_version, seed, created_at_utc, updated_at_utc
+               ) VALUES (
+                   'slot-v3', 'profile-v3', 'notification',
+                   '2026-09-24T08:00:00+00:00', 'scheduled', 1, 'seed',
+                   '2026-09-24T05:00:00+00:00', '2026-09-24T05:00:00+00:00'
+               )"""
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    storage = SQLiteStorage(StoragePaths(state_path, tmp_path / "content-v4" / "current.db"))
+    await storage.async_open()
+    try:
+        migrated = sqlite3.connect(state_path)
+        try:
+            assert migrated.execute("SELECT version FROM schema_version").fetchone() == (
+                DB_SCHEMA_VERSION,
+            )
+            columns = {
+                str(row[1])
+                for row in migrated.execute(
+                    "PRAGMA table_info(scheduled_slots)"
+                ).fetchall()
+            }
+            assert {"deferred_until_utc", "defer_reason"} <= columns
+            assert migrated.execute(
+                "SELECT slot_id FROM scheduled_slots WHERE slot_id = 'slot-v3'"
+            ).fetchone() == ("slot-v3",)
+            assert migrated.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'receptivity_samples'"
+            ).fetchone() == (1,)
+        finally:
+            migrated.close()
+        assert state_path.with_name("state.db.pre-migration-v3.bak").is_file()
     finally:
         await storage.async_close()
