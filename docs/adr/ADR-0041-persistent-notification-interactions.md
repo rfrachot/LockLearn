@@ -2,8 +2,7 @@
 
 ## Status
 
-Proposed for P4.6. Mark Accepted only after the normal repository quality gate
-passes.
+Accepted for P4.6 on 2026-09-24 after the repository quality gate passed.
 
 ## Context
 
@@ -107,3 +106,16 @@ Rejected. The reserved table already satisfies the normative data contract.
 - later notification renderers must generate a new token per actionable stage;
 - P4.7/P4.8 must never bypass the P4.6 claim result when applying learning
   outcomes or emitting pedagogical events.
+
+## Final qualification gate — 2026-09-24
+
+The final development-checkout gate passed after Ruff-only mechanical formatting:
+
+- Ruff format: PASS after formatting the three P4.6 files reported by check mode;
+- Ruff lint: PASS;
+- mypy: PASS, 128 source files;
+- resource registries: PASS;
+- pytest: PASS, 357 tests in 17.16 s.
+
+The formatting changes were mechanical only; no semantic behavior changed after
+the passing lint/type/resource/test run. P4.6 is therefore closed PASS.
