@@ -10,7 +10,14 @@ from homeassistant.components import websocket_api
 from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.core import HomeAssistant
 
-from ..const import CONF_CREATE_PERSONAL_PROFILE, DATA_RUNTIME, DOMAIN, FRONTEND_PROTOCOL_VERSION
+from ..const import (
+    CONF_CREATE_PERSONAL_PROFILE,
+    DATA_RUNTIME,
+    DOMAIN,
+    FRONTEND_PROTOCOL_VERSION,
+    INTEGRATION_VERSION,
+    PANEL_URL_PATH,
+)
 from ..core.acl import LastOwnerError, ProfilePermission, ProfileRole
 from ..core.content import GradingOutcome, GradingPolicyKind
 from ..core.content_reports import ContentReportError
@@ -194,6 +201,8 @@ async def ws_bootstrap(
         msg["id"],
         {
             "frontend_protocol": FRONTEND_PROTOCOL_VERSION,
+            "backend_version": INTEGRATION_VERSION,
+            "panel_path": f"/{PANEL_URL_PATH}",
             "authenticated_user_id": connection.user.id,
             "personal_profile": personal_profile,
         },
