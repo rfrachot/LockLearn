@@ -2,6 +2,33 @@
 
 ## Current state
 
+P4.7 implementation is pushed on `feat/p4-scheduler` and is **pending
+qualification**, not yet closed PASS. It adds capability-aware notification
+renderers, same-tag two-step reveal with fresh P4.6 tokens, conservative
+direct-exposure fallback, bounded binary mobile quiz with panel handoff,
+learning/quiz/relearning channels, private-by-default visibility, shared-device
+Profile labeling, stable target delivery with dynamic mobile_app route
+resolution, target-unavailable Repairs, and a private dashboard warning for
+expired mobile action attempts that could not be recorded.
+
+The direct-exposure renderer is explicitly `exposure_only` and tests pass that
+result through SignalPolicy to prove it cannot promote a review box.
+Profile/target identities remain distinct throughout rendered payload and
+delivery. No DB migration is required.
+
+P4.8 still owns HA action/result services and pedagogical events. It must decode
+the content-free action ID, consume the P4.6 token, and only then apply any
+ReviewEvent/Progress mutation.
+
+Tests cover same-tag/fresh-token reveal, silent preference, fallback SRS safety,
+Android/iOS quiz routing, channels, shared-device labeling, visibility defaults,
+stable dynamic delivery, generic plain-message fallback, target Repairs and
+Profile-private unrecorded-response warnings.
+
+Next concrete action: run the normal repository gate on current
+`feat/p4-scheduler`, remediate any findings, then close P4.7 PASS and begin
+P4.8 HA services/actions and pedagogical events.
+
 P4.6 is closed PASS on `feat/p4-scheduler`. It adds a persistent
 NotificationInteraction repository/service over the existing state-schema-v5
 table, cryptographically random per-stage tokens, transactional single-use
