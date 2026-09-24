@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
@@ -591,6 +592,365 @@ async def test_timezone_change_cancels_only_old_future_unsent_slots(tmp_path: Pa
         assert old_by_id[old_slots[0]["slot_id"]]["status"] == "sent"
         assert old_by_id[old_slots[1]["slot_id"]]["status"] == "cancelled"
         assert any(int(slot["scheduler_config_version"]) == 2 for slot in all_slots)
+    finally:
+        await storage.async_close()
+
+
+async def test_weighted_round_robin_prevents_greedy_track_starvation(
+    tmp_path: Path,
+) -> None:
+    clock = FixedClock(datetime(2026, 9, 24, 5, 0, tzinfo=UTC))
+    storage = await _storage(tmp_path, clock)
+    try:
+        await _profile(
+            storage,
+            now=clock.now(),
+            settings={
+                "daily_push_budget": 5,
+                "quiet_hours": {"start": "22:00", "end": "07:00"},
+                "scheduler": {
+                    "active_days": [3],
+                    "active_windows": [{"start": "08:00", "end": "18:00"}],
+                    "minimum_gap_seconds": 0,
+                    "maximum_notifications_per_hour": 5,
+                },
+            },
+        )
+        await _track(
+            storage,
+            track_id="track-high",
+            priority=3,
+            learning_count=5,
+            now=clock.now(),
+        )
+        await _track(
+            storage,
+            track_id="track-low",
+            priority=1,
+            learning_count=5,
+            now=clock.now(),
+        )
+        await _target(
+            storage,
+            daily_push_budget=10,
+            minimum_gap_seconds=0,
+            maximum_notifications_per_hour=5,
+            now=clock.now(),
+        )
+        service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=clock,
+        )
+
+        preview = await service.async_preview(
+            profile_id="profile-scheduler",
+            local_date=date(2026, 9, 24),
+        )
+        track_ids = [slot["track_id"] for slot in preview["slots"]]
+        assert len(track_ids) == 5
+        assert "track-high" in track_ids
+        assert "track-low" in track_ids
+        assert track_ids.count("track-high") > track_ids.count("track-low")
+        assert preview["allocation"]["requested_demand"] == 10
+        assert preview["allocation"]["allocated_demand"] == 5
+        assert preview["allocation"]["unmet_demand"] == 5
+    finally:
+        await storage.async_close()
+
+
+async def test_target_daily_budget_limits_track_allocation(tmp_path: Path) -> None:
+    clock = FixedClock(datetime(2026, 9, 24, 5, 0, tzinfo=UTC))
+    storage = await _storage(tmp_path, clock)
+    try:
+        await _profile(
+            storage,
+            now=clock.now(),
+            settings={
+                "daily_push_budget": 4,
+                "quiet_hours": {"start": "22:00", "end": "07:00"},
+                "scheduler": {
+                    "active_days": [3],
+                    "active_windows": [{"start": "08:00", "end": "18:00"}],
+                    "minimum_gap_seconds": 0,
+                    "maximum_notifications_per_hour": 4,
+                },
+            },
+        )
+        await _track(
+            storage,
+            track_id="track-1",
+            priority=1,
+            learning_count=4,
+            now=clock.now(),
+        )
+        await _target(
+            storage,
+            daily_push_budget=2,
+            minimum_gap_seconds=0,
+            maximum_notifications_per_hour=4,
+            now=clock.now(),
+        )
+        service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=clock,
+        )
+
+        preview = await service.async_preview(
+            profile_id="profile-scheduler",
+            local_date=date(2026, 9, 24),
+        )
+        assert preview["generated_slots"] == 2
+        assert preview["allocation"]["allocated_demand"] == 2
+        assert preview["allocation"]["unmet_demand"] == 2
+        assert {slot["target_id"] for slot in preview["slots"]} == {"target-1"}
+    finally:
+        await storage.async_close()
+
+
+async def test_shared_device_budget_is_enforced_across_profiles(tmp_path: Path) -> None:
+    clock = FixedClock(datetime(2026, 9, 24, 5, 0, tzinfo=UTC))
+    storage = await _storage(tmp_path, clock)
+    try:
+        await _profile(
+            storage,
+            now=clock.now(),
+            settings={
+                "daily_push_budget": 1,
+                "quiet_hours": {"start": "22:00", "end": "07:00"},
+                "scheduler": {
+                    "active_days": [3],
+                    "active_windows": [{"start": "08:00", "end": "18:00"}],
+                    "minimum_gap_seconds": 0,
+                    "maximum_notifications_per_hour": 4,
+                },
+            },
+        )
+        await _track(
+            storage,
+            track_id="track-1",
+            priority=1,
+            learning_count=1,
+            now=clock.now(),
+        )
+        await _target(
+            storage,
+            target_id="target-1",
+            device_registry_id="shared-device",
+            daily_push_budget=1,
+            minimum_gap_seconds=0,
+            maximum_notifications_per_hour=4,
+            now=clock.now(),
+        )
+        await storage.repositories.profiles.async_insert(
+            ProfileRecord(
+                profile_id="profile-other",
+                name="Other",
+                preset="custom",
+                timezone="Europe/Paris",
+                settings={},
+                created_at_utc=clock.now().isoformat(),
+                updated_at_utc=clock.now().isoformat(),
+            )
+        )
+        await _target(
+            storage,
+            target_id="target-other",
+            profile_id="profile-other",
+            device_registry_id="shared-device",
+            daily_push_budget=1,
+            minimum_gap_seconds=0,
+            maximum_notifications_per_hour=4,
+            now=clock.now(),
+        )
+        await storage.repositories.scheduler.async_materialize_day(
+            profile_id="profile-other",
+            scheduler_config_version=1,
+            seed="other",
+            start_utc="2026-09-23T22:00:00+00:00",
+            end_utc="2026-09-24T22:00:00+00:00",
+            now_utc=clock.now().isoformat(),
+            slots=(
+                {
+                    "slot_id": "other-slot",
+                    "track_id": None,
+                    "target_id": "target-other",
+                    "slot_type": "learning",
+                    "scheduled_for_utc": "2026-09-24T09:00:00+00:00",
+                },
+            ),
+            updated_at_utc=clock.now().isoformat(),
+        )
+        service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=clock,
+        )
+
+        preview = await service.async_preview(
+            profile_id="profile-scheduler",
+            local_date=date(2026, 9, 24),
+        )
+        assert preview["generated_slots"] == 0
+        assert preview["allocation"]["unmet_demand"] == 1
+    finally:
+        await storage.async_close()
+
+
+async def test_active_session_suppresses_only_its_track(tmp_path: Path) -> None:
+    clock = FixedClock(datetime(2026, 9, 24, 5, 0, tzinfo=UTC))
+    storage = await _storage(tmp_path, clock)
+    try:
+        await _profile(
+            storage,
+            now=clock.now(),
+            settings={
+                "daily_push_budget": 3,
+                "quiet_hours": {"start": "22:00", "end": "07:00"},
+                "scheduler": {
+                    "active_days": [3],
+                    "active_windows": [{"start": "08:00", "end": "18:00"}],
+                    "minimum_gap_seconds": 0,
+                    "maximum_notifications_per_hour": 3,
+                },
+            },
+        )
+        await _track(
+            storage,
+            track_id="track-session",
+            priority=10,
+            learning_count=3,
+            now=clock.now(),
+        )
+        await _track(
+            storage,
+            track_id="track-free",
+            priority=1,
+            learning_count=3,
+            now=clock.now(),
+        )
+        await _target(
+            storage,
+            daily_push_budget=10,
+            minimum_gap_seconds=0,
+            maximum_notifications_per_hour=3,
+            now=clock.now(),
+        )
+        await storage.async_create_session(
+            "active-session",
+            "profile-scheduler",
+            "track-session",
+        )
+        service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=clock,
+        )
+
+        preview = await service.async_preview(
+            profile_id="profile-scheduler",
+            local_date=date(2026, 9, 24),
+        )
+        assert {slot["track_id"] for slot in preview["slots"]} == {"track-free"}
+        assert preview["allocation"]["suppressed_active_session_tracks"] == [
+            "track-session"
+        ]
+    finally:
+        await storage.async_close()
+
+
+async def test_capacity_repair_requires_three_distinct_infeasible_days(
+    tmp_path: Path,
+) -> None:
+    clock = FixedClock(datetime(2026, 9, 24, 5, 0, tzinfo=UTC))
+    storage = await _storage(tmp_path, clock)
+    issues: list[tuple[str, str, dict[str, str]]] = []
+    cleared: list[str] = []
+
+    async def issue_callback(
+        issue_id: str,
+        translation_key: str,
+        placeholders: Mapping[str, str],
+    ) -> None:
+        issues.append((issue_id, translation_key, dict(placeholders)))
+
+    async def issue_clear_callback(issue_id: str) -> None:
+        cleared.append(issue_id)
+
+    try:
+        await _profile(
+            storage,
+            now=clock.now(),
+            settings={
+                "daily_push_budget": 3,
+                "quiet_hours": {"start": "22:00", "end": "07:00"},
+                "scheduler": {
+                    "active_days": [3, 4, 5],
+                    "active_windows": [{"start": "08:00", "end": "18:00"}],
+                    "minimum_gap_seconds": 0,
+                    "maximum_notifications_per_hour": 3,
+                },
+            },
+        )
+        await _track(
+            storage,
+            track_id="track-1",
+            priority=1,
+            learning_count=3,
+            now=clock.now(),
+        )
+        await _target(
+            storage,
+            daily_push_budget=1,
+            minimum_gap_seconds=0,
+            maximum_notifications_per_hour=3,
+            now=clock.now(),
+        )
+        service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=clock,
+            issue_callback=issue_callback,
+            issue_clear_callback=issue_clear_callback,
+        )
+
+        for local_day in (
+            date(2026, 9, 24),
+            date(2026, 9, 25),
+            date(2026, 9, 26),
+        ):
+            result = await service.async_generate(
+                profile_id="profile-scheduler",
+                local_date=local_day,
+            )
+            assert result["allocation"]["unmet_demand"] == 2
+
+        assert len(issues) == 1
+        issue_id, translation_key, placeholders = issues[0]
+        assert issue_id == "scheduler_configuration_infeasible_profile-scheduler"
+        assert translation_key == "scheduler_configuration_infeasible"
+        assert placeholders == {
+            "profile_id": "profile-scheduler",
+            "requested": "3",
+            "capacity": "1",
+        }
+        assert cleared == []
     finally:
         await storage.async_close()
 
