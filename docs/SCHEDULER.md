@@ -34,3 +34,26 @@ changes, restart/clock-jump reconciliation are P4.2.
 Multi-track/target arbitration and capacity Repairs are P4.3. Receptivity and
 routine hooks are P4.4. Missed/pending/backoff policy is P4.5. Notification
 interactions/rendering are P4.6/P4.7.
+
+## P4.2 temporal reconciliation
+
+All slot timestamps are persisted in UTC while active windows are interpreted
+in the Profile timezone.
+
+LockLearn resolves each local wall-clock minute explicitly:
+
+- nonexistent spring-forward minutes are skipped;
+- duplicated fall-back minutes produce both real UTC instants;
+- both folds share the same local-hour capacity budget;
+- cross-midnight windows use the weekday on which the window starts.
+
+A persisted scheduler UTC high-watermark prevents a backwards NTP adjustment
+from reopening time the scheduler has already passed. Config Entry startup and
+reload reconcile against that watermark and expire only overdue unsent
+`scheduled`/`deferred` rows. Sent/consumed history is never changed.
+
+A Profile timezone change creates a new scheduler config version, cancels only
+future unsent rows from older versions, and generates new opportunities using
+the new timezone. P4.5 remains responsible for ordinary missed/pending/backoff
+policy.
+
