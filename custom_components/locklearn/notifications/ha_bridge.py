@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import suppress
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
@@ -71,13 +72,11 @@ class NotificationHomeAssistantBridge:
             payload = dict(interaction.get("payload") or {})
             slot_id = payload.get("slot_id")
             if isinstance(slot_id, str) and slot_id:
-                try:
+                with suppress(SchedulerValidationError):
                     await self._scheduler.async_record_receptivity_action(
                         slot_id=slot_id,
                         action="cleared",
                     )
-                except SchedulerValidationError:
-                    pass
             interaction_id = str(interaction["interaction_id"])
             self._hass.bus.async_fire(
                 "locklearn_notification_cleared",
