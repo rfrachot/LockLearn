@@ -653,23 +653,26 @@ class SchedulerService:
         profile_id = str(slot["profile_id"])
         target_id = slot.get("target_id")
         now = await self.async_effective_now()
-        if isinstance(target_id, str) and target_id:
-            if await self._scheduler.async_has_pending_for_target(
+        if (
+            isinstance(target_id, str)
+            and target_id
+            and await self._scheduler.async_has_pending_for_target(
                 profile_id=profile_id,
                 target_id=target_id,
                 exclude_slot_id=slot_id,
-            ):
-                await self._scheduler.async_expire_slot(
-                    slot_id=slot_id,
-                    reason="pending_existing",
-                    updated_at_utc=now.isoformat(),
-                )
-                return {
-                    "slot_id": slot_id,
-                    "ready": False,
-                    "status": "expired",
-                    "reason": "pending_existing",
-                }
+            )
+        ):
+            await self._scheduler.async_expire_slot(
+                slot_id=slot_id,
+                reason="pending_existing",
+                updated_at_utc=now.isoformat(),
+            )
+            return {
+                "slot_id": slot_id,
+                "ready": False,
+                "status": "expired",
+                "reason": "pending_existing",
+            }
 
         profile = await self._profiles.async_get(profile_id)
         if profile is None:
@@ -694,9 +697,9 @@ class SchedulerService:
                 raise SchedulerValidationError("receptive_when evaluator is unavailable")
             receptive = await self._receptive_evaluator(config.receptive_when)
             if not receptive:
-                scheduled_for = datetime.fromisoformat(
-                    str(slot["scheduled_for_utc"])
-                ).astimezone(UTC)
+                scheduled_for = datetime.fromisoformat(str(slot["scheduled_for_utc"])).astimezone(
+                    UTC
+                )
                 deadline = scheduled_for + timedelta(minutes=config.defer_window_minutes)
                 if config.defer_window_minutes <= 0 or now >= deadline:
                     await self._scheduler.async_expire_slot(
@@ -752,9 +755,7 @@ class SchedulerService:
             "ready": True,
             "status": str(slot["status"]),
             "reason": (
-                "receptive_condition_absent"
-                if config.receptive_when is None
-                else "receptive"
+                "receptive_condition_absent" if config.receptive_when is None else "receptive"
             ),
             "selection": selection,
         }
@@ -880,7 +881,7 @@ class SchedulerService:
         targets = await self._async_targets_with_backoff(
             profile_id=profile_id,
             targets=raw_targets,
-            profile_daily_budget=profile_daily_budget,
+            profile_daily_budget=daily_push_budget,
         )
         targets_by_id = {str(target["target_id"]): target for target in targets}
         if target_id is None:
@@ -1060,12 +1061,9 @@ class SchedulerService:
                 "allocatable_slots": len(drafts),
                 "suppressed_active_session_tracks": sorted(suppressed),
                 "target_backoff": {
-                    str(target["target_id"]): float(target["backoff_factor"])
-                    for target in targets
+                    str(target["target_id"]): float(target["backoff_factor"]) for target in targets
                 },
-                "backoff_active": any(
-                    float(target["backoff_factor"]) < 1.0 for target in targets
-                ),
+                "backoff_active": any(float(target["backoff_factor"]) < 1.0 for target in targets),
             }
 
         sequence = _weighted_round_robin(tuple(demands))
@@ -1150,12 +1148,9 @@ class SchedulerService:
             "allocatable_slots": len(drafts),
             "suppressed_active_session_tracks": sorted(suppressed),
             "target_backoff": {
-                str(target["target_id"]): float(target["backoff_factor"])
-                for target in targets
+                str(target["target_id"]): float(target["backoff_factor"]) for target in targets
             },
-            "backoff_active": any(
-                float(target["backoff_factor"]) < 1.0 for target in targets
-            ),
+            "backoff_active": any(float(target["backoff_factor"]) < 1.0 for target in targets),
         }
 
     @staticmethod
