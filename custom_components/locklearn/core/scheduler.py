@@ -994,7 +994,12 @@ class SchedulerService:
             if str(track["status"]) == "active"
         )
         active_session_tracks = await self._scheduler.async_active_session_track_ids(profile_id)
-        targets = await self._notification_targets.async_list_for_profile(profile_id)
+        raw_targets = await self._notification_targets.async_list_for_profile(profile_id)
+        targets = await self._async_targets_with_backoff(
+            profile_id=profile_id,
+            targets=raw_targets,
+            profile_daily_budget=profile_daily_budget,
+        )
         targets_by_id = {str(target["target_id"]): target for target in targets}
 
         demands: list[TrackDemand] = []
@@ -1050,6 +1055,10 @@ class SchedulerService:
                 "unmet_demand": 0,
                 "allocatable_slots": len(drafts),
                 "suppressed_active_session_tracks": sorted(suppressed),
+                "target_backoff": {
+                    str(target["target_id"]): float(target["backoff_factor"])
+                    for target in targets
+                },
             }
 
         sequence = _weighted_round_robin(tuple(demands))
