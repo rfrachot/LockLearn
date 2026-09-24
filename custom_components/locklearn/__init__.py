@@ -10,6 +10,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .api.websocket import async_register_commands
 from .const import DATA_RUNTIME, DATA_STATIC_REGISTERED, DOMAIN
+from .ha_services import async_register_services, async_unregister_services
 from .panel import async_register_panel, async_register_static_path, async_unregister_panel
 from .runtime import LockLearnRuntime
 
@@ -36,11 +37,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: LockLearnConfigEntry) ->
         return False
     runtime = await LockLearnRuntime.async_create(hass)
     domain_data[DATA_RUNTIME] = runtime
+    async_register_services(hass)
     try:
         await hass.config_entries.async_forward_entry_setups(entry, _PLATFORMS)
         await async_register_panel(hass)
     except Exception:
         domain_data.pop(DATA_RUNTIME, None)
+        async_unregister_services(hass)
         await hass.config_entries.async_unload_platforms(entry, _PLATFORMS)
         await runtime.async_close()
         raise
@@ -54,6 +57,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: LockLearnConfigEntry) -
     if not await hass.config_entries.async_unload_platforms(entry, _PLATFORMS):
         return False
     domain_data.pop(DATA_RUNTIME, None)
+    async_unregister_services(hass)
     async_unregister_panel(hass)
     if isinstance(runtime, LockLearnRuntime):
         await runtime.async_close()
