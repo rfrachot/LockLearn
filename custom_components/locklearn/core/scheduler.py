@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from ..storage.repositories import ProfilesRepository, SchedulerRepository, SettingsRepository
+from ..storage.repositories import (
+    NotificationTargetsRepository,
+    ProfilesRepository,
+    SchedulerRepository,
+    SettingsRepository,
+    TracksRepository,
+)
 from .clock import Clock, SystemClock
 
 _DEFAULT_ACTIVE_DAYS = tuple(range(7))
@@ -18,6 +24,8 @@ _DEFAULT_MINIMUM_GAP_SECONDS = 3600
 _DEFAULT_MAXIMUM_NOTIFICATIONS_PER_HOUR = 1
 _DEFAULT_QUIET_HOURS = ("22:00", "08:00")
 _SCHEDULER_TIME_STATE_KEY = "scheduler_time_state_v1"
+_CAPACITY_STATE_PREFIX = "scheduler_capacity_state_v1:"
+_CAPACITY_REPAIR_DAYS = 3
 
 
 class SchedulerValidationError(ValueError):
@@ -48,6 +56,8 @@ class SchedulerSlotDraft:
     profile_id: str
     slot_type: str
     scheduled_for_utc: str
+    track_id: str | None = None
+    target_id: str | None = None
     scheduler_config_version: int
     seed: str
 
@@ -56,8 +66,8 @@ class SchedulerSlotDraft:
         return {
             "slot_id": self.slot_id,
             "profile_id": self.profile_id,
-            "track_id": None,
-            "target_id": None,
+            "track_id": self.track_id,
+            "target_id": self.target_id,
             "slot_type": self.slot_type,
             "scheduled_for_utc": self.scheduled_for_utc,
             "scheduler_config_version": self.scheduler_config_version,
@@ -90,6 +100,30 @@ class SchedulerReconciliation:
             "kind": self.kind,
             "reason": self.reason,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class TrackDemand:
+    """One Track's requested scheduler work for a local day."""
+
+    track_id: str
+    priority: int
+    learning_count: int
+    quiz_count: int
+    target_ids: tuple[str, ...]
+
+    @property
+    def total(self) -> int:
+        return self.learning_count + self.quiz_count
+
+
+@dataclass(frozen=True, slots=True)
+class SchedulerAllocation:
+    """One Track/target/type assignment for a concrete future slot."""
+
+    track_id: str
+    target_id: str
+    slot_type: str
 
 
 def _parse_hhmm(value: Any, field: str) -> time:
@@ -349,6 +383,48 @@ def _stratified_schedule(
     return tuple(selected)
 
 
+def _track_unit_queue(demand: TrackDemand) -> list[str]:
+    """Interleave one Track's learning and quiz demand deterministically."""
+    learning = demand.learning_count
+    quiz = demand.quiz_count
+    queue: list[str] = []
+    while learning or quiz:
+        if learning:
+            queue.append("learning")
+            learning -= 1
+        if quiz:
+            queue.append("quiz")
+            quiz -= 1
+    return queue
+
+
+def _weighted_round_robin(
+    demands: tuple[TrackDemand, ...],
+) -> tuple[tuple[TrackDemand, str], ...]:
+    """Return a finite smooth weighted round-robin sequence without starvation."""
+    queues = {demand.track_id: _track_unit_queue(demand) for demand in demands}
+    current = {demand.track_id: 0 for demand in demands}
+    active = [demand for demand in demands if queues[demand.track_id]]
+    sequence: list[tuple[TrackDemand, str]] = []
+
+    while active:
+        total_weight = sum(demand.priority for demand in active)
+        for demand in active:
+            current[demand.track_id] += demand.priority
+        chosen = max(
+            active,
+            key=lambda demand: (
+                current[demand.track_id],
+                demand.priority,
+                demand.track_id,
+            ),
+        )
+        current[chosen.track_id] -= total_weight
+        sequence.append((chosen, queues[chosen.track_id].pop(0)))
+        active = [demand for demand in active if queues[demand.track_id]]
+    return tuple(sequence)
+
+
 def _slot_id(
     profile_id: str,
     local_date: date,
@@ -373,15 +449,23 @@ class SchedulerService:
     def __init__(
         self,
         profiles: ProfilesRepository,
+        tracks: TracksRepository,
+        notification_targets: NotificationTargetsRepository,
         scheduler: SchedulerRepository,
         settings: SettingsRepository,
         *,
         clock: Clock | None = None,
+        issue_callback: Callable[[str, str, Mapping[str, str]], Awaitable[None]] | None = None,
+        issue_clear_callback: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         self._profiles = profiles
+        self._tracks = tracks
+        self._notification_targets = notification_targets
         self._scheduler = scheduler
         self._settings = settings
         self._clock = clock or SystemClock()
+        self._issue_callback = issue_callback
+        self._issue_clear_callback = issue_clear_callback
 
     async def async_preview(
         self,
@@ -406,12 +490,21 @@ class SchedulerService:
             daily_push_budget=daily_push_budget,
             not_before_utc=not_before,
         )
-        return self._preview_payload(
+        drafts, allocation = await self._async_allocate(
+            profile_id=profile_id,
+            config=config,
+            local_date=resolved_date,
+            drafts=drafts,
+            existing_slots=(),
+        )
+        payload = self._preview_payload(
             config=config,
             local_date=resolved_date,
             daily_push_budget=daily_push_budget,
             drafts=drafts,
         )
+        payload["allocation"] = allocation
+        return payload
 
     async def async_generate(
         self,
@@ -477,6 +570,21 @@ class SchedulerService:
             not_before_utc=not_before,
             occupied=occupied,
         )
+        drafts, allocation = await self._async_allocate(
+            profile_id=profile_id,
+            config=config,
+            local_date=resolved_date,
+            drafts=drafts,
+            existing_slots=current_version,
+        )
+        await self._async_update_capacity_repair(
+            profile_id=profile_id,
+            local_date=resolved_date,
+            unmet_demand=int(allocation["unmet_demand"]),
+            requested_demand=int(allocation["requested_demand"]),
+            allocatable_slots=int(allocation["allocatable_slots"]),
+            now_utc=now,
+        )
         materialized = await self._scheduler.async_materialize_day(
             profile_id=profile_id,
             scheduler_config_version=config.version,
@@ -496,7 +604,292 @@ class SchedulerService:
         payload["materialized"] = True
         payload["materialized_slots"] = list(materialized)
         payload["reconciliation"] = reconciliation.as_dict()
+        payload["allocation"] = allocation
         return payload
+
+    async def _async_allocate(
+        self,
+        *,
+        profile_id: str,
+        config: SchedulerConfig,
+        local_date: date,
+        drafts: tuple[SchedulerSlotDraft, ...],
+        existing_slots: tuple[dict[str, Any], ...],
+    ) -> tuple[tuple[SchedulerSlotDraft, ...], dict[str, Any]]:
+        """Allocate future Profile slots across Tracks and stable targets."""
+        tracks = tuple(
+            track
+            for track in await self._tracks.async_list_for_profile(profile_id)
+            if str(track["status"]) == "active"
+        )
+        active_session_tracks = await self._scheduler.async_active_session_track_ids(profile_id)
+        targets = await self._notification_targets.async_list_for_profile(profile_id)
+        targets_by_id = {str(target["target_id"]): target for target in targets}
+
+        demands: list[TrackDemand] = []
+        suppressed: list[str] = []
+        for track in tracks:
+            settings = track.get("settings")
+            scheduler_settings = (
+                settings.get("scheduler")
+                if isinstance(settings, Mapping)
+                else None
+            )
+            if not isinstance(scheduler_settings, Mapping):
+                continue
+            learning_count = self._nonnegative_count(
+                scheduler_settings.get("learning_count", 0),
+                "learning_count",
+            )
+            quiz_count = self._nonnegative_count(
+                scheduler_settings.get("quiz_count", 0),
+                "quiz_count",
+            )
+            if learning_count + quiz_count == 0:
+                continue
+            track_id = str(track["track_id"])
+            if track_id in active_session_tracks:
+                suppressed.append(track_id)
+                continue
+            raw_target_ids = scheduler_settings.get("target_ids")
+            if raw_target_ids is None:
+                target_ids = tuple(sorted(targets_by_id))
+            elif isinstance(raw_target_ids, (list, tuple)):
+                target_ids = tuple(
+                    target_id
+                    for target_id in dict.fromkeys(str(value) for value in raw_target_ids)
+                    if target_id in targets_by_id
+                )
+            else:
+                raise SchedulerValidationError("track scheduler target_ids must be a list")
+            demands.append(
+                TrackDemand(
+                    track_id=track_id,
+                    priority=int(track["priority"]),
+                    learning_count=learning_count,
+                    quiz_count=quiz_count,
+                    target_ids=target_ids,
+                )
+            )
+
+        requested_demand = sum(demand.total for demand in demands)
+        if requested_demand == 0:
+            return drafts, {
+                "mode": "profile_only",
+                "requested_demand": 0,
+                "allocated_demand": 0,
+                "unmet_demand": 0,
+                "allocatable_slots": len(drafts),
+                "suppressed_active_session_tracks": sorted(suppressed),
+            }
+
+        sequence = _weighted_round_robin(tuple(demands))
+        existing_by_target: dict[str, list[datetime]] = {}
+        for slot in existing_slots:
+            target_id = slot.get("target_id")
+            if not isinstance(target_id, str):
+                continue
+            existing_by_target.setdefault(target_id, []).append(
+                datetime.fromisoformat(str(slot["scheduled_for_utc"])).astimezone(UTC)
+            )
+
+        device_usage: dict[str, tuple[datetime, ...]] = {}
+        start_utc, end_utc = self._local_day_bounds(config.timezone, local_date)
+        for target in targets:
+            device_registry_id = str(target["device_registry_id"])
+            if device_registry_id in device_usage:
+                continue
+            device_usage[device_registry_id] = tuple(
+                datetime.fromisoformat(str(slot["scheduled_for_utc"])).astimezone(UTC)
+                for slot in await self._scheduler.async_list_device_slots(
+                    device_registry_id=device_registry_id,
+                    start_utc=start_utc.isoformat(),
+                    end_utc=end_utc.isoformat(),
+                )
+                if str(slot["status"]) not in {"cancelled", "expired"}
+            )
+
+        allocated: list[SchedulerSlotDraft] = []
+        target_new_usage: dict[str, list[datetime]] = {
+            target_id: [] for target_id in targets_by_id
+        }
+        device_new_usage: dict[str, list[datetime]] = {
+            str(target["device_registry_id"]): [] for target in targets
+        }
+        sequence_index = 0
+        for draft in drafts:
+            while sequence_index < len(sequence):
+                demand, slot_type = sequence[sequence_index]
+                target_id = self._select_target(
+                    demand=demand,
+                    scheduled_for_utc=datetime.fromisoformat(
+                        draft.scheduled_for_utc
+                    ).astimezone(UTC),
+                    targets_by_id=targets_by_id,
+                    target_existing_usage=existing_by_target,
+                    target_new_usage=target_new_usage,
+                    device_existing_usage=device_usage,
+                    device_new_usage=device_new_usage,
+                    config=config,
+                )
+                if target_id is None:
+                    sequence_index += 1
+                    continue
+                target = targets_by_id[target_id]
+                when = datetime.fromisoformat(draft.scheduled_for_utc).astimezone(UTC)
+                target_new_usage[target_id].append(when)
+                device_new_usage[str(target["device_registry_id"])].append(when)
+                allocated.append(
+                    SchedulerSlotDraft(
+                        slot_id=draft.slot_id,
+                        profile_id=draft.profile_id,
+                        track_id=demand.track_id,
+                        target_id=target_id,
+                        slot_type=slot_type,
+                        scheduled_for_utc=draft.scheduled_for_utc,
+                        scheduler_config_version=draft.scheduler_config_version,
+                        seed=draft.seed,
+                    )
+                )
+                sequence_index += 1
+                break
+            if sequence_index >= len(sequence):
+                break
+
+        allocated_demand = len(allocated)
+        return tuple(allocated), {
+            "mode": "track_target",
+            "requested_demand": requested_demand,
+            "allocated_demand": allocated_demand,
+            "unmet_demand": max(0, requested_demand - allocated_demand),
+            "allocatable_slots": len(drafts),
+            "suppressed_active_session_tracks": sorted(suppressed),
+        }
+
+    @staticmethod
+    def _nonnegative_count(value: Any, field: str) -> int:
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise SchedulerValidationError(f"{field} must be an integer >= 0")
+        return value
+
+    @staticmethod
+    def _select_target(
+        *,
+        demand: TrackDemand,
+        scheduled_for_utc: datetime,
+        targets_by_id: Mapping[str, Mapping[str, Any]],
+        target_existing_usage: Mapping[str, list[datetime]],
+        target_new_usage: Mapping[str, list[datetime]],
+        device_existing_usage: Mapping[str, tuple[datetime, ...]],
+        device_new_usage: Mapping[str, list[datetime]],
+        config: SchedulerConfig,
+    ) -> str | None:
+        """Choose the first stable target satisfying target/device budgets."""
+        for target_id in demand.target_ids:
+            target = targets_by_id.get(target_id)
+            if target is None:
+                continue
+            target_existing = tuple(target_existing_usage.get(target_id, ()))
+            target_new = tuple(target_new_usage.get(target_id, ()))
+            target_usage = (*target_existing, *target_new)
+            daily_budget_raw = target.get("daily_push_budget")
+            daily_budget = (
+                10**9 if daily_budget_raw is None else int(daily_budget_raw)
+            )
+            if len(target_usage) >= daily_budget:
+                continue
+
+            minimum_gap_raw = target.get("minimum_gap_seconds")
+            minimum_gap = (
+                config.minimum_gap_seconds
+                if minimum_gap_raw is None
+                else int(minimum_gap_raw)
+            )
+            if any(
+                abs((scheduled_for_utc - item).total_seconds()) < minimum_gap
+                for item in target_usage
+            ):
+                continue
+
+            max_hour_raw = target.get("maximum_notifications_per_hour")
+            max_hour = (
+                config.maximum_notifications_per_hour
+                if max_hour_raw is None
+                else int(max_hour_raw)
+            )
+            timezone = ZoneInfo(config.timezone)
+            bucket = _hour_bucket(scheduled_for_utc, timezone)
+            if (
+                sum(1 for item in target_usage if _hour_bucket(item, timezone) == bucket)
+                >= max_hour
+            ):
+                continue
+
+            device_registry_id = str(target["device_registry_id"])
+            device_usage = (
+                *device_existing_usage.get(device_registry_id, ()),
+                *device_new_usage.get(device_registry_id, ()),
+            )
+            if any(
+                abs((scheduled_for_utc - item).total_seconds()) < minimum_gap
+                for item in device_usage
+            ):
+                continue
+            return target_id
+        return None
+
+    async def _async_update_capacity_repair(
+        self,
+        *,
+        profile_id: str,
+        local_date: date,
+        unmet_demand: int,
+        requested_demand: int,
+        allocatable_slots: int,
+        now_utc: datetime,
+    ) -> None:
+        """Raise/clear the HA Repair only after distinct sustained infeasible days."""
+        key = f"{_CAPACITY_STATE_PREFIX}{profile_id}"
+        issue_id = f"scheduler_configuration_infeasible_{profile_id}"
+        raw = await self._settings.async_get(key)
+        state = dict(raw) if isinstance(raw, Mapping) else {}
+        last_raw = state.get("last_local_date")
+        last_date = date.fromisoformat(str(last_raw)) if isinstance(last_raw, str) else None
+        count = int(state.get("consecutive_infeasible_days", 0))
+
+        if unmet_demand <= 0:
+            count = 0
+            if self._issue_clear_callback is not None:
+                await self._issue_clear_callback(issue_id)
+        elif last_date != local_date:
+            count = count + 1 if last_date == local_date - timedelta(days=1) else 1
+
+        await self._settings.async_set(
+            key,
+            {
+                "last_local_date": local_date.isoformat(),
+                "consecutive_infeasible_days": count,
+                "last_unmet_demand": unmet_demand,
+                "last_requested_demand": requested_demand,
+                "last_allocatable_slots": allocatable_slots,
+            },
+            updated_at_utc=now_utc.isoformat(),
+        )
+
+        if (
+            unmet_demand > 0
+            and count >= _CAPACITY_REPAIR_DAYS
+            and self._issue_callback is not None
+        ):
+            await self._issue_callback(
+                issue_id,
+                "scheduler_configuration_infeasible",
+                {
+                    "profile_id": profile_id,
+                    "requested": str(requested_demand),
+                    "capacity": str(allocatable_slots),
+                },
+            )
 
     def _resolve_config(
         self,
