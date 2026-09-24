@@ -5,6 +5,15 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P4.8 native Home Assistant services for session start, immediate scheduler
+  request, snooze and Track pause/resume with Profile ACL and audited unattended
+  allowlist enforcement.
+- Companion action bridge from P4.6 single-use tokens into canonical P3
+  LearningStateMachine/SignalPolicy/ReviewEvent/Progress transitions.
+- Post-commit privacy-minimal pedagogical events with stable event/interaction
+  identifiers, automation counters, clear-event handling and observation-only
+  bus semantics.
+- P4.8 service metadata, HA action/event documentation and ADR-0043.
 - P4.7 capability-aware learning/quiz notification renderers with same-tag
   reveal, direct-exposure fallback, bounded mobile quiz and panel handoff.
 - Distinct learning/quiz/relearning channels, private-by-default visibility and
