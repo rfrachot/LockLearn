@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed for P4.5 on 2026-09-24 pending the full repository quality gate.
+Accepted for P4.5 on 2026-09-24 after the full repository quality gate passed.
 
 ## Context
 
@@ -169,3 +169,18 @@ privacy exposure.
 - P4.6 still owns persistent interaction tokens, replay protection and atomic
   pedagogical action consumption;
 - P4.7 still owns notification rendering and platform capability behavior.
+
+
+## Final qualification gate — 2026-09-24
+
+The final development-checkout gate passed across the verified P4.5 HEAD:
+
+- Ruff format: PASS, 225 files already formatted;
+- Ruff lint: PASS;
+- mypy: PASS, 126 source files;
+- resource registries: PASS;
+- pytest: PASS, 350 tests in 16.83 s.
+
+P4.5 is therefore closed PASS. Notification-channel expiry, pending suppression
+and adaptive backoff remain explicitly separate from pedagogical ReviewEvent/SRS
+state. P4.6 owns persistent interaction consumption and replay protection.
