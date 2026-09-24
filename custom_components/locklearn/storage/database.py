@@ -193,7 +193,7 @@ def _migrate_state_database(path: Path, schema: str, current: int, target: int) 
             _configure_state_connection(connection)
             connection.execute("BEGIN IMMEDIATE")
             connection.execute(
-            """CREATE TABLE progress_v3 (
+                """CREATE TABLE progress_v3 (
                 profile_id TEXT NOT NULL,
                 track_id TEXT NOT NULL,
                 card_key TEXT NOT NULL,
@@ -246,7 +246,7 @@ def _migrate_state_database(path: Path, schema: str, current: int, target: int) 
             )"""
             )
             connection.execute(
-            """INSERT INTO progress_v3
+                """INSERT INTO progress_v3
                SELECT profile_id, track_id, card_key, learning_item_id,
                       prompt_facet_id, answer_facet_id, state, mastery, box,
                       seen_count, verified_correct_count, verified_wrong_count,
@@ -262,11 +262,11 @@ def _migrate_state_database(path: Path, schema: str, current: int, target: int) 
             connection.execute("DROP TABLE progress")
             connection.execute("ALTER TABLE progress_v3 RENAME TO progress")
             connection.execute(
-            """CREATE INDEX progress_due
+                """CREATE INDEX progress_due
                ON progress(profile_id, track_id, state, next_due_at_utc)"""
             )
             connection.execute(
-            """CREATE INDEX progress_content_identity
+                """CREATE INDEX progress_content_identity
                ON progress(card_key, learning_item_id, prompt_facet_id, answer_facet_id)"""
             )
             connection.execute("UPDATE schema_version SET version = 3")
@@ -294,13 +294,9 @@ def _migrate_state_database(path: Path, schema: str, current: int, target: int) 
                 for row in connection.execute("PRAGMA table_info(scheduled_slots)").fetchall()
             }
             if "deferred_until_utc" not in columns:
-                connection.execute(
-                    "ALTER TABLE scheduled_slots ADD COLUMN deferred_until_utc TEXT"
-                )
+                connection.execute("ALTER TABLE scheduled_slots ADD COLUMN deferred_until_utc TEXT")
             if "defer_reason" not in columns:
-                connection.execute(
-                    "ALTER TABLE scheduled_slots ADD COLUMN defer_reason TEXT"
-                )
+                connection.execute("ALTER TABLE scheduled_slots ADD COLUMN defer_reason TEXT")
             connection.execute(
                 """CREATE TABLE IF NOT EXISTS receptivity_samples (
                     slot_id TEXT PRIMARY KEY
