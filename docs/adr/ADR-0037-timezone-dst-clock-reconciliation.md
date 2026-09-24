@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed for P4.2 on 2026-09-24 pending the full repository quality gate.
+Accepted for P4.2 on 2026-09-24 after the full repository quality gate passed.
 
 ## Context
 
@@ -120,3 +120,19 @@ Rejected. Materialized rows are authoritative and restart must be idempotent.
 - P4.3 still owns Track/target arbitration and shared capacity.
 - P4.4 still owns receptivity/defer evaluation.
 - P4.5 still owns normal missed/pending/backoff notification policy.
+
+
+## Final qualification gate — 2026-09-24
+
+The final development-checkout gate passed:
+
+- Ruff format: PASS, 219 files already formatted;
+- Ruff lint: PASS;
+- mypy: PASS, 123 source files;
+- resource registries: PASS;
+- pytest: PASS, 328 tests in 15.51 s.
+
+P4.2 is therefore closed PASS. The scheduler remains temporally decoupled from
+SRS interval calculation: persisted slot timestamps are delivery opportunities,
+while P3 review state continues to derive elapsed scheduling evidence from real
+retrieval/response timestamps rather than theoretical slot time.
