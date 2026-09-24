@@ -597,7 +597,7 @@ class SchedulerService:
             local_date=resolved_date,
             unmet_demand=int(allocation["unmet_demand"]),
             requested_demand=int(allocation["requested_demand"]),
-            allocatable_slots=int(allocation["allocatable_slots"]),
+            allocatable_slots=int(allocation["allocated_demand"]),
             now_utc=now,
         )
         materialized = await self._scheduler.async_materialize_day(
