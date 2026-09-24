@@ -3506,6 +3506,50 @@ class NotificationInteractionsRepository:
 
         await self._storage._async_writer(write)
 
+    async def async_clear_by_tag(
+        self,
+        *,
+        tag: str,
+        cleared_at_utc: str,
+    ) -> dict[str, Any] | None:
+        """Atomically clear the newest pending interaction for one visible tag."""
+
+        def write(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    f"""SELECT {",".join(self._SELECT_COLUMNS)}
+                        FROM notification_interactions
+                        WHERE tag = ? AND status = 'pending'
+                        ORDER BY created_at_utc DESC, interaction_id DESC
+                        LIMIT 1""",
+                    (tag,),
+                ).fetchone()
+                if row is None:
+                    connection.commit()
+                    return None
+                interaction = self._interaction_dict(row)
+                cursor = connection.execute(
+                    """UPDATE notification_interactions
+                       SET status = 'cleared',
+                           consumed_at_utc = ?
+                       WHERE interaction_id = ? AND status = 'pending'""",
+                    (cleared_at_utc, interaction["interaction_id"]),
+                )
+                if cursor.rowcount != 1:
+                    connection.rollback()
+                    return None
+                interaction["status"] = "cleared"
+                interaction["consumed_at_utc"] = cleared_at_utc
+                connection.commit()
+                return interaction
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        return await self._storage._async_writer(write)
+
     async def async_consume(
         self,
         *,
