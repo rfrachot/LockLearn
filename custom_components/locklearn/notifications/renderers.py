@@ -75,6 +75,22 @@ def decode_action_id(action_id: str) -> tuple[str, str] | None:
     return parts[1], parts[2]
 
 
+def effective_lockscreen_visibility(
+    requested: str | None,
+    *,
+    profile_preset: str,
+    shared_device: bool,
+) -> str:
+    """Resolve conservative V1 defaults without treating OS visibility as security."""
+    if requested is not None and requested not in {"public", "private", "secret"}:
+        raise ValueError("invalid lockscreen visibility")
+    if requested is not None:
+        return requested
+    if shared_device or profile_preset == "child":
+        return "private"
+    return "private"
+
+
 class NotificationRenderer:
     """Build conservative Companion payloads from per-target capability evidence."""
 
