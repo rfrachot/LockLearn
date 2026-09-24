@@ -68,6 +68,9 @@ async def test_bootstrap_profile_crud_privacy_share_and_pagination(
     await owner.send_json_auto_id({"type": "locklearn/bootstrap"})
     bootstrap = await owner.receive_json()
     assert bootstrap["success"] is True
+    assert bootstrap["result"]["frontend_protocol"] == 1
+    assert bootstrap["result"]["backend_version"] == "0.0.2"
+    assert bootstrap["result"]["panel_path"] == "/locklearn"
     personal = bootstrap["result"]["personal_profile"]
     assert personal["role"] == "owner"
     personal_id = personal["profile_id"]
