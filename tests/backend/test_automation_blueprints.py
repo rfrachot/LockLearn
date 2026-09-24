@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from homeassistant.components.automation import config as automation_config
+from homeassistant.components import automation
 from homeassistant.components.blueprint import models
 from homeassistant.util import yaml as yaml_util
 
@@ -42,7 +42,7 @@ def test_blueprints_validate_with_home_assistant_schema() -> None:
             yaml_util.load_yaml(path),
             expected_domain="automation",
             path=str(path),
-            schema=automation_config.AUTOMATION_BLUEPRINT_SCHEMA,
+            schema=automation.config.AUTOMATION_BLUEPRINT_SCHEMA,
         )
 
 
