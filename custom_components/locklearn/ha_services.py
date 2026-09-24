@@ -238,10 +238,26 @@ async def _resume_track(hass: HomeAssistant, call: ServiceCall) -> None:
 
 def async_register_services(hass: HomeAssistant) -> None:
     """Register the V1 service surface for the loaded singleton runtime."""
+
+    async def handle_start_session(call: ServiceCall) -> None:
+        await _start_session(hass, call)
+
+    async def handle_send_now(call: ServiceCall) -> None:
+        await _send_now(hass, call)
+
+    async def handle_snooze(call: ServiceCall) -> None:
+        await _snooze(hass, call)
+
+    async def handle_pause_track(call: ServiceCall) -> None:
+        await _pause_track(hass, call)
+
+    async def handle_resume_track(call: ServiceCall) -> None:
+        await _resume_track(hass, call)
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_START_SESSION,
-        lambda call: _start_session(hass, call),
+        handle_start_session,
         schema=vol.Schema(
             {
                 _PROFILE: cv.string,
@@ -255,7 +271,7 @@ def async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN,
         SERVICE_SEND_NOW,
-        lambda call: _send_now(hass, call),
+        handle_send_now,
         schema=vol.Schema(
             {
                 _PROFILE: cv.string,
@@ -267,7 +283,7 @@ def async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN,
         SERVICE_SNOOZE,
-        lambda call: _snooze(hass, call),
+        handle_snooze,
         schema=vol.Schema(
             {
                 _PROFILE: cv.string,
@@ -288,13 +304,13 @@ def async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN,
         SERVICE_PAUSE_TRACK,
-        lambda call: _pause_track(hass, call),
+        handle_pause_track,
         schema=track_schema,
     )
     hass.services.async_register(
         DOMAIN,
         SERVICE_RESUME_TRACK,
-        lambda call: _resume_track(hass, call),
+        handle_resume_track,
         schema=track_schema,
     )
 
