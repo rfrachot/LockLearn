@@ -13,7 +13,13 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.locklearn.const import DOMAIN
 from custom_components.locklearn.core.scheduler import SchedulerService
-from custom_components.locklearn.storage import ProfileRecord, SQLiteStorage, StoragePaths
+from custom_components.locklearn.storage import (
+    NotificationTargetRecord,
+    ProfileRecord,
+    SQLiteStorage,
+    StoragePaths,
+    TrackRecord,
+)
 
 
 class FixedClock:
@@ -57,6 +63,62 @@ async def _profile(
     )
 
 
+async def _track(
+    storage: SQLiteStorage,
+    *,
+    track_id: str,
+    priority: int,
+    learning_count: int,
+    quiz_count: int = 0,
+    target_ids: tuple[str, ...] | None = None,
+    now: datetime,
+) -> None:
+    scheduler: dict[str, Any] = {
+        "learning_count": learning_count,
+        "quiz_count": quiz_count,
+    }
+    if target_ids is not None:
+        scheduler["target_ids"] = list(target_ids)
+    await storage.repositories.tracks.async_insert(
+        TrackRecord(
+            track_id=track_id,
+            profile_id="profile-scheduler",
+            name=track_id,
+            priority=priority,
+            settings={"scheduler": scheduler},
+            created_at_utc=now.isoformat(),
+            updated_at_utc=now.isoformat(),
+        )
+    )
+
+
+async def _target(
+    storage: SQLiteStorage,
+    *,
+    target_id: str = "target-1",
+    profile_id: str = "profile-scheduler",
+    device_registry_id: str = "device-1",
+    daily_push_budget: int | None = None,
+    minimum_gap_seconds: int | None = None,
+    maximum_notifications_per_hour: int | None = None,
+    now: datetime,
+) -> None:
+    await storage.repositories.notification_targets.async_insert(
+        NotificationTargetRecord(
+            target_id=target_id,
+            profile_id=profile_id,
+            device_registry_id=device_registry_id,
+            platform="android",
+            friendly_name=target_id,
+            daily_push_budget=daily_push_budget,
+            minimum_gap_seconds=minimum_gap_seconds,
+            maximum_notifications_per_hour=maximum_notifications_per_hour,
+            created_at_utc=now.isoformat(),
+            updated_at_utc=now.isoformat(),
+        )
+    )
+
+
 async def test_preview_is_deterministic_and_obeys_windows_quiet_gap_and_hour_limit(
     tmp_path: Path,
 ) -> None:
@@ -79,6 +141,8 @@ async def test_preview_is_deterministic_and_obeys_windows_quiet_gap_and_hour_lim
         )
         service = SchedulerService(
             storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
             storage.repositories.scheduler,
             storage.repositories.settings,
             clock=clock,
@@ -136,6 +200,8 @@ async def test_materialized_slots_are_authoritative_after_config_change(tmp_path
         )
         service = SchedulerService(
             storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
             storage.repositories.scheduler,
             storage.repositories.settings,
             clock=clock,
@@ -208,6 +274,8 @@ async def test_spring_forward_skips_nonexistent_local_minutes(tmp_path: Path) ->
         )
         service = SchedulerService(
             storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
             storage.repositories.scheduler,
             storage.repositories.settings,
             clock=clock,
@@ -247,6 +315,8 @@ async def test_fall_back_duplicate_hour_respects_one_local_hour_budget(tmp_path:
         )
         service = SchedulerService(
             storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
             storage.repositories.scheduler,
             storage.repositories.settings,
             clock=clock,
@@ -284,6 +354,8 @@ async def test_cross_midnight_window_uses_start_day_active_rule(tmp_path: Path) 
         )
         service = SchedulerService(
             storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
             storage.repositories.scheduler,
             storage.repositories.settings,
             clock=clock,
@@ -323,6 +395,8 @@ async def test_backward_clock_jump_uses_persisted_high_watermark(tmp_path: Path)
         )
         service = SchedulerService(
             storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
             storage.repositories.scheduler,
             storage.repositories.settings,
             clock=clock,
@@ -368,6 +442,8 @@ async def test_forward_clock_jump_expires_overdue_unsent_slots(tmp_path: Path) -
         )
         service = SchedulerService(
             storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
             storage.repositories.scheduler,
             storage.repositories.settings,
             clock=clock,
@@ -416,6 +492,8 @@ async def test_restart_expires_overdue_unsent_slots_without_touching_consumed(
         )
         service = SchedulerService(
             storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
             storage.repositories.scheduler,
             storage.repositories.settings,
             clock=clock,
@@ -471,6 +549,8 @@ async def test_timezone_change_cancels_only_old_future_unsent_slots(tmp_path: Pa
         )
         service = SchedulerService(
             storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
             storage.repositories.scheduler,
             storage.repositories.settings,
             clock=clock,
