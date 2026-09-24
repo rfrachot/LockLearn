@@ -41,6 +41,7 @@ from .datasets.manager import (
 )
 from .datasets.policy import OfficialRegistryPolicy
 from .datasets.transport import HomeAssistantDatasetTransport
+from .notifications.delivery import NotificationDeliveryService
 from .notifications.interactions import NotificationInteractionService
 from .notifications.warnings import NotificationWarningService
 from .scheduler_ha import SchedulerHomeAssistantBridge
@@ -70,6 +71,7 @@ class LockLearnRuntime:
     session_selection: SessionSelectionService
     stats: StatsService
     reviews: ReviewEventService
+    notification_delivery: NotificationDeliveryService
     notification_interactions: NotificationInteractionService
     notification_warnings: NotificationWarningService
     scheduler: SchedulerService
@@ -212,6 +214,12 @@ class LockLearnRuntime:
                     review_policy=review_policy,
                 ),
                 reviews=reviews,
+                notification_delivery=NotificationDeliveryService(
+                    hass,
+                    storage.repositories.notification_targets,
+                    issue_callback=report_issue,
+                    issue_clear_callback=clear_issue,
+                ),
                 notification_interactions=NotificationInteractionService(
                     storage.repositories.notification_interactions,
                     acl,
