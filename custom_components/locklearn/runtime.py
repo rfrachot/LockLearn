@@ -105,9 +105,7 @@ class LockLearnRuntime:
             try:
                 rendered = Template(expression, hass).async_render(parse_result=False)
             except TemplateError as err:
-                raise SchedulerValidationError(
-                    f"receptive_when template failed: {err}"
-                ) from err
+                raise SchedulerValidationError(f"receptive_when template failed: {err}") from err
             return result_as_boolean(rendered)
 
         try:
