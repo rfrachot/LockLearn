@@ -9,9 +9,8 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-import pytest
-
 from homeassistant.core import HomeAssistant
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.locklearn.const import DATA_RUNTIME, DOMAIN
@@ -1043,22 +1042,21 @@ async def test_receptive_when_false_defers_without_receptivity_or_srs_signal(
         assert slot["status"] == "deferred"
         assert slot["defer_reason"] == "receptive_when_false"
         assert (
-            await storage.repositories.scheduler.async_get_receptivity_sample(
-                "slot-receptive"
-            )
+            await storage.repositories.scheduler.async_get_receptivity_sample("slot-receptive")
             is None
         )
-        assert await storage.repositories.review_events.async_list_scope_events(
-            profile_id="profile-scheduler",
-            track_id=None,
-        ) == ()
+        assert (
+            await storage.repositories.review_events.async_list_scope_events(
+                profile_id="profile-scheduler",
+                track_id=None,
+            )
+            == ()
+        )
 
         clock.set(datetime(2026, 9, 24, 8, 10, tzinfo=UTC))
         reconciled = await service.async_reconcile(reason="timer")
         assert reconciled.expired_slots == 0
-        still_deferred = await storage.repositories.scheduler.async_get_slot(
-            "slot-receptive"
-        )
+        still_deferred = await storage.repositories.scheduler.async_get_slot("slot-receptive")
         assert still_deferred is not None
         assert still_deferred["status"] == "deferred"
 
@@ -1233,9 +1231,7 @@ async def test_runtime_receptive_when_uses_home_assistant_template(
             settings={
                 "daily_push_budget": 1,
                 "scheduler": {
-                    "receptive_when": (
-                        "{{ is_state('binary_sensor.locklearn_receptive', 'on') }}"
-                    ),
+                    "receptive_when": ("{{ is_state('binary_sensor.locklearn_receptive', 'on') }}"),
                     "defer_window_minutes": 0,
                 },
             },
