@@ -1256,6 +1256,13 @@ async def test_runtime_receptive_when_uses_home_assistant_template(
                 "slot_type": "learning",
                 "scheduled_for_utc": now.isoformat(),
             },
+            {
+                "slot_id": "slot-ha-template-ready",
+                "track_id": None,
+                "target_id": None,
+                "slot_type": "learning",
+                "scheduled_for_utc": now.isoformat(),
+            },
         ),
         updated_at_utc=now.isoformat(),
     )
@@ -1263,10 +1270,11 @@ async def test_runtime_receptive_when_uses_home_assistant_template(
     hass.states.async_set("binary_sensor.locklearn_receptive", "off")
     blocked = await runtime.scheduler.async_prepare_delivery("slot-ha-template")
     assert blocked["ready"] is False
-    assert blocked["reason"] == "not_receptive_defer_window_exhausted"
+    assert blocked["status"] == "expired"
+    assert blocked["reason"] == "missed_not_receptive"
 
     hass.states.async_set("binary_sensor.locklearn_receptive", "on")
-    ready = await runtime.scheduler.async_prepare_delivery("slot-ha-template")
+    ready = await runtime.scheduler.async_prepare_delivery("slot-ha-template-ready")
     assert ready["ready"] is True
     assert ready["reason"] == "receptive"
 
@@ -1415,10 +1423,13 @@ async def test_skip_if_pending_expires_new_slot_without_srs_mutation(
         assert slot is not None
         assert slot["status"] == "expired"
         assert slot["expired_reason"] == "pending_existing"
-        assert await storage.repositories.review_events.async_list_scope_events(
-            profile_id="profile-scheduler",
-            track_id=None,
-        ) == ()
+        assert (
+            await storage.repositories.review_events.async_list_scope_events(
+                profile_id="profile-scheduler",
+                track_id=None,
+            )
+            == ()
+        )
     finally:
         await storage.async_close()
 
@@ -1462,10 +1473,13 @@ async def test_missed_slot_expires_without_catchup_or_srs_mutation(tmp_path: Pat
         assert slot is not None
         assert slot["status"] == "expired"
         assert slot["expired_reason"] == "missed"
-        assert await storage.repositories.review_events.async_list_scope_events(
-            profile_id="profile-scheduler",
-            track_id=None,
-        ) == ()
+        assert (
+            await storage.repositories.review_events.async_list_scope_events(
+                profile_id="profile-scheduler",
+                track_id=None,
+            )
+            == ()
+        )
     finally:
         await storage.async_close()
 
@@ -1527,10 +1541,13 @@ async def test_cleared_notification_closes_pending_without_srs_result(
             target_id="target-1",
             exclude_slot_id="unused",
         )
-        assert await storage.repositories.review_events.async_list_scope_events(
-            profile_id="profile-scheduler",
-            track_id=None,
-        ) == ()
+        assert (
+            await storage.repositories.review_events.async_list_scope_events(
+                profile_id="profile-scheduler",
+                track_id=None,
+            )
+            == ()
+        )
     finally:
         await storage.async_close()
 
@@ -1652,10 +1669,13 @@ async def test_adaptive_backoff_reduces_then_restores_target_budget(tmp_path: Pa
         )
         assert restored["allocation"]["target_backoff"] == {"target-1": 1.0}
         assert restored["generated_slots"] == 4
-        assert await storage.repositories.review_events.async_list_scope_events(
-            profile_id="profile-scheduler",
-            track_id=None,
-        ) == ()
+        assert (
+            await storage.repositories.review_events.async_list_scope_events(
+                profile_id="profile-scheduler",
+                track_id=None,
+            )
+            == ()
+        )
     finally:
         await storage.async_close()
 
