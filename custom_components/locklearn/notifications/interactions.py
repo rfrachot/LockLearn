@@ -75,17 +75,13 @@ class NotificationInteractionService:
     def _require_text(field_name: str, value: str) -> str:
         normalized = value.strip()
         if not normalized:
-            raise NotificationInteractionValidationError(
-                f"{field_name} must not be empty"
-            )
+            raise NotificationInteractionValidationError(f"{field_name} must not be empty")
         return normalized
 
     @staticmethod
     def _utc_iso(field_name: str, value: datetime) -> str:
         if value.tzinfo is None or value.utcoffset() is None:
-            raise NotificationInteractionValidationError(
-                f"{field_name} must be timezone-aware"
-            )
+            raise NotificationInteractionValidationError(f"{field_name} must be timezone-aware")
         return value.astimezone(UTC).isoformat()
 
     async def async_create(
@@ -141,9 +137,7 @@ class NotificationInteractionService:
         resolved_token = self._require_text("token", token)
         resolved_action = self._require_text("action_id", action_id)
         actor = (
-            None
-            if actor_user_id is None
-            else self._require_text("actor_user_id", actor_user_id)
+            None if actor_user_id is None else self._require_text("actor_user_id", actor_user_id)
         )
         now_utc = self._utc_iso("action_at", self._clock.now())
 
@@ -162,9 +156,7 @@ class NotificationInteractionService:
                         reason="user_context_forbidden",
                         created_at_utc=now_utc,
                     )
-                    return NotificationActionResult(
-                        NotificationActionDisposition.FORBIDDEN
-                    )
+                    return NotificationActionResult(NotificationActionDisposition.FORBIDDEN)
 
         claimed = await self._repository.async_consume(
             token=resolved_token,
