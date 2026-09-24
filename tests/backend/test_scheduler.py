@@ -103,8 +103,7 @@ async def test_preview_is_deterministic_and_obeys_windows_quiet_gap_and_hour_lim
         assert all(value.hour != 12 for value in local_times)
         assert len({(value.date(), value.hour) for value in local_times}) == len(local_times)
         assert all(
-            (later - earlier).total_seconds() >= 1800
-            for earlier, later in pairwise(local_times)
+            (later - earlier).total_seconds() >= 1800 for earlier, later in pairwise(local_times)
         )
         assert all(slot["track_id"] is None for slot in first["slots"])
         assert all(slot["target_id"] is None for slot in first["slots"])
