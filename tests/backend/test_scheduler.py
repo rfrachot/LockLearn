@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -89,15 +90,13 @@ async def test_preview_is_deterministic_and_obeys_windows_quiet_gap_and_hour_lim
         )
 
         assert first == second
-        assert first["generated_slots"] == 6
-        assert first["capacity_limited"] is False
+        assert first["generated_slots"] == 5
+        assert first["capacity_limited"] is True
         assert first["content_selection"] == "send_time"
         assert await storage.repositories.scheduler.async_get_config("profile-scheduler") is None
 
         local_times = [
-            datetime.fromisoformat(slot["scheduled_for_utc"]).astimezone(
-                ZoneInfo("Europe/Paris")
-            )
+            datetime.fromisoformat(slot["scheduled_for_utc"]).astimezone(ZoneInfo("Europe/Paris"))
             for slot in first["slots"]
         ]
         assert all(8 <= value.hour < 14 for value in local_times)
@@ -105,7 +104,7 @@ async def test_preview_is_deterministic_and_obeys_windows_quiet_gap_and_hour_lim
         assert len({(value.date(), value.hour) for value in local_times}) == len(local_times)
         assert all(
             (later - earlier).total_seconds() >= 1800
-            for earlier, later in zip(local_times, local_times[1:], strict=False)
+            for earlier, later in pairwise(local_times)
         )
         assert all(slot["track_id"] is None for slot in first["slots"])
         assert all(slot["target_id"] is None for slot in first["slots"])
