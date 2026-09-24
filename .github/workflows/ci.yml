@@ -71,6 +71,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: git diff --exit-code -- ../custom_components/locklearn/frontend/locklearn-panel.js
 
   home-assistant-validation:
     runs-on: ubuntu-latest
