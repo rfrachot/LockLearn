@@ -15,8 +15,8 @@ from ..core.signals import SignalMode, SignalPolicy
 from ..core.stats import StatsService
 from ..storage.repositories import (
     NotificationTargetsRepository,
-    ProgressRepository,
     ProfilesRepository,
+    ProgressRepository,
     ReviewEventsRepository,
     TracksRepository,
 )
@@ -164,7 +164,12 @@ class NotificationActionProcessor:
         pre = current or self._new_snapshot(identity)
         transition = self._learning.introduce(pre)
         return await self._reviews.async_record(
-            **identity,
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            learning_item_id=identity["learning_item_id"],
+            prompt_facet_id=identity["prompt_facet_id"],
+            answer_facet_id=identity["answer_facet_id"],
+            card_key=identity["card_key"],
             mode="introduction",
             question_type="learning",
             result="exposure",
@@ -192,9 +197,7 @@ class NotificationActionProcessor:
             card_key=identity["card_key"],
         )
         if pre is None or str(pre["state"]) == "new":
-            raise NotificationActionError(
-                "notification answer requires an introduced card"
-            )
+            raise NotificationActionError("notification answer requires an introduced card")
 
         kind = str(payload.get("kind", "learning"))
         if kind == "quiz":
@@ -221,9 +224,7 @@ class NotificationActionProcessor:
             raise NotificationActionError("notification identity disappeared")
         profile_settings = dict(profile.get("settings") or {})
         shared_device = bool(target.get("shared_device", False))
-        shared_trusted = bool(
-            profile_settings.get("trust_shared_device_responses", False)
-        )
+        shared_trusted = bool(profile_settings.get("trust_shared_device_responses", False))
 
         before_stats = await self._stats.async_get(
             profile_id=identity["profile_id"],
@@ -248,7 +249,12 @@ class NotificationActionProcessor:
         )
 
         event = await self._reviews.async_record(
-            **identity,
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            learning_item_id=identity["learning_item_id"],
+            prompt_facet_id=identity["prompt_facet_id"],
+            answer_facet_id=identity["answer_facet_id"],
+            card_key=identity["card_key"],
             mode=mode.value,
             question_type=question_type,
             result=result,
@@ -344,14 +350,14 @@ class NotificationActionProcessor:
         applied = self._signal_policy.apply_review_signal(pre, decision=decision)
         if applied.transition is None:
             raise NotificationActionError("notification answer produced no schedulable transition")
-        transition: ReviewTransition = applied.transition
+        review_transition: ReviewTransition = applied.transition
         return (
-            dict(transition.post_state),
+            dict(review_transition.post_state),
             decision.signal_quality.value,
             decision.verified,
             False,
-            transition.scheduled_interval_days,
-            transition.elapsed_days,
+            review_transition.scheduled_interval_days,
+            review_transition.elapsed_days,
         )
 
     @staticmethod
@@ -598,9 +604,7 @@ class NotificationActionProcessor:
         today = stats["streak"]["today"]
         target = int(today["target"])
         daily_goal_progress = (
-            0.0
-            if target <= 0
-            else round(min(1.0, int(today["treated_due"]) / target), 6)
+            0.0 if target <= 0 else round(min(1.0, int(today["treated_due"]) / target), 6)
         )
         return {
             "consecutive_correct": consecutive_correct,
