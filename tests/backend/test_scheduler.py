@@ -1063,7 +1063,8 @@ async def test_receptive_when_false_defers_without_receptivity_or_srs_signal(
         clock.set(datetime(2026, 9, 24, 8, 31, tzinfo=UTC))
         exhausted = await service.async_prepare_delivery("slot-receptive")
         assert exhausted["ready"] is False
-        assert exhausted["reason"] == "not_receptive_defer_window_exhausted"
+        assert exhausted["status"] == "expired"
+        assert exhausted["reason"] == "missed_not_receptive"
         assert exhausted["defer_exhausted"] is True
         assert (
             await storage.repositories.scheduler.async_get_receptivity_sample("slot-receptive")
