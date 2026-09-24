@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed for P4.4 on 2026-09-24 pending the full repository quality gate.
+Accepted for P4.4 on 2026-09-24 after the full repository quality gate passed.
 
 ## Context
 
@@ -139,3 +139,18 @@ opt-in hook.
 - P4.5 still owns send-time CardDefinition selection and ordinary
   missed/pending/backoff policy.
 - P4.6/P4.7 still own interaction replay protection and notification rendering.
+
+
+## Final qualification gate — 2026-09-24
+
+The final development-checkout gate passed:
+
+- Ruff format: PASS, 222 files already formatted;
+- Ruff lint: PASS;
+- mypy: PASS, 124 source files;
+- resource registries: PASS;
+- pytest: PASS, 340 tests in 16.59 s.
+
+P4.4 is therefore closed PASS. Receptivity remains observational and
+pedagogically neutral; ordinary notification selection, missed-slot policy and
+adaptive backoff remain owned by P4.5.
