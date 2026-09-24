@@ -30,7 +30,7 @@ _DEFAULT_QUIET_HOURS = ("22:00", "08:00")
 _SCHEDULER_TIME_STATE_KEY = "scheduler_time_state_v1"
 _CAPACITY_STATE_PREFIX = "scheduler_capacity_state_v1:"
 _CAPACITY_REPAIR_DAYS = 3
-_ROUTINE_SLOT_TYPES = frozenset({"pre_sleep_consolidation", "morning_first_review"})
+_ROUTINE_SLOT_TYPES = frozenset({"pre_sleep_consolidation", "morning_first_review", "manual_send_now"})
 
 
 class SchedulerValidationError(ValueError):
@@ -967,6 +967,34 @@ class SchedulerService:
         if created is None:
             raise SchedulerValidationError("routine slot could not be materialized")
         return created
+
+    async def async_snooze_slot(
+        self,
+        *,
+        profile_id: str,
+        slot_id: str,
+        minutes: int,
+    ) -> dict[str, Any]:
+        """Defer one unsent Profile slot without creating learning evidence."""
+        if minutes < 1 or minutes > 24 * 60:
+            raise SchedulerValidationError("snooze minutes must be within 1..1440")
+        slot = await self._scheduler.async_get_slot(slot_id)
+        if slot is None or str(slot["profile_id"]) != profile_id:
+            raise SchedulerValidationError("slot does not belong to profile")
+        now = await self.async_effective_now()
+        deferred_until = now + timedelta(minutes=minutes)
+        changed = await self._scheduler.async_defer_slot(
+            slot_id=slot_id,
+            deferred_until_utc=deferred_until.isoformat(),
+            reason="manual_snooze",
+            updated_at_utc=now.isoformat(),
+        )
+        if not changed:
+            raise SchedulerValidationError("slot is not snoozable")
+        updated = await self._scheduler.async_get_slot(slot_id)
+        if updated is None:
+            raise SchedulerValidationError("snoozed slot disappeared")
+        return updated
 
     @staticmethod
     def _routine_slot_id(
