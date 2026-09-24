@@ -26,6 +26,7 @@ _DEFAULT_QUIET_HOURS = ("22:00", "08:00")
 _SCHEDULER_TIME_STATE_KEY = "scheduler_time_state_v1"
 _CAPACITY_STATE_PREFIX = "scheduler_capacity_state_v1:"
 _CAPACITY_REPAIR_DAYS = 3
+_ROUTINE_SLOT_TYPES = frozenset({"pre_sleep_consolidation", "morning_first_review"})
 
 
 class SchedulerValidationError(ValueError):
@@ -457,6 +458,7 @@ class SchedulerService:
         clock: Clock | None = None,
         issue_callback: Callable[[str, str, Mapping[str, str]], Awaitable[None]] | None = None,
         issue_clear_callback: Callable[[str], Awaitable[None]] | None = None,
+        receptive_evaluator: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
         self._profiles = profiles
         self._tracks = tracks
@@ -466,6 +468,7 @@ class SchedulerService:
         self._clock = clock or SystemClock()
         self._issue_callback = issue_callback
         self._issue_clear_callback = issue_clear_callback
+        self._receptive_evaluator = receptive_evaluator
 
     async def async_preview(
         self,
@@ -621,6 +624,247 @@ class SchedulerService:
         payload["reconciliation"] = reconciliation.as_dict()
         payload["allocation"] = allocation
         return payload
+
+    async def async_prepare_delivery(self, slot_id: str) -> dict[str, Any]:
+        """Evaluate send-time receptivity without selecting pedagogical content."""
+        slot = await self._scheduler.async_get_slot(slot_id)
+        if slot is None:
+            raise SchedulerValidationError("slot does not exist")
+        if str(slot["status"]) not in {"scheduled", "deferred"}:
+            return {
+                "slot_id": slot_id,
+                "ready": False,
+                "status": str(slot["status"]),
+                "reason": "not_pending",
+            }
+
+        profile = await self._profiles.async_get(str(slot["profile_id"]))
+        if profile is None:
+            raise SchedulerValidationError("slot profile does not exist")
+        persisted = await self._scheduler.async_get_config(str(slot["profile_id"]))
+        config, _daily_budget = self._resolve_config(profile, persisted)
+        now = await self.async_effective_now()
+
+        deferred_until_raw = slot.get("deferred_until_utc")
+        if isinstance(deferred_until_raw, str):
+            deferred_until = datetime.fromisoformat(deferred_until_raw).astimezone(UTC)
+            if now < deferred_until:
+                return {
+                    "slot_id": slot_id,
+                    "ready": False,
+                    "status": "deferred",
+                    "reason": str(slot.get("defer_reason") or "deferred"),
+                    "deferred_until_utc": deferred_until.isoformat(),
+                }
+
+        if config.receptive_when is None:
+            return {
+                "slot_id": slot_id,
+                "ready": True,
+                "status": str(slot["status"]),
+                "reason": "receptive_condition_absent",
+            }
+        if self._receptive_evaluator is None:
+            raise SchedulerValidationError("receptive_when evaluator is unavailable")
+
+        receptive = await self._receptive_evaluator(config.receptive_when)
+        if receptive:
+            return {
+                "slot_id": slot_id,
+                "ready": True,
+                "status": str(slot["status"]),
+                "reason": "receptive",
+            }
+
+        scheduled_for = datetime.fromisoformat(str(slot["scheduled_for_utc"])).astimezone(UTC)
+        deadline = scheduled_for + timedelta(minutes=config.defer_window_minutes)
+        if config.defer_window_minutes <= 0 or now >= deadline:
+            return {
+                "slot_id": slot_id,
+                "ready": False,
+                "status": str(slot["status"]),
+                "reason": "not_receptive_defer_window_exhausted",
+                "defer_exhausted": True,
+            }
+
+        await self._scheduler.async_defer_slot(
+            slot_id=slot_id,
+            deferred_until_utc=deadline.isoformat(),
+            reason="receptive_when_false",
+            updated_at_utc=now.isoformat(),
+        )
+        return {
+            "slot_id": slot_id,
+            "ready": False,
+            "status": "deferred",
+            "reason": "receptive_when_false",
+            "deferred_until_utc": deadline.isoformat(),
+            "defer_exhausted": False,
+        }
+
+    async def async_record_delivery(
+        self,
+        *,
+        slot_id: str,
+        delivered_at_utc: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Record delivery-only receptivity features, never an SRS result."""
+        slot = await self._scheduler.async_get_slot(slot_id)
+        if slot is None:
+            raise SchedulerValidationError("slot does not exist")
+        profile = await self._profiles.async_get(str(slot["profile_id"]))
+        if profile is None:
+            raise SchedulerValidationError("slot profile does not exist")
+        delivered = (delivered_at_utc or self._aware_utc_now()).astimezone(UTC)
+        timezone_name = str(profile["timezone"])
+        local = delivered.astimezone(ZoneInfo(timezone_name))
+        changed = await self._scheduler.async_mark_slot_sent(
+            slot_id=slot_id,
+            delivered_at_utc=delivered.isoformat(),
+            timezone_name=timezone_name,
+            weekday=local.weekday(),
+            local_hour=local.hour,
+        )
+        if not changed:
+            raise SchedulerValidationError("slot is not deliverable")
+        sample = await self._scheduler.async_get_receptivity_sample(slot_id)
+        if sample is None:
+            raise SchedulerValidationError("receptivity sample was not created")
+        return sample
+
+    async def async_record_receptivity_action(
+        self,
+        *,
+        slot_id: str,
+        action: str,
+        action_at_utc: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Record observational cleared/answered features without SRS mutation."""
+        sample = await self._scheduler.async_get_receptivity_sample(slot_id)
+        if sample is None:
+            raise SchedulerValidationError("slot has no delivery sample")
+        action_at = (action_at_utc or self._aware_utc_now()).astimezone(UTC)
+        delivered_at = datetime.fromisoformat(str(sample["delivered_at_utc"])).astimezone(UTC)
+        latency_ms = max(0, int((action_at - delivered_at).total_seconds() * 1000))
+        changed = await self._scheduler.async_record_receptivity_action(
+            slot_id=slot_id,
+            action=action,
+            action_at_utc=action_at.isoformat(),
+            delivery_to_action_ms=latency_ms,
+        )
+        if not changed:
+            raise SchedulerValidationError("receptivity sample could not be updated")
+        updated = await self._scheduler.async_get_receptivity_sample(slot_id)
+        if updated is None:
+            raise SchedulerValidationError("receptivity sample disappeared")
+        return updated
+
+    async def async_trigger_routine(
+        self,
+        *,
+        profile_id: str,
+        routine_type: str,
+        track_id: str | None = None,
+        target_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Materialize one routine hook slot for an HA entity/automation adapter."""
+        if routine_type not in _ROUTINE_SLOT_TYPES:
+            raise SchedulerValidationError("unsupported routine slot type")
+        profile = await self._profiles.async_get(profile_id)
+        if profile is None or str(profile["status"]) != "active":
+            raise SchedulerValidationError("active profile does not exist")
+        persisted = await self._scheduler.async_get_config(profile_id)
+        config, daily_push_budget = self._resolve_config(profile, persisted)
+        now = await self.async_effective_now()
+        timezone = ZoneInfo(config.timezone)
+        local_date = now.astimezone(timezone).date()
+        start_utc, end_utc = self._local_day_bounds(config.timezone, local_date)
+        existing = await self._scheduler.async_list_slots(
+            profile_id=profile_id,
+            start_utc=start_utc.isoformat(),
+            end_utc=end_utc.isoformat(),
+        )
+        active_slots = tuple(
+            slot
+            for slot in existing
+            if str(slot["status"]) not in {"cancelled", "expired"}
+        )
+        if len(active_slots) >= daily_push_budget:
+            raise SchedulerValidationError("profile daily push budget is exhausted")
+
+        tracks = tuple(
+            track
+            for track in await self._tracks.async_list_for_profile(profile_id)
+            if str(track["status"]) == "active"
+        )
+        if track_id is None:
+            selected_track_id = (
+                None if not tracks else str(sorted(tracks, key=lambda item: str(item["track_id"]))[0]["track_id"])
+            )
+        else:
+            matching = next(
+                (track for track in tracks if str(track["track_id"]) == track_id),
+                None,
+            )
+            if matching is None:
+                raise SchedulerValidationError("routine track is not active in profile")
+            selected_track_id = track_id
+
+        targets = await self._notification_targets.async_list_for_profile(profile_id)
+        if target_id is None:
+            selected_target_id = None if not targets else str(targets[0]["target_id"])
+        else:
+            if not any(str(target["target_id"]) == target_id for target in targets):
+                raise SchedulerValidationError("routine target is not enabled in profile")
+            selected_target_id = target_id
+
+        slot_id = self._routine_slot_id(
+            profile_id=profile_id,
+            routine_type=routine_type,
+            scheduled_for_utc=now,
+            config_version=config.version,
+        )
+        slot = SchedulerSlotDraft(
+            slot_id=slot_id,
+            profile_id=profile_id,
+            track_id=selected_track_id,
+            target_id=selected_target_id,
+            slot_type=routine_type,
+            scheduled_for_utc=now.isoformat(),
+            scheduler_config_version=config.version,
+            seed=self._seed(profile_id, local_date, config.version),
+        )
+        materialized = await self._scheduler.async_materialize_day(
+            profile_id=profile_id,
+            scheduler_config_version=config.version,
+            seed=slot.seed,
+            start_utc=start_utc.isoformat(),
+            end_utc=end_utc.isoformat(),
+            now_utc=now.isoformat(),
+            slots=(slot.as_dict(),),
+            updated_at_utc=now.isoformat(),
+        )
+        created = next(
+            (item for item in materialized if str(item["slot_id"]) == slot_id),
+            None,
+        )
+        if created is None:
+            raise SchedulerValidationError("routine slot could not be materialized")
+        return created
+
+    @staticmethod
+    def _routine_slot_id(
+        *,
+        profile_id: str,
+        routine_type: str,
+        scheduled_for_utc: datetime,
+        config_version: int,
+    ) -> str:
+        payload = (
+            f"locklearn|routine|{profile_id}|{routine_type}|"
+            f"{config_version}|{scheduled_for_utc.isoformat()}"
+        )
+        return "locklearn:routine-slot:" + hashlib.sha256(payload.encode()).hexdigest()[:32]
 
     async def _async_allocate(
         self,
