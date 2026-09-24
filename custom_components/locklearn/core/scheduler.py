@@ -9,7 +9,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from ..storage.repositories import ProfilesRepository, SchedulerRepository
+from ..storage.repositories import ProfilesRepository, SchedulerRepository, SettingsRepository
 from .clock import Clock, SystemClock
 
 _DEFAULT_ACTIVE_DAYS = tuple(range(7))
@@ -17,6 +17,7 @@ _DEFAULT_ACTIVE_WINDOWS = (("08:00", "20:00"),)
 _DEFAULT_MINIMUM_GAP_SECONDS = 3600
 _DEFAULT_MAXIMUM_NOTIFICATIONS_PER_HOUR = 1
 _DEFAULT_QUIET_HOURS = ("22:00", "08:00")
+_SCHEDULER_TIME_STATE_KEY = "scheduler_time_state_v1"
 
 
 class SchedulerValidationError(ValueError):
@@ -64,6 +65,31 @@ class SchedulerSlotDraft:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class SchedulerReconciliation:
+    """Clock high-watermark used to make restart/jump handling monotonic."""
+
+    observed_now_utc: datetime
+    effective_now_utc: datetime
+    previous_high_watermark_utc: datetime | None
+    kind: str
+    reason: str
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return a serializable reconciliation diagnostic."""
+        return {
+            "observed_now_utc": self.observed_now_utc.isoformat(),
+            "effective_now_utc": self.effective_now_utc.isoformat(),
+            "previous_high_watermark_utc": (
+                None
+                if self.previous_high_watermark_utc is None
+                else self.previous_high_watermark_utc.isoformat()
+            ),
+            "kind": self.kind,
+            "reason": self.reason,
+        }
+
+
 def _parse_hhmm(value: Any, field: str) -> time:
     if not isinstance(value, str) or len(value) != 5 or value[2] != ":":
         raise SchedulerValidationError(f"{field} must use HH:MM")
@@ -103,11 +129,8 @@ def _normalize_active_windows(raw: Any) -> tuple[tuple[str, str], ...]:
         end_value = entry.get("end")
         start = _parse_hhmm(start_value, f"active_windows[{index}].start")
         end = _parse_hhmm(end_value, f"active_windows[{index}].end")
-        if start >= end:
-            raise SchedulerValidationError(
-                "P4.1 active windows must stay within one local day; "
-                "cross-midnight windows are deferred to P4.2"
-            )
+        if start == end:
+            raise SchedulerValidationError("active window start and end must differ")
         window = (str(start_value), str(end_value))
         if window not in windows:
             windows.append(window)
@@ -155,58 +178,55 @@ def _persisted_semantics(config: Mapping[str, Any]) -> tuple[Any, ...]:
     )
 
 
-def _subtract_interval(
-    intervals: list[tuple[datetime, datetime]],
-    blocked: tuple[datetime, datetime],
-) -> list[tuple[datetime, datetime]]:
-    result: list[tuple[datetime, datetime]] = []
-    blocked_start, blocked_end = blocked
-    for start, end in intervals:
-        if blocked_end <= start or blocked_start >= end:
-            result.append((start, end))
+def _active_at_local_minute(config: SchedulerConfig, local_naive: datetime) -> bool:
+    local_date = local_naive.date()
+    local_time = local_naive.time()
+    for start_value, end_value in config.active_windows:
+        start = _parse_hhmm(start_value, "active_window.start")
+        end = _parse_hhmm(end_value, "active_window.end")
+        if start < end:
+            if local_date.weekday() in config.active_days and start <= local_time < end:
+                return True
             continue
-        if blocked_start > start:
-            result.append((start, blocked_start))
-        if blocked_end < end:
-            result.append((blocked_end, end))
-    return result
-
-
-def _active_intervals(config: SchedulerConfig, local_date: date) -> list[tuple[datetime, datetime]]:
-    if local_date.weekday() not in config.active_days:
-        return []
-
-    timezone = ZoneInfo(config.timezone)
-    intervals = [
-        (
-            datetime.combine(
-                local_date,
-                _parse_hhmm(start, "active_window.start"),
-                tzinfo=timezone,
-            ),
-            datetime.combine(
-                local_date,
-                _parse_hhmm(end, "active_window.end"),
-                tzinfo=timezone,
-            ),
-        )
-        for start, end in config.active_windows
-    ]
-
-    quiet_start = _parse_hhmm(config.quiet_hours[0], "quiet_hours.start")
-    quiet_end = _parse_hhmm(config.quiet_hours[1], "quiet_hours.end")
-    if quiet_start == quiet_end:
-        return intervals
-
-    for day_offset in (-1, 0, 1):
-        quiet_date = local_date + timedelta(days=day_offset)
-        start = datetime.combine(quiet_date, quiet_start, tzinfo=timezone)
-        if quiet_start < quiet_end:
-            end = datetime.combine(quiet_date, quiet_end, tzinfo=timezone)
+        if local_time >= start:
+            window_start_date = local_date
+        elif local_time < end:
+            window_start_date = local_date - timedelta(days=1)
         else:
-            end = datetime.combine(quiet_date + timedelta(days=1), quiet_end, tzinfo=timezone)
-        intervals = _subtract_interval(intervals, (start, end))
-    return [(start, end) for start, end in intervals if start < end]
+            continue
+        if window_start_date.weekday() in config.active_days:
+            return True
+    return False
+
+
+def _quiet_at_local_minute(config: SchedulerConfig, local_naive: datetime) -> bool:
+    local_time = local_naive.time()
+    start = _parse_hhmm(config.quiet_hours[0], "quiet_hours.start")
+    end = _parse_hhmm(config.quiet_hours[1], "quiet_hours.end")
+    if start == end:
+        return False
+    if start < end:
+        return start <= local_time < end
+    return local_time >= start or local_time < end
+
+
+def _resolve_local_minute(local_naive: datetime, timezone: ZoneInfo) -> tuple[datetime, ...]:
+    """Map one wall-clock minute to zero, one, or two real UTC instants.
+
+    A spring-forward minute has no round-tripping representation and is skipped.
+    A fall-back minute has two valid folds and both are returned; downstream
+    local-hour capacity applies across both folds, preventing duplicate floods.
+    """
+    resolved: list[datetime] = []
+    for fold in (0, 1):
+        aware = local_naive.replace(tzinfo=timezone, fold=fold)
+        candidate = aware.astimezone(UTC)
+        round_trip = candidate.astimezone(timezone)
+        if round_trip.replace(tzinfo=None) != local_naive or round_trip.fold != fold:
+            continue
+        if candidate not in resolved:
+            resolved.append(candidate)
+    return tuple(sorted(resolved))
 
 
 def _minute_candidates(
@@ -215,18 +235,19 @@ def _minute_candidates(
     *,
     not_before_utc: datetime | None,
 ) -> tuple[datetime, ...]:
+    timezone = ZoneInfo(config.timezone)
+    local_midnight = datetime.combine(local_date, time.min)
     candidates: list[datetime] = []
-    for start, end in _active_intervals(config, local_date):
-        cursor = start.replace(second=0, microsecond=0)
-        if cursor < start:
-            cursor += timedelta(minutes=1)
-        while cursor < end:
-            candidate = cursor.astimezone(UTC)
+    for minute_offset in range(24 * 60):
+        local_naive = local_midnight + timedelta(minutes=minute_offset)
+        if not _active_at_local_minute(config, local_naive):
+            continue
+        if _quiet_at_local_minute(config, local_naive):
+            continue
+        for candidate in _resolve_local_minute(local_naive, timezone):
             if not_before_utc is None or candidate >= not_before_utc:
                 candidates.append(candidate)
-            cursor += timedelta(minutes=1)
     return tuple(sorted(dict.fromkeys(candidates)))
-
 
 def _hour_bucket(candidate_utc: datetime, timezone: ZoneInfo) -> tuple[date, int]:
     local = candidate_utc.astimezone(timezone)
@@ -237,17 +258,20 @@ def _valid_after(
     candidate: datetime,
     selected: list[datetime],
     *,
+    occupied: tuple[datetime, ...],
     timezone: ZoneInfo,
     minimum_gap_seconds: int,
     maximum_notifications_per_hour: int,
 ) -> bool:
-    if selected:
-        gap = (candidate - selected[-1]).total_seconds()
-        if gap < minimum_gap_seconds:
-            return False
+    all_existing = (*occupied, *selected)
+    if any(
+        abs((candidate - item).total_seconds()) < minimum_gap_seconds
+        for item in all_existing
+    ):
+        return False
     bucket = _hour_bucket(candidate, timezone)
     return (
-        sum(1 for item in selected if _hour_bucket(item, timezone) == bucket)
+        sum(1 for item in all_existing if _hour_bucket(item, timezone) == bucket)
         < maximum_notifications_per_hour
     )
 
@@ -256,21 +280,20 @@ def _greedy_capacity(
     candidates: tuple[datetime, ...],
     *,
     requested: int,
+    occupied: tuple[datetime, ...],
     timezone: ZoneInfo,
     minimum_gap_seconds: int,
     maximum_notifications_per_hour: int,
 ) -> tuple[datetime, ...]:
     selected: list[datetime] = []
     for candidate in candidates:
-        if selected and (candidate - selected[-1]).total_seconds() < minimum_gap_seconds:
-            continue
-        if (
-            sum(
-                1
-                for item in selected
-                if _hour_bucket(item, timezone) == _hour_bucket(candidate, timezone)
-            )
-            >= maximum_notifications_per_hour
+        if not _valid_after(
+            candidate,
+            selected,
+            occupied=occupied,
+            timezone=timezone,
+            minimum_gap_seconds=minimum_gap_seconds,
+            maximum_notifications_per_hour=maximum_notifications_per_hour,
         ):
             continue
         selected.append(candidate)
@@ -289,6 +312,7 @@ def _stratified_schedule(
     *,
     target_count: int,
     seed: str,
+    occupied: tuple[datetime, ...],
     timezone: ZoneInfo,
     minimum_gap_seconds: int,
     maximum_notifications_per_hour: int,
@@ -311,6 +335,7 @@ def _stratified_schedule(
                 if _valid_after(
                     candidate,
                     selected,
+                    occupied=occupied,
                     timezone=timezone,
                     minimum_gap_seconds=minimum_gap_seconds,
                     maximum_notifications_per_hour=maximum_notifications_per_hour,
@@ -349,11 +374,13 @@ class SchedulerService:
         self,
         profiles: ProfilesRepository,
         scheduler: SchedulerRepository,
+        settings: SettingsRepository,
         *,
         clock: Clock | None = None,
     ) -> None:
         self._profiles = profiles
         self._scheduler = scheduler
+        self._settings = settings
         self._clock = clock or SystemClock()
 
     async def async_preview(
@@ -369,7 +396,7 @@ class SchedulerService:
         persisted = await self._scheduler.async_get_config(profile_id)
         config, daily_push_budget = self._resolve_config(profile, persisted)
 
-        now = self._aware_utc_now()
+        now = await self.async_effective_now()
         timezone = ZoneInfo(config.timezone)
         resolved_date = local_date or now.astimezone(timezone).date()
         not_before = now if resolved_date == now.astimezone(timezone).date() else None
@@ -399,7 +426,11 @@ class SchedulerService:
         persisted = await self._scheduler.async_get_config(profile_id)
         prospective, daily_push_budget = self._resolve_config(profile, persisted)
 
-        now = self._aware_utc_now()
+        reconciliation = await self.async_reconcile(reason="generate")
+        now = reconciliation.effective_now_utc
+        timezone_changed = (
+            persisted is not None and str(persisted["timezone"]) != prospective.timezone
+        )
         config_row = await self._scheduler.async_sync_config(
             profile_id=profile_id,
             timezone=prospective.timezone,
@@ -413,17 +444,41 @@ class SchedulerService:
             updated_at_utc=now.isoformat(),
         )
         config = self._config_from_row(config_row)
+        if timezone_changed:
+            await self._scheduler.async_cancel_superseded_future_slots(
+                profile_id=profile_id,
+                active_config_version=config.version,
+                not_before_utc=now.isoformat(),
+                updated_at_utc=now.isoformat(),
+            )
+
         timezone = ZoneInfo(config.timezone)
         resolved_date = local_date or now.astimezone(timezone).date()
         local_today = now.astimezone(timezone).date()
         not_before = now if resolved_date == local_today else None
+        start_utc, end_utc = self._local_day_bounds(config.timezone, resolved_date)
+        existing = await self._scheduler.async_list_slots(
+            profile_id=profile_id,
+            start_utc=start_utc.isoformat(),
+            end_utc=end_utc.isoformat(),
+        )
+        current_version = tuple(
+            slot
+            for slot in existing
+            if int(slot["scheduler_config_version"]) == config.version
+        )
+        remaining_budget = max(0, daily_push_budget - len(current_version))
+        occupied = tuple(
+            datetime.fromisoformat(str(slot["scheduled_for_utc"])).astimezone(UTC)
+            for slot in current_version
+        )
         drafts = self._generate(
             config,
             local_date=resolved_date,
-            daily_push_budget=daily_push_budget,
+            daily_push_budget=remaining_budget,
             not_before_utc=not_before,
+            occupied=occupied,
         )
-        start_utc, end_utc = self._local_day_bounds(config.timezone, resolved_date)
         materialized = await self._scheduler.async_materialize_day(
             profile_id=profile_id,
             scheduler_config_version=config.version,
@@ -442,6 +497,7 @@ class SchedulerService:
         )
         payload["materialized"] = True
         payload["materialized_slots"] = list(materialized)
+        payload["reconciliation"] = reconciliation.as_dict()
         return payload
 
     def _resolve_config(
@@ -560,6 +616,7 @@ class SchedulerService:
         local_date: date,
         daily_push_budget: int,
         not_before_utc: datetime | None,
+        occupied: tuple[datetime, ...] = (),
     ) -> tuple[SchedulerSlotDraft, ...]:
         seed = self._seed(config.profile_id, local_date, config.version)
         candidates = _minute_candidates(
@@ -571,6 +628,7 @@ class SchedulerService:
         capacity = _greedy_capacity(
             candidates,
             requested=daily_push_budget,
+            occupied=occupied,
             timezone=timezone,
             minimum_gap_seconds=config.minimum_gap_seconds,
             maximum_notifications_per_hour=config.maximum_notifications_per_hour,
@@ -579,6 +637,7 @@ class SchedulerService:
             candidates,
             target_count=len(capacity),
             seed=seed,
+            occupied=occupied,
             timezone=timezone,
             minimum_gap_seconds=config.minimum_gap_seconds,
             maximum_notifications_per_hour=config.maximum_notifications_per_hour,
@@ -611,13 +670,71 @@ class SchedulerService:
     @staticmethod
     def _local_day_bounds(timezone_name: str, local_date: date) -> tuple[datetime, datetime]:
         timezone = ZoneInfo(timezone_name)
-        start = datetime.combine(local_date, time.min, tzinfo=timezone).astimezone(UTC)
-        end = datetime.combine(
-            local_date + timedelta(days=1),
-            time.min,
-            tzinfo=timezone,
-        ).astimezone(UTC)
-        return start, end
+
+        def boundary(day: date) -> datetime:
+            local_midnight = datetime.combine(day, time.min)
+            for minute_offset in range(48 * 60):
+                resolved = _resolve_local_minute(
+                    local_midnight + timedelta(minutes=minute_offset),
+                    timezone,
+                )
+                if resolved:
+                    return resolved[0]
+            raise SchedulerValidationError(
+                f"could not resolve a local-day boundary for {day.isoformat()}"
+            )
+
+        return boundary(local_date), boundary(local_date + timedelta(days=1))
+
+    async def async_effective_now(self) -> datetime:
+        """Return a read-only monotonic wall-clock cutoff for preview/generation."""
+        observed = self._aware_utc_now()
+        state = await self._settings.async_get(_SCHEDULER_TIME_STATE_KEY)
+        if not isinstance(state, Mapping):
+            return observed
+        raw = state.get("high_watermark_utc")
+        if not isinstance(raw, str):
+            return observed
+        previous = datetime.fromisoformat(raw).astimezone(UTC)
+        return max(observed, previous)
+
+    async def async_reconcile(self, *, reason: str) -> SchedulerReconciliation:
+        """Persist a monotonic scheduler time watermark across restart/clock jumps."""
+        observed = self._aware_utc_now()
+        state = await self._settings.async_get(_SCHEDULER_TIME_STATE_KEY)
+        previous: datetime | None = None
+        if isinstance(state, Mapping):
+            raw = state.get("high_watermark_utc")
+            if isinstance(raw, str):
+                previous = datetime.fromisoformat(raw).astimezone(UTC)
+
+        effective = observed if previous is None else max(observed, previous)
+        if previous is None:
+            kind = "initial"
+        elif observed < previous:
+            kind = "clock_backward"
+        elif reason == "startup":
+            kind = "restart"
+        else:
+            kind = "advance"
+
+        await self._settings.async_set(
+            _SCHEDULER_TIME_STATE_KEY,
+            {
+                "high_watermark_utc": effective.isoformat(),
+                "last_observed_utc": observed.isoformat(),
+                "last_reason": reason,
+                "kind": kind,
+            },
+            updated_at_utc=observed.isoformat(),
+        )
+        return SchedulerReconciliation(
+            observed_now_utc=observed,
+            effective_now_utc=effective,
+            previous_high_watermark_utc=previous,
+            kind=kind,
+            reason=reason,
+        )
 
     def _aware_utc_now(self) -> datetime:
         now = self._clock.now()
