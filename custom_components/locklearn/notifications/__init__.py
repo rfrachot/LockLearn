@@ -7,6 +7,7 @@ from .capabilities import (
     TargetCapabilities,
     classify_learning_signal,
 )
+from .delivery import NotificationDeliveryError, NotificationDeliveryService
 from .interactions import (
     NotificationActionDisposition,
     NotificationActionResult,
@@ -32,6 +33,8 @@ __all__ = [
     "LearningSignal",
     "NotificationActionDisposition",
     "NotificationActionResult",
+    "NotificationDeliveryError",
+    "NotificationDeliveryService",
     "NotificationInteractionService",
     "NotificationInteractionValidationError",
     "NotificationRenderMode",
