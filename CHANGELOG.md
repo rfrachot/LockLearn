@@ -5,6 +5,14 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P4.5 send-time CardDefinition selection with explicit relearning/review/
+  difficult/calibration/teaser priority and idempotent slot binding.
+- Default `skip_if_pending`, explicit missed/no-candidate expiry reasons and
+  catch-up-free reconciliation.
+- Target/Profile adaptive notification backoff from expiry/clear streaks with
+  progressive interaction recovery, isolated from SRS state.
+- State schema v5 migration for selected CardDefinition identity and slot expiry
+  reasons, plus ADR-0040.
 - P4.4 send-time Home Assistant `receptive_when` evaluation with bounded,
   pedagogically neutral slot deferral.
 - Persistent V1 receptivity samples for local weekday/hour, delivered, cleared,
