@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-from homeassistant.core import Event, HomeAssistant
+from homeassistant.core import Context, Event, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -203,3 +203,108 @@ async def test_services_lifecycle_and_unattended_snooze_audit(
     assert await hass.config_entries.async_unload(entry.entry_id)
     for service in ("start_session", "send_now", "snooze", "pause_track", "resume_track"):
         assert not hass.services.has_service(DOMAIN, service)
+
+
+async def test_user_services_delegate_to_scheduler_track_and_session_primitives(
+    hass: HomeAssistant,
+) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    runtime = hass.data[DOMAIN][DATA_RUNTIME]
+
+    now = datetime.now(UTC)
+    profile = await runtime.profiles.async_create_profile(
+        name="P4.8 owner actions",
+        preset="standard",
+        timezone="Europe/Paris",
+        owner_ha_user_ids=("owner-service",),
+    )
+    profile_id = str(profile["profile_id"])
+    track = await runtime.tracks.async_create_track(
+        profile_id=profile_id,
+        name="Japanese",
+        pack_version_id="locklearn:pack-version:japanese-starter-1.0.0",
+        source_language="ja",
+        target_language="ja-Latn",
+    )
+    track_id = str(track["track_id"])
+    await runtime.storage.repositories.notification_targets.async_insert(
+        NotificationTargetRecord(
+            target_id="target-service",
+            profile_id=profile_id,
+            device_registry_id="device-service",
+            platform="android",
+            friendly_name="Service phone",
+            created_at_utc=now.isoformat(),
+            updated_at_utc=now.isoformat(),
+        )
+    )
+    context = Context(user_id="owner-service")
+
+    await hass.services.async_call(
+        DOMAIN,
+        "send_now",
+        {
+            "profile_id": profile_id,
+            "track_id": track_id,
+            "target_id": "target-service",
+        },
+        blocking=True,
+        context=context,
+    )
+    slots = await runtime.storage.repositories.scheduler.async_list_slots(
+        profile_id=profile_id,
+        start_utc=(now - timedelta(minutes=5)).isoformat(),
+        end_utc=(now + timedelta(hours=1)).isoformat(),
+    )
+    manual = [slot for slot in slots if slot["slot_type"] == "manual_send_now"]
+    assert len(manual) == 1
+    assert manual[0]["track_id"] == track_id
+    assert manual[0]["target_id"] == "target-service"
+    assert manual[0]["card_key"] is not None
+    assert manual[0]["selection_reason"] == "teaser_new"
+
+    await hass.services.async_call(
+        DOMAIN,
+        "pause_track",
+        {"profile_id": profile_id, "track_id": track_id},
+        blocking=True,
+        context=context,
+    )
+    paused = await runtime.storage.repositories.tracks.async_get(track_id)
+    assert paused is not None
+    assert paused["status"] == "paused"
+
+    await hass.services.async_call(
+        DOMAIN,
+        "resume_track",
+        {"profile_id": profile_id, "track_id": track_id},
+        blocking=True,
+        context=context,
+    )
+    resumed = await runtime.storage.repositories.tracks.async_get(track_id)
+    assert resumed is not None
+    assert resumed["status"] == "active"
+
+    await hass.services.async_call(
+        DOMAIN,
+        "start_session",
+        {
+            "profile_id": profile_id,
+            "track_id": track_id,
+            "settings": {"requested_cards": 2},
+        },
+        blocking=True,
+        context=context,
+    )
+    connection = sqlite3.connect(runtime.storage.paths.state_db)
+    try:
+        session_rows = connection.execute(
+            "SELECT profile_id, track_id, status, question_count FROM sessions"
+        ).fetchall()
+    finally:
+        connection.close()
+    assert session_rows == [(profile_id, track_id, "active", 2)]
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
