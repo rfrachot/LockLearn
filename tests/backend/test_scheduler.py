@@ -137,6 +137,7 @@ async def test_materialized_slots_are_authoritative_after_config_change(tmp_path
         service = SchedulerService(
             storage.repositories.profiles,
             storage.repositories.scheduler,
+            storage.repositories.settings,
             clock=clock,
         )
         day = date(2026, 9, 24)
