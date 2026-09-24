@@ -86,7 +86,7 @@
 ### P4
 
 - **P4.1** — Materialized scheduler slots and deterministic generation (complete)
-- **P4.2** — Timezone, DST, restart and clock-jump reconciliation
+- **P4.2** — Timezone, DST, restart and clock-jump reconciliation (complete)
 - **P4.3** — Multi-track/multi-target arbitration and capacity Repairs
 - **P4.4** — Context-aware receptivity and routine slots
 - **P4.5** — Notification selection policy, missed/pending/backoff
