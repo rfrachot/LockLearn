@@ -2,38 +2,33 @@
 
 ## Current state
 
-P5.1 implementation is pushed on `feat/p5-frontend` and is **pending
-qualification**, not yet closed PASS. P4 remains frozen on
-`feat/p4-scheduler`.
+P5.1 is **closed PASS** on `feat/p5-frontend`. The qualified implementation and
+committed bundle HEAD is `7460f55` (`build(frontend): update P5.1 bundled panel`);
+the branch also contains the subsequent closure-documentation commit.
 
-The P0 Lit/Vite prototype has been promoted into a versioned frontend shell.
-`locklearn/bootstrap` now returns frontend protocol, backend version and panel
-path before any product data is loaded. The compiled frontend fails closed on a
-protocol mismatch and offers an explicit hard browser reload.
+Final repository gate on 2026-09-25: Ruff format PASS (247 files), Ruff lint
+PASS, mypy PASS (141 sources), resource registries PASS, pytest PASS (379 tests
+in 18.82 seconds), TypeScript typecheck PASS, Vitest PASS (14/14), and Vite build
+PASS (34.19 kB, 10.48 kB gzip). Consecutive builds reproduced SHA-256
+`a92882a7fc77e59428941852438aaabd1ea24a5a2b96ae50673f83990a653dce` with
+no `frontend/` drift.
 
-The shell loads visible Profiles through paginated Home Assistant WebSocket
-calls only, implements stable `/locklearn/<route>` history routing for all V1
-sections, and derives navigation visibility from backend-returned Profile roles.
-This is presentation only; backend ACL remains authoritative. Settings is hidden
-unless at least one visible Profile is owned by the current HA user.
+The branch was downloaded through HACS onto real Home Assistant 2026.7.4 and
+Core restarted. Bootstrap returned protocol 1, backend 0.0.2 and `/locklearn`;
+the loaded module URL was
+`/locklearn_static/locklearn-panel.js?v=0.0.2-a92882a7fc77`, and its bytes matched
+the committed bundle. One loaded Config Entry/panel remained and the LockLearn
+system log had zero ERROR/CRITICAL records.
 
-Custom-element registration is version-aware. A matching existing
-`locklearn-panel` is reused; an unknown/mismatched constructor is never
-redefined and instead produces a full-page reload-required overlay.
+Firefox 156 real-browser qualification passed sidebar load, Home, Quiz,
+owner-visible Settings, unknown-route fallback, full reload at `/locklearn/quiz`,
+stale-element no-redefinition/full-reload UX, and bootstrap mismatch fail-closed
+behavior before Profile loading. Viewer/editor UI visibility was not run because
+only one owner token was available; this scenario was optional and remains
+covered by automated navigation/ACL tests.
 
-The panel module URL now includes both integration version and the SHA-256 prefix
-of the committed bundle. Frontend CI rebuilds with Vite and fails if the
-committed HACS bundle differs.
-
-Source/tests/docs are pushed, but the committed
-`custom_components/locklearn/frontend/locklearn-panel.js` still needs the local
-Vite build from this branch. P5.1 must not be closed until npm typecheck/tests,
-Vite build/bundle diff, the Python gate and preferably a real HA panel reload
-check are green.
-
-Next concrete action: checkout/pull `feat/p5-frontend`, run the full frontend
-and backend gate, commit/push the Vite-generated bundled artifact if it changed,
-then remediate any findings. Do not start P5.2 before P5.1 PASS.
+P5.2 is not started. Next concrete action: review the pushed P5.1 closure and,
+only when explicitly requested, begin P5.2 Home dashboard/profile switcher work.
 
 P4.9 and the complete P4 phase are closed PASS on `feat/p4-scheduler`.
 P4.9 ships three Home Assistant automation blueprints under
