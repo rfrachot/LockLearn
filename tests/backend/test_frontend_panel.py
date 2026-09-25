@@ -8,8 +8,8 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 
-from custom_components.locklearn.const import INTEGRATION_VERSION, STATIC_URL_PATH
 from custom_components.locklearn import panel
+from custom_components.locklearn.const import INTEGRATION_VERSION, STATIC_URL_PATH
 
 
 async def test_panel_module_url_uses_release_and_bundle_hash(
