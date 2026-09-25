@@ -66,7 +66,7 @@ export async function listVisibleProfiles(
   const profiles: VisibleProfile[] = [];
   let cursor: string | null = null;
   do {
-    const page = await hass.callWS<Page<VisibleProfile>>({
+    const page: Page<VisibleProfile> = await hass.callWS<Page<VisibleProfile>>({
       type: "locklearn/profiles/list",
       limit: 100,
       ...(cursor === null ? {} : { cursor }),
