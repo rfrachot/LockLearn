@@ -47,8 +47,7 @@ async def async_register_panel(hass: HomeAssistant) -> None:
         sidebar_title="LockLearn",
         sidebar_icon="mdi:school",
         module_url=(
-            f"{STATIC_URL_PATH}/locklearn-panel.js"
-            f"?v={INTEGRATION_VERSION}-{asset_version}"
+            f"{STATIC_URL_PATH}/locklearn-panel.js?v={INTEGRATION_VERSION}-{asset_version}"
         ),
         require_admin=False,
     )
