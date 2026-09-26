@@ -275,10 +275,18 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
     assert created["success"] is True
     track_id = created["result"]["track_id"]
     assert created["result"]["pack_version_id"] == "locklearn:pack-version:v1"
+    assert created["result"]["content_weights"] == {"vocabulary": 1.0}
     assert created["result"]["settings"]["scheduler"] == {
         "learning_count": 2,
         "quiz_count": 1,
     }
+
+    await client.send_json_auto_id(
+        {"type": "locklearn/targets/list", "profile_id": profile_id}
+    )
+    targets = await client.receive_json()
+    assert targets["success"] is True
+    assert targets["result"]["items"] == []
 
     outsider = await hass_ws_client(hass, hass_read_only_access_token)
     await outsider.send_json_auto_id({"type": "locklearn/tracks/list", "profile_id": profile_id})
@@ -295,6 +303,13 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
         }
     )
     assert (await client.receive_json())["success"] is True
+
+    await outsider.send_json_auto_id(
+        {"type": "locklearn/targets/list", "profile_id": profile_id}
+    )
+    viewer_targets = await outsider.receive_json()
+    assert viewer_targets["success"] is False
+    assert viewer_targets["error"]["code"] == "locklearn/forbidden"
 
     await outsider.send_json_auto_id(
         {
@@ -336,6 +351,7 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
             "track_id": track_id,
             "name": "Updated track",
             "priority": 3,
+            "content_weights": {"vocabulary": 2.5},
             "scheduler_settings": {
                 "learning_count": 1,
                 "quiz_count": 2,
@@ -346,6 +362,7 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
     assert updated["success"] is True
     assert updated["result"]["name"] == "Updated track"
     assert updated["result"]["priority"] == 3
+    assert updated["result"]["content_weights"] == {"vocabulary": 2.5}
     assert updated["result"]["settings"]["scheduler"] == {
         "learning_count": 1,
         "quiz_count": 2,

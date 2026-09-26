@@ -12,6 +12,7 @@ import {
   listShareTargets,
   listTracks,
   listPacks,
+  listNotificationTargets,
   previewPackUpdate,
   previewTrackPlan,
   setTrackPlan,
@@ -314,7 +315,11 @@ describe("frontend protocol", () => {
         messages.push(message);
         if (message.type === "locklearn/profiles/members") return [] as T;
         if (message.type === "locklearn/profiles/share_targets") return [] as T;
-        if (message.type === "locklearn/tracks/list" || message.type === "locklearn/packs/list") {
+        if (
+          message.type === "locklearn/tracks/list" ||
+          message.type === "locklearn/packs/list" ||
+          message.type === "locklearn/targets/list"
+        ) {
           return { items: [], cursor: null } as T;
         }
         if (message.type === "locklearn/tracks/preview_pack_update") {
@@ -361,6 +366,7 @@ describe("frontend protocol", () => {
     await listShareTargets(hass, "p1");
     await listTracks(hass, "p1");
     await listPacks(hass);
+    await listNotificationTargets(hass, "p1");
     await previewPackUpdate(hass, "t1", "v2");
     await previewTrackPlan(hass, "t1", plan);
     await setTrackPlan(hass, "t1", plan);
@@ -370,6 +376,7 @@ describe("frontend protocol", () => {
       { type: "locklearn/profiles/share_targets", profile_id: "p1" },
       { type: "locklearn/tracks/list", limit: 100, profile_id: "p1" },
       { type: "locklearn/packs/list", limit: 100 },
+      { type: "locklearn/targets/list", limit: 100, profile_id: "p1" },
       {
         type: "locklearn/tracks/preview_pack_update",
         track_id: "t1",
