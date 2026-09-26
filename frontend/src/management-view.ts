@@ -5,6 +5,7 @@ import { languageFallback, translate, type UiLanguage } from "./i18n";
 import {
   createProfile,
   createTrack,
+  deleteProfile,
   deleteTrack,
   integratePackUpdate,
   listPacks,
@@ -257,7 +258,10 @@ export class LockLearnManagementView extends LitElement {
             <option value="archived">${this.t("manage.archived")}</option>
           </select>
         </label>
-        <div class="actions"><button class="primary" type="submit">${this.t("manage.save")}</button></div>
+        <div class="actions">
+          <button class="primary" type="submit">${this.t("manage.save")}</button>
+          <button type="button" @click=${() => this.removeProfile()}>${this.t("manage.deleteProfile")}</button>
+        </div>
       </form>
     `;
   }
@@ -271,7 +275,22 @@ export class LockLearnManagementView extends LitElement {
         <h2>${this.t("manage.sharing")}</h2>
         ${this.members.length === 0 ? html`<p>${this.t("manage.none")}</p>` : html`
           <ul>${this.members.map((member) => html`<li>
-            ${member.name} — ${member.role}
+            ${member.name}
+            <select
+              aria-label=${this.t("manage.role")}
+              .value=${member.role}
+              ?disabled=${member.role === "owner" && ownerCount === 1}
+              @change=${(event: Event) => {
+                const target = event.currentTarget;
+                if (target instanceof HTMLSelectElement) {
+                  void this.changeMemberRole(member.ha_user_id, target.value as ProfileRole);
+                }
+              }}
+            >
+              <option value="viewer">viewer</option>
+              <option value="editor">editor</option>
+              <option value="owner">owner</option>
+            </select>
             ${member.role === "owner" && ownerCount === 1 ? nothing : html`
               <button @click=${() => this.removeMember(member.ha_user_id)}>${this.t("manage.remove")}</button>`}
           </li>`)}</ul>`}
@@ -304,6 +323,23 @@ export class LockLearnManagementView extends LitElement {
   private async removeMember(userId: string): Promise<void> {
     if (this.hass === undefined || this.profile === undefined) return;
     await this.mutate(() => removeProfileMember(this.hass!, this.profile!.profile_id, userId), this.t("manage.saved"));
+  }
+
+  private async changeMemberRole(userId: string, role: ProfileRole): Promise<void> {
+    if (this.hass === undefined || this.profile === undefined) return;
+    await this.mutate(
+      () => shareProfile(this.hass!, this.profile!.profile_id, userId, role),
+      this.t("manage.saved"),
+    );
+  }
+
+  private async removeProfile(): Promise<void> {
+    if (this.hass === undefined || this.profile === undefined) return;
+    if (!globalThis.confirm?.(this.t("manage.confirmDeleteProfile"))) return;
+    await this.mutate(
+      () => deleteProfile(this.hass!, this.profile!.profile_id),
+      this.t("manage.deleted"),
+    );
   }
 
   private renderCreateProfile() {
@@ -357,6 +393,8 @@ export class LockLearnManagementView extends LitElement {
             if (this.hass === undefined) return;
             void this.mutate(() => updateTrack(this.hass!, track.track_id, {
               name: String(data.get("name") ?? track.name),
+              source_language: String(data.get("source") ?? track.source_language ?? "").trim(),
+              target_language: String(data.get("target") ?? track.target_language ?? "").trim(),
               status: String(data.get("status") ?? track.status),
               priority: asInt(data.get("priority"), track.priority, 1),
             }), this.t("manage.saved"));
@@ -367,6 +405,8 @@ export class LockLearnManagementView extends LitElement {
               <option value="paused">${this.t("manage.paused")}</option>
               <option value="archived">${this.t("manage.archived")}</option>
             </select></label>
+            <label>${this.t("manage.sourceLanguage")}<input name="source" .value=${track.source_language ?? ""} required /></label>
+            <label>${this.t("manage.targetLanguage")}<input name="target" .value=${track.target_language ?? ""} required /></label>
             <label>${this.t("manage.priority")}<input name="priority" type="number" min="1" .value=${String(track.priority)} /></label>
             <div class="actions">
               <button type="submit">${this.t("manage.save")}</button>
