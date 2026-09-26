@@ -255,7 +255,14 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
     await client.send_json_auto_id({"type": "locklearn/datasets/list", "limit": 10})
     datasets = await client.receive_json()
     assert datasets["success"] is True
-    assert any(item["dataset_id"] == DATASET_ID for item in datasets["result"]["items"])
+    dataset = next(item for item in datasets["result"]["items"] if item["dataset_id"] == DATASET_ID)
+    assert dataset["installed_version"] == "v1"
+    assert dataset["state"] == "installed"
+    assert dataset["sources"]
+    assert dataset["sources"][0]["attribution_template"]
+    assert dataset["sources"][0]["provenance_records"] >= 1
+    assert dataset["licenses"]
+    assert dataset["licenses"][0]["license_id"]
 
     await client.send_json_auto_id(
         {
