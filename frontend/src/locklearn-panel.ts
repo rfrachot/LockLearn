@@ -521,10 +521,12 @@ export class LockLearnPanel extends LitElement {
         </header>
         <main>
           ${this.profiles.length === 0
-            ? html`<section class="state-card">
-                <h1>${this.t("app.title")}</h1>
-                <p>${this.t("state.noProfiles")}</p>
-              </section>`
+            ? html`<locklearn-management-view
+                .hass=${this.hass}
+                .profile=${undefined}
+                .route=${"profiles" as ManagementRoute}
+                @locklearn-refresh=${() => void this.refreshManagement()}
+              ></locklearn-management-view>`
             : this.activeRoute === "home"
               ? this.renderHome()
               : this.activeRoute === "learn"
