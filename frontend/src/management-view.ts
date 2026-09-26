@@ -152,7 +152,14 @@ export class LockLearnManagementView extends LitElement {
   }
 
   private async load(): Promise<void> {
-    if (this.hass === undefined || this.profile === undefined) return;
+    if (this.hass === undefined) return;
+    if (this.profile === undefined) {
+      this.tracks = [];
+      this.packs = [];
+      this.members = [];
+      this.shareTargets = [];
+      return;
+    }
     this.loading = true;
     this.errorMessage = "";
     try {
@@ -195,7 +202,14 @@ export class LockLearnManagementView extends LitElement {
   }
 
   protected render() {
-    if (this.profile === undefined) return nothing;
+    if (this.profile === undefined) {
+      return html`<section class="stack">
+        <h1>${this.t("manage.profiles")}</h1>
+        ${this.errorMessage ? html`<div class="error" role="alert">${this.errorMessage}</div>` : nothing}
+        ${this.notice ? html`<div class="notice" role="status">${this.notice}</div>` : nothing}
+        ${this.renderCreateProfile()}
+      </section>`;
+    }
     return html`
       <section class="stack">
         <h1>${this.routeTitle()}</h1>
@@ -231,7 +245,7 @@ export class LockLearnManagementView extends LitElement {
         </article>
         ${this.isOwner() ? this.renderSharing() : nothing}
       </div>
-      ${this.isOwner() ? this.renderCreateProfile() : nothing}
+      ${this.renderCreateProfile()}
     `;
   }
 
@@ -365,7 +379,7 @@ export class LockLearnManagementView extends LitElement {
             <option value="child">child</option><option value="standard">standard</option>
             <option value="intensive">intensive</option><option value="custom">custom</option>
           </select></label>
-          <label>${this.t("manage.timezone")}<input name="timezone" .value=${this.profile?.timezone ?? "UTC"} required /></label>
+          <label>${this.t("manage.timezone")}<input name="timezone" .value=${this.profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC"} required /></label>
           <div class="actions"><button class="primary" type="submit">${this.t("manage.create")}</button></div>
         </form>
       </article>
