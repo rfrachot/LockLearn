@@ -1521,6 +1521,55 @@ async def ws_quiz_evaluate(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "locklearn/quiz/answer",
+        vol.Required("session_id"): str,
+        vol.Required("expected_version"): vol.All(int, vol.Range(min=1)),
+        vol.Required("question_id"): str,
+        vol.Required("answer"): object,
+    }
+)
+@websocket_api.async_response
+async def ws_quiz_answer(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Atomically grade, persist and advance one quiz question."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    state = await _authorized_session(
+        runtime,
+        connection,
+        msg["id"],
+        msg["session_id"],
+        ProfilePermission.ANSWER,
+    )
+    if state is None:
+        return
+    if str(state.get("type")) != "quiz":
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, "Session is not a quiz")
+        return
+    try:
+        result = await runtime.quiz_sessions.async_answer(
+            msg["session_id"],
+            msg["expected_version"],
+            msg["question_id"],
+            msg["answer"],
+        )
+    except QuizSessionError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    except SessionNotFoundError:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Session not found")
+        return
+    except StaleSessionError:
+        connection.send_error(msg["id"], ERR_STALE_SESSION, "The session changed on another client")
+        return
+    result["session"] = await _with_fatigue_advice(runtime, result["session"])
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "locklearn/session/answer",
         vol.Required("session_id"): str,
         vol.Required("expected_version"): vol.All(int, vol.Range(min=1)),
@@ -1536,28 +1585,26 @@ async def ws_session_answer(
     runtime = _require_runtime(hass, connection, msg["id"])
     if runtime is None:
         return
-    if (
-        await _authorized_session(
-            runtime,
-            connection,
+    authorized = await _authorized_session(
+        runtime,
+        connection,
+        msg["id"],
+        msg["session_id"],
+        ProfilePermission.ANSWER,
+    )
+    if authorized is None:
+        return
+    if str(authorized.get("type")) == "quiz":
+        connection.send_error(
             msg["id"],
-            msg["session_id"],
-            ProfilePermission.ANSWER,
+            ERR_INVALID_REQUEST,
+            "Quiz sessions must use locklearn/quiz/answer",
         )
-        is None
-    ):
         return
     try:
         answer = msg["answer"]
         if isinstance(answer, dict) and answer.get("kind") == "learning":
             state = await runtime.learning_sessions.async_answer(
-                msg["session_id"],
-                msg["expected_version"],
-                msg["question_id"],
-                answer,
-            )
-        elif isinstance(answer, dict) and answer.get("kind") == "quiz":
-            state = await runtime.quiz_sessions.async_answer(
                 msg["session_id"],
                 msg["expected_version"],
                 msg["question_id"],
@@ -1907,6 +1954,7 @@ COMMANDS = (
     ws_session_start,
     ws_session_get,
     ws_quiz_evaluate,
+    ws_quiz_answer,
     ws_session_answer,
     ws_session_pause,
     ws_session_complete,
