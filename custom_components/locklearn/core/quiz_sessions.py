@@ -100,9 +100,7 @@ class QuizSessionService:
         self._event_emitter = event_emitter
         self._clock = clock or SystemClock()
         self._learning = LearningStateMachine(clock=self._clock)
-        self._pending_evaluations: dict[
-            tuple[str, str], tuple[dict[str, Any], dict[str, Any]]
-        ] = {}
+        self._pending_evaluations: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]] = {}
 
     async def async_prepare_questions(
         self,
@@ -339,10 +337,9 @@ class QuizSessionService:
         prior: dict[str, Any],
         current: dict[str, Any],
     ) -> bool:
-        return (
-            prior.get("submitted_text") == current.get("submitted_text")
-            and prior.get("hint_used", False) == current.get("hint_used", False)
-        )
+        return prior.get("submitted_text") == current.get("submitted_text") and prior.get(
+            "hint_used", False
+        ) == current.get("hint_used", False)
 
     async def _evaluate_current(
         self,
