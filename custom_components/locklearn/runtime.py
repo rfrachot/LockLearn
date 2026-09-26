@@ -14,6 +14,7 @@ from homeassistant.helpers.template import Template, result_as_boolean
 from .const import DOMAIN
 from .core.acl import ProfileACLService
 from .core.content_reports import ContentReportService
+from .core.dashboard import DashboardService
 from .core.difficulties import DifficultyService
 from .core.grading import FreeTextGrader
 from .core.integrity import IntegrityService
@@ -65,6 +66,7 @@ class LockLearnRuntime:
     grading: FreeTextGrader
     integrity: IntegrityService
     content_reports: ContentReportService
+    dashboard: DashboardService
     difficulties: DifficultyService
     quiz: QuizEngine
     review_policy: ReviewPolicyV1
@@ -236,6 +238,13 @@ class LockLearnRuntime:
                 content_reports=ContentReportService(
                     storage.repositories.content_reports,
                     storage.repositories.tracks,
+                ),
+                dashboard=DashboardService(
+                    storage.repositories.profiles,
+                    storage.repositories.tracks,
+                    storage.repositories.scheduler,
+                    storage,
+                    stats,
                 ),
                 difficulties=DifficultyService(
                     storage.repositories.progress,
