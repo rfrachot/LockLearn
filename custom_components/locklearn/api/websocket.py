@@ -29,6 +29,7 @@ from ..core.progress_state import ProgressUserStateError
 from ..core.scheduler import SchedulerValidationError
 from ..core.session_selection import SessionSelectionError
 from ..core.sessions import SessionQuestion, SessionValidationError
+from ..core.dashboard import DashboardServiceError
 from ..core.stats import StatsServiceError
 from ..core.tracks import TrackValidationError
 from ..runtime import LockLearnRuntime
@@ -860,6 +861,37 @@ async def ws_stats_get(
             confusion_limit=msg["confusion_limit"],
         )
     except StatsServiceError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/dashboard/get",
+        vol.Required("profile_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_dashboard_get(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return the P5.2 Home dashboard for one visible Profile."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.READ,
+    ):
+        return
+    try:
+        result = await runtime.dashboard.async_get(profile_id=profile_id)
+    except DashboardServiceError as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     connection.send_result(msg["id"], result)
@@ -1721,6 +1753,7 @@ COMMANDS = (
     ws_progress_set_user_state,
     ws_calibration_sample,
     ws_stats_get,
+    ws_dashboard_get,
     ws_difficulties_list,
     ws_confusions_list,
     ws_annotations_list,
