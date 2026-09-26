@@ -415,7 +415,7 @@ async def ws_profiles_members(
         connection,
         msg["id"],
         msg["profile_id"],
-        ProfilePermission.READ,
+        ProfilePermission.MANAGE_ACL,
     ):
         return
     members = await runtime.storage.repositories.profiles.async_list_members(msg["profile_id"])
