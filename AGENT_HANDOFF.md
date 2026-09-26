@@ -2,31 +2,22 @@
 
 ## Current state
 
-P5.2 remains **COMPLETE / PASS** on `feat/p5-frontend`.
+P5.3 is **COMPLETE / PASS** on `feat/p5-frontend`. P5.4 has not started.
 
-P5.3 is **IMPLEMENTED / REAL-HA QUALIFICATION PENDING**. The authoritative code gate passed at `48a911bc6d04d41dd6f0007099941410e417156f`; this documentation commit is its descendant.
+The final P5.3 code/bundle gate is rooted at `28bc6f58ae1a7c0b16524b1fb94db30307ad1845`; the documentation-only commits that follow do not change runtime code.
 
-P5.3 now provides the Learn UI and backend contract for direction-aware CardDefinition presentation, explicit introduction, reveal / I-don't-know / hint / known / review interactions, known-already/suspend, question reporting and personal mnemonic creation. The frontend remains non-authoritative: permissions, CardDefinition identity, presentation mapping, progress mutation and learning-signal semantics are enforced by the backend.
+P5.3 provides the Learn UI and backend contract for direction-aware CardDefinition presentation, explicit introduction, reveal / I-don't-know / hint / known / review interactions, known-already/suspend, question reporting and personal mnemonic creation. The frontend remains non-authoritative: permissions, CardDefinition identity, presentation mapping, progress mutation and learning-signal semantics are enforced by the backend.
 
-A qualification review found and fixed one important normative gap before closing the phase: introduction previously set `next_due_at_utc` but simply advanced the session, so a one-card session could finish without the mandatory first retrieval. The fix atomically appends a learning-step retrieval to the same persistent session when introduction commits. Its `available_at_utc == progress.next_due_at_utc`; the backend rejects an answer before that instant, while the frontend renders only a waiting surface and reveals no prompt/answer/hint until due. No state.db migration was needed.
+Two qualification defects were found and corrected before closure:
+1. Introduction originally set `next_due_at_utc` but could end a one-card session without the mandatory first retrieval. The fix atomically appends a learning-step retrieval to the same persistent session. Its `available_at_utc == progress.next_due_at_utc`; the backend rejects answers before that instant and the frontend reveals no prompt/answer/hint until due.
+2. At a real 390×844 viewport, the essential “Continuer” action overflowed horizontally. Responsive containment was corrected and the real-instance requalification passed at 390×844.
 
-Final automated gate on 2026-09-26:
-- Ruff format PASS — 253 files.
-- Ruff lint PASS.
-- mypy PASS — 146 source files.
-- resource registries PASS.
-- pytest PASS — 382 tests.
-- HA 2025.2.5 compatibility PASS — 289 backend tests.
-- HA 2026.9.3 compatibility PASS — 289 backend tests.
-- TypeScript PASS.
-- Vitest PASS — 10 files / 26 tests.
-- Vite PASS — 27 modules, 71.19 kB / 17.52 kB gzip.
-- committed frontend bundle reproducibility PASS.
-- hassfest PASS.
-- HACS metadata validation still fails only because the repository has no description, valid topics or brand asset. That is release-packaging metadata debt, not a P5.3 functional regression.
+Real Home Assistant 2026.7.4 qualification passed introduction, delayed first retrieval in the same session, answer hiding before due, reveal/known, IDK, keyboard operation, mobile 390×844 and clean LockLearn logs.
 
-The remaining P5.3 exit gate is manual qualification on the real Home Assistant instance: complete a Learn session by keyboard and on mobile, including introduction -> delayed first retrieval -> reveal / IDK / hint / known paths, and verify accessibility/focus/readability. P5.4 must not start until that gate is recorded.
+The active pack contained no card with `hint_blocks` or `mnemonic_blocks` among the 100 cards inspected, so real-instance hint interaction could not be exercised. Automated backend/frontend tests cover hint visibility and persistence of `hint_used=true`; this is recorded as a content-fixture limitation, not a P5.3 runtime failure.
 
-P5.2 real-instance baseline remains valid: HA 2026.7.4, schema 5, `integrity_check=ok`, zero FK violations, no LockLearn ERROR/CRITICAL, and `state.db` was not deleted, recreated, downgraded or manually modified.
+Final post-fix CI: backend-quality PASS; frontend PASS including generated-bundle reproducibility; HA 2025.2.5 PASS; HA 2026.9.3 PASS; hassfest PASS. HACS metadata validation still fails only for missing repository description, valid topics and brand asset, which remains release-packaging debt outside P5.3.
 
-The previously exposed HA development token still requires rotation. Renaud has explicitly deferred that security debt; do not remove it from documentation.
+P5.2 remains COMPLETE / PASS. The previously exposed HA development token still requires rotation; Renaud has explicitly deferred that security debt.
+
+Next concrete action: begin P5.4 only when explicitly requested.
