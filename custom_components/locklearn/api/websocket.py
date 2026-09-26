@@ -88,6 +88,20 @@ def _paginate(
     }
 
 
+async def _with_track_management(
+    runtime: LockLearnRuntime,
+    track: dict[str, Any],
+) -> dict[str, Any]:
+    """Attach editable Track configuration kept in normalized side tables."""
+    enriched = dict(track)
+    enriched["content_weights"] = (
+        await runtime.storage.repositories.tracks.async_get_content_weights(
+            str(track["track_id"])
+        )
+    )
+    return enriched
+
+
 async def _with_fatigue_advice(
     runtime: LockLearnRuntime,
     state: dict[str, Any],
@@ -489,8 +503,65 @@ async def ws_tracks_list(
     ):
         return
     tracks = await runtime.storage.repositories.tracks.async_list_for_profile(profile_id)
+    configured_tracks = [
+        await _with_track_management(runtime, track) for track in tracks
+    ]
     try:
-        result = _paginate(tracks, limit=msg["limit"], cursor=msg.get("cursor"))
+        result = _paginate(
+            configured_tracks,
+            limit=msg["limit"],
+            cursor=msg.get("cursor"),
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/targets/list",
+        vol.Required("profile_id"): str,
+        vol.Optional("limit", default=_DEFAULT_PAGE_LIMIT): vol.All(
+            int, vol.Range(min=1, max=_MAX_PAGE_LIMIT)
+        ),
+        vol.Optional("cursor"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_targets_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List privacy-minimal enabled notification targets for Track editing."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.EDIT_TRACK,
+    ):
+        return
+    raw_targets = await runtime.storage.repositories.notification_targets.async_list_for_profile(
+        profile_id
+    )
+    targets = [
+        {
+            "target_id": str(target["target_id"]),
+            "friendly_name": str(target["friendly_name"]),
+            "platform": str(target["platform"]),
+            "shared_device": bool(target["shared_device"]),
+            "lockscreen_visibility": str(target["lockscreen_visibility"]),
+            "enabled": bool(target["enabled"]),
+            "daily_push_budget": target["daily_push_budget"],
+        }
+        for target in raw_targets
+    ]
+    try:
+        result = _paginate(targets, limit=msg["limit"], cursor=msg.get("cursor"))
     except ValueError as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
@@ -547,7 +618,10 @@ async def ws_tracks_create(
     except TrackValidationError as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
-    connection.send_result(msg["id"], track)
+    connection.send_result(
+        msg["id"],
+        await _with_track_management(runtime, track),
+    )
 
 
 @websocket_api.websocket_command(
@@ -599,7 +673,10 @@ async def ws_tracks_update(
     except TrackValidationError as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
-    connection.send_result(msg["id"], track)
+    connection.send_result(
+        msg["id"],
+        await _with_track_management(runtime, track),
+    )
 
 
 @websocket_api.websocket_command(
@@ -2163,6 +2240,7 @@ COMMANDS = (
     ws_profiles_members,
     ws_profiles_share_targets,
     ws_tracks_list,
+    ws_targets_list,
     ws_tracks_create,
     ws_tracks_update,
     ws_tracks_delete,

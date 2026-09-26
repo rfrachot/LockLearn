@@ -64,6 +64,17 @@ def profile_preset_defaults(preset: ProfilePreset | str) -> dict[str, Any]:
     return defaults
 
 
+def _validate_hhmm(value: Any, field: str) -> None:
+    if not isinstance(value, str):
+        raise ProfileValidationError(f"{field} must be HH:MM")
+    parts = value.split(":")
+    if len(parts) != 2 or not all(part.isdigit() for part in parts):
+        raise ProfileValidationError(f"{field} must be HH:MM")
+    hour, minute = (int(part) for part in parts)
+    if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+        raise ProfileValidationError(f"{field} must be HH:MM")
+
+
 def _validate_profile_settings(settings: Mapping[str, Any]) -> None:
     """Validate user-editable V1 Profile settings at the backend boundary."""
     for key, minimum in (
@@ -78,22 +89,37 @@ def _validate_profile_settings(settings: Mapping[str, Any]) -> None:
             raise ProfileValidationError(f"{key} must be an integer >= {minimum}")
 
     quiet = settings.get("quiet_hours")
-    if quiet is None:
+    if quiet is not None:
+        if not isinstance(quiet, Mapping):
+            raise ProfileValidationError("quiet_hours must be an object")
+        if set(quiet) - {"start", "end"}:
+            raise ProfileValidationError("quiet_hours contains unsupported keys")
+        for key in ("start", "end"):
+            _validate_hhmm(quiet.get(key), f"quiet_hours.{key}")
+
+    scheduler = settings.get("scheduler")
+    if scheduler is None:
         return
-    if not isinstance(quiet, Mapping):
-        raise ProfileValidationError("quiet_hours must be an object")
-    if set(quiet) - {"start", "end"}:
-        raise ProfileValidationError("quiet_hours contains unsupported keys")
-    for key in ("start", "end"):
-        value = quiet.get(key)
-        if not isinstance(value, str):
-            raise ProfileValidationError(f"quiet_hours.{key} must be HH:MM")
-        parts = value.split(":")
-        if len(parts) != 2 or not all(part.isdigit() for part in parts):
-            raise ProfileValidationError(f"quiet_hours.{key} must be HH:MM")
-        hour, minute = (int(part) for part in parts)
-        if not 0 <= hour <= 23 or not 0 <= minute <= 59:
-            raise ProfileValidationError(f"quiet_hours.{key} must be HH:MM")
+    if not isinstance(scheduler, Mapping):
+        raise ProfileValidationError("scheduler must be an object")
+    active_windows = scheduler.get("active_windows")
+    if active_windows is None:
+        return
+    if not isinstance(active_windows, (list, tuple)) or not active_windows:
+        raise ProfileValidationError("scheduler.active_windows must be a non-empty list")
+    for index, window in enumerate(active_windows):
+        if not isinstance(window, Mapping):
+            raise ProfileValidationError(
+                f"scheduler.active_windows[{index}] must be an object"
+            )
+        start_value = window.get("start")
+        end_value = window.get("end")
+        _validate_hhmm(start_value, f"scheduler.active_windows[{index}].start")
+        _validate_hhmm(end_value, f"scheduler.active_windows[{index}].end")
+        if start_value == end_value:
+            raise ProfileValidationError(
+                f"scheduler.active_windows[{index}] start and end must differ"
+            )
 
 
 class ProfileService:
