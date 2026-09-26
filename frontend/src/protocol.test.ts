@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   bootstrap,
   FRONTEND_PROTOCOL_VERSION,
+  getDashboard,
   listVisibleProfiles,
   ProtocolMismatchError,
   type HomeAssistantLike,
@@ -42,6 +43,31 @@ describe("frontend protocol", () => {
     };
 
     await expect(bootstrap(hass)).rejects.toBeInstanceOf(ProtocolMismatchError);
+  });
+
+  it("requests one Profile dashboard without widening the scope", async () => {
+    const messages: Record<string, unknown>[] = [];
+    const hass: HomeAssistantLike = {
+      callWS: async <T>(message: Record<string, unknown>): Promise<T> => {
+        messages.push(message);
+        return {
+          profile: {
+            profile_id: "p1",
+            name: "One",
+            preset: "standard",
+            timezone: "Europe/Paris",
+          },
+          generated_at_utc: "2026-09-26T20:00:00+00:00",
+          tracks: [],
+        } as unknown as T;
+      },
+    };
+
+    const result = await getDashboard(hass, "p1");
+    expect(result.profile.profile_id).toBe("p1");
+    expect(messages).toEqual([
+      { type: "locklearn/dashboard/get", profile_id: "p1" },
+    ]);
   });
 
   it("loads every visible profile page", async () => {
