@@ -101,8 +101,8 @@
 - **P5.2** — Home dashboard and profile switcher (complete)
 - **P5.3** — Learn UI and introduction/reveal flow (complete)
 - **P5.4** — Quiz/free-text/cloze UI (complete)
-- **P5.5** — Profiles/tracks/packs/settings management UI (implemented; real-HA qualification pending)
-- **P5.6** — Dataset updates, Sources & Licences UI
+- **P5.5** — Profiles/tracks/packs/settings management UI (complete; real-HA qualified)
+- **P5.6** — Dataset updates, Sources & Licences UI (implemented; automated qualification PASS; real-HA pending)
 - **P5.7** — Basic stats, difficulties and metacognitive views
 - **P5.8** — FR/EN i18n, CJK and accessibility hardening
 - **P5.9** — Frontend performance and compatibility gate
