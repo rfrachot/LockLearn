@@ -16,6 +16,7 @@ import {
   registrationDecision,
   type LockLearnElementConstructor,
 } from "./registration";
+import { shouldStartInitialLoad } from "./panel-lifecycle";
 import {
   navigateToRoute,
   parseRoute,
@@ -38,6 +39,7 @@ export class LockLearnPanel extends LitElement {
   @state() private errorMessage = "";
 
   private loadGeneration = 0;
+  private initialLoadStarted = false;
 
   static styles = css`
     :host {
@@ -160,7 +162,18 @@ export class LockLearnPanel extends LitElement {
       }
 
       nav {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         width: 100%;
+        overflow-x: visible;
+      }
+
+      .nav-button {
+        width: 100%;
+        min-width: 0;
+        padding-inline: 8px;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       main {
@@ -181,7 +194,14 @@ export class LockLearnPanel extends LitElement {
   }
 
   protected updated(changed: Map<PropertyKey, unknown>): void {
-    if (changed.has("hass") && this.hass !== undefined) {
+    if (
+      shouldStartInitialLoad(
+        this.initialLoadStarted,
+        changed.has("hass"),
+        this.hass !== undefined,
+      )
+    ) {
+      this.initialLoadStarted = true;
       void this.load();
     }
   }
