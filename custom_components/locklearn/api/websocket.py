@@ -27,9 +27,9 @@ from ..core.grading import FreeTextGradingResult
 from ..core.integrity import IntegrityServiceError
 from ..core.learning_sessions import LearningSessionError
 from ..core.presentation import PresentationError
-from ..core.quiz_sessions import QuizSessionError
 from ..core.profiles import ProfileValidationError
 from ..core.progress_state import ProgressUserStateError
+from ..core.quiz_sessions import QuizSessionError
 from ..core.scheduler import SchedulerValidationError
 from ..core.session_selection import SessionSelectionError
 from ..core.sessions import SessionQuestion, SessionValidationError
