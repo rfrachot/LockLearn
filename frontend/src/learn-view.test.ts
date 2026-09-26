@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { canAnswerProfile, isIntroductionQuestion } from "./learn-view";
+import { canAnswerProfile, isIntroductionQuestion } from "./learn-model";
 import type { SessionQuestion, VisibleProfile } from "./protocol";
 
 function profile(role: VisibleProfile["role"]): VisibleProfile {
