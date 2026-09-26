@@ -1246,11 +1246,21 @@ const ie = class ie extends E {
 ie.styles = _e`
     :host {
       display: block;
+      min-width: 0;
+      max-width: 100%;
     }
 
     .learn-shell,
-    .learn-card {
+    .learn-card,
+    .toolbar,
+    .actions,
+    .secondary-actions,
+    .field-row,
+    .annotation,
+    label {
       box-sizing: border-box;
+      min-width: 0;
+      max-width: 100%;
     }
 
     .learn-shell {
@@ -1306,6 +1316,8 @@ ie.styles = _e`
     }
 
     button {
+      box-sizing: border-box;
+      max-width: 100%;
       min-height: 42px;
       padding: 9px 14px;
       border: 1px solid var(--divider-color);
@@ -1407,6 +1419,14 @@ ie.styles = _e`
 
       select,
       button {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+      }
+
+      .actions,
+      .secondary-actions,
+      .field-row {
         width: 100%;
       }
 
