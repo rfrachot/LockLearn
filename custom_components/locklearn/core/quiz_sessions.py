@@ -596,9 +596,11 @@ class QuizSessionService:
         raw_options = payload.get("options")
         if not isinstance(raw_options, list) or not raw_options:
             raise QuizSessionError("choice question has no options")
-        by_answer_id = {
-            card.canonical_answer.term_id: card for card in catalog.values() if card.answer_terms
-        }
+        by_answer_id: dict[str, _QuizCardMeta] = {}
+        for card in catalog.values():
+            if card.answer_terms:
+                by_answer_id.setdefault(card.canonical_answer.term_id, card)
+        by_answer_id[meta.canonical_answer.term_id] = meta
         options: list[QuizCandidate] = []
         correct_index: int | None = None
         for index, raw in enumerate(raw_options):
