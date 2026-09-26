@@ -7,6 +7,7 @@ export const ROUTES = [
   "profiles",
   "tracks",
   "packs",
+  "sources",
   "settings",
 ] as const;
 
