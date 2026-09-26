@@ -71,6 +71,7 @@ async def test_bootstrap_profile_crud_privacy_share_and_pagination(
     assert bootstrap["result"]["frontend_protocol"] == FRONTEND_PROTOCOL_VERSION
     assert bootstrap["result"]["backend_version"] == "0.0.2"
     assert bootstrap["result"]["panel_path"] == "/locklearn"
+    assert bootstrap["result"]["is_admin"] is True
     personal = bootstrap["result"]["personal_profile"]
     assert personal["role"] == "owner"
     personal_id = personal["profile_id"]
@@ -462,3 +463,38 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
     assert empty["result"]["items"] == []
 
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_dataset_mutations_require_home_assistant_admin(
+    hass: HomeAssistant,
+    hass_ws_client: Any,
+    hass_read_only_access_token: str,
+) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=DOMAIN,
+        data={"create_personal_profile": False, "ui_language": "en"},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+
+    client = await hass_ws_client(hass, hass_read_only_access_token)
+
+    await client.send_json_auto_id({"type": "locklearn/datasets/list", "limit": 10})
+    visible = await client.receive_json()
+    assert visible["success"] is True
+
+    await client.send_json_auto_id({"type": "locklearn/datasets/refresh"})
+    refresh = await client.receive_json()
+    assert refresh["success"] is False
+    assert refresh["error"]["code"] == "locklearn/forbidden"
+
+    await client.send_json_auto_id(
+        {
+            "type": "locklearn/datasets/install",
+            "dataset_id": DATASET_ID,
+        }
+    )
+    install = await client.receive_json()
+    assert install["success"] is False
+    assert install["error"]["code"] == "locklearn/forbidden"
