@@ -15,6 +15,7 @@ const READ_ROUTES: NavigationItem[] = [
   { route: "profiles", labelKey: "nav.profiles" },
   { route: "tracks", labelKey: "nav.tracks" },
   { route: "packs", labelKey: "nav.packs" },
+  { route: "sources", labelKey: "nav.sources" },
 ];
 
 const OWNER_ONLY: NavigationItem[] = [
