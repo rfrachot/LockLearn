@@ -97,7 +97,7 @@
 
 ### P5
 
-- **P5.1** — Frontend shell, protocol/bootstrap and routing (complete)
+- **P5.1** — Frontend shell, protocol/bootstrap and routing (reopened: live panel refresh regression fix pending qualification)
 - **P5.2** — Home dashboard and profile switcher
 - **P5.3** — Learn UI and introduction/reveal flow
 - **P5.4** — Quiz/free-text/cloze UI
