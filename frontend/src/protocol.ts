@@ -162,7 +162,7 @@ async function listPaged<T>(
   const items: T[] = [];
   let cursor: string | null = null;
   do {
-    const page = await hass.callWS<Page<T>>({
+    const page: Page<T> = await hass.callWS<Page<T>>({
       type,
       limit: 100,
       ...extra,
