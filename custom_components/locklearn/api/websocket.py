@@ -1055,6 +1055,47 @@ async def ws_datasets_list(
     connection.send_result(msg["id"], result)
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/datasets/attributions",
+        vol.Required("dataset_id"): str,
+        vol.Required("source_id"): str,
+        vol.Optional("limit", default=_DEFAULT_PAGE_LIMIT): vol.All(
+            int, vol.Range(min=1, max=_MAX_PAGE_LIMIT)
+        ),
+        vol.Optional("cursor"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_datasets_attributions(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return bounded public attribution details from the active content generation."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    try:
+        offset = 0 if msg.get("cursor") is None else int(msg["cursor"])
+        if offset < 0:
+            raise ValueError
+    except ValueError:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, "invalid cursor")
+        return
+    items, has_more = await runtime.storage.async_dataset_attributions(
+        msg["dataset_id"],
+        msg["source_id"],
+        limit=msg["limit"],
+        offset=offset,
+    )
+    connection.send_result(
+        msg["id"],
+        {
+            "items": items,
+            "cursor": str(offset + len(items)) if has_more else None,
+        },
+    )
+
+
 @websocket_api.websocket_command({vol.Required("type"): "locklearn/datasets/refresh"})
 @websocket_api.async_response
 async def ws_datasets_refresh(
@@ -2372,6 +2413,7 @@ COMMANDS = (
     ws_tracks_plan_set,
     ws_packs_list,
     ws_datasets_list,
+    ws_datasets_attributions,
     ws_datasets_refresh,
     ws_datasets_install,
     ws_content_report,
