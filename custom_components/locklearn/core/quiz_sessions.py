@@ -148,6 +148,7 @@ class QuizSessionService:
                         state=state,
                         presentation=presentation,
                         cloze_prompt=cloze_prompt,
+                        quiz_format=resolved_format,
                         option_count=option_count,
                         presentation_index=len(prepared),
                     )
@@ -498,6 +499,7 @@ class QuizSessionService:
         state: str,
         presentation: dict[str, Any],
         cloze_prompt: str | None,
+        quiz_format: str,
         option_count: int,
         presentation_index: int,
     ) -> QuizQuestion:
@@ -532,7 +534,6 @@ class QuizSessionService:
             for other in catalog.values()
             if other.card_key != meta.card_key and other.answer_terms
         )
-        raw_format = "cloze_mcq" if cloze_prompt is not None and meta.content_type == "grammar" else "mcq"
         return self._quiz.build_question(
             prompt,
             candidates=candidates,
@@ -540,7 +541,7 @@ class QuizSessionService:
             presentation_index=presentation_index,
             answer_position_balance=presentation_index,
             example_rotation_index=0,
-            quiz_format=QuizFormat(raw_format),
+            quiz_format=QuizFormat(quiz_format),
         )
 
     def _choice_question_from_payload(
