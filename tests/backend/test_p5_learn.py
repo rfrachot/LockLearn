@@ -137,7 +137,7 @@ async def _create_track(
     )
     result = await owner.receive_json()
     assert result["success"] is True
-    return result["result"]["track_id"]
+    return str(result["result"]["track_id"])
 
 
 async def test_presentation_respects_card_direction(
