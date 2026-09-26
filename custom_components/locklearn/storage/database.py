@@ -1176,6 +1176,54 @@ class SQLiteStorage:
 
         await self._async_writer(append)
 
+    async def async_dataset_attributions(
+        self,
+        dataset_id: str,
+        source_id: str,
+        *,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Return bounded individual attribution rows from active content."""
+
+        def query(connection: sqlite3.Connection) -> tuple[list[dict[str, Any]], bool]:
+            rows = connection.execute(
+                """SELECT DISTINCT provenance.source_record_id,
+                          provenance.author, provenance.language_tag,
+                          provenance.modified_from_source,
+                          provenance.attribution_text,
+                          provenance.license_id, provenance.license_scope
+                   FROM content.provenance_records AS provenance
+                   JOIN content.source_snapshots AS snapshot
+                     ON snapshot.snapshot_id = provenance.source_snapshot_id
+                   WHERE provenance.dataset_id = ?
+                     AND snapshot.source_id = ?
+                     AND provenance.attribution_text IS NOT NULL
+                     AND trim(provenance.attribution_text) <> ''
+                   ORDER BY provenance.source_record_id, provenance.attribution_text
+                   LIMIT ? OFFSET ?""",
+                (dataset_id, source_id, limit + 1, offset),
+            ).fetchall()
+            has_more = len(rows) > limit
+            visible = rows[:limit]
+            return (
+                [
+                    {
+                        "source_record_id": None if row[0] is None else str(row[0]),
+                        "author": None if row[1] is None else str(row[1]),
+                        "language_tag": None if row[2] is None else str(row[2]),
+                        "modified_from_source": bool(row[3]),
+                        "attribution_text": str(row[4]),
+                        "license_id": str(row[5]),
+                        "license_scope": str(row[6]),
+                    }
+                    for row in visible
+                ],
+                has_more,
+            )
+
+        return await self._async_reader(query)
+
     async def async_dataset_inventory(self) -> list[dict[str, Any]]:
         """Return privacy-safe installed dataset metadata from the active generation."""
 
