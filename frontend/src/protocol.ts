@@ -7,6 +7,7 @@ export interface BootstrapResponse {
   backend_version: string;
   panel_path: string;
   authenticated_user_id: string;
+  is_admin: boolean;
   personal_profile: VisibleProfile | null;
 }
 
@@ -133,6 +134,71 @@ export interface PackVersionDiff {
   added_learning_item_ids: string[];
   removed_learning_item_ids: string[];
   changed_learning_item_ids: string[];
+}
+
+export interface DatasetSourceRecord {
+  source_id: string;
+  name: string;
+  provider: string;
+  homepage: string;
+  license_id: string;
+  attribution_template: string;
+  adapter_id: string;
+  refresh_policy: string;
+  commercial_compatible: boolean;
+  notes: string;
+  upstream_version: string;
+  upstream_date: string | null;
+  retrieved_at: string;
+  source_url: string;
+  adapter_version: string;
+  provenance_records: number;
+  modified_records: number;
+  attribution_records: number;
+}
+
+export interface DatasetLicenseRecord {
+  license_id: string;
+  license_scope: string;
+  spdx_or_internal_id: string;
+  name: string;
+  version: string;
+  commercial_use_allowed: boolean;
+  derivatives_allowed: boolean;
+  share_alike: boolean;
+  attribution_required: boolean;
+  source_url: string;
+  notes: string;
+}
+
+export interface DatasetStatusRecord {
+  dataset_id: string;
+  name: string;
+  state: "error" | "update_available" | "installed" | "available" | "unknown";
+  installed_version: string | null;
+  available_version: string | null;
+  update_available: boolean;
+  source_age_days: number | null;
+  stale_sources: string[];
+  cache_bytes: number;
+  error: string | null;
+  changelog: string | null;
+  release_url: string | null;
+  artifact_size: number | null;
+  built_at_utc: string | null;
+  dataset_version_id: string | null;
+  canonical_content_hash: string | null;
+  sources: DatasetSourceRecord[];
+  licenses: DatasetLicenseRecord[];
+  pack_version_ids: string[];
+}
+
+export interface DatasetInstallResult {
+  dataset_id: string;
+  version: string;
+  generation_id: string;
+  previous_generation_id: string | null;
+  statuses: DatasetStatusRecord[];
 }
 
 export interface LearningPlanInput {
@@ -340,6 +406,33 @@ export async function listPacks(
   hass: HomeAssistantLike,
 ): Promise<PackVersionRecord[]> {
   return listPaged<PackVersionRecord>(hass, "locklearn/packs/list");
+}
+
+export async function listDatasets(
+  hass: HomeAssistantLike,
+): Promise<DatasetStatusRecord[]> {
+  return listPaged<DatasetStatusRecord>(hass, "locklearn/datasets/list");
+}
+
+export async function refreshDatasets(
+  hass: HomeAssistantLike,
+): Promise<DatasetStatusRecord[]> {
+  const result = await hass.callWS<{ items: DatasetStatusRecord[] }>({
+    type: "locklearn/datasets/refresh",
+  });
+  return result.items;
+}
+
+export async function installDataset(
+  hass: HomeAssistantLike,
+  datasetId: string,
+  version?: string | null,
+): Promise<DatasetInstallResult> {
+  return hass.callWS<DatasetInstallResult>({
+    type: "locklearn/datasets/install",
+    dataset_id: datasetId,
+    ...(version ? { version } : {}),
+  });
 }
 
 export async function previewPackUpdate(
