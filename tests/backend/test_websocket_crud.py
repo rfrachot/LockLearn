@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.locklearn.const import DOMAIN, FRONTEND_PROTOCOL_VERSION
-from tests.backend.content_db_helpers import DATASET_ID, ITEM_A, ITEM_B, create_package
+from tests.backend.content_db_helpers import DATASET_ID, ITEM_A, ITEM_B, SOURCE_ID, create_package
 
 
 def _directional_package(
@@ -263,6 +263,20 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
     assert dataset["sources"][0]["provenance_records"] >= 1
     assert dataset["licenses"]
     assert dataset["licenses"][0]["license_id"]
+
+    await client.send_json_auto_id(
+        {
+            "type": "locklearn/datasets/attributions",
+            "dataset_id": DATASET_ID,
+            "source_id": SOURCE_ID,
+            "limit": 10,
+        }
+    )
+    attributions = await client.receive_json()
+    assert attributions["success"] is True
+    assert attributions["result"]["cursor"] is None
+    assert attributions["result"]["items"][0]["attribution_text"] == "Synthetic dataset provenance"
+    assert attributions["result"]["items"][0]["modified_from_source"] is True
 
     await client.send_json_auto_id(
         {
