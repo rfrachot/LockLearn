@@ -3,12 +3,15 @@ import { property, state } from "lit/decorators.js";
 
 import { languageFallback, translate, type UiLanguage } from "./i18n";
 import { isRouteVisible, visibleNavigation } from "./navigation";
+import { defaultProfileId, groupProfiles } from "./profile-switcher";
 import {
   bootstrap,
   FRONTEND_PROTOCOL_VERSION,
+  getDashboard,
   listVisibleProfiles,
   ProtocolMismatchError,
   type BootstrapResponse,
+  type DashboardResponse,
   type HomeAssistantLike,
   type VisibleProfile,
 } from "./protocol";
@@ -40,9 +43,14 @@ export class LockLearnPanel extends LitElement {
   );
   @state() private bootstrapState?: BootstrapResponse;
   @state() private profiles: VisibleProfile[] = [];
+  @state() private selectedProfileId: string | null = null;
+  @state() private dashboard?: DashboardResponse;
+  @state() private dashboardLoading = false;
+  @state() private dashboardError = "";
   @state() private errorMessage = "";
 
   private loadGeneration = 0;
+  private dashboardGeneration = 0;
   private initialLoadStarted = false;
 
   static styles = css`
@@ -78,6 +86,25 @@ export class LockLearnPanel extends LitElement {
       font-size: 1.15rem;
       font-weight: 700;
       white-space: nowrap;
+    }
+
+    .profile-switcher {
+      display: grid;
+      gap: 2px;
+      min-width: 170px;
+      color: var(--secondary-text-color);
+      font-size: 0.75rem;
+    }
+
+    .profile-switcher select {
+      min-width: 0;
+      padding: 7px 28px 7px 9px;
+      border: 1px solid var(--divider-color);
+      border-radius: 8px;
+      color: var(--primary-text-color);
+      background: var(--card-background-color, var(--primary-background-color));
+      font: inherit;
+      font-size: 0.9rem;
     }
 
     nav {
@@ -133,6 +160,75 @@ export class LockLearnPanel extends LitElement {
       margin: 48px auto 0;
     }
 
+    .home-header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .home-header h1 {
+      margin: 0;
+    }
+
+    .track-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .track-card {
+      padding: 20px;
+      border: 1px solid var(--divider-color);
+      border-radius: 12px;
+      background: var(--card-background-color, var(--primary-background-color));
+      box-shadow: var(--ha-card-box-shadow, none);
+    }
+
+    .track-card h2 {
+      margin: 0;
+      font-size: 1.15rem;
+    }
+
+    .track-languages {
+      margin-top: 4px;
+      color: var(--secondary-text-color);
+      font-size: 0.85rem;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 12px;
+      border-radius: 10px;
+      background: var(--secondary-background-color);
+    }
+
+    .metric-label {
+      color: var(--secondary-text-color);
+      font-size: 0.78rem;
+    }
+
+    .metric-value {
+      margin-top: 4px;
+      font-weight: 650;
+      line-height: 1.25;
+    }
+
+    .metric-detail {
+      margin-top: 4px;
+      color: var(--secondary-text-color);
+      font-size: 0.78rem;
+      line-height: 1.3;
+    }
+
     .state-card h1,
     .page h1 {
       margin-top: 0;
@@ -163,6 +259,14 @@ export class LockLearnPanel extends LitElement {
         flex-direction: column;
         gap: 8px;
         padding: 14px 16px 10px;
+      }
+
+      .profile-switcher {
+        width: 100%;
+      }
+
+      .profile-switcher select {
+        width: 100%;
       }
 
       nav {
@@ -241,9 +345,11 @@ export class LockLearnPanel extends LitElement {
 
       this.bootstrapState = bootstrapState;
       this.profiles = profiles;
+      this.selectedProfileId = defaultProfileId(profiles, bootstrapState);
       const requested = parseRoute(globalThis.location?.pathname ?? bootstrapState.panel_path);
       this.activeRoute = isRouteVisible(requested, profiles) ? requested : "home";
       this.status = "ready";
+      void this.loadDashboard();
     } catch (error) {
       if (generation !== this.loadGeneration) return;
       if (error instanceof ProtocolMismatchError) {
@@ -266,6 +372,39 @@ export class LockLearnPanel extends LitElement {
     if (!isRouteVisible(route, this.profiles)) return;
     this.activeRoute = route;
     navigateToRoute(route);
+  }
+
+  private selectProfile(event: Event): void {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLSelectElement)) return;
+    const profileId = target.value;
+    if (!this.profiles.some((profile) => profile.profile_id === profileId)) return;
+    this.selectedProfileId = profileId;
+    void this.loadDashboard();
+  }
+
+  private async loadDashboard(): Promise<void> {
+    if (this.hass === undefined || this.selectedProfileId === null) {
+      this.dashboard = undefined;
+      this.dashboardError = "";
+      return;
+    }
+    const generation = ++this.dashboardGeneration;
+    this.dashboardLoading = true;
+    this.dashboardError = "";
+    try {
+      const dashboard = await getDashboard(this.hass, this.selectedProfileId);
+      if (generation !== this.dashboardGeneration) return;
+      this.dashboard = dashboard;
+    } catch (error) {
+      if (generation !== this.dashboardGeneration) return;
+      this.dashboard = undefined;
+      this.dashboardError = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (generation === this.dashboardGeneration) {
+        this.dashboardLoading = false;
+      }
+    }
   }
 
   private hardReload(): void {
@@ -309,10 +448,37 @@ export class LockLearnPanel extends LitElement {
     }
 
     const navigation = visibleNavigation(this.profiles);
+    const groups = groupProfiles(this.profiles);
     return html`
       <div class="shell">
         <header>
           <div class="brand">${this.t("app.title")}</div>
+          ${this.profiles.length === 0
+            ? nothing
+            : html`<label class="profile-switcher">
+                <span>${this.t("profile.select")}</span>
+                <select
+                  .value=${this.selectedProfileId ?? ""}
+                  @change=${this.selectProfile}
+                >
+                  ${groups.mine.length === 0
+                    ? nothing
+                    : html`<optgroup label=${this.t("profile.mine")}>
+                        ${groups.mine.map(
+                          (profile) =>
+                            html`<option value=${profile.profile_id}>${profile.name}</option>`,
+                        )}
+                      </optgroup>`}
+                  ${groups.shared.length === 0
+                    ? nothing
+                    : html`<optgroup label=${this.t("profile.shared")}>
+                        ${groups.shared.map(
+                          (profile) =>
+                            html`<option value=${profile.profile_id}>${profile.name}</option>`,
+                        )}
+                      </optgroup>`}
+                </select>
+              </label>`}
           <nav aria-label="LockLearn">
             ${navigation.map(
               (item) => html`
@@ -333,13 +499,126 @@ export class LockLearnPanel extends LitElement {
                 <h1>${this.t("app.title")}</h1>
                 <p>${this.t("state.noProfiles")}</p>
               </section>`
-            : html`<section class="page">
-                <h1>${this.routeLabel(this.activeRoute)}</h1>
-                <p>${this.t("route.placeholder")}</p>
-              </section>`}
+            : this.activeRoute === "home"
+              ? this.renderHome()
+              : html`<section class="page">
+                  <h1>${this.routeLabel(this.activeRoute)}</h1>
+                  <p>${this.t("route.placeholder")}</p>
+                </section>`}
         </main>
       </div>
     `;
+  }
+
+  private renderHome() {
+    if (this.dashboardLoading) {
+      return html`<section class="page"><p>${this.t("dashboard.loading")}</p></section>`;
+    }
+    if (this.dashboardError) {
+      return html`<section class="page" role="alert">
+        <h1>${this.t("dashboard.error")}</h1>
+        <p>${this.dashboardError}</p>
+      </section>`;
+    }
+    if (this.dashboard === undefined) {
+      return html`<section class="page"><p>${this.t("dashboard.noTracks")}</p></section>`;
+    }
+    return html`
+      <section>
+        <div class="home-header">
+          <h1>${this.dashboard.profile.name}</h1>
+        </div>
+        ${this.dashboard.tracks.length === 0
+          ? html`<section class="page"><p>${this.t("dashboard.noTracks")}</p></section>`
+          : html`<div class="track-grid">
+              ${this.dashboard.tracks.map((track) => html`
+                <article class="track-card">
+                  <h2>${track.name}</h2>
+                  <div class="track-languages">
+                    ${track.source_language} → ${track.target_language}
+                  </div>
+                  <div class="metrics">
+                    <div class="metric">
+                      <div class="metric-label">${this.t("dashboard.dueToday")}</div>
+                      <div class="metric-value">${track.due_today}</div>
+                    </div>
+                    <div class="metric">
+                      <div class="metric-label">${this.t("dashboard.accuracy")}</div>
+                      <div class="metric-value">${this.formatAccuracy(track.recent_verified_accuracy.accuracy)}</div>
+                      <div class="metric-detail">
+                        ${track.recent_verified_accuracy.correct}/${track.recent_verified_accuracy.total}
+                      </div>
+                    </div>
+                    <div class="metric">
+                      <div class="metric-label">${this.t("dashboard.latestVerified")}</div>
+                      <div class="metric-value">
+                        ${track.recent_verified_retention === null
+                          ? this.t("dashboard.noVerified")
+                          : track.recent_verified_retention.retained
+                            ? this.t("dashboard.retained")
+                            : this.t("dashboard.notRetained")}
+                      </div>
+                      ${track.recent_verified_retention === null
+                        ? nothing
+                        : html`<div class="metric-detail">
+                            ${this.formatDateTime(
+                              track.recent_verified_retention.created_at_utc,
+                              this.dashboard?.profile.timezone,
+                            )}
+                          </div>`}
+                    </div>
+                    <div class="metric">
+                      <div class="metric-label">${this.t("dashboard.lastSession")}</div>
+                      <div class="metric-value">
+                        ${track.last_session === null
+                          ? this.t("dashboard.noSession")
+                          : `${track.last_session.answered_count}/${track.last_session.question_count} ${this.t("dashboard.answered")}`}
+                      </div>
+                      ${track.last_session === null
+                        ? nothing
+                        : html`<div class="metric-detail">
+                            ${this.formatDateTime(
+                              track.last_session.completed_at_utc ??
+                                track.last_session.last_activity_at_utc,
+                              this.dashboard?.profile.timezone,
+                            )}
+                          </div>`}
+                    </div>
+                    <div class="metric">
+                      <div class="metric-label">${this.t("dashboard.nextNotification")}</div>
+                      <div class="metric-value">
+                        ${track.next_notification === null
+                          ? this.t("dashboard.noNotification")
+                          : this.formatDateTime(
+                              track.next_notification.effective_for_utc,
+                              this.dashboard?.profile.timezone,
+                            )}
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              `)}
+            </div>`}
+      </section>
+    `;
+  }
+
+  private formatAccuracy(value: number | null): string {
+    if (value === null) return "—";
+    return new Intl.NumberFormat(this.locale(), {
+      style: "percent",
+      maximumFractionDigits: 0,
+    }).format(value);
+  }
+
+  private formatDateTime(value: string, timeZone?: string): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return new Intl.DateTimeFormat(this.locale(), {
+      dateStyle: "short",
+      timeStyle: "short",
+      ...(timeZone === undefined ? {} : { timeZone }),
+    }).format(date);
   }
 
   private renderState(message: string) {
