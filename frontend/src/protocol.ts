@@ -283,6 +283,27 @@ export async function startQuizSession(
   });
 }
 
+
+export interface QuizAnswerResponse {
+  feedback: QuizFeedback;
+  session: SessionState;
+}
+
+export async function submitQuizAnswer(
+  hass: HomeAssistantLike,
+  session: SessionState,
+  questionId: string,
+  answer: Record<string, unknown>,
+): Promise<QuizAnswerResponse> {
+  return hass.callWS<QuizAnswerResponse>({
+    type: "locklearn/quiz/answer",
+    session_id: session.id,
+    expected_version: session.version,
+    question_id: questionId,
+    answer,
+  });
+}
+
 export async function evaluateQuizAnswer(
   hass: HomeAssistantLike,
   sessionId: string,
