@@ -28,3 +28,22 @@ async def test_operation_stream_and_cancellation_cleanup() -> None:
     assert state.status == "cancelled"
     unsubscribe()
     await registry.async_close()
+
+
+async def test_operation_can_publish_terminal_result_payload() -> None:
+    registry = OperationRegistry()
+
+    async def worker(context):
+        await context.async_set_result({"rebuilt_cards": 3, "applied": True})
+
+    operation_id = registry.start("rebuild_progress", worker)
+    task = registry.task(operation_id)
+    assert task is not None
+    await task
+
+    state = registry.get(operation_id)
+    assert state is not None
+    assert state.status == "completed"
+    assert state.result == {"rebuilt_cards": 3, "applied": True}
+    assert state.as_dict()["result"] == {"rebuilt_cards": 3, "applied": True}
+    await registry.async_close()

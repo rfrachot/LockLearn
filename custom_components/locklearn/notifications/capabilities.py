@@ -62,6 +62,57 @@ class TargetCapabilities:
     tested_app_version: str | None = None
     tested_at_utc: str | None = None
 
+    @classmethod
+    def from_mapping(
+        cls,
+        *,
+        device_registry_id: str,
+        platform: str,
+        shared_device: bool,
+        values: dict[str, Any] | None,
+    ) -> TargetCapabilities:
+        """Parse persisted tri-state capability JSON without optimistic defaults."""
+        raw = dict(values or {})
+
+        def capability(name: str) -> Capability:
+            value = raw.get(name, Capability.UNKNOWN.value)
+            try:
+                return Capability(str(value))
+            except ValueError:
+                return Capability.UNKNOWN
+
+        visible_actions_raw = raw.get("visible_actions", 0)
+        visible_actions = (
+            int(visible_actions_raw)
+            if isinstance(visible_actions_raw, (int, float, str))
+            and str(visible_actions_raw).isdigit()
+            else 0
+        )
+        return cls(
+            device_registry_id=device_registry_id,
+            platform=platform,
+            replace_by_tag=capability("replace_by_tag"),
+            silent_replace=capability("silent_replace"),
+            action_data=capability("action_data"),
+            text_input=capability("text_input"),
+            clear_event=capability("clear_event"),
+            device_attribution=capability("device_attribution"),
+            lockscreen_privacy=capability("lockscreen_privacy"),
+            visible_actions=max(0, visible_actions),
+            expiration=capability("expiration"),
+            channel_importance=capability("channel_importance"),
+            media=capability("media"),
+            shared_device=shared_device,
+            tested_app_version=(
+                str(raw["tested_app_version"])
+                if raw.get("tested_app_version") is not None
+                else None
+            ),
+            tested_at_utc=(
+                str(raw["tested_at_utc"]) if raw.get("tested_at_utc") is not None else None
+            ),
+        )
+
     def learning_mode(self) -> LearningNotificationMode:
         """Select a prompt-first flow when actionable delivery is proven.
 

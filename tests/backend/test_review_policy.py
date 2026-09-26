@@ -184,3 +184,21 @@ def test_policy_rejects_non_review_long_transition_and_invalid_config() -> None:
 
     with pytest.raises(ReviewPolicyError, match="jitter_fraction"):
         ReviewPolicyV1(jitter_fraction=0.5)
+
+
+def test_leech_review_transitions_remain_leech_until_manual_reactivation() -> None:
+    clock = _MutableClock(datetime(2026, 9, 22, 20, 0, tzinfo=UTC))
+    policy = ReviewPolicyV1(clock=clock)
+    leech = _review_snapshot(box=4)
+    leech["state"] = "leech"
+    leech["leech_score"] = 1.0
+
+    success = policy.review_success(leech)
+    assert success.post_state["state"] == "leech"
+    assert success.post_state["verified_correct_count"] == 5
+
+    failure = policy.review_failure(leech)
+    assert failure.post_state["state"] == "leech"
+    assert failure.entered_relearning is True
+    assert failure.post_state["verified_wrong_count"] == 2
+    assert failure.post_state["next_due_at_utc"] == "2026-09-22T20:10:00+00:00"

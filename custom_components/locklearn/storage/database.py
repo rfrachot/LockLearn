@@ -22,7 +22,7 @@ from .content import (
     ContentGenerationManager,
     GenerationMetadata,
 )
-from .repositories import StateRepositories
+from .repositories import ReviewEventRecord, ReviewEventsRepository, StateRepositories
 from .schema import STATE_SCHEMA
 
 T = TypeVar("T")
@@ -126,64 +126,256 @@ def _unlink_sqlite_files(path: Path) -> None:
 
 
 def _migrate_state_database(path: Path, schema: str, current: int, target: int) -> None:
-    if (current, target) != (1, 2):
+    if current == 1 and target >= 2:
+        candidate = path.with_name(f".{path.name}.v2-migration")
+        _unlink_sqlite_files(candidate)
+        connection = sqlite3.connect(candidate)
+        try:
+            _configure_state_connection(connection)
+            connection.executescript(schema)
+            connection.execute("ATTACH DATABASE ? AS legacy", (str(path),))
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute("INSERT INTO schema_version(version) VALUES (2)")
+            connection.execute(
+                """INSERT INTO sessions(
+                       id, profile_id, track_id, status, version, current_position,
+                       started_at_utc, last_activity_at_utc
+                   )
+                   SELECT id, profile_id, track_id, status, version, current_position,
+                          started_at_utc, last_activity_at_utc
+                   FROM legacy.sessions"""
+            )
+            connection.execute(
+                """INSERT INTO session_answers(
+                       id, session_id, question_id, answer_json, resulting_version, created_at_utc
+                   )
+                   SELECT id, session_id, question_id, answer_json, resulting_version, created_at_utc
+                   FROM legacy.session_answers"""
+            )
+            connection.execute(
+                """INSERT INTO progress(
+                       profile_id, track_id, card_key, state, next_due_at_utc
+                   )
+                   SELECT profile_id, track_id, card_key, state, next_due_at_utc
+                   FROM legacy.progress"""
+            )
+            connection.execute(
+                """INSERT INTO audit_events(
+                       id, event_type, actor_user_id, profile_id, payload_json, created_at_utc
+                   )
+                   SELECT id, event_type, actor_user_id, profile_id, payload_json, created_at_utc
+                   FROM legacy.audit_events"""
+            )
+            connection.commit()
+            connection.execute("DETACH DATABASE legacy")
+            if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                raise RuntimeError("Migrated state database failed integrity_check")
+            if connection.execute("PRAGMA foreign_key_check").fetchall():
+                raise RuntimeError("Migrated state database failed foreign_key_check")
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            if connection.in_transaction:
+                connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+        os.replace(candidate, path)
+        _unlink_sqlite_files(candidate)
+        current = 2
+
+    if current == target:
+        return
+
+    if current == 2 and target >= 3:
+        connection = sqlite3.connect(path)
+        try:
+            _configure_state_connection(connection)
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """CREATE TABLE progress_v3 (
+                profile_id TEXT NOT NULL,
+                track_id TEXT NOT NULL,
+                card_key TEXT NOT NULL,
+                learning_item_id TEXT,
+                prompt_facet_id TEXT,
+                answer_facet_id TEXT,
+                state TEXT NOT NULL CHECK (
+                    state IN ('new', 'learning', 'review', 'relearning', 'leech')
+                ),
+                mastery REAL NOT NULL DEFAULT 0 CHECK (mastery >= 0 AND mastery <= 1),
+                box INTEGER NOT NULL DEFAULT 0 CHECK (box >= 0),
+                seen_count INTEGER NOT NULL DEFAULT 0 CHECK (seen_count >= 0),
+                verified_correct_count INTEGER NOT NULL DEFAULT 0
+                    CHECK (verified_correct_count >= 0),
+                verified_wrong_count INTEGER NOT NULL DEFAULT 0 CHECK (verified_wrong_count >= 0),
+                self_known_count INTEGER NOT NULL DEFAULT 0 CHECK (self_known_count >= 0),
+                self_review_count INTEGER NOT NULL DEFAULT 0 CHECK (self_review_count >= 0),
+                first_seen_at_utc TEXT,
+                last_seen_at_utc TEXT,
+                last_result TEXT,
+                next_due_at_utc TEXT,
+                streak_correct INTEGER NOT NULL DEFAULT 0 CHECK (streak_correct >= 0),
+                leech_score REAL NOT NULL DEFAULT 0 CHECK (leech_score >= 0),
+                difficulty_factor REAL NOT NULL DEFAULT 1 CHECK (difficulty_factor > 0),
+                last_verified_at_utc TEXT,
+                verified_success_since_box INTEGER NOT NULL DEFAULT 0
+                    CHECK (verified_success_since_box >= 0),
+                user_state TEXT NOT NULL DEFAULT 'active'
+                    CHECK (user_state IN ('active', 'known_already', 'suspended', 'buried')),
+                suspend_until_utc TEXT,
+                example_rotation_index INTEGER NOT NULL DEFAULT 0
+                    CHECK (example_rotation_index >= 0),
+                content_status TEXT NOT NULL DEFAULT 'active'
+                    CHECK (content_status IN ('active', 'removed', 'superseded')),
+                policy_version INTEGER NOT NULL DEFAULT 1 CHECK (policy_version >= 1),
+                dataset_generation TEXT,
+                normalization_version INTEGER CHECK (
+                    normalization_version IS NULL OR normalization_version >= 1
+                ),
+                updated_at_utc TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY(profile_id, track_id, card_key),
+                CHECK (
+                    (learning_item_id IS NULL AND prompt_facet_id IS NULL AND answer_facet_id IS NULL)
+                    OR (
+                        learning_item_id IS NOT NULL
+                        AND prompt_facet_id IS NOT NULL
+                        AND answer_facet_id IS NOT NULL
+                    )
+                )
+            )"""
+            )
+            connection.execute(
+                """INSERT INTO progress_v3
+               SELECT profile_id, track_id, card_key, learning_item_id,
+                      prompt_facet_id, answer_facet_id, state, mastery, box,
+                      seen_count, verified_correct_count, verified_wrong_count,
+                      self_known_count, self_review_count, first_seen_at_utc,
+                      last_seen_at_utc, last_result, next_due_at_utc,
+                      streak_correct, leech_score, difficulty_factor,
+                      last_verified_at_utc, verified_success_since_box,
+                      user_state, suspend_until_utc, example_rotation_index,
+                      content_status, policy_version, dataset_generation,
+                      normalization_version, updated_at_utc
+               FROM progress"""
+            )
+            connection.execute("DROP TABLE progress")
+            connection.execute("ALTER TABLE progress_v3 RENAME TO progress")
+            connection.execute(
+                """CREATE INDEX progress_due
+               ON progress(profile_id, track_id, state, next_due_at_utc)"""
+            )
+            connection.execute(
+                """CREATE INDEX progress_content_identity
+               ON progress(card_key, learning_item_id, prompt_facet_id, answer_facet_id)"""
+            )
+            connection.execute("UPDATE schema_version SET version = 3")
+            connection.commit()
+            if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                raise RuntimeError("Migrated state database failed integrity_check")
+            if connection.execute("PRAGMA foreign_key_check").fetchall():
+                raise RuntimeError("Migrated state database failed foreign_key_check")
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            if connection.in_transaction:
+                connection.rollback()
+            raise
+        finally:
+            connection.close()
+        current = 3
+
+    if current == 3 and target >= 4:
+        connection = sqlite3.connect(path)
+        try:
+            _configure_state_connection(connection)
+            connection.execute("BEGIN IMMEDIATE")
+            columns = {
+                str(row[1])
+                for row in connection.execute("PRAGMA table_info(scheduled_slots)").fetchall()
+            }
+            if "deferred_until_utc" not in columns:
+                connection.execute("ALTER TABLE scheduled_slots ADD COLUMN deferred_until_utc TEXT")
+            if "defer_reason" not in columns:
+                connection.execute("ALTER TABLE scheduled_slots ADD COLUMN defer_reason TEXT")
+            connection.execute(
+                """CREATE TABLE IF NOT EXISTS receptivity_samples (
+                    slot_id TEXT PRIMARY KEY
+                        REFERENCES scheduled_slots(slot_id) ON DELETE CASCADE,
+                    profile_id TEXT NOT NULL,
+                    target_id TEXT,
+                    delivered_at_utc TEXT NOT NULL,
+                    timezone_name TEXT NOT NULL,
+                    weekday INTEGER NOT NULL CHECK (weekday >= 0 AND weekday <= 6),
+                    local_hour INTEGER NOT NULL CHECK (local_hour >= 0 AND local_hour <= 23),
+                    delivered INTEGER NOT NULL DEFAULT 1 CHECK (delivered IN (0, 1)),
+                    cleared INTEGER NOT NULL DEFAULT 0 CHECK (cleared IN (0, 1)),
+                    answered INTEGER NOT NULL DEFAULT 0 CHECK (answered IN (0, 1)),
+                    delivery_to_action_ms INTEGER CHECK (
+                        delivery_to_action_ms IS NULL OR delivery_to_action_ms >= 0
+                    ),
+                    updated_at_utc TEXT NOT NULL
+                )"""
+            )
+            connection.execute(
+                """CREATE INDEX IF NOT EXISTS receptivity_samples_profile_hour
+                   ON receptivity_samples(
+                       profile_id, weekday, local_hour, delivered_at_utc DESC
+                   )"""
+            )
+            connection.execute("UPDATE schema_version SET version = 4")
+            connection.commit()
+            if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                raise RuntimeError("Migrated state database failed integrity_check")
+            if connection.execute("PRAGMA foreign_key_check").fetchall():
+                raise RuntimeError("Migrated state database failed foreign_key_check")
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            if connection.in_transaction:
+                connection.rollback()
+            raise
+        finally:
+            connection.close()
+        current = 4
+
+    if current == 4 and target >= 5:
+        connection = sqlite3.connect(path)
+        try:
+            _configure_state_connection(connection)
+            connection.execute("BEGIN IMMEDIATE")
+            columns = {
+                str(row[1])
+                for row in connection.execute("PRAGMA table_info(scheduled_slots)").fetchall()
+            }
+            additions = (
+                ("card_key", "TEXT"),
+                ("learning_item_id", "TEXT"),
+                ("prompt_facet_id", "TEXT"),
+                ("answer_facet_id", "TEXT"),
+                ("selection_reason", "TEXT"),
+                ("expired_reason", "TEXT"),
+            )
+            for column_name, column_type in additions:
+                if column_name not in columns:
+                    connection.execute(
+                        f"ALTER TABLE scheduled_slots ADD COLUMN {column_name} {column_type}"
+                    )
+            connection.execute("UPDATE schema_version SET version = 5")
+            connection.commit()
+            if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                raise RuntimeError("Migrated state database failed integrity_check")
+            if connection.execute("PRAGMA foreign_key_check").fetchall():
+                raise RuntimeError("Migrated state database failed foreign_key_check")
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            if connection.in_transaction:
+                connection.rollback()
+            raise
+        finally:
+            connection.close()
+        current = 5
+
+    if current != target:
         raise RuntimeError(f"No state migration path from {current} to {target}")
-
-    candidate = path.with_name(f".{path.name}.v2-migration")
-    _unlink_sqlite_files(candidate)
-    connection = sqlite3.connect(candidate)
-    try:
-        _configure_state_connection(connection)
-        connection.executescript(schema)
-        connection.execute("ATTACH DATABASE ? AS legacy", (str(path),))
-        connection.execute("BEGIN IMMEDIATE")
-        connection.execute("INSERT INTO schema_version(version) VALUES (2)")
-        connection.execute(
-            """INSERT INTO sessions(
-                   id, profile_id, track_id, status, version, current_position,
-                   started_at_utc, last_activity_at_utc
-               )
-               SELECT id, profile_id, track_id, status, version, current_position,
-                      started_at_utc, last_activity_at_utc
-               FROM legacy.sessions"""
-        )
-        connection.execute(
-            """INSERT INTO session_answers(
-                   id, session_id, question_id, answer_json, resulting_version, created_at_utc
-               )
-               SELECT id, session_id, question_id, answer_json, resulting_version, created_at_utc
-               FROM legacy.session_answers"""
-        )
-        connection.execute(
-            """INSERT INTO progress(
-                   profile_id, track_id, card_key, state, next_due_at_utc
-               )
-               SELECT profile_id, track_id, card_key, state, next_due_at_utc
-               FROM legacy.progress"""
-        )
-        connection.execute(
-            """INSERT INTO audit_events(
-                   id, event_type, actor_user_id, profile_id, payload_json, created_at_utc
-               )
-               SELECT id, event_type, actor_user_id, profile_id, payload_json, created_at_utc
-               FROM legacy.audit_events"""
-        )
-        connection.commit()
-        connection.execute("DETACH DATABASE legacy")
-        if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
-            raise RuntimeError("Migrated state database failed integrity_check")
-        if connection.execute("PRAGMA foreign_key_check").fetchall():
-            raise RuntimeError("Migrated state database failed foreign_key_check")
-        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    except Exception:
-        if connection.in_transaction:
-            connection.rollback()
-        raise
-    finally:
-        connection.close()
-
-    os.replace(candidate, path)
-    _unlink_sqlite_files(candidate)
 
 
 class SQLiteStorage:
@@ -277,20 +469,77 @@ class SQLiteStorage:
             connection.close()
 
     async def async_create_session(
-        self, session_id: str, profile_id: str, track_id: str | None
+        self,
+        session_id: str,
+        profile_id: str,
+        track_id: str | None,
+        *,
+        session_type: str = "learn",
+        strategy: str = "default",
+        settings: dict[str, Any] | None = None,
+        items: tuple[dict[str, Any], ...] = (),
     ) -> dict[str, Any]:
-        """Persist a new active session."""
+        """Persist a configured session and its prepared question state."""
         now = self._clock.now().isoformat()
+        serialized_settings = json.dumps(
+            settings or {},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
 
         def create(connection: sqlite3.Connection) -> None:
-            connection.execute(
-                """INSERT INTO sessions(
-                       id, profile_id, track_id, status, version, current_position,
-                       started_at_utc, last_activity_at_utc
-                   ) VALUES (?, ?, ?, 'active', 1, 0, ?, ?)""",
-                (session_id, profile_id, track_id, now, now),
-            )
-            connection.commit()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    """INSERT INTO sessions(
+                           id, profile_id, track_id, type, strategy, status, version,
+                           current_position, started_at_utc, last_activity_at_utc,
+                           question_count, settings_json
+                       ) VALUES (?, ?, ?, ?, ?, 'active', 1, 0, ?, ?, ?, ?)""",
+                    (
+                        session_id,
+                        profile_id,
+                        track_id,
+                        session_type,
+                        strategy,
+                        now,
+                        now,
+                        len(items),
+                        serialized_settings,
+                    ),
+                )
+                connection.executemany(
+                    """INSERT INTO session_items(
+                           session_id, position, question_id, card_key,
+                           learning_item_id, prompt_facet_id, answer_facet_id,
+                           status, payload_json
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        (
+                            session_id,
+                            position,
+                            str(item["question_id"]),
+                            str(item["card_key"]),
+                            str(item["learning_item_id"]),
+                            str(item["prompt_facet_id"]),
+                            str(item["answer_facet_id"]),
+                            "presented" if position == 0 else "queued",
+                            json.dumps(
+                                dict(item.get("payload", {})),
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                                sort_keys=True,
+                            ),
+                        )
+                        for position, item in enumerate(items)
+                    ),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
 
         await self._async_writer(create)
         session = await self.async_get_session(session_id)
@@ -298,12 +547,13 @@ class SQLiteStorage:
         return session
 
     async def async_get_session(self, session_id: str) -> dict[str, Any] | None:
-        """Read a session using a short-lived reader connection."""
+        """Read a complete resumable session snapshot."""
 
         def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
             row = connection.execute(
-                """SELECT id, profile_id, track_id, status, version, current_position,
-                          started_at_utc, last_activity_at_utc
+                """SELECT id, profile_id, track_id, type, strategy, status, version,
+                          current_position, started_at_utc, last_activity_at_utc,
+                          completed_at_utc, question_count, settings_json
                    FROM sessions WHERE id = ?""",
                 (session_id,),
             ).fetchone()
@@ -313,13 +563,61 @@ class SQLiteStorage:
                 "id",
                 "profile_id",
                 "track_id",
+                "type",
+                "strategy",
                 "status",
                 "version",
                 "current_position",
                 "started_at_utc",
                 "last_activity_at_utc",
+                "completed_at_utc",
+                "question_count",
+                "settings_json",
             )
-            return dict(zip(keys, row, strict=True))
+            result = dict(zip(keys, row, strict=True))
+            result["settings"] = json.loads(str(result.pop("settings_json")))
+            item_rows = connection.execute(
+                """SELECT position, question_id, card_key, learning_item_id,
+                          prompt_facet_id, answer_facet_id, status, payload_json
+                   FROM session_items
+                   WHERE session_id = ?
+                   ORDER BY position""",
+                (session_id,),
+            ).fetchall()
+            result["items"] = [
+                {
+                    "position": int(item[0]),
+                    "question_id": str(item[1]),
+                    "card_key": str(item[2]),
+                    "learning_item_id": str(item[3]),
+                    "prompt_facet_id": str(item[4]),
+                    "answer_facet_id": str(item[5]),
+                    "status": str(item[6]),
+                    "payload": json.loads(str(item[7])),
+                }
+                for item in item_rows
+            ]
+            answer_rows = connection.execute(
+                """SELECT id, question_id, answer_json, resulting_version, created_at_utc
+                   FROM session_answers
+                   WHERE session_id = ?
+                   ORDER BY resulting_version""",
+                (session_id,),
+            ).fetchall()
+            result["answers"] = [
+                {
+                    "id": int(answer[0]),
+                    "question_id": str(answer[1]),
+                    "answer": json.loads(str(answer[2])),
+                    "resulting_version": int(answer[3]),
+                    "created_at_utc": str(answer[4]),
+                }
+                for answer in answer_rows
+            ]
+            position = int(result["current_position"])
+            items = result["items"]
+            result["current_question"] = items[position] if 0 <= position < len(items) else None
+            return result
 
         return await self._async_reader(read)
 
@@ -349,6 +647,275 @@ class SQLiteStorage:
         status["backup_active"] = self._backup_active
         return status
 
+    async def async_latest_session_summary(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+    ) -> dict[str, Any] | None:
+        """Return the most recently active session summary for one Track."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT s.id, s.profile_id, s.track_id, s.type, s.status,
+                          s.started_at_utc, s.last_activity_at_utc,
+                          s.completed_at_utc, s.question_count,
+                          (
+                              SELECT COUNT(*)
+                              FROM session_items AS item
+                              WHERE item.session_id = s.id
+                                AND item.status = 'answered'
+                          ) AS answered_count
+                   FROM sessions AS s
+                   WHERE s.profile_id = ? AND s.track_id = ?
+                   ORDER BY COALESCE(
+                                s.completed_at_utc,
+                                s.last_activity_at_utc,
+                                s.started_at_utc
+                            ) DESC,
+                            s.id DESC
+                   LIMIT 1""",
+                (profile_id, track_id),
+            ).fetchone()
+            if row is None:
+                return None
+            keys = (
+                "session_id",
+                "profile_id",
+                "track_id",
+                "session_type",
+                "status",
+                "started_at_utc",
+                "last_activity_at_utc",
+                "completed_at_utc",
+                "question_count",
+                "answered_count",
+            )
+            return dict(zip(keys, row, strict=True))
+
+        return await self._async_reader(read)
+
+    async def async_answer_learning_session(
+        self,
+        event: ReviewEventRecord,
+        *,
+        expected_version: int,
+        question_id: str,
+        answer: Any,
+        follow_up: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Atomically append a ReviewEvent projection and advance one session question."""
+        valid = await self.async_validate_card_reference(
+            card_key=event.card_key,
+            learning_item_id=event.learning_item_id,
+            prompt_facet_id=event.prompt_facet_id,
+            answer_facet_id=event.answer_facet_id,
+        )
+        if not valid:
+            raise RuntimeError(f"unknown active card reference: {event.card_key}")
+        ReviewEventsRepository._validate_projection_identity(event, event.post_state_snapshot)
+        pre_json = json.dumps(
+            event.pre_state_snapshot,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        post_json = json.dumps(
+            event.post_state_snapshot,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        answer_json = json.dumps(answer, ensure_ascii=False, separators=(",", ":"))
+        follow_up_json: str | None = None
+        if follow_up is not None:
+            expected_identity = {
+                "card_key": event.card_key,
+                "learning_item_id": event.learning_item_id,
+                "prompt_facet_id": event.prompt_facet_id,
+                "answer_facet_id": event.answer_facet_id,
+            }
+            if any(str(follow_up.get(key)) != value for key, value in expected_identity.items()):
+                raise RuntimeError("learning follow-up must preserve CardDefinition identity")
+            follow_up_payload = follow_up.get("payload")
+            if not isinstance(follow_up_payload, dict):
+                raise RuntimeError("learning follow-up payload must be an object")
+            follow_up_json = json.dumps(
+                follow_up_payload,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        now = self._clock.now().isoformat()
+
+        def answer_cas(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                session = connection.execute(
+                    """SELECT profile_id, track_id, status, version,
+                              current_position, question_count
+                       FROM sessions WHERE id = ?""",
+                    (event.session_id,),
+                ).fetchone()
+                if session is None:
+                    connection.rollback()
+                    raise SessionNotFoundError(str(event.session_id))
+                profile_id, track_id, status, version, position, question_count = session
+                if (
+                    event.session_id is None
+                    or str(profile_id) != event.profile_id
+                    or str(track_id) != event.track_id
+                    or str(status) != "active"
+                    or int(version) != expected_version
+                ):
+                    connection.rollback()
+                    raise StaleSessionError(str(event.session_id))
+                item = connection.execute(
+                    """SELECT question_id, card_key, learning_item_id,
+                              prompt_facet_id, answer_facet_id, status
+                       FROM session_items
+                       WHERE session_id = ? AND position = ?""",
+                    (event.session_id, int(position)),
+                ).fetchone()
+                if (
+                    item is None
+                    or str(item[0]) != question_id
+                    or str(item[1]) != event.card_key
+                    or str(item[2]) != event.learning_item_id
+                    or str(item[3]) != event.prompt_facet_id
+                    or str(item[4]) != event.answer_facet_id
+                    or str(item[5]) not in {"queued", "presented"}
+                ):
+                    connection.rollback()
+                    raise StaleSessionError(str(event.session_id))
+
+                connection.execute(
+                    """INSERT INTO review_events(
+                           id, profile_id, track_id, learning_item_id,
+                           prompt_facet_id, answer_facet_id, card_key, mode,
+                           question_type, result, answer_id, expected_answer_id,
+                           hint_used, retrieval_occurred, scheduled_interval_days,
+                           elapsed_days, grading_result, signal_quality,
+                           policy_version, dataset_generation, normalization_version,
+                           pre_state_snapshot, post_state_snapshot,
+                           presentation_to_answer_ms, delivery_to_action_ms,
+                           session_id, notification_id, created_at_utc, local_date,
+                           timezone_name, utc_offset_minutes
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        event.id,
+                        event.profile_id,
+                        event.track_id,
+                        event.learning_item_id,
+                        event.prompt_facet_id,
+                        event.answer_facet_id,
+                        event.card_key,
+                        event.mode,
+                        event.question_type,
+                        event.result,
+                        event.answer_id,
+                        event.expected_answer_id,
+                        int(event.hint_used),
+                        int(event.retrieval_occurred),
+                        event.scheduled_interval_days,
+                        event.elapsed_days,
+                        event.grading_result,
+                        event.signal_quality,
+                        event.policy_version,
+                        event.dataset_generation,
+                        event.normalization_version,
+                        pre_json,
+                        post_json,
+                        event.presentation_to_answer_ms,
+                        event.delivery_to_action_ms,
+                        event.session_id,
+                        event.notification_id,
+                        event.created_at_utc,
+                        event.local_date,
+                        event.timezone_name,
+                        event.utc_offset_minutes,
+                    ),
+                )
+                ReviewEventsRepository._upsert_progress(connection, event.post_state_snapshot)
+                ReviewEventsRepository._rebuild_stats_day_in_connection(
+                    connection,
+                    profile_id=event.profile_id,
+                    track_id=event.track_id,
+                    local_date=event.local_date,
+                )
+
+                resulting_version = expected_version + 1
+                next_position = int(position) + 1
+                effective_question_count = int(question_count)
+                connection.execute(
+                    """UPDATE session_items
+                       SET status = 'answered'
+                       WHERE session_id = ? AND position = ?""",
+                    (event.session_id, int(position)),
+                )
+                if follow_up is not None:
+                    assert follow_up_json is not None
+                    connection.execute(
+                        """INSERT INTO session_items(
+                               session_id, position, question_id, card_key,
+                               learning_item_id, prompt_facet_id, answer_facet_id,
+                               status, payload_json
+                           ) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?)""",
+                        (
+                            event.session_id,
+                            effective_question_count,
+                            str(follow_up["question_id"]),
+                            str(follow_up["card_key"]),
+                            str(follow_up["learning_item_id"]),
+                            str(follow_up["prompt_facet_id"]),
+                            str(follow_up["answer_facet_id"]),
+                            follow_up_json,
+                        ),
+                    )
+                    effective_question_count += 1
+                if next_position < effective_question_count:
+                    connection.execute(
+                        """UPDATE session_items
+                           SET status = 'presented'
+                           WHERE session_id = ? AND position = ? AND status = 'queued'""",
+                        (event.session_id, next_position),
+                    )
+                cursor = connection.execute(
+                    """UPDATE sessions
+                       SET version = ?, current_position = ?, question_count = ?,
+                           last_activity_at_utc = ?
+                       WHERE id = ? AND version = ? AND status = 'active'""",
+                    (
+                        resulting_version,
+                        next_position,
+                        effective_question_count,
+                        now,
+                        event.session_id,
+                        expected_version,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    connection.rollback()
+                    raise StaleSessionError(str(event.session_id))
+                connection.execute(
+                    """INSERT INTO session_answers(
+                           session_id, question_id, answer_json,
+                           resulting_version, created_at_utc
+                       ) VALUES (?, ?, ?, ?, ?)""",
+                    (event.session_id, question_id, answer_json, resulting_version, now),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._async_writer(answer_cas)
+        session = await self.async_get_session(str(event.session_id))
+        assert session is not None
+        return session
+
     async def async_answer_session(
         self,
         session_id: str,
@@ -356,30 +923,73 @@ class SQLiteStorage:
         question_id: str,
         answer: Any,
     ) -> dict[str, Any]:
-        """Apply an answer with an atomic optimistic version check."""
+        """Apply an answer with atomic session/question CAS semantics."""
         now = self._clock.now().isoformat()
         answer_json = json.dumps(answer, ensure_ascii=False, separators=(",", ":"))
 
         def answer_cas(connection: sqlite3.Connection) -> None:
             try:
                 connection.execute("BEGIN IMMEDIATE")
+                session = connection.execute(
+                    """SELECT status, version, current_position, question_count
+                       FROM sessions WHERE id = ?""",
+                    (session_id,),
+                ).fetchone()
+                if session is None:
+                    connection.rollback()
+                    raise SessionNotFoundError(session_id)
+                status, version, position, question_count = session
+                if str(status) != "active" or int(version) != expected_version:
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+                item = connection.execute(
+                    """SELECT question_id, status
+                       FROM session_items
+                       WHERE session_id = ? AND position = ?""",
+                    (session_id, int(position)),
+                ).fetchone()
+                if (
+                    item is None
+                    or str(item[0]) != question_id
+                    or str(item[1])
+                    not in {
+                        "queued",
+                        "presented",
+                    }
+                ):
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+
+                resulting_version = expected_version + 1
+                next_position = int(position) + 1
+                connection.execute(
+                    """UPDATE session_items
+                       SET status = 'answered'
+                       WHERE session_id = ? AND position = ?""",
+                    (session_id, int(position)),
+                )
+                if next_position < int(question_count):
+                    connection.execute(
+                        """UPDATE session_items
+                           SET status = 'presented'
+                           WHERE session_id = ? AND position = ? AND status = 'queued'""",
+                        (session_id, next_position),
+                    )
                 cursor = connection.execute(
                     """UPDATE sessions
-                       SET version = version + 1,
-                           current_position = current_position + 1,
-                           last_activity_at_utc = ?
+                       SET version = ?, current_position = ?, last_activity_at_utc = ?
                        WHERE id = ? AND version = ? AND status = 'active'""",
-                    (now, session_id, expected_version),
+                    (
+                        resulting_version,
+                        next_position,
+                        now,
+                        session_id,
+                        expected_version,
+                    ),
                 )
                 if cursor.rowcount != 1:
-                    exists = connection.execute(
-                        "SELECT 1 FROM sessions WHERE id = ?", (session_id,)
-                    ).fetchone()
                     connection.rollback()
-                    if exists is None:
-                        raise SessionNotFoundError(session_id)
                     raise StaleSessionError(session_id)
-                resulting_version = expected_version + 1
                 connection.execute(
                     """INSERT INTO session_answers(
                            session_id, question_id, answer_json, resulting_version, created_at_utc
@@ -393,6 +1003,153 @@ class SQLiteStorage:
                 raise
 
         await self._async_writer(answer_cas)
+        session = await self.async_get_session(session_id)
+        assert session is not None
+        return session
+
+    async def async_set_session_status(
+        self,
+        session_id: str,
+        expected_version: int,
+        *,
+        status: str,
+    ) -> dict[str, Any]:
+        """CAS pause/resume/complete one persistent session."""
+        if status not in {"active", "paused", "completed"}:
+            raise ValueError(f"unsupported session status: {status}")
+        now = self._clock.now().isoformat()
+
+        def mutate(connection: sqlite3.Connection) -> None:
+            completed_at = now if status == "completed" else None
+            allowed_source = {
+                "paused": ("active",),
+                "active": ("paused",),
+                "completed": ("active", "paused"),
+            }[status]
+            placeholders = ",".join("?" for _ in allowed_source)
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                cursor = connection.execute(
+                    f"""UPDATE sessions
+                        SET status = ?, version = version + 1,
+                            last_activity_at_utc = ?,
+                            completed_at_utc = CASE
+                                WHEN ? = 'completed' THEN ?
+                                ELSE completed_at_utc
+                            END
+                        WHERE id = ? AND version = ?
+                          AND status IN ({placeholders})""",
+                    (
+                        status,
+                        now,
+                        status,
+                        completed_at,
+                        session_id,
+                        expected_version,
+                        *allowed_source,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    exists = connection.execute(
+                        "SELECT 1 FROM sessions WHERE id = ?",
+                        (session_id,),
+                    ).fetchone()
+                    connection.rollback()
+                    if exists is None:
+                        raise SessionNotFoundError(session_id)
+                    raise StaleSessionError(session_id)
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._async_writer(mutate)
+        session = await self.async_get_session(session_id)
+        assert session is not None
+        return session
+
+    async def async_undo_session_answer(
+        self,
+        session_id: str,
+        expected_version: int,
+        *,
+        actor_user_id: str | None = None,
+    ) -> dict[str, Any]:
+        """CAS-rewind session navigation while preserving answer history."""
+        now = self._clock.now().isoformat()
+
+        def undo(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                session = connection.execute(
+                    """SELECT profile_id, status, version, current_position
+                       FROM sessions WHERE id = ?""",
+                    (session_id,),
+                ).fetchone()
+                if session is None:
+                    connection.rollback()
+                    raise SessionNotFoundError(session_id)
+                profile_id, status, version, position = session
+                if str(status) not in {"active", "paused"} or int(version) != expected_version:
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+                previous_position = int(position) - 1
+                if previous_position < 0:
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+                item = connection.execute(
+                    """SELECT question_id, status
+                       FROM session_items
+                       WHERE session_id = ? AND position = ?""",
+                    (session_id, previous_position),
+                ).fetchone()
+                if item is None or str(item[1]) != "answered":
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+                question_id = str(item[0])
+                connection.execute(
+                    """UPDATE session_items SET status = 'presented'
+                       WHERE session_id = ? AND position = ?""",
+                    (session_id, previous_position),
+                )
+                connection.execute(
+                    """UPDATE session_items SET status = 'queued'
+                       WHERE session_id = ? AND position = ? AND status = 'presented'""",
+                    (session_id, int(position)),
+                )
+                cursor = connection.execute(
+                    """UPDATE sessions
+                       SET version = version + 1, current_position = ?,
+                           status = 'active', last_activity_at_utc = ?
+                       WHERE id = ? AND version = ?""",
+                    (previous_position, now, session_id, expected_version),
+                )
+                if cursor.rowcount != 1:
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+                payload = json.dumps(
+                    {
+                        "session_id": session_id,
+                        "question_id": question_id,
+                        "previous_version": expected_version,
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+                connection.execute(
+                    """INSERT INTO audit_events(
+                           event_type, actor_user_id, profile_id, payload_json, created_at_utc
+                       ) VALUES ('session_undo_navigation', ?, ?, ?, ?)""",
+                    (actor_user_id, str(profile_id), payload, now),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._async_writer(undo)
         session = await self.async_get_session(session_id)
         assert session is not None
         return session
@@ -587,6 +1344,21 @@ class SQLiteStorage:
                     """SELECT 1 FROM content.pack_versions
                        WHERE pack_version_id = ?""",
                     (pack_version_id,),
+                ).fetchone()
+                is not None
+            )
+
+        return await self._async_reader(query)
+
+    async def async_validate_learning_item_reference(self, learning_item_id: str) -> bool:
+        """Validate one active LearningItem against the active content generation."""
+
+        def query(connection: sqlite3.Connection) -> bool:
+            return (
+                connection.execute(
+                    """SELECT 1 FROM content.learning_items
+                       WHERE learning_item_id = ? AND lifecycle_status = 'active'""",
+                    (learning_item_id,),
                 ).fetchone()
                 is not None
             )

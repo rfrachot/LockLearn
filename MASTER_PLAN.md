@@ -25,7 +25,7 @@
 | P0 | Architecture spikes + installable HA skeleton | complete | yes | `docs/plan/P0.md` |
 | P1 | Content core + signed starter dataset | complete | yes | `docs/plan/P1.md` |
 | P2 | Profiles/tracks/ACL | complete | yes | `docs/plan/P2.md` |
-| P3 | Learning/SRS/sessions/stats | in progress (P3.1–P3.7 complete; P3.8 next) | yes | `docs/plan/P3.md` |
+| P3 | Learning/SRS/sessions/stats | complete | yes | `docs/plan/P3.md` |
 | P4 | Scheduler/notifications/HA automation | queued | yes | `docs/plan/P4.md` |
 | P5 | Useful panel | queued | yes | `docs/plan/P5.md` |
 | P6 | Hardening/release | queued | yes | `docs/plan/P6.md` |
@@ -75,32 +75,32 @@
 - **P3.5** — Sibling burial, prerequisites and confusable introduction spacing (complete)
 - **P3.6** — Quiz engine, distractors and corrective feedback (complete)
 - **P3.7** — Panel free-text grading and content-quality feedback (complete)
-- **P3.8** — Persistent sessions, concurrency and cross-client resume
-- **P3.9** — Fatigue-aware session selection and interleaving
-- **P3.10** — Known-already, suspend/bury and calibration
-- **P3.11** — Leech detection, confusion matrix and personal annotations
-- **P3.12** — Undo, integrity rebuild and algorithmic recompute
-- **P3.13** — Basic statistics and metacognitive calibration backend
-- **P3.14** — Long-horizon SRS simulation gate
+- **P3.8** — Persistent sessions, concurrency and cross-client resume (complete)
+- **P3.9** — Fatigue-aware session selection and interleaving (complete)
+- **P3.10** — Known-already, suspend/bury and calibration (complete)
+- **P3.11** — Leech detection, confusion matrix and personal annotations (complete)
+- **P3.12** — Undo, integrity rebuild and algorithmic recompute (complete)
+- **P3.13** — Basic statistics and metacognitive calibration backend (complete)
+- **P3.14** — Long-horizon SRS simulation gate (complete)
 
 ### P4
 
-- **P4.1** — Materialized scheduler slots and deterministic generation
-- **P4.2** — Timezone, DST, restart and clock-jump reconciliation
-- **P4.3** — Multi-track/multi-target arbitration and capacity Repairs
-- **P4.4** — Context-aware receptivity and routine slots
-- **P4.5** — Notification selection policy, missed/pending/backoff
-- **P4.6** — Persistent notification interactions and replay protection
-- **P4.7** — Notification renderers and privacy-safe target behavior
-- **P4.8** — HA services/actions and pedagogical events
-- **P4.9** — Automation blueprints
+- **P4.1** — Materialized scheduler slots and deterministic generation (complete)
+- **P4.2** — Timezone, DST, restart and clock-jump reconciliation (complete)
+- **P4.3** — Multi-track/multi-target arbitration and capacity Repairs (complete)
+- **P4.4** — Context-aware receptivity and routine slots (complete)
+- **P4.5** — Notification selection policy, missed/pending/backoff (complete)
+- **P4.6** — Persistent notification interactions and replay protection (complete)
+- **P4.7** — Notification renderers and privacy-safe target behavior (complete)
+- **P4.8** — HA services/actions and pedagogical events (complete)
+- **P4.9** — Automation blueprints (complete)
 
 ### P5
 
-- **P5.1** — Frontend shell, protocol/bootstrap and routing
-- **P5.2** — Home dashboard and profile switcher
-- **P5.3** — Learn UI and introduction/reveal flow
-- **P5.4** — Quiz/free-text/cloze UI
+- **P5.1** — Frontend shell, protocol/bootstrap and routing (functional real-HA regression qualification complete; deferred token-rotation debt remains)
+- **P5.2** — Home dashboard and profile switcher (complete)
+- **P5.3** — Learn UI and introduction/reveal flow (complete)
+- **P5.4** — Quiz/free-text/cloze UI (implemented; real-HA qualification pending)
 - **P5.5** — Profiles/tracks/packs/settings management UI
 - **P5.6** — Dataset updates, Sources & Licences UI
 - **P5.7** — Basic stats, difficulties and metacognitive views

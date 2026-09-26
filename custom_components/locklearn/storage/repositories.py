@@ -31,6 +31,7 @@ class RepositoryStorage(Protocol):
         answer_facet_id: str,
     ) -> bool: ...
     async def async_validate_pack_version_reference(self, pack_version_id: str) -> bool: ...
+    async def async_validate_learning_item_reference(self, learning_item_id: str) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +66,56 @@ class TrackRecord:
     status: str = "active"
     priority: int = 1
     settings: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationTargetRecord:
+    """Stable notification target state backed by the HA device registry identity."""
+
+    target_id: str
+    profile_id: str
+    device_registry_id: str
+    platform: str
+    friendly_name: str
+    created_at_utc: str
+    updated_at_utc: str
+    capabilities: dict[str, Any] | None = None
+    last_resolved_notify_service: str | None = None
+    shared_device: bool = False
+    lockscreen_visibility: str = "private"
+    enabled: bool = True
+    minimum_gap_seconds: int | None = None
+    maximum_notifications_per_hour: int | None = None
+    daily_push_budget: int | None = None
+    adaptive_backoff: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationInteractionRecord:
+    """Persistent single-use action capability for one notification stage."""
+
+    interaction_id: str
+    token: str
+    profile_id: str
+    target_id: str
+    stage: str
+    created_at_utc: str
+    expires_at_utc: str
+    tag: str | None = None
+    track_id: str | None = None
+    card_key: str | None = None
+    status: str = "pending"
+    consumed_at_utc: str | None = None
+    action_id: str | None = None
+    payload: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationInteractionConsumeResult:
+    """Atomic notification action claim returned by the state repository."""
+
+    disposition: str
+    interaction: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,6 +278,21 @@ class ProfilesRepository:
                 (profile_id,),
             ).fetchone()
             return None if row is None else _profile_dict(row)
+
+        return await self._storage._async_reader(read)
+
+    async def async_list_active(self) -> tuple[dict[str, Any], ...]:
+        """List active Profiles for internal scheduler hooks."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT profile_id, name, preset, timezone, status, settings_json,
+                          created_at_utc, updated_at_utc
+                   FROM profiles
+                   WHERE status = 'active'
+                   ORDER BY profile_id"""
+            ).fetchall()
+            return tuple(_profile_dict(row) for row in rows)
 
         return await self._storage._async_reader(read)
 
@@ -1170,6 +1236,140 @@ class TracksRepository:
 
         await self._storage._async_writer(write)
 
+    async def async_card_reference(
+        self,
+        *,
+        track_id: str,
+        card_key: str,
+    ) -> CardReference | None:
+        """Resolve one enabled active CardDefinition selected by a Track."""
+
+        def read(connection: sqlite3.Connection) -> CardReference | None:
+            row = connection.execute(
+                """SELECT card.card_key, card.learning_item_id,
+                          card.prompt_facet_id, card.answer_facet_id
+                   FROM track_card_rules AS rule
+                   JOIN content.card_definitions AS card
+                     ON card.card_key = rule.card_key
+                    AND card.lifecycle_status = 'active'
+                   JOIN content.learning_items AS item
+                     ON item.learning_item_id = card.learning_item_id
+                    AND item.lifecycle_status = 'active'
+                   JOIN content.facets AS prompt
+                     ON prompt.facet_id = card.prompt_facet_id
+                    AND prompt.lifecycle_status = 'active'
+                   JOIN content.facets AS answer
+                     ON answer.facet_id = card.answer_facet_id
+                    AND answer.lifecycle_status = 'active'
+                   WHERE rule.track_id = ? AND rule.card_key = ?
+                     AND rule.enabled = 1
+                   LIMIT 1""",
+                (track_id, card_key),
+            ).fetchone()
+            if row is None:
+                return None
+            return CardReference(
+                card_key=str(row[0]),
+                learning_item_id=str(row[1]),
+                prompt_facet_id=str(row[2]),
+                answer_facet_id=str(row[3]),
+            )
+
+        return await self._storage._async_reader(read)
+
+    async def async_session_candidates(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+    ) -> tuple[dict[str, Any], ...]:
+        """Load P3.9/P3.10 candidate facts from the pinned active PackVersion."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            pin = connection.execute(
+                """SELECT pin.pack_version_id
+                   FROM tracks AS track
+                   JOIN track_pack_versions AS pin ON pin.track_id = track.track_id
+                   WHERE track.track_id = ? AND track.profile_id = ?
+                     AND track.status = 'active'""",
+                (track_id, profile_id),
+            ).fetchone()
+            if pin is None:
+                return ()
+            pack_version_id = str(pin[0])
+
+            rows = connection.execute(
+                """SELECT DISTINCT rule.card_key, card.learning_item_id,
+                          card.prompt_facet_id, card.answer_facet_id,
+                          item.content_type,
+                          COALESCE(progress.state, 'new') AS progress_state,
+                          progress.next_due_at_utc, pack_item.position,
+                          COALESCE(progress.user_state, 'active') AS user_state,
+                          progress.suspend_until_utc,
+                          COALESCE(progress.difficulty_factor, 1.0),
+                          progress.last_verified_at_utc,
+                          progress.last_seen_at_utc,
+                          COALESCE(progress.self_known_count, 0),
+                          COALESCE(progress.verified_correct_count, 0),
+                          COALESCE(progress.verified_wrong_count, 0)
+                   FROM track_card_rules AS rule
+                   JOIN content.card_definitions AS card
+                     ON card.card_key = rule.card_key
+                    AND card.lifecycle_status = 'active'
+                   JOIN content.learning_items AS item
+                     ON item.learning_item_id = card.learning_item_id
+                    AND item.lifecycle_status = 'active'
+                   JOIN content.pack_items AS pack_item
+                     ON pack_item.pack_version_id = ?
+                    AND pack_item.learning_item_id = item.learning_item_id
+                   LEFT JOIN progress
+                     ON progress.profile_id = ?
+                    AND progress.track_id = rule.track_id
+                    AND progress.card_key = rule.card_key
+                   WHERE rule.track_id = ? AND rule.enabled = 1
+                     AND rule.card_key IS NOT NULL
+                     AND COALESCE(progress.content_status, 'active') = 'active'
+                   ORDER BY pack_item.position, rule.card_key""",
+                (pack_version_id, profile_id, track_id),
+            ).fetchall()
+
+            confusable_by_item: dict[str, list[str]] = {}
+            for learning_item_id, group_id in connection.execute(
+                """SELECT member.learning_item_id, member.confusable_group_id
+                   FROM content.confusable_group_items AS member
+                   JOIN content.confusable_groups AS group_row
+                     ON group_row.confusable_group_id = member.confusable_group_id
+                   WHERE group_row.pack_version_id = ?
+                   ORDER BY member.learning_item_id, member.confusable_group_id""",
+                (pack_version_id,),
+            ).fetchall():
+                confusable_by_item.setdefault(str(learning_item_id), []).append(str(group_id))
+
+            return tuple(
+                {
+                    "card_key": str(row[0]),
+                    "learning_item_id": str(row[1]),
+                    "prompt_facet_id": str(row[2]),
+                    "answer_facet_id": str(row[3]),
+                    "content_type": str(row[4]),
+                    "state": str(row[5]),
+                    "next_due_at_utc": None if row[6] is None else str(row[6]),
+                    "pack_position": int(row[7]),
+                    "user_state": str(row[8]),
+                    "suspend_until_utc": None if row[9] is None else str(row[9]),
+                    "difficulty_factor": float(row[10]),
+                    "last_verified_at_utc": None if row[11] is None else str(row[11]),
+                    "last_seen_at_utc": None if row[12] is None else str(row[12]),
+                    "self_known_count": int(row[13]),
+                    "verified_correct_count": int(row[14]),
+                    "verified_wrong_count": int(row[15]),
+                    "confusable_group_ids": tuple(confusable_by_item.get(str(row[1]), ())),
+                }
+                for row in rows
+            )
+
+        return await self._storage._async_reader(read)
+
     async def async_selection_constraints(
         self,
         *,
@@ -1324,9 +1524,13 @@ class ProgressRepository:
                 """SELECT profile_id, track_id, card_key, learning_item_id,
                           prompt_facet_id, answer_facet_id, state, mastery, box,
                           seen_count, verified_correct_count, verified_wrong_count,
-                          self_known_count, self_review_count, next_due_at_utc,
-                          user_state, content_status, policy_version,
-                          dataset_generation, normalization_version, updated_at_utc
+                          self_known_count, self_review_count, first_seen_at_utc,
+                          last_seen_at_utc, last_result, next_due_at_utc,
+                          streak_correct, leech_score, difficulty_factor,
+                          last_verified_at_utc, verified_success_since_box,
+                          user_state, suspend_until_utc, example_rotation_index,
+                          content_status, policy_version, dataset_generation,
+                          normalization_version, updated_at_utc
                    FROM progress
                    WHERE profile_id = ? AND track_id = ? AND card_key = ?""",
                 (profile_id, track_id, card_key),
@@ -1348,8 +1552,18 @@ class ProgressRepository:
                 "verified_wrong_count",
                 "self_known_count",
                 "self_review_count",
+                "first_seen_at_utc",
+                "last_seen_at_utc",
+                "last_result",
                 "next_due_at_utc",
+                "streak_correct",
+                "leech_score",
+                "difficulty_factor",
+                "last_verified_at_utc",
+                "verified_success_since_box",
                 "user_state",
+                "suspend_until_utc",
+                "example_rotation_index",
                 "content_status",
                 "policy_version",
                 "dataset_generation",
@@ -1357,6 +1571,185 @@ class ProgressRepository:
                 "updated_at_utc",
             )
             return dict(zip(keys, row, strict=True))
+
+        return await self._storage._async_reader(read)
+
+    async def async_list_scope(
+        self,
+        *,
+        profile_id: str,
+        track_id: str | None = None,
+    ) -> tuple[dict[str, Any], ...]:
+        """List materialized Progress rows for statistics and integrity views."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            clauses = ["profile_id = ?"]
+            params: list[Any] = [profile_id]
+            if track_id is not None:
+                clauses.append("track_id = ?")
+                params.append(track_id)
+            rows = connection.execute(
+                f"""SELECT {",".join(ReviewEventsRepository._PROGRESS_COLUMNS)}
+                    FROM progress
+                    WHERE {" AND ".join(clauses)}
+                    ORDER BY track_id, card_key""",
+                tuple(params),
+            ).fetchall()
+            return tuple(
+                dict(zip(ReviewEventsRepository._PROGRESS_COLUMNS, row, strict=True))
+                for row in rows
+            )
+
+        return await self._storage._async_reader(read)
+
+    async def async_set_user_state(
+        self,
+        *,
+        actor_user_id: str,
+        profile_id: str,
+        track_id: str,
+        card: CardReference,
+        user_state: str,
+        suspend_until_utc: str | None,
+        dataset_generation: str,
+        updated_at_utc: str,
+    ) -> None:
+        """Upsert user-owned card state without changing SRS scheduling fields."""
+        valid = await self._storage.async_validate_card_reference(
+            card_key=card.card_key,
+            learning_item_id=card.learning_item_id,
+            prompt_facet_id=card.prompt_facet_id,
+            answer_facet_id=card.answer_facet_id,
+        )
+        if not valid:
+            raise ContentReferenceError(f"unknown active card reference: {card.card_key}")
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                track = connection.execute(
+                    "SELECT profile_id FROM tracks WHERE track_id = ?",
+                    (track_id,),
+                ).fetchone()
+                if track is None or str(track[0]) != profile_id:
+                    raise StateRepositoryError("track does not belong to profile")
+                selected = connection.execute(
+                    """SELECT 1 FROM track_card_rules
+                       WHERE track_id = ? AND card_key = ? AND enabled = 1
+                       LIMIT 1""",
+                    (track_id, card.card_key),
+                ).fetchone()
+                if selected is None:
+                    raise StateRepositoryError("card is not enabled in track")
+
+                previous = connection.execute(
+                    """SELECT user_state, suspend_until_utc
+                       FROM progress
+                       WHERE profile_id = ? AND track_id = ? AND card_key = ?""",
+                    (profile_id, track_id, card.card_key),
+                ).fetchone()
+                connection.execute(
+                    """INSERT INTO progress(
+                           profile_id, track_id, card_key, learning_item_id,
+                           prompt_facet_id, answer_facet_id, state, user_state,
+                           suspend_until_utc, dataset_generation, updated_at_utc
+                       ) VALUES (?, ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?)
+                       ON CONFLICT(profile_id, track_id, card_key) DO UPDATE SET
+                           user_state = excluded.user_state,
+                           suspend_until_utc = excluded.suspend_until_utc,
+                           updated_at_utc = excluded.updated_at_utc""",
+                    (
+                        profile_id,
+                        track_id,
+                        card.card_key,
+                        card.learning_item_id,
+                        card.prompt_facet_id,
+                        card.answer_facet_id,
+                        user_state,
+                        suspend_until_utc,
+                        dataset_generation,
+                        updated_at_utc,
+                    ),
+                )
+                payload = json.dumps(
+                    {
+                        "track_id": track_id,
+                        "card_key": card.card_key,
+                        "learning_item_id": card.learning_item_id,
+                        "prompt_facet_id": card.prompt_facet_id,
+                        "answer_facet_id": card.answer_facet_id,
+                        "previous_user_state": "active" if previous is None else str(previous[0]),
+                        "previous_suspend_until_utc": (
+                            None if previous is None or previous[1] is None else str(previous[1])
+                        ),
+                        "user_state": user_state,
+                        "suspend_until_utc": suspend_until_utc,
+                        "dataset_generation": dataset_generation,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+                connection.execute(
+                    """INSERT INTO audit_events(
+                           event_type, actor_user_id, profile_id, payload_json, created_at_utc
+                       ) VALUES ('progress_user_state', ?, ?, ?, ?)""",
+                    (actor_user_id, profile_id, payload, updated_at_utc),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+
+    async def async_list_leeches(
+        self,
+        *,
+        profile_id: str,
+        track_id: str | None = None,
+    ) -> tuple[dict[str, Any], ...]:
+        """List materialized leech cards for a profile."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            clauses = ["profile_id = ?", "state = 'leech'"]
+            params: list[Any] = [profile_id]
+            if track_id is not None:
+                clauses.append("track_id = ?")
+                params.append(track_id)
+            rows = connection.execute(
+                f"""SELECT profile_id, track_id, card_key, learning_item_id,
+                           prompt_facet_id, answer_facet_id, mastery, box,
+                           seen_count, verified_correct_count, verified_wrong_count,
+                           next_due_at_utc, leech_score, difficulty_factor,
+                           user_state, content_status, policy_version, updated_at_utc
+                    FROM progress
+                    WHERE {" AND ".join(clauses)}
+                    ORDER BY leech_score DESC, updated_at_utc DESC, card_key""",
+                tuple(params),
+            ).fetchall()
+            keys = (
+                "profile_id",
+                "track_id",
+                "card_key",
+                "learning_item_id",
+                "prompt_facet_id",
+                "answer_facet_id",
+                "mastery",
+                "box",
+                "seen_count",
+                "verified_correct_count",
+                "verified_wrong_count",
+                "next_due_at_utc",
+                "leech_score",
+                "difficulty_factor",
+                "user_state",
+                "content_status",
+                "policy_version",
+                "updated_at_utc",
+            )
+            return tuple(dict(zip(keys, row, strict=True)) for row in rows)
 
         return await self._storage._async_reader(read)
 
@@ -1482,6 +1875,170 @@ class ReviewEventsRepository:
             tuple(snapshot[column] for column in cls._PROGRESS_COLUMNS),
         )
 
+    @staticmethod
+    def _undone_ids_in_connection(
+        connection: sqlite3.Connection,
+        *,
+        profile_id: str,
+    ) -> set[str]:
+        undone: set[str] = set()
+        rows = connection.execute(
+            """SELECT payload_json FROM audit_events
+               WHERE event_type = 'progress_undo' AND profile_id = ?""",
+            (profile_id,),
+        ).fetchall()
+        for (payload,) in rows:
+            decoded = json.loads(str(payload))
+            target = decoded.get("target_event_id")
+            if isinstance(target, str):
+                undone.add(target)
+        return undone
+
+    @classmethod
+    def _rebuild_stats_day_in_connection(
+        cls,
+        connection: sqlite3.Connection,
+        *,
+        profile_id: str,
+        track_id: str,
+        local_date: str,
+    ) -> bool:
+        """Replace one stats_daily row from canonical non-undone ReviewEvents."""
+        connection.execute(
+            """DELETE FROM stats_daily
+               WHERE profile_id = ? AND track_id = ? AND local_date = ?""",
+            (profile_id, track_id, local_date),
+        )
+        undone_ids = cls._undone_ids_in_connection(
+            connection,
+            profile_id=profile_id,
+        )
+        rows = connection.execute(
+            """SELECT id, timezone_name, utc_offset_minutes, policy_version,
+                      mode, result, hint_used, retrieval_occurred, signal_quality,
+                      question_type, pre_state_snapshot, post_state_snapshot,
+                      presentation_to_answer_ms
+               FROM review_events
+               WHERE profile_id = ? AND track_id = ? AND local_date = ?
+               ORDER BY created_at_utc, id""",
+            (profile_id, track_id, local_date),
+        ).fetchall()
+        if not rows:
+            return False
+
+        item: dict[str, Any] | None = None
+        for row in rows:
+            event_id = str(row[0])
+            mode = str(row[4])
+            if event_id in undone_ids or mode == "undo_compensation":
+                continue
+            if item is None:
+                item = {
+                    "timezone_name": str(row[1]),
+                    "utc_offset_minutes": int(row[2]),
+                    "policy_version": int(row[3]),
+                    "learning_exposures": 0,
+                    "verified_retrievals": 0,
+                    "self_known": 0,
+                    "verified_correct": 0,
+                    "verified_wrong": 0,
+                    "quiz_total": 0,
+                    "free_text_total": 0,
+                    "hints_used": 0,
+                    "new_cards": set(),
+                    "reviewed_cards": set(),
+                    "relearning_cards": set(),
+                    "leech_cards": set(),
+                    "active_seconds": 0,
+                }
+            item["timezone_name"] = str(row[1])
+            item["utc_offset_minutes"] = int(row[2])
+            item["policy_version"] = int(row[3])
+            result = str(row[5])
+            retrieval = bool(row[7])
+            quality = str(row[8])
+            question_type = str(row[9])
+            pre = json.loads(str(row[10]))
+            post = json.loads(str(row[11]))
+            if mode == "introduction":
+                item["learning_exposures"] += 1
+                item["new_cards"].add(str(post["card_key"]))
+            trusted_verified = (
+                retrieval
+                and mode
+                in {
+                    "verified_mcq",
+                    "verified_free_text",
+                    "verified_cloze",
+                    "exam_retrieval",
+                }
+                and quality in {"verified", "weak", "medium", "strong"}
+                and result in {"correct", "wrong", "idk"}
+            )
+            if trusted_verified:
+                item["verified_retrievals"] += 1
+                if result == "correct":
+                    item["verified_correct"] += 1
+                else:
+                    item["verified_wrong"] += 1
+            if mode == "self_assessment_after_retrieval" and result in {
+                "correct",
+                "known",
+                "knew",
+                "easy",
+                "hard",
+            }:
+                item["self_known"] += 1
+            if question_type in {"mcq", "cloze", "cloze_mcq"}:
+                item["quiz_total"] += 1
+            if question_type == "free_text":
+                item["free_text_total"] += 1
+            if bool(row[6]):
+                item["hints_used"] += 1
+            if str(pre.get("state")) in {"review", "leech"} and retrieval:
+                item["reviewed_cards"].add(str(post["card_key"]))
+            if str(pre.get("state")) == "relearning" or str(post.get("state")) == "relearning":
+                item["relearning_cards"].add(str(post["card_key"]))
+            if str(post.get("state")) == "leech":
+                item["leech_cards"].add(str(post["card_key"]))
+            if row[12] is not None:
+                item["active_seconds"] += max(0, int(row[12]) // 1000)
+
+        if item is None:
+            return False
+        connection.execute(
+            """INSERT INTO stats_daily(
+                   profile_id, track_id, local_date, timezone_name,
+                   utc_offset_minutes, policy_version, learning_exposures,
+                   verified_retrievals, self_known, verified_correct,
+                   verified_wrong, quiz_total, free_text_total, hints_used,
+                   new_cards, reviewed_cards, relearning_cards, leech_cards,
+                   active_seconds
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                profile_id,
+                track_id,
+                local_date,
+                item["timezone_name"],
+                item["utc_offset_minutes"],
+                item["policy_version"],
+                item["learning_exposures"],
+                item["verified_retrievals"],
+                item["self_known"],
+                item["verified_correct"],
+                item["verified_wrong"],
+                item["quiz_total"],
+                item["free_text_total"],
+                item["hints_used"],
+                len(item["new_cards"]),
+                len(item["reviewed_cards"]),
+                len(item["relearning_cards"]),
+                len(item["leech_cards"]),
+                item["active_seconds"],
+            ),
+        )
+        return True
+
     async def async_append_with_projection(self, event: ReviewEventRecord) -> None:
         """Append one event and materialize its post-state in one transaction."""
         valid = await self._storage.async_validate_card_reference(
@@ -1559,6 +2116,12 @@ class ReviewEventsRepository:
                     ),
                 )
                 self._upsert_progress(connection, event.post_state_snapshot)
+                self._rebuild_stats_day_in_connection(
+                    connection,
+                    profile_id=event.profile_id,
+                    track_id=event.track_id,
+                    local_date=event.local_date,
+                )
                 connection.commit()
             except Exception:
                 if connection.in_transaction:
@@ -1566,6 +2129,269 @@ class ReviewEventsRepository:
                 raise
 
         await self._storage._async_writer(write)
+
+    async def async_count_introductions(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        local_date: str,
+    ) -> int:
+        """Count distinct cards introduced today for P3.9 new-card quota."""
+
+        def read(connection: sqlite3.Connection) -> int:
+            row = connection.execute(
+                """SELECT COUNT(DISTINCT card_key)
+                   FROM review_events
+                   WHERE profile_id = ? AND track_id = ?
+                     AND local_date = ? AND mode = 'introduction'""",
+                (profile_id, track_id, local_date),
+            ).fetchone()
+            return 0 if row is None else int(row[0])
+
+        return await self._storage._async_reader(read)
+
+    async def async_introduced_card_keys(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        local_date: str,
+    ) -> frozenset[str]:
+        """Return cards introduced on one Profile-local date."""
+
+        def read(connection: sqlite3.Connection) -> frozenset[str]:
+            rows = connection.execute(
+                """SELECT DISTINCT card_key
+                   FROM review_events
+                   WHERE profile_id = ?
+                     AND track_id = ?
+                     AND local_date = ?
+                     AND mode = 'introduction'""",
+                (profile_id, track_id, local_date),
+            ).fetchall()
+            return frozenset(str(row[0]) for row in rows)
+
+        return await self._storage._async_reader(read)
+
+    async def async_recent_session_verified_results(
+        self,
+        session_id: str,
+        *,
+        limit: int,
+    ) -> tuple[str, ...]:
+        """Return recent trusted verified outcomes for fatigue detection."""
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+
+        def read(connection: sqlite3.Connection) -> tuple[str, ...]:
+            rows = connection.execute(
+                """SELECT result
+                   FROM review_events
+                   WHERE session_id = ?
+                     AND retrieval_occurred = 1
+                     AND mode IN (
+                         'verified_mcq',
+                         'verified_free_text',
+                         'verified_cloze',
+                         'exam_retrieval'
+                     )
+                     AND signal_quality IN ('weak', 'medium', 'strong')
+                     AND result IN ('correct', 'wrong', 'idk')
+                   ORDER BY created_at_utc DESC, id DESC
+                   LIMIT ?""",
+                (session_id, limit),
+            ).fetchall()
+            return tuple(str(row[0]) for row in rows)
+
+        return await self._storage._async_reader(read)
+
+    async def async_recent_verified_card_events(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        card_key: str,
+        since_utc: str,
+    ) -> tuple[dict[str, Any], ...]:
+        """Return trusted verified card events for versioned leech detection."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT mode, result, retrieval_occurred, signal_quality,
+                          pre_state_snapshot, post_state_snapshot, created_at_utc
+                   FROM review_events
+                   WHERE profile_id = ? AND track_id = ? AND card_key = ?
+                     AND created_at_utc >= ?
+                     AND retrieval_occurred = 1
+                     AND mode IN (
+                         'verified_mcq',
+                         'verified_free_text',
+                         'verified_cloze',
+                         'exam_retrieval'
+                     )
+                     AND signal_quality IN ('weak', 'medium', 'strong')
+                     AND result IN ('correct', 'wrong', 'idk')
+                   ORDER BY created_at_utc DESC, id DESC""",
+                (profile_id, track_id, card_key, since_utc),
+            ).fetchall()
+            return tuple(
+                {
+                    "mode": str(row[0]),
+                    "result": str(row[1]),
+                    "retrieval_occurred": bool(row[2]),
+                    "signal_quality": str(row[3]),
+                    "pre_state_snapshot": json.loads(str(row[4])),
+                    "post_state_snapshot": json.loads(str(row[5])),
+                    "created_at_utc": str(row[6]),
+                }
+                for row in rows
+            )
+
+        return await self._storage._async_reader(read)
+
+    async def async_confusions(
+        self,
+        *,
+        profile_id: str,
+        track_id: str | None = None,
+        card_key: str | None = None,
+        limit: int = 50,
+    ) -> tuple[dict[str, Any], ...]:
+        """Aggregate expected/chosen answer confusions from non-undone events."""
+        if limit < 1:
+            raise ValueError("limit must be >= 1")
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            undone = self._undone_ids_in_connection(connection, profile_id=profile_id)
+            clauses = [
+                "profile_id = ?",
+                "retrieval_occurred = 1",
+                "result IN ('wrong', 'idk')",
+                "expected_answer_id IS NOT NULL",
+                "answer_id IS NOT NULL",
+                "expected_answer_id != answer_id",
+            ]
+            params: list[Any] = [profile_id]
+            if track_id is not None:
+                clauses.append("track_id = ?")
+                params.append(track_id)
+            if card_key is not None:
+                clauses.append("card_key = ?")
+                params.append(card_key)
+            rows = connection.execute(
+                f"""SELECT id, card_key, expected_answer_id, answer_id
+                    FROM review_events
+                    WHERE {" AND ".join(clauses)}
+                    ORDER BY created_at_utc, id""",
+                tuple(params),
+            ).fetchall()
+            counts: dict[tuple[str, str, str], int] = {}
+            for row in rows:
+                if str(row[0]) in undone:
+                    continue
+                key = (str(row[1]), str(row[2]), str(row[3]))
+                counts[key] = counts.get(key, 0) + 1
+            ordered = sorted(
+                counts.items(),
+                key=lambda item: (-item[1], item[0][0], item[0][1], item[0][2]),
+            )[:limit]
+            return tuple(
+                {
+                    "card_key": key[0],
+                    "expected_answer_id": key[1],
+                    "chosen_answer_id": key[2],
+                    "count": count,
+                }
+                for key, count in ordered
+            )
+
+        return await self._storage._async_reader(read)
+
+    async def async_stats_daily(
+        self,
+        *,
+        profile_id: str,
+        track_id: str | None = None,
+        since_local_date: str | None = None,
+    ) -> tuple[dict[str, Any], ...]:
+        """Read materialized daily statistics without rewriting historical dates."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            clauses = ["profile_id = ?"]
+            params: list[Any] = [profile_id]
+            if track_id is not None:
+                clauses.append("track_id = ?")
+                params.append(track_id)
+            if since_local_date is not None:
+                clauses.append("local_date >= ?")
+                params.append(since_local_date)
+            rows = connection.execute(
+                f"""SELECT profile_id, track_id, local_date, timezone_name,
+                           utc_offset_minutes, policy_version, learning_exposures,
+                           verified_retrievals, self_known, verified_correct,
+                           verified_wrong, quiz_total, free_text_total, hints_used,
+                           new_cards, reviewed_cards, relearning_cards, leech_cards,
+                           active_seconds
+                    FROM stats_daily
+                    WHERE {" AND ".join(clauses)}
+                    ORDER BY local_date, track_id""",
+                tuple(params),
+            ).fetchall()
+            keys = (
+                "profile_id",
+                "track_id",
+                "local_date",
+                "timezone_name",
+                "utc_offset_minutes",
+                "policy_version",
+                "learning_exposures",
+                "verified_retrievals",
+                "self_known",
+                "verified_correct",
+                "verified_wrong",
+                "quiz_total",
+                "free_text_total",
+                "hints_used",
+                "new_cards",
+                "reviewed_cards",
+                "relearning_cards",
+                "leech_cards",
+                "active_seconds",
+            )
+            return tuple(dict(zip(keys, row, strict=True)) for row in rows)
+
+        return await self._storage._async_reader(read)
+
+    async def async_progress_user_state_audit(
+        self,
+        *,
+        profile_id: str,
+        since_utc: str | None = None,
+    ) -> tuple[dict[str, Any], ...]:
+        """Return private P3.10 user-state audit events for metacognitive stats."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            clauses = ["event_type = 'progress_user_state'", "profile_id = ?"]
+            params: list[Any] = [profile_id]
+            if since_utc is not None:
+                clauses.append("created_at_utc >= ?")
+                params.append(since_utc)
+            rows = connection.execute(
+                f"""SELECT payload_json, created_at_utc
+                    FROM audit_events
+                    WHERE {" AND ".join(clauses)}
+                    ORDER BY created_at_utc, id""",
+                tuple(params),
+            ).fetchall()
+            result: list[dict[str, Any]] = []
+            for payload, created_at in rows:
+                item = json.loads(str(payload))
+                item["created_at_utc"] = str(created_at)
+                result.append(item)
+            return tuple(result)
+
+        return await self._storage._async_reader(read)
 
     async def async_list_for_card(
         self,
@@ -1614,15 +2440,343 @@ class ReviewEventsRepository:
 
         return await self._storage._async_reader(read)
 
-    async def async_rebuild_progress(
+    async def async_list_scope_events(
         self,
         *,
         profile_id: str | None = None,
         track_id: str | None = None,
-    ) -> int:
-        """Rebuild progress from the latest event snapshot under historical policy."""
+    ) -> tuple[dict[str, Any], ...]:
+        """Return canonical events in deterministic replay order."""
         if track_id is not None and profile_id is None:
-            raise ValueError("track-scoped rebuild requires profile_id")
+            raise ValueError("track-scoped event replay requires profile_id")
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            clauses: list[str] = []
+            params: list[str] = []
+            if profile_id is not None:
+                clauses.append("profile_id = ?")
+                params.append(profile_id)
+            if track_id is not None:
+                clauses.append("track_id = ?")
+                params.append(track_id)
+            where = "" if not clauses else " WHERE " + " AND ".join(clauses)
+            rows = connection.execute(
+                f"""SELECT id, profile_id, track_id, learning_item_id,
+                           prompt_facet_id, answer_facet_id, card_key, mode,
+                           question_type, result, answer_id, expected_answer_id,
+                           hint_used, retrieval_occurred, scheduled_interval_days,
+                           elapsed_days, grading_result, signal_quality,
+                           policy_version, dataset_generation, normalization_version,
+                           pre_state_snapshot, post_state_snapshot,
+                           presentation_to_answer_ms, delivery_to_action_ms,
+                           session_id, notification_id, created_at_utc, local_date,
+                           timezone_name, utc_offset_minutes
+                    FROM review_events{where}
+                    ORDER BY created_at_utc, id""",
+                tuple(params),
+            ).fetchall()
+            keys = (
+                "id",
+                "profile_id",
+                "track_id",
+                "learning_item_id",
+                "prompt_facet_id",
+                "answer_facet_id",
+                "card_key",
+                "mode",
+                "question_type",
+                "result",
+                "answer_id",
+                "expected_answer_id",
+                "hint_used",
+                "retrieval_occurred",
+                "scheduled_interval_days",
+                "elapsed_days",
+                "grading_result",
+                "signal_quality",
+                "policy_version",
+                "dataset_generation",
+                "normalization_version",
+                "pre_state_snapshot",
+                "post_state_snapshot",
+                "presentation_to_answer_ms",
+                "delivery_to_action_ms",
+                "session_id",
+                "notification_id",
+                "created_at_utc",
+                "local_date",
+                "timezone_name",
+                "utc_offset_minutes",
+            )
+            result: list[dict[str, Any]] = []
+            for row in rows:
+                event = dict(zip(keys, row, strict=True))
+                event["hint_used"] = bool(event["hint_used"])
+                event["retrieval_occurred"] = bool(event["retrieval_occurred"])
+                event["policy_version"] = int(event["policy_version"])
+                event["normalization_version"] = (
+                    None
+                    if event["normalization_version"] is None
+                    else int(event["normalization_version"])
+                )
+                event["pre_state_snapshot"] = json.loads(str(event["pre_state_snapshot"]))
+                event["post_state_snapshot"] = json.loads(str(event["post_state_snapshot"]))
+                result.append(event)
+            return tuple(result)
+
+        return await self._storage._async_reader(read)
+
+    async def async_undone_event_ids(
+        self,
+        *,
+        profile_id: str | None = None,
+    ) -> frozenset[str]:
+        """Return canonical ReviewEvent ids explicitly undone by compensation."""
+
+        def read(connection: sqlite3.Connection) -> frozenset[str]:
+            if profile_id is None:
+                rows = connection.execute(
+                    """SELECT payload_json FROM audit_events
+                       WHERE event_type = 'progress_undo'
+                       ORDER BY id"""
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """SELECT payload_json FROM audit_events
+                       WHERE event_type = 'progress_undo' AND profile_id = ?
+                       ORDER BY id""",
+                    (profile_id,),
+                ).fetchall()
+            ids: set[str] = set()
+            for (payload,) in rows:
+                decoded = json.loads(str(payload))
+                target = decoded.get("target_event_id")
+                if isinstance(target, str):
+                    ids.add(target)
+            return frozenset(ids)
+
+        return await self._storage._async_reader(read)
+
+    async def async_latest_undo_candidate(
+        self,
+        *,
+        profile_id: str,
+        track_id: str | None = None,
+        card_key: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Return the newest not-yet-undone progress mutation in scope."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            undone: set[str] = set()
+            rows = connection.execute(
+                """SELECT payload_json FROM audit_events
+                   WHERE event_type = 'progress_undo' AND profile_id = ?
+                   ORDER BY id""",
+                (profile_id,),
+            ).fetchall()
+            for (payload,) in rows:
+                decoded = json.loads(str(payload))
+                target = decoded.get("target_event_id")
+                if isinstance(target, str):
+                    undone.add(target)
+
+            clauses = ["profile_id = ?", "mode != 'undo_compensation'"]
+            params: list[Any] = [profile_id]
+            if track_id is not None:
+                clauses.append("track_id = ?")
+                params.append(track_id)
+            if card_key is not None:
+                clauses.append("card_key = ?")
+                params.append(card_key)
+            rows = connection.execute(
+                f"""SELECT id, profile_id, track_id, learning_item_id,
+                           prompt_facet_id, answer_facet_id, card_key, mode,
+                           question_type, result, signal_quality, policy_version,
+                           dataset_generation, normalization_version,
+                           pre_state_snapshot, post_state_snapshot, created_at_utc,
+                           local_date, timezone_name, utc_offset_minutes
+                    FROM review_events
+                    WHERE {" AND ".join(clauses)}
+                    ORDER BY created_at_utc DESC, id DESC""",
+                tuple(params),
+            ).fetchall()
+            for row in rows:
+                event_id = str(row[0])
+                if event_id in undone:
+                    continue
+                return {
+                    "id": event_id,
+                    "profile_id": str(row[1]),
+                    "track_id": str(row[2]),
+                    "learning_item_id": str(row[3]),
+                    "prompt_facet_id": str(row[4]),
+                    "answer_facet_id": str(row[5]),
+                    "card_key": str(row[6]),
+                    "mode": str(row[7]),
+                    "question_type": str(row[8]),
+                    "result": str(row[9]),
+                    "signal_quality": str(row[10]),
+                    "policy_version": int(row[11]),
+                    "dataset_generation": str(row[12]),
+                    "normalization_version": None if row[13] is None else int(row[13]),
+                    "pre_state_snapshot": json.loads(str(row[14])),
+                    "post_state_snapshot": json.loads(str(row[15])),
+                    "created_at_utc": str(row[16]),
+                    "local_date": str(row[17]),
+                    "timezone_name": str(row[18]),
+                    "utc_offset_minutes": int(row[19]),
+                }
+            return None
+
+        return await self._storage._async_reader(read)
+
+    async def async_append_undo_compensation(
+        self,
+        event: ReviewEventRecord,
+        *,
+        target_event_id: str,
+        actor_user_id: str,
+    ) -> None:
+        """Atomically append an undo compensation and audit its target."""
+        self._validate_projection_identity(event, event.post_state_snapshot)
+        pre_json = json.dumps(
+            event.pre_state_snapshot,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        post_json = json.dumps(
+            event.post_state_snapshot,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                target = connection.execute(
+                    """SELECT local_date FROM review_events
+                       WHERE id = ? AND profile_id = ?""",
+                    (target_event_id, event.profile_id),
+                ).fetchone()
+                if target is None:
+                    raise StateRepositoryError("undo target no longer exists")
+                target_local_date = str(target[0])
+                for (payload,) in connection.execute(
+                    """SELECT payload_json FROM audit_events
+                       WHERE event_type = 'progress_undo' AND profile_id = ?""",
+                    (event.profile_id,),
+                ).fetchall():
+                    decoded = json.loads(str(payload))
+                    if decoded.get("target_event_id") == target_event_id:
+                        raise StateRepositoryError("progress mutation was already undone")
+
+                current_row = connection.execute(
+                    f"""SELECT {",".join(self._PROGRESS_COLUMNS)}
+                        FROM progress
+                        WHERE profile_id = ? AND track_id = ? AND card_key = ?""",
+                    (event.profile_id, event.track_id, event.card_key),
+                ).fetchone()
+                if current_row is None:
+                    raise StateRepositoryError("undo target has no current progress")
+                current_progress = dict(zip(self._PROGRESS_COLUMNS, current_row, strict=True))
+                if any(
+                    current_progress[column] != event.pre_state_snapshot.get(column)
+                    for column in self._PROGRESS_COLUMNS
+                ):
+                    raise StateRepositoryError("progress changed during undo")
+                connection.execute(
+                    """INSERT INTO review_events(
+                           id, profile_id, track_id, learning_item_id,
+                           prompt_facet_id, answer_facet_id, card_key, mode,
+                           question_type, result, answer_id, expected_answer_id,
+                           hint_used, retrieval_occurred, scheduled_interval_days,
+                           elapsed_days, grading_result, signal_quality,
+                           policy_version, dataset_generation, normalization_version,
+                           pre_state_snapshot, post_state_snapshot,
+                           presentation_to_answer_ms, delivery_to_action_ms,
+                           session_id, notification_id, created_at_utc, local_date,
+                           timezone_name, utc_offset_minutes
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        event.id,
+                        event.profile_id,
+                        event.track_id,
+                        event.learning_item_id,
+                        event.prompt_facet_id,
+                        event.answer_facet_id,
+                        event.card_key,
+                        event.mode,
+                        event.question_type,
+                        event.result,
+                        event.answer_id,
+                        event.expected_answer_id,
+                        int(event.hint_used),
+                        int(event.retrieval_occurred),
+                        event.scheduled_interval_days,
+                        event.elapsed_days,
+                        event.grading_result,
+                        event.signal_quality,
+                        event.policy_version,
+                        event.dataset_generation,
+                        event.normalization_version,
+                        pre_json,
+                        post_json,
+                        event.presentation_to_answer_ms,
+                        event.delivery_to_action_ms,
+                        event.session_id,
+                        event.notification_id,
+                        event.created_at_utc,
+                        event.local_date,
+                        event.timezone_name,
+                        event.utc_offset_minutes,
+                    ),
+                )
+                self._upsert_progress(connection, event.post_state_snapshot)
+                audit_payload = json.dumps(
+                    {
+                        "target_event_id": target_event_id,
+                        "compensation_event_id": event.id,
+                        "track_id": event.track_id,
+                        "card_key": event.card_key,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+                connection.execute(
+                    """INSERT INTO audit_events(
+                           event_type, actor_user_id, profile_id, payload_json, created_at_utc
+                       ) VALUES ('progress_undo', ?, ?, ?, ?)""",
+                    (actor_user_id, event.profile_id, audit_payload, event.created_at_utc),
+                )
+                for affected_date in {target_local_date, event.local_date}:
+                    self._rebuild_stats_day_in_connection(
+                        connection,
+                        profile_id=event.profile_id,
+                        track_id=event.track_id,
+                        local_date=affected_date,
+                    )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+
+    async def async_replace_progress(
+        self,
+        snapshots: tuple[dict[str, Any], ...],
+        *,
+        profile_id: str | None = None,
+        track_id: str | None = None,
+    ) -> int:
+        """Replace Progress while preserving independent user/content overlays."""
+        if track_id is not None and profile_id is None:
+            raise ValueError("track-scoped replacement requires profile_id")
 
         def write(connection: sqlite3.Connection) -> int:
             try:
@@ -1636,31 +2790,287 @@ class ReviewEventsRepository:
                     clauses.append("track_id = ?")
                     params.append(track_id)
                 where = "" if not clauses else " WHERE " + " AND ".join(clauses)
-                connection.execute(f"DELETE FROM progress{where}", tuple(params))
-                rows = connection.execute(
-                    f"""SELECT post_state_snapshot
-                        FROM review_events
-                        {where}
-                        ORDER BY created_at_utc, id""",
+
+                existing_rows = connection.execute(
+                    f"""SELECT {",".join(self._PROGRESS_COLUMNS)}
+                        FROM progress{where}""",
                     tuple(params),
                 ).fetchall()
-                latest: dict[tuple[str, str, str], dict[str, Any]] = {}
-                for (payload,) in rows:
-                    snapshot = json.loads(str(payload))
+                existing: dict[tuple[str, str, str], dict[str, Any]] = {}
+                for row in existing_rows:
+                    snapshot = dict(zip(self._PROGRESS_COLUMNS, row, strict=True))
                     key = (
                         str(snapshot["profile_id"]),
                         str(snapshot["track_id"]),
                         str(snapshot["card_key"]),
                     )
-                    latest[key] = snapshot
-                for snapshot in latest.values():
+                    existing[key] = snapshot
+
+                connection.execute(f"DELETE FROM progress{where}", tuple(params))
+                inserted: set[tuple[str, str, str]] = set()
+                for raw in snapshots:
+                    snapshot = dict(raw)
+                    key = (
+                        str(snapshot["profile_id"]),
+                        str(snapshot["track_id"]),
+                        str(snapshot["card_key"]),
+                    )
+                    previous = existing.get(key)
+                    if previous is not None:
+                        snapshot["user_state"] = previous["user_state"]
+                        snapshot["suspend_until_utc"] = previous["suspend_until_utc"]
+                        snapshot["content_status"] = previous["content_status"]
                     self._upsert_progress(connection, snapshot)
+                    inserted.add(key)
+
+                for key, previous in existing.items():
+                    if key in inserted:
+                        continue
+                    if (
+                        previous["user_state"] != "active"
+                        or previous["suspend_until_utc"] is not None
+                        or previous["content_status"] != "active"
+                    ):
+                        self._upsert_progress(connection, previous)
+                        inserted.add(key)
+
                 connection.commit()
-                return len(latest)
+                return len(inserted)
             except Exception:
                 if connection.in_transaction:
                     connection.rollback()
                 raise
+
+        return await self._storage._async_writer(write)
+
+    async def async_rebuild_stats(
+        self,
+        *,
+        profile_id: str | None = None,
+        track_id: str | None = None,
+    ) -> int:
+        """Rebuild stats_daily independently from canonical ReviewEvents."""
+        if track_id is not None and profile_id is None:
+            raise ValueError("track-scoped stats rebuild requires profile_id")
+
+        def write(connection: sqlite3.Connection) -> int:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                clauses: list[str] = []
+                params: list[str] = []
+                if profile_id is not None:
+                    clauses.append("profile_id = ?")
+                    params.append(profile_id)
+                if track_id is not None:
+                    clauses.append("track_id = ?")
+                    params.append(track_id)
+                where = "" if not clauses else " WHERE " + " AND ".join(clauses)
+                connection.execute(f"DELETE FROM stats_daily{where}", tuple(params))
+                rows = connection.execute(
+                    f"""SELECT DISTINCT profile_id, track_id, local_date
+                        FROM review_events{where}
+                        ORDER BY profile_id, track_id, local_date""",
+                    tuple(params),
+                ).fetchall()
+                rebuilt = 0
+                for p_id, t_id, local_date in rows:
+                    rebuilt += int(
+                        self._rebuild_stats_day_in_connection(
+                            connection,
+                            profile_id=str(p_id),
+                            track_id=str(t_id),
+                            local_date=str(local_date),
+                        )
+                    )
+                connection.commit()
+                return rebuilt
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        return await self._storage._async_writer(write)
+
+    async def async_rebuild_progress(
+        self,
+        *,
+        profile_id: str | None = None,
+        track_id: str | None = None,
+    ) -> int:
+        """Rebuild Progress from historical post snapshots, preserving overlays."""
+        events = await self.async_list_scope_events(
+            profile_id=profile_id,
+            track_id=track_id,
+        )
+        latest: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for event in events:
+            snapshot = dict(event["post_state_snapshot"])
+            key = (
+                str(snapshot["profile_id"]),
+                str(snapshot["track_id"]),
+                str(snapshot["card_key"]),
+            )
+            latest[key] = snapshot
+        return await self.async_replace_progress(
+            tuple(latest.values()),
+            profile_id=profile_id,
+            track_id=track_id,
+        )
+
+
+class UserAnnotationsRepository:
+    """Private profile-scoped notes and mnemonics."""
+
+    def __init__(self, storage: RepositoryStorage) -> None:
+        self._storage = storage
+
+    async def async_upsert(
+        self,
+        *,
+        annotation_id: str,
+        profile_id: str,
+        learning_item_id: str | None,
+        card_key: str | None,
+        note: str,
+        created_at_utc: str,
+        updated_at_utc: str,
+    ) -> dict[str, Any]:
+        if (learning_item_id is None) == (card_key is None):
+            raise StateRepositoryError("annotation must target exactly one item or card")
+        if not note.strip():
+            raise StateRepositoryError("annotation note must not be empty")
+        if (
+            learning_item_id is not None
+            and not await self._storage.async_validate_learning_item_reference(learning_item_id)
+        ):
+            raise ContentReferenceError(
+                f"unknown active learning item reference: {learning_item_id}"
+            )
+
+        def write(connection: sqlite3.Connection) -> None:
+            if card_key is not None:
+                exists = connection.execute(
+                    """SELECT 1 FROM progress
+                       WHERE profile_id = ? AND card_key = ?
+                       LIMIT 1""",
+                    (profile_id, card_key),
+                ).fetchone()
+                if exists is None:
+                    # Card annotations may precede Progress materialization; validate
+                    # identity against active content through the reader boundary above
+                    # is unavailable here, so require at least one track rule for profile.
+                    exists = connection.execute(
+                        """SELECT 1
+                           FROM track_card_rules AS rule
+                           JOIN tracks AS track ON track.track_id = rule.track_id
+                           WHERE track.profile_id = ? AND rule.card_key = ?
+                             AND rule.enabled = 1
+                           LIMIT 1""",
+                        (profile_id, card_key),
+                    ).fetchone()
+                if exists is None:
+                    raise StateRepositoryError("card is not available to profile")
+            connection.execute(
+                """INSERT INTO user_annotations(
+                       annotation_id, profile_id, learning_item_id, card_key, note,
+                       created_at_utc, updated_at_utc
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(annotation_id) DO UPDATE SET
+                       note = excluded.note,
+                       updated_at_utc = excluded.updated_at_utc
+                   WHERE user_annotations.profile_id = excluded.profile_id""",
+                (
+                    annotation_id,
+                    profile_id,
+                    learning_item_id,
+                    card_key,
+                    note.strip(),
+                    created_at_utc,
+                    updated_at_utc,
+                ),
+            )
+            connection.commit()
+
+        await self._storage._async_writer(write)
+        result = await self.async_get(annotation_id=annotation_id, profile_id=profile_id)
+        if result is None:
+            raise StateRepositoryError("annotation upsert failed")
+        return result
+
+    async def async_get(
+        self,
+        *,
+        annotation_id: str,
+        profile_id: str,
+    ) -> dict[str, Any] | None:
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT annotation_id, profile_id, learning_item_id, card_key,
+                          note, created_at_utc, updated_at_utc
+                   FROM user_annotations
+                   WHERE annotation_id = ? AND profile_id = ?""",
+                (annotation_id, profile_id),
+            ).fetchone()
+            if row is None:
+                return None
+            keys = (
+                "annotation_id",
+                "profile_id",
+                "learning_item_id",
+                "card_key",
+                "note",
+                "created_at_utc",
+                "updated_at_utc",
+            )
+            return dict(zip(keys, row, strict=True))
+
+        return await self._storage._async_reader(read)
+
+    async def async_list(
+        self,
+        *,
+        profile_id: str,
+        learning_item_id: str | None = None,
+        card_key: str | None = None,
+    ) -> tuple[dict[str, Any], ...]:
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            clauses = ["profile_id = ?"]
+            params: list[Any] = [profile_id]
+            if learning_item_id is not None:
+                clauses.append("learning_item_id = ?")
+                params.append(learning_item_id)
+            if card_key is not None:
+                clauses.append("card_key = ?")
+                params.append(card_key)
+            rows = connection.execute(
+                f"""SELECT annotation_id, profile_id, learning_item_id, card_key,
+                           note, created_at_utc, updated_at_utc
+                    FROM user_annotations
+                    WHERE {" AND ".join(clauses)}
+                    ORDER BY updated_at_utc DESC, annotation_id""",
+                tuple(params),
+            ).fetchall()
+            keys = (
+                "annotation_id",
+                "profile_id",
+                "learning_item_id",
+                "card_key",
+                "note",
+                "created_at_utc",
+                "updated_at_utc",
+            )
+            return tuple(dict(zip(keys, row, strict=True)) for row in rows)
+
+        return await self._storage._async_reader(read)
+
+    async def async_delete(self, *, annotation_id: str, profile_id: str) -> bool:
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                "DELETE FROM user_annotations WHERE annotation_id = ? AND profile_id = ?",
+                (annotation_id, profile_id),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
 
         return await self._storage._async_writer(write)
 
@@ -1745,6 +3155,73 @@ class ContentReportsRepository:
 
         return await self._storage._async_writer(write)
 
+    async def async_create_question_report(
+        self,
+        *,
+        actor_user_id: str,
+        profile_id: str,
+        track_id: str,
+        card: CardReference,
+        dataset_generation: str,
+        reason: str,
+        message: str | None,
+        created_at_utc: str,
+    ) -> int:
+        """Append one generic question-quality report to the private audit log."""
+        valid = await self._storage.async_validate_card_reference(
+            card_key=card.card_key,
+            learning_item_id=card.learning_item_id,
+            prompt_facet_id=card.prompt_facet_id,
+            answer_facet_id=card.answer_facet_id,
+        )
+        if not valid:
+            raise ContentReferenceError(f"unknown active card reference: {card.card_key}")
+        payload = json.dumps(
+            {
+                "report_kind": "question",
+                "track_id": track_id,
+                "card_key": card.card_key,
+                "learning_item_id": card.learning_item_id,
+                "prompt_facet_id": card.prompt_facet_id,
+                "answer_facet_id": card.answer_facet_id,
+                "dataset_generation": dataset_generation,
+                "reason": reason,
+                "message": message,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> int:
+            track = connection.execute(
+                "SELECT profile_id FROM tracks WHERE track_id = ?",
+                (track_id,),
+            ).fetchone()
+            if track is None or str(track[0]) != profile_id:
+                raise StateRepositoryError("track does not belong to profile")
+            selected = connection.execute(
+                """SELECT 1 FROM track_card_rules
+                   WHERE track_id = ? AND card_key = ? AND enabled = 1
+                   LIMIT 1""",
+                (track_id, card.card_key),
+            ).fetchone()
+            if selected is None:
+                raise StateRepositoryError("card is not enabled in track")
+            cursor = connection.execute(
+                """INSERT INTO audit_events(
+                       event_type, actor_user_id, profile_id, payload_json, created_at_utc
+                   ) VALUES ('content_report', ?, ?, ?, ?)""",
+                (actor_user_id, profile_id, payload, created_at_utc),
+            )
+            report_id = cursor.lastrowid
+            if report_id is None:
+                raise StateRepositoryError("content report insert returned no row id")
+            connection.commit()
+            return int(report_id)
+
+        return await self._storage._async_writer(write)
+
     async def async_get(self, report_id: int) -> dict[str, Any] | None:
         def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
             row = connection.execute(
@@ -1764,6 +3241,1373 @@ class ContentReportsRepository:
             }
 
         return await self._storage._async_reader(read)
+
+
+class NotificationTargetsRepository:
+    """Persistence primitives for stable Profile notification targets."""
+
+    def __init__(self, storage: RepositoryStorage) -> None:
+        self._storage = storage
+
+    @staticmethod
+    def _target_dict(row: tuple[Any, ...]) -> dict[str, Any]:
+        keys = (
+            "target_id",
+            "profile_id",
+            "device_registry_id",
+            "platform",
+            "capabilities_json",
+            "friendly_name",
+            "last_resolved_notify_service",
+            "shared_device",
+            "lockscreen_visibility",
+            "enabled",
+            "minimum_gap_seconds",
+            "maximum_notifications_per_hour",
+            "daily_push_budget",
+            "adaptive_backoff_json",
+            "created_at_utc",
+            "updated_at_utc",
+        )
+        result = dict(zip(keys, row, strict=True))
+        result["capabilities"] = json.loads(result.pop("capabilities_json"))
+        result["adaptive_backoff"] = json.loads(result.pop("adaptive_backoff_json"))
+        result["shared_device"] = bool(result["shared_device"])
+        result["enabled"] = bool(result["enabled"])
+        return result
+
+    async def async_insert(self, target: NotificationTargetRecord) -> None:
+        """Insert one stable Profile target."""
+        capabilities_json = json.dumps(
+            target.capabilities or {},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        adaptive_backoff_json = json.dumps(
+            target.adaptive_backoff or {},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> None:
+            connection.execute(
+                """INSERT INTO notification_targets(
+                       target_id, profile_id, device_registry_id, platform,
+                       capabilities_json, friendly_name, last_resolved_notify_service,
+                       shared_device, lockscreen_visibility, enabled,
+                       minimum_gap_seconds, maximum_notifications_per_hour,
+                       daily_push_budget, adaptive_backoff_json,
+                       created_at_utc, updated_at_utc
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    target.target_id,
+                    target.profile_id,
+                    target.device_registry_id,
+                    target.platform,
+                    capabilities_json,
+                    target.friendly_name,
+                    target.last_resolved_notify_service,
+                    int(target.shared_device),
+                    target.lockscreen_visibility,
+                    int(target.enabled),
+                    target.minimum_gap_seconds,
+                    target.maximum_notifications_per_hour,
+                    target.daily_push_budget,
+                    adaptive_backoff_json,
+                    target.created_at_utc,
+                    target.updated_at_utc,
+                ),
+            )
+            connection.commit()
+
+        await self._storage._async_writer(write)
+
+    async def async_get(self, target_id: str) -> dict[str, Any] | None:
+        """Return one stable notification target by LockLearn target identity."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT target_id, profile_id, device_registry_id, platform,
+                          capabilities_json, friendly_name, last_resolved_notify_service,
+                          shared_device, lockscreen_visibility, enabled,
+                          minimum_gap_seconds, maximum_notifications_per_hour,
+                          daily_push_budget, adaptive_backoff_json,
+                          created_at_utc, updated_at_utc
+                   FROM notification_targets
+                   WHERE target_id = ?""",
+                (target_id,),
+            ).fetchone()
+            return None if row is None else self._target_dict(row)
+
+        return await self._storage._async_reader(read)
+
+    async def async_set_last_resolved_service(
+        self,
+        *,
+        target_id: str,
+        service: str,
+        updated_at_utc: str,
+    ) -> bool:
+        """Persist diagnostics-only route metadata without changing target identity."""
+
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                """UPDATE notification_targets
+                   SET last_resolved_notify_service = ?,
+                       updated_at_utc = ?
+                   WHERE target_id = ?""",
+                (service, updated_at_utc, target_id),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(write)
+
+    async def async_list_for_profile(
+        self,
+        profile_id: str,
+        *,
+        enabled_only: bool = True,
+    ) -> tuple[dict[str, Any], ...]:
+        """List Profile targets in stable target_id order."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            enabled_clause = "AND enabled = 1" if enabled_only else ""
+            rows = connection.execute(
+                f"""SELECT target_id, profile_id, device_registry_id, platform,
+                           capabilities_json, friendly_name, last_resolved_notify_service,
+                           shared_device, lockscreen_visibility, enabled,
+                           minimum_gap_seconds, maximum_notifications_per_hour,
+                           daily_push_budget, adaptive_backoff_json,
+                           created_at_utc, updated_at_utc
+                    FROM notification_targets
+                    WHERE profile_id = ? {enabled_clause}
+                    ORDER BY target_id""",
+                (profile_id,),
+            ).fetchall()
+            return tuple(self._target_dict(row) for row in rows)
+
+        return await self._storage._async_reader(read)
+
+
+class NotificationInteractionsRepository:
+    """Persist and atomically consume single-use notification interactions."""
+
+    _SELECT_COLUMNS = (
+        "interaction_id",
+        "token",
+        "tag",
+        "profile_id",
+        "track_id",
+        "target_id",
+        "card_key",
+        "stage",
+        "status",
+        "created_at_utc",
+        "expires_at_utc",
+        "consumed_at_utc",
+        "action_id",
+        "payload_json",
+    )
+
+    def __init__(self, storage: RepositoryStorage) -> None:
+        self._storage = storage
+
+    @classmethod
+    def _interaction_dict(cls, row: tuple[Any, ...]) -> dict[str, Any]:
+        result = dict(zip(cls._SELECT_COLUMNS, row, strict=True))
+        result["payload"] = json.loads(str(result.pop("payload_json")))
+        return result
+
+    @staticmethod
+    def _audit_action(
+        connection: sqlite3.Connection,
+        *,
+        event_type: str,
+        actor_user_id: str | None,
+        profile_id: str | None,
+        interaction: dict[str, Any] | None,
+        reason: str,
+        created_at_utc: str,
+    ) -> None:
+        payload: dict[str, Any] = {"reason": reason}
+        if interaction is not None:
+            payload.update(
+                {
+                    "interaction_id": interaction["interaction_id"],
+                    "target_id": interaction["target_id"],
+                    "stage": interaction["stage"],
+                    "status": interaction["status"],
+                }
+            )
+        connection.execute(
+            """INSERT INTO audit_events(
+                   event_type, actor_user_id, profile_id, payload_json, created_at_utc
+               ) VALUES (?, ?, ?, ?, ?)""",
+            (
+                event_type,
+                actor_user_id,
+                profile_id,
+                json.dumps(
+                    payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+                created_at_utc,
+            ),
+        )
+
+    async def async_insert(self, interaction: NotificationInteractionRecord) -> None:
+        """Insert one pending interaction after state-domain identity checks."""
+        payload_json = json.dumps(
+            interaction.payload or {},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                target = connection.execute(
+                    """SELECT profile_id
+                       FROM notification_targets
+                       WHERE target_id = ?""",
+                    (interaction.target_id,),
+                ).fetchone()
+                if target is None or str(target[0]) != interaction.profile_id:
+                    raise StateRepositoryError(
+                        "notification interaction target does not belong to profile"
+                    )
+                if interaction.track_id is not None:
+                    track = connection.execute(
+                        "SELECT profile_id FROM tracks WHERE track_id = ?",
+                        (interaction.track_id,),
+                    ).fetchone()
+                    if track is None or str(track[0]) != interaction.profile_id:
+                        raise StateRepositoryError(
+                            "notification interaction track does not belong to profile"
+                        )
+                connection.execute(
+                    """INSERT INTO notification_interactions(
+                           interaction_id, token, tag, profile_id, track_id,
+                           target_id, card_key, stage, status, created_at_utc,
+                           expires_at_utc, consumed_at_utc, action_id, payload_json
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        interaction.interaction_id,
+                        interaction.token,
+                        interaction.tag,
+                        interaction.profile_id,
+                        interaction.track_id,
+                        interaction.target_id,
+                        interaction.card_key,
+                        interaction.stage,
+                        interaction.status,
+                        interaction.created_at_utc,
+                        interaction.expires_at_utc,
+                        interaction.consumed_at_utc,
+                        interaction.action_id,
+                        payload_json,
+                    ),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+
+    async def async_get_by_token(self, token: str) -> dict[str, Any] | None:
+        """Resolve an opaque interaction token for internal action handling."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                f"""SELECT {",".join(self._SELECT_COLUMNS)}
+                    FROM notification_interactions
+                    WHERE token = ?""",
+                (token,),
+            ).fetchone()
+            return None if row is None else self._interaction_dict(row)
+
+        return await self._storage._async_reader(read)
+
+    async def async_audit_rejection(
+        self,
+        *,
+        token: str,
+        actor_user_id: str | None,
+        reason: str,
+        created_at_utc: str,
+    ) -> None:
+        """Audit a rejected action without persisting the bearer token."""
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    f"""SELECT {",".join(self._SELECT_COLUMNS)}
+                        FROM notification_interactions
+                        WHERE token = ?""",
+                    (token,),
+                ).fetchone()
+                interaction = None if row is None else self._interaction_dict(row)
+                self._audit_action(
+                    connection,
+                    event_type="notification_action_rejected",
+                    actor_user_id=actor_user_id,
+                    profile_id=(None if interaction is None else str(interaction["profile_id"])),
+                    interaction=interaction,
+                    reason=reason,
+                    created_at_utc=created_at_utc,
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+
+    async def async_clear_by_tag(
+        self,
+        *,
+        tag: str,
+        cleared_at_utc: str,
+    ) -> dict[str, Any] | None:
+        """Atomically clear the newest pending interaction for one visible tag."""
+
+        def write(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    f"""SELECT {",".join(self._SELECT_COLUMNS)}
+                        FROM notification_interactions
+                        WHERE tag = ? AND status = 'pending'
+                        ORDER BY created_at_utc DESC, interaction_id DESC
+                        LIMIT 1""",
+                    (tag,),
+                ).fetchone()
+                if row is None:
+                    connection.commit()
+                    return None
+                interaction = self._interaction_dict(row)
+                cursor = connection.execute(
+                    """UPDATE notification_interactions
+                       SET status = 'cleared',
+                           consumed_at_utc = ?
+                       WHERE interaction_id = ? AND status = 'pending'""",
+                    (cleared_at_utc, interaction["interaction_id"]),
+                )
+                if cursor.rowcount != 1:
+                    connection.rollback()
+                    return None
+                interaction["status"] = "cleared"
+                interaction["consumed_at_utc"] = cleared_at_utc
+                connection.commit()
+                return interaction
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        return await self._storage._async_writer(write)
+
+    async def async_consume(
+        self,
+        *,
+        token: str,
+        action_id: str,
+        actor_user_id: str | None,
+        action_at_utc: str,
+    ) -> NotificationInteractionConsumeResult:
+        """Atomically claim a live pending token once and audit the attempt."""
+
+        def write(connection: sqlite3.Connection) -> NotificationInteractionConsumeResult:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    f"""SELECT {",".join(self._SELECT_COLUMNS)}
+                        FROM notification_interactions
+                        WHERE token = ?""",
+                    (token,),
+                ).fetchone()
+                if row is None:
+                    self._audit_action(
+                        connection,
+                        event_type="notification_action_rejected",
+                        actor_user_id=actor_user_id,
+                        profile_id=None,
+                        interaction=None,
+                        reason="unknown_token",
+                        created_at_utc=action_at_utc,
+                    )
+                    connection.commit()
+                    return NotificationInteractionConsumeResult("not_found")
+
+                interaction = self._interaction_dict(row)
+                profile_id = str(interaction["profile_id"])
+                if interaction["status"] != "pending":
+                    self._audit_action(
+                        connection,
+                        event_type="notification_action_rejected",
+                        actor_user_id=actor_user_id,
+                        profile_id=profile_id,
+                        interaction=interaction,
+                        reason="replayed",
+                        created_at_utc=action_at_utc,
+                    )
+                    connection.commit()
+                    return NotificationInteractionConsumeResult("replayed")
+
+                is_live = connection.execute(
+                    """SELECT CASE
+                           WHEN julianday(expires_at_utc) > julianday(?) THEN 1
+                           ELSE 0
+                       END
+                       FROM notification_interactions
+                       WHERE interaction_id = ?""",
+                    (action_at_utc, interaction["interaction_id"]),
+                ).fetchone()
+                if is_live is None or int(is_live[0]) != 1:
+                    connection.execute(
+                        """UPDATE notification_interactions
+                           SET status = 'expired'
+                           WHERE interaction_id = ? AND status = 'pending'""",
+                        (interaction["interaction_id"],),
+                    )
+                    interaction["status"] = "expired"
+                    self._audit_action(
+                        connection,
+                        event_type="notification_action_rejected",
+                        actor_user_id=actor_user_id,
+                        profile_id=profile_id,
+                        interaction=interaction,
+                        reason="expired",
+                        created_at_utc=action_at_utc,
+                    )
+                    connection.commit()
+                    return NotificationInteractionConsumeResult("expired")
+
+                cursor = connection.execute(
+                    """UPDATE notification_interactions
+                       SET status = 'consumed',
+                           consumed_at_utc = ?,
+                           action_id = ?
+                       WHERE interaction_id = ?
+                         AND status = 'pending'
+                         AND julianday(expires_at_utc) > julianday(?)""",
+                    (
+                        action_at_utc,
+                        action_id,
+                        interaction["interaction_id"],
+                        action_at_utc,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    self._audit_action(
+                        connection,
+                        event_type="notification_action_rejected",
+                        actor_user_id=actor_user_id,
+                        profile_id=profile_id,
+                        interaction=interaction,
+                        reason="replayed",
+                        created_at_utc=action_at_utc,
+                    )
+                    connection.commit()
+                    return NotificationInteractionConsumeResult("replayed")
+
+                interaction["status"] = "consumed"
+                interaction["consumed_at_utc"] = action_at_utc
+                interaction["action_id"] = action_id
+                self._audit_action(
+                    connection,
+                    event_type="notification_action_consumed",
+                    actor_user_id=actor_user_id,
+                    profile_id=profile_id,
+                    interaction=interaction,
+                    reason="consumed",
+                    created_at_utc=action_at_utc,
+                )
+                connection.commit()
+                return NotificationInteractionConsumeResult(
+                    "consumed",
+                    interaction=interaction,
+                )
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        return await self._storage._async_writer(write)
+
+
+class NotificationWarningsRepository:
+    """Read privacy-minimal notification warning surfaces for the dashboard."""
+
+    def __init__(self, storage: RepositoryStorage) -> None:
+        self._storage = storage
+
+    async def async_recent_unrecorded_mobile_responses(
+        self,
+        *,
+        profile_id: str,
+        since_utc: str,
+        limit: int = 20,
+    ) -> tuple[dict[str, Any], ...]:
+        """Return recent expired mobile action attempts that could not be confirmed."""
+        if limit < 1:
+            return ()
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT id, payload_json, created_at_utc
+                   FROM audit_events
+                   WHERE event_type = 'notification_action_rejected'
+                     AND profile_id = ?
+                     AND created_at_utc >= ?
+                   ORDER BY created_at_utc DESC, id DESC
+                   LIMIT ?""",
+                (profile_id, since_utc, limit),
+            ).fetchall()
+            result: list[dict[str, Any]] = []
+            for event_id, payload_json, created_at_utc in rows:
+                payload = json.loads(str(payload_json))
+                if payload.get("reason") != "expired":
+                    continue
+                result.append(
+                    {
+                        "audit_event_id": int(event_id),
+                        "interaction_id": payload.get("interaction_id"),
+                        "target_id": payload.get("target_id"),
+                        "stage": payload.get("stage"),
+                        "created_at_utc": str(created_at_utc),
+                    }
+                )
+            return tuple(result)
+
+        return await self._storage._async_reader(read)
+
+
+class SchedulerRepository:
+    """Persist profile scheduler configuration and materialized slots."""
+
+    def __init__(self, storage: RepositoryStorage) -> None:
+        self._storage = storage
+
+    @staticmethod
+    def _config_dict(row: tuple[Any, ...]) -> dict[str, Any]:
+        keys = (
+            "profile_id",
+            "version",
+            "timezone",
+            "active_days_json",
+            "active_windows_json",
+            "minimum_gap_seconds",
+            "maximum_notifications_per_hour",
+            "quiet_hours_json",
+            "receptive_when",
+            "defer_window_minutes",
+            "updated_at_utc",
+        )
+        result = dict(zip(keys, row, strict=True))
+        result["active_days"] = json.loads(result.pop("active_days_json"))
+        result["active_windows"] = json.loads(result.pop("active_windows_json"))
+        result["quiet_hours"] = json.loads(result.pop("quiet_hours_json"))
+        return result
+
+    async def async_get_config(self, profile_id: str) -> dict[str, Any] | None:
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT profile_id, version, timezone, active_days_json,
+                          active_windows_json, minimum_gap_seconds,
+                          maximum_notifications_per_hour, quiet_hours_json,
+                          receptive_when, defer_window_minutes, updated_at_utc
+                   FROM scheduler_config
+                   WHERE profile_id = ?""",
+                (profile_id,),
+            ).fetchone()
+            return None if row is None else self._config_dict(row)
+
+        return await self._storage._async_reader(read)
+
+    async def async_sync_config(
+        self,
+        *,
+        profile_id: str,
+        timezone: str,
+        active_days: tuple[int, ...],
+        active_windows: tuple[tuple[str, str], ...],
+        minimum_gap_seconds: int,
+        maximum_notifications_per_hour: int,
+        quiet_hours: tuple[str, str],
+        receptive_when: str | None,
+        defer_window_minutes: int,
+        updated_at_utc: str,
+    ) -> dict[str, Any]:
+        active_days_json = json.dumps(list(active_days), separators=(",", ":"))
+        active_windows_json = json.dumps(
+            [{"start": start, "end": end} for start, end in active_windows],
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        quiet_hours_json = json.dumps(
+            {"start": quiet_hours[0], "end": quiet_hours[1]},
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                current = connection.execute(
+                    """SELECT version, timezone, active_days_json, active_windows_json,
+                              minimum_gap_seconds, maximum_notifications_per_hour,
+                              quiet_hours_json, receptive_when, defer_window_minutes
+                       FROM scheduler_config
+                       WHERE profile_id = ?""",
+                    (profile_id,),
+                ).fetchone()
+                semantic = (
+                    timezone,
+                    active_days_json,
+                    active_windows_json,
+                    minimum_gap_seconds,
+                    maximum_notifications_per_hour,
+                    quiet_hours_json,
+                    receptive_when,
+                    defer_window_minutes,
+                )
+                if current is None:
+                    version = 1
+                    connection.execute(
+                        """INSERT INTO scheduler_config(
+                               profile_id, version, timezone, active_days_json,
+                               active_windows_json, minimum_gap_seconds,
+                               maximum_notifications_per_hour, quiet_hours_json,
+                               receptive_when, defer_window_minutes, updated_at_utc
+                           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            profile_id,
+                            version,
+                            *semantic,
+                            updated_at_utc,
+                        ),
+                    )
+                elif tuple(current[1:]) != semantic:
+                    version = int(current[0]) + 1
+                    connection.execute(
+                        """UPDATE scheduler_config
+                           SET version = ?, timezone = ?, active_days_json = ?,
+                               active_windows_json = ?, minimum_gap_seconds = ?,
+                               maximum_notifications_per_hour = ?, quiet_hours_json = ?,
+                               receptive_when = ?, defer_window_minutes = ?,
+                               updated_at_utc = ?
+                           WHERE profile_id = ?""",
+                        (
+                            version,
+                            *semantic,
+                            updated_at_utc,
+                            profile_id,
+                        ),
+                    )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+        config = await self.async_get_config(profile_id)
+        if config is None:
+            raise StateRepositoryError("scheduler config could not be reloaded")
+        return config
+
+    async def async_materialize_day(
+        self,
+        *,
+        profile_id: str,
+        scheduler_config_version: int,
+        seed: str,
+        start_utc: str,
+        end_utc: str,
+        now_utc: str,
+        slots: tuple[dict[str, Any], ...],
+        updated_at_utc: str,
+    ) -> tuple[dict[str, Any], ...]:
+        """Insert missing slots while never rewriting already materialized rows."""
+
+        def write(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                for slot in slots:
+                    connection.execute(
+                        """INSERT OR IGNORE INTO scheduled_slots(
+                               slot_id, profile_id, track_id, target_id, slot_type,
+                               scheduled_for_utc, status, scheduler_config_version,
+                               seed, created_at_utc, updated_at_utc
+                           ) VALUES (?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?)""",
+                        (
+                            slot["slot_id"],
+                            profile_id,
+                            slot.get("track_id"),
+                            slot.get("target_id"),
+                            slot["slot_type"],
+                            slot["scheduled_for_utc"],
+                            scheduler_config_version,
+                            seed,
+                            now_utc,
+                            updated_at_utc,
+                        ),
+                    )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._storage._async_writer(write)
+        return await self.async_list_slots(
+            profile_id=profile_id,
+            start_utc=start_utc,
+            end_utc=end_utc,
+        )
+
+    async def async_list_slots(
+        self,
+        *,
+        profile_id: str,
+        start_utc: str,
+        end_utc: str,
+    ) -> tuple[dict[str, Any], ...]:
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT slot_id, profile_id, track_id, target_id, slot_type,
+                          scheduled_for_utc, deferred_until_utc, defer_reason,
+                          card_key, learning_item_id, prompt_facet_id,
+                          answer_facet_id, selection_reason, expired_reason,
+                          status, scheduler_config_version, seed,
+                          created_at_utc, updated_at_utc
+                   FROM scheduled_slots
+                   WHERE profile_id = ?
+                     AND scheduled_for_utc >= ?
+                     AND scheduled_for_utc < ?
+                   ORDER BY scheduled_for_utc, slot_id""",
+                (profile_id, start_utc, end_utc),
+            ).fetchall()
+            keys = (
+                "slot_id",
+                "profile_id",
+                "track_id",
+                "target_id",
+                "slot_type",
+                "scheduled_for_utc",
+                "deferred_until_utc",
+                "defer_reason",
+                "card_key",
+                "learning_item_id",
+                "prompt_facet_id",
+                "answer_facet_id",
+                "selection_reason",
+                "expired_reason",
+                "status",
+                "scheduler_config_version",
+                "seed",
+                "created_at_utc",
+                "updated_at_utc",
+            )
+            return tuple(dict(zip(keys, row, strict=True)) for row in rows)
+
+        return await self._storage._async_reader(read)
+
+    async def async_next_slot(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        after_utc: str,
+    ) -> dict[str, Any] | None:
+        """Return the next effective unsent scheduler slot for one Track."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT slot_id, profile_id, track_id, target_id, slot_type,
+                          scheduled_for_utc, deferred_until_utc, status,
+                          CASE
+                              WHEN status = 'deferred'
+                                   AND deferred_until_utc IS NOT NULL
+                              THEN deferred_until_utc
+                              ELSE scheduled_for_utc
+                          END AS effective_for_utc
+                   FROM scheduled_slots
+                   WHERE profile_id = ?
+                     AND track_id = ?
+                     AND status IN ('scheduled', 'deferred')
+                     AND CASE
+                             WHEN status = 'deferred'
+                                  AND deferred_until_utc IS NOT NULL
+                             THEN deferred_until_utc
+                             ELSE scheduled_for_utc
+                         END >= ?
+                   ORDER BY effective_for_utc, slot_id
+                   LIMIT 1""",
+                (profile_id, track_id, after_utc),
+            ).fetchone()
+            if row is None:
+                return None
+            keys = (
+                "slot_id",
+                "profile_id",
+                "track_id",
+                "target_id",
+                "slot_type",
+                "scheduled_for_utc",
+                "deferred_until_utc",
+                "status",
+                "effective_for_utc",
+            )
+            return dict(zip(keys, row, strict=True))
+
+        return await self._storage._async_reader(read)
+
+    async def async_list_device_slots(
+        self,
+        *,
+        device_registry_id: str,
+        start_utc: str,
+        end_utc: str,
+    ) -> tuple[dict[str, Any], ...]:
+        """List materialized slots sharing one physical device identity."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT slot.slot_id, slot.profile_id, slot.track_id, slot.target_id,
+                          slot.slot_type, slot.scheduled_for_utc,
+                          slot.deferred_until_utc, slot.defer_reason,
+                          slot.card_key, slot.learning_item_id, slot.prompt_facet_id,
+                          slot.answer_facet_id, slot.selection_reason,
+                          slot.expired_reason, slot.status,
+                          slot.scheduler_config_version, slot.seed,
+                          slot.created_at_utc, slot.updated_at_utc
+                   FROM scheduled_slots AS slot
+                   JOIN notification_targets AS target
+                     ON target.target_id = slot.target_id
+                   WHERE target.device_registry_id = ?
+                     AND slot.scheduled_for_utc >= ?
+                     AND slot.scheduled_for_utc < ?
+                   ORDER BY slot.scheduled_for_utc, slot.slot_id""",
+                (device_registry_id, start_utc, end_utc),
+            ).fetchall()
+            keys = (
+                "slot_id",
+                "profile_id",
+                "track_id",
+                "target_id",
+                "slot_type",
+                "scheduled_for_utc",
+                "deferred_until_utc",
+                "defer_reason",
+                "card_key",
+                "learning_item_id",
+                "prompt_facet_id",
+                "answer_facet_id",
+                "selection_reason",
+                "expired_reason",
+                "status",
+                "scheduler_config_version",
+                "seed",
+                "created_at_utc",
+                "updated_at_utc",
+            )
+            return tuple(dict(zip(keys, row, strict=True)) for row in rows)
+
+        return await self._storage._async_reader(read)
+
+    async def async_get_slot(self, slot_id: str) -> dict[str, Any] | None:
+        """Return one materialized scheduler slot."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT slot_id, profile_id, track_id, target_id, slot_type,
+                          scheduled_for_utc, deferred_until_utc, defer_reason,
+                          card_key, learning_item_id, prompt_facet_id,
+                          answer_facet_id, selection_reason, expired_reason,
+                          status, scheduler_config_version, seed,
+                          created_at_utc, updated_at_utc
+                   FROM scheduled_slots
+                   WHERE slot_id = ?""",
+                (slot_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            keys = (
+                "slot_id",
+                "profile_id",
+                "track_id",
+                "target_id",
+                "slot_type",
+                "scheduled_for_utc",
+                "deferred_until_utc",
+                "defer_reason",
+                "card_key",
+                "learning_item_id",
+                "prompt_facet_id",
+                "answer_facet_id",
+                "selection_reason",
+                "expired_reason",
+                "status",
+                "scheduler_config_version",
+                "seed",
+                "created_at_utc",
+                "updated_at_utc",
+            )
+            return dict(zip(keys, row, strict=True))
+
+        return await self._storage._async_reader(read)
+
+    async def async_defer_slot(
+        self,
+        *,
+        slot_id: str,
+        deferred_until_utc: str,
+        reason: str,
+        updated_at_utc: str,
+    ) -> bool:
+        """Defer an unsent slot without recording a pedagogical outcome."""
+
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                """UPDATE scheduled_slots
+                   SET status = 'deferred',
+                       deferred_until_utc = ?,
+                       defer_reason = ?,
+                       updated_at_utc = ?
+                   WHERE slot_id = ?
+                     AND status IN ('scheduled', 'deferred')""",
+                (deferred_until_utc, reason, updated_at_utc, slot_id),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(write)
+
+    async def async_mark_slot_sent(
+        self,
+        *,
+        slot_id: str,
+        delivered_at_utc: str,
+        timezone_name: str,
+        weekday: int,
+        local_hour: int,
+    ) -> bool:
+        """Mark delivery and initialize the V1 receptivity feature sample."""
+
+        def write(connection: sqlite3.Connection) -> bool:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                slot = connection.execute(
+                    """SELECT profile_id, target_id, status
+                       FROM scheduled_slots
+                       WHERE slot_id = ?""",
+                    (slot_id,),
+                ).fetchone()
+                if slot is None or str(slot[2]) not in {"scheduled", "deferred"}:
+                    connection.rollback()
+                    return False
+                connection.execute(
+                    """UPDATE scheduled_slots
+                       SET status = 'sent',
+                           deferred_until_utc = NULL,
+                           defer_reason = NULL,
+                           updated_at_utc = ?
+                       WHERE slot_id = ?""",
+                    (delivered_at_utc, slot_id),
+                )
+                connection.execute(
+                    """INSERT INTO receptivity_samples(
+                           slot_id, profile_id, target_id, delivered_at_utc,
+                           timezone_name, weekday, local_hour, delivered,
+                           cleared, answered, delivery_to_action_ms, updated_at_utc
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, 0, NULL, ?)
+                       ON CONFLICT(slot_id) DO NOTHING""",
+                    (
+                        slot_id,
+                        str(slot[0]),
+                        None if slot[1] is None else str(slot[1]),
+                        delivered_at_utc,
+                        timezone_name,
+                        weekday,
+                        local_hour,
+                        delivered_at_utc,
+                    ),
+                )
+                connection.commit()
+                return True
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        return await self._storage._async_writer(write)
+
+    async def async_record_receptivity_action(
+        self,
+        *,
+        slot_id: str,
+        action: str,
+        action_at_utc: str,
+        delivery_to_action_ms: int,
+    ) -> bool:
+        """Update only observational receptivity features for a delivered slot."""
+        if action not in {"cleared", "answered"}:
+            raise ValueError("unsupported receptivity action")
+
+        def write(connection: sqlite3.Connection) -> bool:
+            column = "cleared" if action == "cleared" else "answered"
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                cursor = connection.execute(
+                    f"""UPDATE receptivity_samples
+                        SET {column} = 1,
+                            delivery_to_action_ms = CASE
+                                WHEN delivery_to_action_ms IS NULL
+                                    THEN ?
+                                ELSE MIN(delivery_to_action_ms, ?)
+                            END,
+                            updated_at_utc = ?
+                        WHERE slot_id = ?""",
+                    (
+                        delivery_to_action_ms,
+                        delivery_to_action_ms,
+                        action_at_utc,
+                        slot_id,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    connection.rollback()
+                    return False
+                if action == "cleared":
+                    connection.execute(
+                        """UPDATE scheduled_slots
+                           SET status = 'expired',
+                               expired_reason = 'cleared',
+                               updated_at_utc = ?
+                           WHERE slot_id = ?
+                             AND status = 'sent'""",
+                        (action_at_utc, slot_id),
+                    )
+                connection.commit()
+                return True
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        return await self._storage._async_writer(write)
+
+    async def async_get_receptivity_sample(self, slot_id: str) -> dict[str, Any] | None:
+        """Read one observational receptivity sample for tests/diagnostics."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT slot_id, profile_id, target_id, delivered_at_utc,
+                          timezone_name, weekday, local_hour, delivered,
+                          cleared, answered, delivery_to_action_ms, updated_at_utc
+                   FROM receptivity_samples
+                   WHERE slot_id = ?""",
+                (slot_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            keys = (
+                "slot_id",
+                "profile_id",
+                "target_id",
+                "delivered_at_utc",
+                "timezone_name",
+                "weekday",
+                "local_hour",
+                "delivered",
+                "cleared",
+                "answered",
+                "delivery_to_action_ms",
+                "updated_at_utc",
+            )
+            result = dict(zip(keys, row, strict=True))
+            for key in ("delivered", "cleared", "answered"):
+                result[key] = bool(result[key])
+            return result
+
+        return await self._storage._async_reader(read)
+
+    async def async_bind_content_selection(
+        self,
+        *,
+        slot_id: str,
+        card_key: str,
+        learning_item_id: str,
+        prompt_facet_id: str,
+        answer_facet_id: str,
+        selection_reason: str,
+        updated_at_utc: str,
+    ) -> bool:
+        """Persist one send-time CardDefinition decision exactly once."""
+
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                """UPDATE scheduled_slots
+                   SET card_key = ?,
+                       learning_item_id = ?,
+                       prompt_facet_id = ?,
+                       answer_facet_id = ?,
+                       selection_reason = ?,
+                       updated_at_utc = ?
+                   WHERE slot_id = ?
+                     AND status IN ('scheduled', 'deferred')
+                     AND card_key IS NULL""",
+                (
+                    card_key,
+                    learning_item_id,
+                    prompt_facet_id,
+                    answer_facet_id,
+                    selection_reason,
+                    updated_at_utc,
+                    slot_id,
+                ),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(write)
+
+    async def async_has_pending_for_target(
+        self,
+        *,
+        profile_id: str,
+        target_id: str,
+        exclude_slot_id: str,
+    ) -> bool:
+        """Return whether the target already has an unanswered sent notification."""
+
+        def read(connection: sqlite3.Connection) -> bool:
+            row = connection.execute(
+                """SELECT 1
+                   FROM scheduled_slots AS slot
+                   LEFT JOIN receptivity_samples AS sample
+                     ON sample.slot_id = slot.slot_id
+                   WHERE slot.profile_id = ?
+                     AND slot.target_id = ?
+                     AND slot.slot_id <> ?
+                     AND slot.status = 'sent'
+                     AND COALESCE(sample.answered, 0) = 0
+                     AND COALESCE(sample.cleared, 0) = 0
+                   LIMIT 1""",
+                (profile_id, target_id, exclude_slot_id),
+            ).fetchone()
+            return row is not None
+
+        return await self._storage._async_reader(read)
+
+    async def async_expire_slot(
+        self,
+        *,
+        slot_id: str,
+        reason: str,
+        updated_at_utc: str,
+    ) -> bool:
+        """Expire one unsent slot with an explicit channel-policy reason."""
+
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                """UPDATE scheduled_slots
+                   SET status = 'expired',
+                       expired_reason = ?,
+                       updated_at_utc = ?
+                   WHERE slot_id = ?
+                     AND status IN ('scheduled', 'deferred')""",
+                (reason, updated_at_utc, slot_id),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(write)
+
+    async def async_count_selected_teasers(
+        self,
+        *,
+        profile_id: str,
+        start_utc: str,
+        end_utc: str,
+    ) -> int:
+        """Count V1 teaser selections in one Profile-local day."""
+
+        def read(connection: sqlite3.Connection) -> int:
+            row = connection.execute(
+                """SELECT COUNT(*)
+                   FROM scheduled_slots
+                   WHERE profile_id = ?
+                     AND scheduled_for_utc >= ?
+                     AND scheduled_for_utc < ?
+                     AND selection_reason = 'teaser_new'
+                     AND status NOT IN ('cancelled')""",
+                (profile_id, start_utc, end_utc),
+            ).fetchone()
+            return 0 if row is None else int(row[0])
+
+        return await self._storage._async_reader(read)
+
+    async def async_channel_outcomes(
+        self,
+        *,
+        profile_id: str,
+        target_id: str,
+        limit: int = 12,
+    ) -> tuple[str, ...]:
+        """Return recent channel-only outcomes, newest first."""
+        if limit < 1:
+            return ()
+
+        def read(connection: sqlite3.Connection) -> tuple[str, ...]:
+            rows = connection.execute(
+                """SELECT slot.status, slot.expired_reason,
+                          COALESCE(sample.cleared, 0), COALESCE(sample.answered, 0)
+                   FROM scheduled_slots AS slot
+                   LEFT JOIN receptivity_samples AS sample
+                     ON sample.slot_id = slot.slot_id
+                   WHERE slot.profile_id = ?
+                     AND slot.target_id = ?
+                     AND slot.status IN ('sent', 'consumed', 'expired')
+                   ORDER BY slot.updated_at_utc DESC, slot.slot_id DESC
+                   LIMIT ?""",
+                (profile_id, target_id, limit),
+            ).fetchall()
+            result: list[str] = []
+            for status, expired_reason, cleared, answered in rows:
+                if bool(answered):
+                    result.append("answered")
+                elif bool(cleared):
+                    result.append("cleared")
+                elif str(status) == "expired":
+                    if str(expired_reason) in {
+                        "missed",
+                        "pending_existing",
+                        "missed_not_receptive",
+                    }:
+                        result.append("expired")
+                    else:
+                        result.append("neutral")
+                elif str(status) == "consumed":
+                    result.append("consumed")
+                else:
+                    result.append("pending")
+            return tuple(result)
+
+        return await self._storage._async_reader(read)
+
+    async def async_cancel_superseded_future_slots(
+        self,
+        *,
+        profile_id: str,
+        active_config_version: int,
+        not_before_utc: str,
+        updated_at_utc: str,
+    ) -> int:
+        """Cancel only future unsent slots from an older scheduler config version."""
+
+        def write(connection: sqlite3.Connection) -> int:
+            cursor = connection.execute(
+                """UPDATE scheduled_slots
+                   SET status = 'cancelled', updated_at_utc = ?
+                   WHERE profile_id = ?
+                     AND scheduler_config_version <> ?
+                     AND scheduled_for_utc >= ?
+                     AND status IN ('scheduled', 'deferred')""",
+                (
+                    updated_at_utc,
+                    profile_id,
+                    active_config_version,
+                    not_before_utc,
+                ),
+            )
+            connection.commit()
+            return cursor.rowcount
+
+        return await self._storage._async_writer(write)
+
+    async def async_expire_before(
+        self,
+        *,
+        before_utc: str,
+        updated_at_utc: str,
+    ) -> int:
+        """Expire overdue unsent slots during restart/clock reconciliation."""
+
+        def write(connection: sqlite3.Connection) -> int:
+            cursor = connection.execute(
+                """UPDATE scheduled_slots
+                   SET status = 'expired',
+                       expired_reason = COALESCE(expired_reason, 'missed'),
+                       updated_at_utc = ?
+                   WHERE (
+                       (status = 'scheduled' AND scheduled_for_utc < ?)
+                       OR (
+                           status = 'deferred'
+                           AND COALESCE(deferred_until_utc, scheduled_for_utc) < ?
+                       )
+                   )""",
+                (updated_at_utc, before_utc, before_utc),
+            )
+            connection.commit()
+            return cursor.rowcount
+
+        return await self._storage._async_writer(write)
+
+    async def async_active_session_track_ids(
+        self,
+        profile_id: str,
+    ) -> frozenset[str]:
+        """Return Tracks currently suppressed by an active Profile session."""
+
+        def read(connection: sqlite3.Connection) -> frozenset[str]:
+            rows = connection.execute(
+                """SELECT DISTINCT track_id
+                   FROM sessions
+                   WHERE profile_id = ?
+                     AND status = 'active'
+                     AND track_id IS NOT NULL""",
+                (profile_id,),
+            ).fetchall()
+            return frozenset(str(row[0]) for row in rows)
+
+        return await self._storage._async_reader(read)
+
+    async def async_set_slot_status(
+        self,
+        slot_id: str,
+        status: str,
+        *,
+        updated_at_utc: str,
+    ) -> bool:
+        """Small status primitive used by P4.1 tests and later notification stages."""
+        allowed = {"scheduled", "deferred", "sent", "consumed", "expired", "cancelled"}
+        if status not in allowed:
+            raise ValueError("invalid scheduled slot status")
+
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                """UPDATE scheduled_slots
+                   SET status = ?, updated_at_utc = ?
+                   WHERE slot_id = ?""",
+                (status, updated_at_utc, slot_id),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(write)
 
 
 class SettingsRepository:
@@ -1807,7 +4651,12 @@ class StateRepositories:
     tracks: TracksRepository
     progress: ProgressRepository
     review_events: ReviewEventsRepository
+    user_annotations: UserAnnotationsRepository
     content_reports: ContentReportsRepository
+    notification_targets: NotificationTargetsRepository
+    notification_interactions: NotificationInteractionsRepository
+    notification_warnings: NotificationWarningsRepository
+    scheduler: SchedulerRepository
     settings: SettingsRepository
 
     @classmethod
@@ -1817,6 +4666,11 @@ class StateRepositories:
             tracks=TracksRepository(storage),
             progress=ProgressRepository(storage),
             review_events=ReviewEventsRepository(storage),
+            user_annotations=UserAnnotationsRepository(storage),
             content_reports=ContentReportsRepository(storage),
+            notification_targets=NotificationTargetsRepository(storage),
+            notification_interactions=NotificationInteractionsRepository(storage),
+            notification_warnings=NotificationWarningsRepository(storage),
+            scheduler=SchedulerRepository(storage),
             settings=SettingsRepository(storage),
         )

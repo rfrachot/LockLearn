@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.update import UpdateEntity, UpdateEntityFeature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import DATA_RUNTIME, DOMAIN
 from .datasets.manager import DatasetDefinition, DatasetManager, DatasetStatus
 from .runtime import LockLearnRuntime
+
+if TYPE_CHECKING:
+    from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 
 async def async_setup_entry(

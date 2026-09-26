@@ -26,6 +26,14 @@
     "dataset_sources_stale": {
       "title": "Dataset sources are stale",
       "description": "The sources {sources} used by {dataset_id} exceed their freshness target. The installed dataset remains usable, but an update is recommended."
+    },
+    "scheduler_configuration_infeasible": {
+      "title": "Scheduler capacity is insufficient",
+      "description": "Profile {profile_id} requests {requested} daily notification slots but only {capacity} are currently allocatable. Adjust Track demand, target budgets, or scheduler windows."
+    },
+    "notification_target_unavailable": {
+      "title": "Notification target unavailable",
+      "description": "LockLearn cannot currently resolve or deliver to {friendly_name} ({target_id}). The notification was not recorded as sent."
     }
   }
 }

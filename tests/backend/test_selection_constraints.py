@@ -287,7 +287,7 @@ async def test_confusable_group_blocks_only_new_introduction_until_gap_expires()
 
 def test_confusable_distractors_are_reserved_for_review_state() -> None:
     assert SelectionConstraintService.confusable_distractors_allowed("review") is True
-    for state in ("new", "learning", "relearning"):
+    for state in ("new", "learning", "relearning", "leech"):
         assert SelectionConstraintService.confusable_distractors_allowed(state) is False
 
 
@@ -301,7 +301,7 @@ async def test_selection_constraint_validation_is_explicit() -> None:
             track_id="track-1",
             card_key="card-1",
             learning_item_id="item-1",
-            state="leech",
+            state="invalid",
         )
 
     with pytest.raises(SelectionConstraintError, match="does not belong"):

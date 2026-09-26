@@ -22,6 +22,7 @@ class OperationState:
     cancellable: bool
     status: str
     error: str | None = None
+    result: dict[str, Any] | None = None
     owner_user_id: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
@@ -41,6 +42,11 @@ class OperationContext:
     async def async_update(self, phase: str, progress: float) -> None:
         """Publish progress and yield so cancellation/backpressure can run."""
         await self._registry.async_update(self.operation_id, phase, progress)
+        await asyncio.sleep(0)
+
+    async def async_set_result(self, result: dict[str, Any]) -> None:
+        """Publish the terminal/result payload produced by a long operation."""
+        await self._registry.async_set_result(self.operation_id, result)
         await asyncio.sleep(0)
 
     def raise_if_cancelled(self) -> None:
@@ -126,6 +132,14 @@ class OperationRegistry:
             return
         state.phase = phase
         state.progress = min(1.0, max(0.0, progress))
+        self._publish(operation_id)
+
+    async def async_set_result(self, operation_id: str, result: dict[str, Any]) -> None:
+        """Attach a WebSocket-safe result payload to an active operation."""
+        state = self._states[operation_id]
+        if state.status != "running":
+            return
+        state.result = dict(result)
         self._publish(operation_id)
 
     def cancel(self, operation_id: str) -> bool:

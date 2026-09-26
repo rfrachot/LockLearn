@@ -50,6 +50,35 @@ class TrackService:
         return normalized
 
     @staticmethod
+    def _validate_scheduler_settings(
+        settings: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        if settings is None:
+            return {}
+        allowed = {"learning_count", "quiz_count", "target_ids"}
+        unknown = set(settings) - allowed
+        if unknown:
+            raise TrackValidationError(f"unsupported track scheduler settings: {sorted(unknown)!r}")
+        normalized: dict[str, Any] = {}
+        for field in ("learning_count", "quiz_count"):
+            value = settings.get(field, 0)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise TrackValidationError(f"{field} must be an integer >= 0")
+            normalized[field] = value
+        raw_targets = settings.get("target_ids")
+        if raw_targets is not None:
+            if not isinstance(raw_targets, (list, tuple)):
+                raise TrackValidationError("target_ids must be a list")
+            normalized["target_ids"] = list(
+                dict.fromkeys(
+                    target_id.strip()
+                    for target_id in raw_targets
+                    if isinstance(target_id, str) and target_id.strip()
+                )
+            )
+        return normalized
+
+    @staticmethod
     def _rules_from_cards(
         track_id: str,
         cards: tuple[dict[str, str], ...],
@@ -80,6 +109,7 @@ class TrackService:
         priority: int = 1,
         content_weights: Mapping[str, float] | None = None,
         explicit_card_keys: tuple[str, ...] | None = None,
+        scheduler_settings: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create one Track with an explicit immutable PackVersion pin."""
         normalized_name = name.strip()
@@ -132,6 +162,10 @@ class TrackService:
         )
         rules = self._rules_from_cards(track_id, cards, rule_kind=rule_kind)
         now = self._clock.now().isoformat()
+        track_settings: dict[str, Any] = {"card_selection_mode": selection_mode}
+        normalized_scheduler = self._validate_scheduler_settings(scheduler_settings)
+        if normalized_scheduler:
+            track_settings["scheduler"] = normalized_scheduler
         track = TrackRecord(
             track_id=track_id,
             profile_id=profile_id,
@@ -139,7 +173,7 @@ class TrackService:
             source_language=source,
             target_language=target,
             priority=priority,
-            settings={"card_selection_mode": selection_mode},
+            settings=track_settings,
             created_at_utc=now,
             updated_at_utc=now,
         )
@@ -167,6 +201,7 @@ class TrackService:
         priority: int | None = None,
         content_weights: Mapping[str, float] | None = None,
         explicit_card_keys: tuple[str, ...] | None = None,
+        scheduler_settings: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Atomically update mutable Track configuration."""
         current = await self._repository.async_get(track_id)
@@ -246,6 +281,12 @@ class TrackService:
             else self._validate_weights(content_weights)
         )
         settings["card_selection_mode"] = mode
+        if scheduler_settings is not None:
+            normalized_scheduler = self._validate_scheduler_settings(scheduler_settings)
+            if normalized_scheduler:
+                settings["scheduler"] = normalized_scheduler
+            else:
+                settings.pop("scheduler", None)
         now = self._clock.now().isoformat()
         updated = await self._repository.async_update_configured(
             track=TrackRecord(
