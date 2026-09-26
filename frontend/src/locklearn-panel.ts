@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 
 import { languageFallback, translate, type UiLanguage } from "./i18n";
+import "./learn-view";
 import { isRouteVisible, visibleNavigation } from "./navigation";
 import { defaultProfileId, groupProfiles } from "./profile-switcher";
 import {
@@ -501,7 +502,15 @@ export class LockLearnPanel extends LitElement {
               </section>`
             : this.activeRoute === "home"
               ? this.renderHome()
-              : html`<section class="page">
+              : this.activeRoute === "learn"
+                ? html`<locklearn-learn-view
+                    .hass=${this.hass}
+                    .profile=${this.profiles.find(
+                      (profile) => profile.profile_id === this.selectedProfileId,
+                    )}
+                    .dashboard=${this.dashboard}
+                  ></locklearn-learn-view>`
+                : html`<section class="page">
                   <h1>${this.routeLabel(this.activeRoute)}</h1>
                   <p>${this.t("route.placeholder")}</p>
                 </section>`}
