@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 
 import { languageFallback, translate, type UiLanguage } from "./i18n";
+import { canAnswerProfile, isIntroductionQuestion } from "./learn-model";
 import {
   answerSession,
   completeSession,
@@ -21,14 +22,6 @@ import {
 
 function nowMs(): number {
   return globalThis.performance?.now() ?? Date.now();
-}
-
-export function isIntroductionQuestion(question: SessionQuestion | null): boolean {
-  return question?.payload.selection?.progress_state === "new";
-}
-
-export function canAnswerProfile(profile: VisibleProfile | undefined): boolean {
-  return profile !== undefined && profile.role !== "viewer";
 }
 
 export class LockLearnLearnView extends LitElement {
@@ -276,6 +269,7 @@ export class LockLearnLearnView extends LitElement {
     this.pendingIdkLatency = undefined;
     this.mnemonic = "";
     this.reportMessage = "";
+    this.notice = "";
     this.questionStartedAt = nowMs();
     this.questionId = this.session?.current_question?.question_id ?? null;
   }
@@ -753,7 +747,10 @@ export class LockLearnLearnView extends LitElement {
   }
 }
 
-if (customElements.get("locklearn-learn-view") === undefined) {
+if (
+  globalThis.customElements !== undefined &&
+  customElements.get("locklearn-learn-view") === undefined
+) {
   customElements.define("locklearn-learn-view", LockLearnLearnView);
 }
 
