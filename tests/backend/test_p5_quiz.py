@@ -9,6 +9,7 @@ import pytest
 from custom_components.locklearn.core.grading import FreeTextGrader
 from custom_components.locklearn.core.quiz import QuizEngine
 from custom_components.locklearn.core.quiz_sessions import (
+    QuizSessionError,
     QuizSessionService,
     _AnswerTerm,
     _QuizCardMeta,
@@ -228,7 +229,7 @@ async def test_provisional_free_text_cannot_change_after_grading() -> None:
         {"kind": "quiz", "submitted_text": "wrong"},
     )
 
-    with pytest.raises(Exception, match="already evaluated"):
+    with pytest.raises(QuizSessionError, match="already evaluated"):
         await service.async_evaluate(
             "session-1",
             "q1",
@@ -269,7 +270,7 @@ async def test_choice_evaluation_requires_atomic_submission() -> None:
 
     service._load_catalog = load_catalog  # type: ignore[method-assign]
 
-    with pytest.raises(Exception, match="atomic quiz submission"):
+    with pytest.raises(QuizSessionError, match="atomic quiz submission"):
         await service.async_evaluate(
             "session-1",
             "q1",
