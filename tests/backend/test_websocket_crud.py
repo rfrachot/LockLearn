@@ -140,14 +140,10 @@ async def test_bootstrap_profile_crud_privacy_share_and_pagination(
     assert shared["success"] is True
     assert shared["result"]["role"] == "viewer"
 
-    await owner.send_json_auto_id(
-        {"type": "locklearn/profiles/members", "profile_id": second_id}
-    )
+    await owner.send_json_auto_id({"type": "locklearn/profiles/members", "profile_id": second_id})
     members = await owner.receive_json()
     assert members["success"] is True
-    assert {item["ha_user_id"] for item in members["result"]} >= {
-        hass_read_only_user.id
-    }
+    assert {item["ha_user_id"] for item in members["result"]} >= {hass_read_only_user.id}
 
     await owner.send_json_auto_id(
         {"type": "locklearn/profiles/share_targets", "profile_id": second_id}
