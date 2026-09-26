@@ -71,6 +71,10 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p5-frontend-bundle
+          path: custom_components/locklearn/frontend/locklearn-panel.js
       - run: git diff --exit-code -- ../custom_components/locklearn/frontend/locklearn-panel.js
 
   home-assistant-validation:

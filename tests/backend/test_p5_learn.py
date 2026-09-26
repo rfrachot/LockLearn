@@ -219,7 +219,9 @@ async def test_learning_answer_commits_event_progress_and_session_atomically(
     state = started["result"]
     question = state["current_question"]
     assert question is not None
-    assert question["payload"]["presentation"]["answer"]["blocks"][0]["payload"]["text"] == "réponse"
+    assert (
+        question["payload"]["presentation"]["answer"]["blocks"][0]["payload"]["text"] == "réponse"
+    )
 
     await owner.send_json_auto_id(
         {

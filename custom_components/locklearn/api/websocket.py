@@ -1407,10 +1407,11 @@ async def ws_session_start(
             prepared: list[SessionQuestion] = []
             for position, candidate in enumerate(selected):
                 payload = dict(candidate.payload)
-                payload["presentation"] = await runtime.presentation.async_for_card(
-                    track_id=track_id,
-                    card_key=candidate.card_key,
-                )
+                if msg["session_type"] == "learn":
+                    payload["presentation"] = await runtime.presentation.async_for_card(
+                        track_id=track_id,
+                        card_key=candidate.card_key,
+                    )
                 prepared.append(
                     SessionQuestion(
                         question_id=f"q-{position + 1}-{candidate.card_key}",

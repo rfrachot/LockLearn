@@ -117,12 +117,8 @@ class CardPresentationService:
                 "context": list(context),
                 "introduction_blocks": list(annotated),
                 "hint_blocks": [block for block in annotated if block["role"] == "hint"],
-                "mnemonic_blocks": [
-                    block for block in annotated if block["role"] == "mnemonic"
-                ],
-                "example_blocks": [
-                    block for block in annotated if block["role"] == "example"
-                ],
+                "mnemonic_blocks": [block for block in annotated if block["role"] == "mnemonic"],
+                "example_blocks": [block for block in annotated if block["role"] == "example"],
             }
 
         return await self._storage._async_reader(read)
