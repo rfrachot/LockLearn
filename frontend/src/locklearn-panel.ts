@@ -363,6 +363,7 @@ export class LockLearnPanel extends LitElement {
           backend_version: error.backendVersion,
           panel_path: "/locklearn",
           authenticated_user_id: "",
+          is_admin: false,
           personal_profile: null,
         };
         this.status = "protocol-mismatch";
