@@ -8,6 +8,8 @@ import {
   createCardAnnotation,
   getDashboard,
   getSession,
+  installDataset,
+  listDatasets,
   listProfileMembers,
   listShareTargets,
   listTracks,
@@ -15,6 +17,7 @@ import {
   listNotificationTargets,
   previewPackUpdate,
   previewTrackPlan,
+  refreshDatasets,
   setTrackPlan,
   listVisibleProfiles,
   reportQuestion,
@@ -39,6 +42,7 @@ describe("frontend protocol", () => {
           backend_version: "0.0.2",
           panel_path: "/locklearn",
           authenticated_user_id: "user-1",
+          is_admin: true,
           personal_profile: null,
         } as unknown as T;
       },
@@ -57,6 +61,7 @@ describe("frontend protocol", () => {
           backend_version: "9.9.9",
           panel_path: "/locklearn",
           authenticated_user_id: "user-1",
+          is_admin: true,
           personal_profile: null,
         }) as T,
     };
@@ -384,6 +389,62 @@ describe("frontend protocol", () => {
       },
       { type: "locklearn/tracks/plan_preview", track_id: "t1", ...plan },
       { type: "locklearn/tracks/plan_set", track_id: "t1", ...plan },
+    ]);
+  });
+
+  it("uses global dataset status and admin update contracts", async () => {
+    const messages: Record<string, unknown>[] = [];
+    const status = {
+      dataset_id: "locklearn:starter",
+      name: "Starter",
+      state: "update_available",
+      installed_version: "1.0.0",
+      available_version: "1.1.0",
+      update_available: true,
+      source_age_days: 4,
+      stale_sources: [],
+      cache_bytes: 4096,
+      error: null,
+      changelog: "Updated content",
+      release_url: "https://example.invalid/releases/1.1.0",
+      artifact_size: 1024,
+      built_at_utc: "2026-09-26T20:00:00+00:00",
+      dataset_version_id: "dataset-version",
+      canonical_content_hash: "a".repeat(64),
+      sources: [],
+      licenses: [],
+      pack_version_ids: ["pack-v1"],
+    };
+    const hass: HomeAssistantLike = {
+      callWS: async <T>(message: Record<string, unknown>): Promise<T> => {
+        messages.push(message);
+        if (message.type === "locklearn/datasets/list") {
+          return { items: [status], cursor: null } as T;
+        }
+        if (message.type === "locklearn/datasets/refresh") {
+          return { items: [status] } as T;
+        }
+        return {
+          dataset_id: status.dataset_id,
+          version: "1.1.0",
+          generation_id: "generation-2",
+          previous_generation_id: "generation-1",
+          statuses: [{ ...status, installed_version: "1.1.0", update_available: false }],
+        } as T;
+      },
+    };
+
+    expect((await listDatasets(hass))[0]?.dataset_id).toBe(status.dataset_id);
+    expect((await refreshDatasets(hass))[0]?.available_version).toBe("1.1.0");
+    expect((await installDataset(hass, status.dataset_id, "1.1.0")).version).toBe("1.1.0");
+    expect(messages).toEqual([
+      { type: "locklearn/datasets/list", limit: 100 },
+      { type: "locklearn/datasets/refresh" },
+      {
+        type: "locklearn/datasets/install",
+        dataset_id: "locklearn:starter",
+        version: "1.1.0",
+      },
     ]);
   });
 
