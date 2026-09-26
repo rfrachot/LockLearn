@@ -107,10 +107,7 @@ async def test_dashboard_is_private_and_aggregates_track_home_state(
     await viewer.send_json_auto_id({"type": "locklearn/profiles/list"})
     invisible_profiles = await viewer.receive_json()
     assert invisible_profiles["success"] is True
-    assert all(
-        item["profile_id"] != profile_id
-        for item in invisible_profiles["result"]["items"]
-    )
+    assert all(item["profile_id"] != profile_id for item in invisible_profiles["result"]["items"])
 
     await owner.send_json_auto_id(
         {
@@ -148,8 +145,6 @@ async def test_dashboard_is_private_and_aggregates_track_home_state(
     assert card["last_session"]["question_count"] == 2
     assert card["last_session"]["answered_count"] == 1
     assert card["next_notification"]["slot_type"] == "learning"
-    assert card["next_notification"]["effective_for_utc"] == (
-        now + timedelta(hours=2)
-    ).isoformat()
+    assert card["next_notification"]["effective_for_utc"] == (now + timedelta(hours=2)).isoformat()
 
     await hass.config_entries.async_unload(entry.entry_id)
