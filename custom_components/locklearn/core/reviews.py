@@ -68,8 +68,9 @@ class ReviewEventService:
         delivery_to_action_ms: int | None = None,
         session_id: str | None = None,
         notification_id: str | None = None,
+        persist: bool = True,
     ) -> ReviewEventRecord:
-        """Append one audit event with explicit cognitive and delivery latencies."""
+        """Build one audit event and optionally append its canonical projection."""
         for field_name, text_value in (
             ("profile_id", profile_id),
             ("track_id", track_id),
@@ -189,7 +190,8 @@ class ReviewEventService:
             timezone_name=timezone_name,
             utc_offset_minutes=utc_offset_minutes,
         )
-        await self._events.async_append_with_projection(event)
+        if persist:
+            await self._events.async_append_with_projection(event)
         return event
 
     async def async_rebuild_progress(

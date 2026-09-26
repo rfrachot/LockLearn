@@ -25,6 +25,8 @@ from ..core.dashboard import DashboardServiceError
 from ..core.difficulties import DifficultyServiceError
 from ..core.grading import FreeTextGradingResult
 from ..core.integrity import IntegrityServiceError
+from ..core.learning_sessions import LearningSessionError
+from ..core.presentation import PresentationError
 from ..core.profiles import ProfileValidationError
 from ..core.progress_state import ProgressUserStateError
 from ..core.scheduler import SchedulerValidationError
@@ -744,6 +746,60 @@ async def ws_content_report(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "locklearn/content/report_question",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("card_key"): str,
+        vol.Required("learning_item_id"): str,
+        vol.Required("prompt_facet_id"): str,
+        vol.Required("answer_facet_id"): str,
+        vol.Optional("reason", default="user_reported_question"): str,
+        vol.Optional("message"): vol.All(str, vol.Length(max=1000)),
+    }
+)
+@websocket_api.async_response
+async def ws_content_report_question(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Report a question/content issue without fabricating an SRS result."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.ANSWER,
+    ):
+        return
+    try:
+        receipt = await runtime.content_reports.async_report_question(
+            actor_user_id=connection.user.id,
+            profile_id=profile_id,
+            track_id=msg["track_id"],
+            card=CardReference(
+                card_key=msg["card_key"],
+                learning_item_id=msg["learning_item_id"],
+                prompt_facet_id=msg["prompt_facet_id"],
+                answer_facet_id=msg["answer_facet_id"],
+            ),
+            dataset_generation=runtime.storage.content_generations.active_metadata.generation_id,
+            reason=msg["reason"],
+            message=msg.get("message"),
+        )
+    except (ContentReportError, ContentReferenceError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(
+        msg["id"],
+        {"report_id": receipt.report_id, "srs_penalized": receipt.srs_penalized},
+    )
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "locklearn/progress/set_user_state",
         vol.Required("profile_id"): str,
         vol.Required("track_id"): str,
@@ -1348,17 +1404,24 @@ async def ws_session_start(
                 session_type=msg["session_type"],
                 settings=msg["settings"],
             )
-            prepared_questions = tuple(
-                SessionQuestion(
-                    question_id=f"q-{position + 1}-{candidate.card_key}",
+            prepared: list[SessionQuestion] = []
+            for position, candidate in enumerate(selected):
+                payload = dict(candidate.payload)
+                payload["presentation"] = await runtime.presentation.async_for_card(
+                    track_id=track_id,
                     card_key=candidate.card_key,
-                    learning_item_id=candidate.learning_item_id,
-                    prompt_facet_id=candidate.prompt_facet_id,
-                    answer_facet_id=candidate.answer_facet_id,
-                    payload=dict(candidate.payload),
                 )
-                for position, candidate in enumerate(selected)
-            )
+                prepared.append(
+                    SessionQuestion(
+                        question_id=f"q-{position + 1}-{candidate.card_key}",
+                        card_key=candidate.card_key,
+                        learning_item_id=candidate.learning_item_id,
+                        prompt_facet_id=candidate.prompt_facet_id,
+                        answer_facet_id=candidate.answer_facet_id,
+                        payload=payload,
+                    )
+                )
+            prepared_questions = tuple(prepared)
         else:
             runtime.session_selection.validate_session_settings(msg["settings"])
 
@@ -1371,7 +1434,7 @@ async def ws_session_start(
             questions=prepared_questions,
         )
         state = await _with_fatigue_advice(runtime, state)
-    except (SessionSelectionError, SessionValidationError) as err:
+    except (PresentationError, SessionSelectionError, SessionValidationError) as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     connection.send_result(msg["id"], state)
@@ -1432,12 +1495,24 @@ async def ws_session_answer(
     ):
         return
     try:
-        state = await runtime.sessions.async_answer(
-            msg["session_id"],
-            msg["expected_version"],
-            msg["question_id"],
-            msg["answer"],
-        )
+        answer = msg["answer"]
+        if isinstance(answer, dict) and answer.get("kind") == "learning":
+            state = await runtime.learning_sessions.async_answer(
+                msg["session_id"],
+                msg["expected_version"],
+                msg["question_id"],
+                answer,
+            )
+        else:
+            state = await runtime.sessions.async_answer(
+                msg["session_id"],
+                msg["expected_version"],
+                msg["question_id"],
+                answer,
+            )
+    except LearningSessionError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
     except SessionNotFoundError:
         connection.send_error(msg["id"], ERR_NOT_FOUND, "Session not found")
         return
@@ -1750,6 +1825,7 @@ COMMANDS = (
     ws_packs_list,
     ws_datasets_list,
     ws_content_report,
+    ws_content_report_question,
     ws_progress_set_user_state,
     ws_calibration_sample,
     ws_stats_get,

@@ -3155,6 +3155,74 @@ class ContentReportsRepository:
 
         return await self._storage._async_writer(write)
 
+
+    async def async_create_question_report(
+        self,
+        *,
+        actor_user_id: str,
+        profile_id: str,
+        track_id: str,
+        card: CardReference,
+        dataset_generation: str,
+        reason: str,
+        message: str | None,
+        created_at_utc: str,
+    ) -> int:
+        """Append one generic question-quality report to the private audit log."""
+        valid = await self._storage.async_validate_card_reference(
+            card_key=card.card_key,
+            learning_item_id=card.learning_item_id,
+            prompt_facet_id=card.prompt_facet_id,
+            answer_facet_id=card.answer_facet_id,
+        )
+        if not valid:
+            raise ContentReferenceError(f"unknown active card reference: {card.card_key}")
+        payload = json.dumps(
+            {
+                "report_kind": "question",
+                "track_id": track_id,
+                "card_key": card.card_key,
+                "learning_item_id": card.learning_item_id,
+                "prompt_facet_id": card.prompt_facet_id,
+                "answer_facet_id": card.answer_facet_id,
+                "dataset_generation": dataset_generation,
+                "reason": reason,
+                "message": message,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> int:
+            track = connection.execute(
+                "SELECT profile_id FROM tracks WHERE track_id = ?",
+                (track_id,),
+            ).fetchone()
+            if track is None or str(track[0]) != profile_id:
+                raise StateRepositoryError("track does not belong to profile")
+            selected = connection.execute(
+                """SELECT 1 FROM track_card_rules
+                   WHERE track_id = ? AND card_key = ? AND enabled = 1
+                   LIMIT 1""",
+                (track_id, card.card_key),
+            ).fetchone()
+            if selected is None:
+                raise StateRepositoryError("card is not enabled in track")
+            cursor = connection.execute(
+                """INSERT INTO audit_events(
+                       event_type, actor_user_id, profile_id, payload_json, created_at_utc
+                   ) VALUES ('content_report', ?, ?, ?, ?)""",
+                (actor_user_id, profile_id, payload, created_at_utc),
+            )
+            report_id = cursor.lastrowid
+            if report_id is None:
+                raise StateRepositoryError("content report insert returned no row id")
+            connection.commit()
+            return int(report_id)
+
+        return await self._storage._async_writer(write)
+
     async def async_get(self, report_id: int) -> dict[str, Any] | None:
         def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
             row = connection.execute(

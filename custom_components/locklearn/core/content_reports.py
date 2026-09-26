@@ -79,3 +79,40 @@ class ContentReportService:
         except StateRepositoryError as err:
             raise ContentReportError(str(err)) from err
         return ContentReportReceipt(report_id=report_id)
+
+    async def async_report_question(
+        self,
+        *,
+        actor_user_id: str,
+        profile_id: str,
+        track_id: str,
+        card: CardReference,
+        dataset_generation: str,
+        reason: str = "user_reported_question",
+        message: str | None = None,
+    ) -> ContentReportReceipt:
+        """Persist generic question-quality feedback without touching SRS."""
+        if not dataset_generation.strip():
+            raise ContentReportError("dataset_generation must not be empty")
+        if not reason.strip():
+            raise ContentReportError("reason must not be empty")
+        if message is not None and len(message) > 1000:
+            raise ContentReportError("report message is too long")
+
+        track = await self._tracks.async_get(track_id)
+        if track is None or str(track["profile_id"]) != profile_id:
+            raise ContentReportError("track does not belong to profile")
+        try:
+            report_id = await self._reports.async_create_question_report(
+                actor_user_id=actor_user_id,
+                profile_id=profile_id,
+                track_id=track_id,
+                card=card,
+                dataset_generation=dataset_generation,
+                reason=reason,
+                message=message,
+                created_at_utc=self._clock.now().isoformat(),
+            )
+        except StateRepositoryError as err:
+            raise ContentReportError(str(err)) from err
+        return ContentReportReceipt(report_id=report_id, grading_result="not_applicable")
