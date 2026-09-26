@@ -64,6 +64,38 @@ def profile_preset_defaults(preset: ProfilePreset | str) -> dict[str, Any]:
     return defaults
 
 
+def _validate_profile_settings(settings: Mapping[str, Any]) -> None:
+    """Validate user-editable V1 Profile settings at the backend boundary."""
+    for key, minimum in (
+        ("session_length_cards", 1),
+        ("max_new_per_day_cards", 0),
+        ("daily_push_budget", 0),
+    ):
+        if key not in settings:
+            continue
+        value = settings[key]
+        if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+            raise ProfileValidationError(f"{key} must be an integer >= {minimum}")
+
+    quiet = settings.get("quiet_hours")
+    if quiet is None:
+        return
+    if not isinstance(quiet, Mapping):
+        raise ProfileValidationError("quiet_hours must be an object")
+    if set(quiet) - {"start", "end"}:
+        raise ProfileValidationError("quiet_hours contains unsupported keys")
+    for key in ("start", "end"):
+        value = quiet.get(key)
+        if not isinstance(value, str):
+            raise ProfileValidationError(f"quiet_hours.{key} must be HH:MM")
+        parts = value.split(":")
+        if len(parts) != 2 or not all(part.isdigit() for part in parts):
+            raise ProfileValidationError(f"quiet_hours.{key} must be HH:MM")
+        hour, minute = (int(part) for part in parts)
+        if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+            raise ProfileValidationError(f"quiet_hours.{key} must be HH:MM")
+
+
 class ProfileService:
     """Create learner profiles without conflating them with HA accounts."""
 
@@ -120,6 +152,7 @@ class ProfileService:
             settings.update(dict(settings_override))
         if personal_profile:
             settings[_PERSONAL_PROFILE_MARKER] = True
+        _validate_profile_settings(settings)
 
         now = self._clock.now().isoformat()
         profile = ProfileRecord(
@@ -179,6 +212,7 @@ class ProfileService:
             if any(key.startswith("_locklearn_") for key in settings_patch):
                 raise ProfileValidationError("settings_patch contains a reserved key")
             settings.update(dict(settings_patch))
+        _validate_profile_settings(settings)
 
         updated = await self._repository.async_update(
             profile_id=profile_id,
