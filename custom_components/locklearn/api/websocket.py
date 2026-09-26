@@ -114,10 +114,38 @@ def _dataset_status_payload(
 async def _dataset_statuses_payload(runtime: LockLearnRuntime) -> list[dict[str, Any]]:
     inventory_rows = await runtime.storage.async_dataset_inventory()
     inventory = {str(item["dataset_id"]): item for item in inventory_rows}
-    return [
+    result = [
         _dataset_status_payload(status, inventory)
         for status in await runtime.datasets.async_statuses()
     ]
+    official_ids = {str(item["dataset_id"]) for item in result}
+    for dataset_id, details in sorted(inventory.items()):
+        if dataset_id in official_ids:
+            continue
+        result.append(
+            {
+                "dataset_id": dataset_id,
+                "name": dataset_id,
+                "state": "installed",
+                "installed_version": details["version"],
+                "available_version": None,
+                "update_available": False,
+                "source_age_days": None,
+                "stale_sources": [],
+                "cache_bytes": 0,
+                "error": None,
+                "changelog": None,
+                "release_url": None,
+                "artifact_size": None,
+                "built_at_utc": details["built_at_utc"],
+                "dataset_version_id": details["dataset_version_id"],
+                "canonical_content_hash": details["canonical_content_hash"],
+                "sources": list(details.get("source_details", ())),
+                "licenses": list(details.get("license_details", ())),
+                "pack_version_ids": list(details.get("pack_version_ids", ())),
+            }
+        )
+    return sorted(result, key=lambda item: str(item["dataset_id"]))
 
 
 def _paginate(
