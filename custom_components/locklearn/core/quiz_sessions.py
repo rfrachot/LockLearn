@@ -729,7 +729,7 @@ class QuizSessionService:
             if not isinstance(text, str) or not text:
                 continue
             if strategy == "hide_block":
-                return "＿＿"
+                return "____"
             targets: list[str] = []
             if strategy == "blank_span" and isinstance(payload, dict):
                 for key in ("blank_text", "answer"):
@@ -737,7 +737,7 @@ class QuizSessionService:
                     if isinstance(value, str) and value:
                         targets.append(value)
             targets.extend(accepted_texts)
-            placeholder = "＿＿"
+            placeholder = "____"
             if strategy == "replace_with_placeholder" and isinstance(payload, dict):
                 raw_placeholder = payload.get("placeholder")
                 if isinstance(raw_placeholder, str) and raw_placeholder:
