@@ -26,6 +26,7 @@ from .core.presentation import CardPresentationService
 from .core.profiles import ProfileService
 from .core.progress_state import ProgressUserStateService
 from .core.quiz import QuizEngine
+from .core.quiz_sessions import QuizSessionService
 from .core.review_policy import ReviewPolicyV1
 from .core.reviews import ReviewEventService
 from .core.scheduler import SchedulerService, SchedulerValidationError
@@ -73,6 +74,7 @@ class LockLearnRuntime:
     dashboard: DashboardService
     difficulties: DifficultyService
     quiz: QuizEngine
+    quiz_sessions: QuizSessionService
     review_policy: ReviewPolicyV1
     signal_policy: SignalPolicy
     selection: SelectionConstraintService
@@ -196,6 +198,25 @@ class LockLearnRuntime:
                 ),
             )
             presentation = CardPresentationService(storage)
+            grading = FreeTextGrader()
+            quiz = QuizEngine()
+            quiz_sessions = QuizSessionService(
+                storage,
+                sessions,
+                presentation,
+                reviews,
+                review_policy,
+                signal_policy,
+                quiz,
+                grading,
+                dataset_generation=lambda: (
+                    storage.content_generations.active_metadata.generation_id
+                ),
+                event_emitter=lambda event_type, data: hass.bus.async_fire(
+                    event_type,
+                    data,
+                ),
+            )
             scheduler_ha = SchedulerHomeAssistantBridge(
                 hass,
                 storage.repositories.profiles,
@@ -247,7 +268,7 @@ class LockLearnRuntime:
                         storage.content_generations.active_metadata.generation_id
                     ),
                 ),
-                grading=FreeTextGrader(),
+                grading=grading,
                 integrity=IntegrityService(
                     storage.repositories.review_events,
                     storage.repositories.progress,
@@ -270,7 +291,8 @@ class LockLearnRuntime:
                     storage.repositories.user_annotations,
                     reviews,
                 ),
-                quiz=QuizEngine(),
+                quiz=quiz,
+                quiz_sessions=quiz_sessions,
                 review_policy=review_policy,
                 signal_policy=signal_policy,
                 selection=selection,
