@@ -17,6 +17,7 @@ export interface VisibleProfile {
   timezone: string;
   status: string;
   role: ProfileRole;
+  settings?: Record<string, unknown>;
 }
 
 export interface Page<T> {
@@ -75,6 +76,300 @@ export async function listVisibleProfiles(
     cursor = page.cursor;
   } while (cursor !== null);
   return profiles;
+}
+
+
+export interface ProfileMember {
+  ha_user_id: string;
+  name: string;
+  role: ProfileRole;
+  created_at_utc: string;
+}
+
+export interface ShareTarget {
+  ha_user_id: string;
+  name: string;
+}
+
+export interface TrackRecord {
+  track_id: string;
+  profile_id: string;
+  name: string;
+  source_language: string | null;
+  target_language: string | null;
+  status: "active" | "paused" | "archived";
+  priority: number;
+  settings: Record<string, unknown>;
+  pack_version_id: string | null;
+  dataset_generation: string | null;
+  integrated_at_utc: string | null;
+}
+
+export interface PackVersionRecord {
+  pack_id: string;
+  name: string;
+  pack_version_id: string;
+  version: string;
+  curation_policy_id: string | null;
+  generation_id: string;
+  total_items: number;
+  total_cards: number;
+}
+
+export interface PackVersionDiff {
+  from_pack_version_id: string;
+  to_pack_version_id: string;
+  added_learning_item_ids: string[];
+  removed_learning_item_ids: string[];
+  changed_learning_item_ids: string[];
+}
+
+export interface LearningPlanInput {
+  max_new_per_day_cards: number;
+  max_reviews_per_day_cards: number;
+  max_notification_new_teasers: number;
+  target_date: string | null;
+  target_coverage: number;
+  target_retention: number;
+}
+
+export interface LoadForecast {
+  selected_cards: number;
+  introduced_cards: number;
+  target_cards: number;
+  remaining_target_cards: number;
+  required_new_per_day: number;
+  planned_new_per_day: number;
+  reviews_per_day_in_3_weeks: number;
+  reviews_per_day_in_3_months: number;
+  due_now: number;
+  notification_deliverable_in_3_weeks: number;
+  active_session_cards_in_3_weeks: number;
+  notification_deliverable_in_3_months: number;
+  active_session_cards_in_3_months: number;
+  target_date_feasible: boolean;
+  review_capacity_feasible_in_3_weeks: boolean;
+  review_capacity_feasible_in_3_months: boolean;
+  warnings: string[];
+  assumptions: string[];
+}
+
+async function listPaged<T>(
+  hass: HomeAssistantLike,
+  type: string,
+  extra: Record<string, unknown> = {},
+): Promise<T[]> {
+  const items: T[] = [];
+  let cursor: string | null = null;
+  do {
+    const page = await hass.callWS<Page<T>>({
+      type,
+      limit: 100,
+      ...extra,
+      ...(cursor === null ? {} : { cursor }),
+    });
+    items.push(...page.items);
+    cursor = page.cursor;
+  } while (cursor !== null);
+  return items;
+}
+
+export async function createProfile(
+  hass: HomeAssistantLike,
+  name: string,
+  preset: "child" | "standard" | "intensive" | "custom",
+  timezone: string,
+): Promise<VisibleProfile> {
+  return hass.callWS<VisibleProfile>({
+    type: "locklearn/profiles/create",
+    name,
+    preset,
+    timezone,
+  });
+}
+
+export async function updateProfile(
+  hass: HomeAssistantLike,
+  profileId: string,
+  patch: {
+    name?: string;
+    timezone?: string;
+    status?: "active" | "archived";
+    settings_patch?: Record<string, unknown>;
+  },
+): Promise<VisibleProfile> {
+  return hass.callWS<VisibleProfile>({
+    type: "locklearn/profiles/update",
+    profile_id: profileId,
+    ...patch,
+  });
+}
+
+export async function deleteProfile(
+  hass: HomeAssistantLike,
+  profileId: string,
+): Promise<void> {
+  await hass.callWS({
+    type: "locklearn/profiles/delete",
+    profile_id: profileId,
+  });
+}
+
+export async function listProfileMembers(
+  hass: HomeAssistantLike,
+  profileId: string,
+): Promise<ProfileMember[]> {
+  return hass.callWS<ProfileMember[]>({
+    type: "locklearn/profiles/members",
+    profile_id: profileId,
+  });
+}
+
+export async function listShareTargets(
+  hass: HomeAssistantLike,
+  profileId: string,
+): Promise<ShareTarget[]> {
+  return hass.callWS<ShareTarget[]>({
+    type: "locklearn/profiles/share_targets",
+    profile_id: profileId,
+  });
+}
+
+export async function shareProfile(
+  hass: HomeAssistantLike,
+  profileId: string,
+  targetUserId: string,
+  role: ProfileRole,
+): Promise<void> {
+  await hass.callWS({
+    type: "locklearn/profiles/share",
+    profile_id: profileId,
+    target_user_id: targetUserId,
+    role,
+  });
+}
+
+export async function removeProfileMember(
+  hass: HomeAssistantLike,
+  profileId: string,
+  targetUserId: string,
+): Promise<void> {
+  await hass.callWS({
+    type: "locklearn/profiles/share",
+    profile_id: profileId,
+    target_user_id: targetUserId,
+    remove: true,
+  });
+}
+
+export async function listTracks(
+  hass: HomeAssistantLike,
+  profileId: string,
+): Promise<TrackRecord[]> {
+  return listPaged<TrackRecord>(hass, "locklearn/tracks/list", {
+    profile_id: profileId,
+  });
+}
+
+export async function createTrack(
+  hass: HomeAssistantLike,
+  input: {
+    profile_id: string;
+    name: string;
+    pack_version_id: string;
+    source_language: string;
+    target_language: string;
+    priority: number;
+  },
+): Promise<TrackRecord> {
+  return hass.callWS<TrackRecord>({
+    type: "locklearn/tracks/create",
+    ...input,
+  });
+}
+
+export async function updateTrack(
+  hass: HomeAssistantLike,
+  trackId: string,
+  patch: Record<string, unknown>,
+): Promise<TrackRecord> {
+  return hass.callWS<TrackRecord>({
+    type: "locklearn/tracks/update",
+    track_id: trackId,
+    ...patch,
+  });
+}
+
+export async function deleteTrack(
+  hass: HomeAssistantLike,
+  trackId: string,
+): Promise<void> {
+  await hass.callWS({
+    type: "locklearn/tracks/delete",
+    track_id: trackId,
+  });
+}
+
+export async function listPacks(
+  hass: HomeAssistantLike,
+): Promise<PackVersionRecord[]> {
+  return listPaged<PackVersionRecord>(hass, "locklearn/packs/list");
+}
+
+export async function previewPackUpdate(
+  hass: HomeAssistantLike,
+  trackId: string,
+  packVersionId: string,
+): Promise<PackVersionDiff> {
+  return hass.callWS<PackVersionDiff>({
+    type: "locklearn/tracks/preview_pack_update",
+    track_id: trackId,
+    pack_version_id: packVersionId,
+  });
+}
+
+export async function integratePackUpdate(
+  hass: HomeAssistantLike,
+  trackId: string,
+  packVersionId: string,
+): Promise<PackVersionDiff> {
+  return hass.callWS<PackVersionDiff>({
+    type: "locklearn/tracks/integrate_pack_update",
+    track_id: trackId,
+    pack_version_id: packVersionId,
+  });
+}
+
+function planMessage(
+  type: "locklearn/tracks/plan_preview" | "locklearn/tracks/plan_set",
+  trackId: string,
+  plan: LearningPlanInput,
+): Record<string, unknown> {
+  return {
+    type,
+    track_id: trackId,
+    ...plan,
+  };
+}
+
+export async function previewTrackPlan(
+  hass: HomeAssistantLike,
+  trackId: string,
+  plan: LearningPlanInput,
+): Promise<LoadForecast> {
+  return hass.callWS<LoadForecast>(
+    planMessage("locklearn/tracks/plan_preview", trackId, plan),
+  );
+}
+
+export async function setTrackPlan(
+  hass: HomeAssistantLike,
+  trackId: string,
+  plan: LearningPlanInput,
+): Promise<LoadForecast> {
+  return hass.callWS<LoadForecast>(
+    planMessage("locklearn/tracks/plan_set", trackId, plan),
+  );
 }
 
 
