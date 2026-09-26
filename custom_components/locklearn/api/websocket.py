@@ -27,6 +27,7 @@ from ..core.grading import FreeTextGradingResult
 from ..core.integrity import IntegrityServiceError
 from ..core.learning_sessions import LearningSessionError
 from ..core.presentation import PresentationError
+from ..core.quiz_sessions import QuizSessionError
 from ..core.profiles import ProfileValidationError
 from ..core.progress_state import ProgressUserStateError
 from ..core.scheduler import SchedulerValidationError
@@ -1404,25 +1405,32 @@ async def ws_session_start(
                 session_type=msg["session_type"],
                 settings=msg["settings"],
             )
-            prepared: list[SessionQuestion] = []
-            for position, candidate in enumerate(selected):
-                payload = dict(candidate.payload)
-                if msg["session_type"] == "learn":
-                    payload["presentation"] = await runtime.presentation.async_for_card(
-                        track_id=track_id,
-                        card_key=candidate.card_key,
-                    )
-                prepared.append(
-                    SessionQuestion(
-                        question_id=f"q-{position + 1}-{candidate.card_key}",
-                        card_key=candidate.card_key,
-                        learning_item_id=candidate.learning_item_id,
-                        prompt_facet_id=candidate.prompt_facet_id,
-                        answer_facet_id=candidate.answer_facet_id,
-                        payload=payload,
-                    )
+            if msg["session_type"] == "quiz":
+                prepared_questions = await runtime.quiz_sessions.async_prepare_questions(
+                    track_id=track_id,
+                    selected=selected,
+                    settings=msg["settings"],
                 )
-            prepared_questions = tuple(prepared)
+            else:
+                prepared: list[SessionQuestion] = []
+                for position, candidate in enumerate(selected):
+                    payload = dict(candidate.payload)
+                    if msg["session_type"] == "learn":
+                        payload["presentation"] = await runtime.presentation.async_for_card(
+                            track_id=track_id,
+                            card_key=candidate.card_key,
+                        )
+                    prepared.append(
+                        SessionQuestion(
+                            question_id=f"q-{position + 1}-{candidate.card_key}",
+                            card_key=candidate.card_key,
+                            learning_item_id=candidate.learning_item_id,
+                            prompt_facet_id=candidate.prompt_facet_id,
+                            answer_facet_id=candidate.answer_facet_id,
+                            payload=payload,
+                        )
+                    )
+                prepared_questions = tuple(prepared)
         else:
             runtime.session_selection.validate_session_settings(msg["settings"])
 
@@ -1435,7 +1443,12 @@ async def ws_session_start(
             questions=prepared_questions,
         )
         state = await _with_fatigue_advice(runtime, state)
-    except (PresentationError, SessionSelectionError, SessionValidationError) as err:
+    except (
+        PresentationError,
+        QuizSessionError,
+        SessionSelectionError,
+        SessionValidationError,
+    ) as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     connection.send_result(msg["id"], state)
@@ -1465,6 +1478,45 @@ async def ws_session_get(
     if state is None:
         return
     connection.send_result(msg["id"], await _with_fatigue_advice(runtime, state))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/quiz/evaluate",
+        vol.Required("session_id"): str,
+        vol.Required("question_id"): str,
+        vol.Required("answer"): object,
+    }
+)
+@websocket_api.async_response
+async def ws_quiz_evaluate(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Evaluate one current quiz answer without advancing the session."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _authorized_session(
+            runtime,
+            connection,
+            msg["id"],
+            msg["session_id"],
+            ProfilePermission.ANSWER,
+        )
+        is None
+    ):
+        return
+    try:
+        feedback = await runtime.quiz_sessions.async_evaluate(
+            msg["session_id"],
+            msg["question_id"],
+            msg["answer"],
+        )
+    except QuizSessionError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], feedback)
 
 
 @websocket_api.websocket_command(
@@ -1504,6 +1556,13 @@ async def ws_session_answer(
                 msg["question_id"],
                 answer,
             )
+        elif isinstance(answer, dict) and answer.get("kind") == "quiz":
+            state = await runtime.quiz_sessions.async_answer(
+                msg["session_id"],
+                msg["expected_version"],
+                msg["question_id"],
+                answer,
+            )
         else:
             state = await runtime.sessions.async_answer(
                 msg["session_id"],
@@ -1511,7 +1570,7 @@ async def ws_session_answer(
                 msg["question_id"],
                 answer,
             )
-    except LearningSessionError as err:
+    except (LearningSessionError, QuizSessionError) as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     except SessionNotFoundError:
@@ -1847,6 +1906,7 @@ COMMANDS = (
     ws_scheduler_preview,
     ws_session_start,
     ws_session_get,
+    ws_quiz_evaluate,
     ws_session_answer,
     ws_session_pause,
     ws_session_complete,
