@@ -248,6 +248,32 @@ async def test_learning_answer_commits_event_progress_and_session_atomically(
     assert progress["state"] == "learning"
     assert progress["seen_count"] == 1
 
+    follow_up = introduced["result"]["current_question"]
+    assert introduced["result"]["question_count"] == 2
+    assert follow_up is not None
+    assert follow_up["card_key"] == forward_key
+    assert follow_up["payload"]["selection"]["progress_state"] == "learning"
+    assert follow_up["payload"]["selection"]["reason"] == "learning_step"
+    assert follow_up["payload"]["available_at_utc"] == progress["next_due_at_utc"]
+
+    await owner.send_json_auto_id(
+        {
+            "type": "locklearn/session/answer",
+            "session_id": introduced["result"]["id"],
+            "expected_version": introduced["result"]["version"],
+            "question_id": follow_up["question_id"],
+            "answer": {
+                "kind": "learning",
+                "action": "known",
+                "hint_used": False,
+            },
+        }
+    )
+    too_early = await owner.receive_json()
+    assert too_early["success"] is False
+    assert too_early["error"]["code"] == "locklearn/invalid_request"
+    assert "not due yet" in too_early["error"]["message"]
+
     events = await runtime.storage.repositories.review_events.async_list_scope_events(
         profile_id=profile_id,
         track_id=track_id,

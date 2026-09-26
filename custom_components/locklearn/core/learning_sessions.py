@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 from ..storage.database import SQLiteStorage
@@ -70,6 +71,7 @@ class LearningSessionService:
         current = session.get("current_question")
         if not isinstance(current, dict) or current.get("question_id") != question_id:
             raise LearningSessionError("question is no longer current")
+        self._require_question_available(current)
         profile_id = str(session["profile_id"])
         track_raw = session.get("track_id")
         if not isinstance(track_raw, str) or not track_raw:
@@ -88,11 +90,13 @@ class LearningSessionService:
             card_key=identity["card_key"],
         )
         pre = self._normalized_pre(pre, identity)
+        follow_up: dict[str, Any] | None = None
 
         if action == "introduce":
             if str(pre["state"]) != "new":
                 raise LearningSessionError("only a new card can be introduced")
             transition = self._learning.introduce(pre)
+            follow_up = self._first_retrieval_question(current, transition.post_state)
             event = await self._reviews.async_record(
                 profile_id=profile_id,
                 track_id=track_raw,
@@ -133,9 +137,57 @@ class LearningSessionService:
             expected_version=expected_version,
             question_id=question_id,
             answer=answer,
+            follow_up=follow_up,
         )
         self._sessions.publish(session_id, state)
         return state
+
+    def _require_question_available(self, current: dict[str, Any]) -> None:
+        """Reject a scheduled learning-step retrieval before its due instant."""
+        payload = current.get("payload")
+        if not isinstance(payload, dict):
+            return
+        raw_available_at = payload.get("available_at_utc")
+        if raw_available_at is None:
+            return
+        if not isinstance(raw_available_at, str):
+            raise LearningSessionError("available_at_utc must be an ISO timestamp")
+        try:
+            available_at = datetime.fromisoformat(raw_available_at)
+        except ValueError as err:
+            raise LearningSessionError("available_at_utc must be an ISO timestamp") from err
+        if available_at.tzinfo is None:
+            raise LearningSessionError("available_at_utc must be timezone-aware")
+        if self._clock.now() < available_at:
+            raise LearningSessionError("learning step is not due yet")
+
+    @staticmethod
+    def _first_retrieval_question(
+        current: dict[str, Any],
+        post_state: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Queue the mandatory first retrieval after an explicit introduction."""
+        available_at = post_state.get("next_due_at_utc")
+        if not isinstance(available_at, str) or not available_at:
+            raise LearningSessionError("introduction must schedule a first retrieval")
+
+        raw_payload = current.get("payload")
+        payload = dict(raw_payload) if isinstance(raw_payload, dict) else {}
+        raw_selection = payload.get("selection")
+        selection = dict(raw_selection) if isinstance(raw_selection, dict) else {}
+        selection["progress_state"] = "learning"
+        selection["reason"] = "learning_step"
+        payload["selection"] = selection
+        payload["available_at_utc"] = available_at
+
+        return {
+            "question_id": f"{current['question_id']}:learning-step-1",
+            "card_key": str(current["card_key"]),
+            "learning_item_id": str(current["learning_item_id"]),
+            "prompt_facet_id": str(current["prompt_facet_id"]),
+            "answer_facet_id": str(current["answer_facet_id"]),
+            "payload": payload,
+        }
 
     async def _self_assessment_event(
         self,

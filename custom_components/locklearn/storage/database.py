@@ -702,6 +702,7 @@ class SQLiteStorage:
         expected_version: int,
         question_id: str,
         answer: Any,
+        follow_up: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Atomically append a ReviewEvent projection and advance one session question."""
         valid = await self.async_validate_card_reference(
@@ -726,6 +727,25 @@ class SQLiteStorage:
             sort_keys=True,
         )
         answer_json = json.dumps(answer, ensure_ascii=False, separators=(",", ":"))
+        follow_up_json: str | None = None
+        if follow_up is not None:
+            expected_identity = {
+                "card_key": event.card_key,
+                "learning_item_id": event.learning_item_id,
+                "prompt_facet_id": event.prompt_facet_id,
+                "answer_facet_id": event.answer_facet_id,
+            }
+            if any(str(follow_up.get(key)) != value for key, value in expected_identity.items()):
+                raise RuntimeError("learning follow-up must preserve CardDefinition identity")
+            follow_up_payload = follow_up.get("payload")
+            if not isinstance(follow_up_payload, dict):
+                raise RuntimeError("learning follow-up payload must be an object")
+            follow_up_json = json.dumps(
+                follow_up_payload,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
         now = self._clock.now().isoformat()
 
         def answer_cas(connection: sqlite3.Connection) -> None:
@@ -827,13 +847,34 @@ class SQLiteStorage:
 
                 resulting_version = expected_version + 1
                 next_position = int(position) + 1
+                effective_question_count = int(question_count)
                 connection.execute(
                     """UPDATE session_items
                        SET status = 'answered'
                        WHERE session_id = ? AND position = ?""",
                     (event.session_id, int(position)),
                 )
-                if next_position < int(question_count):
+                if follow_up is not None:
+                    assert follow_up_json is not None
+                    connection.execute(
+                        """INSERT INTO session_items(
+                               session_id, position, question_id, card_key,
+                               learning_item_id, prompt_facet_id, answer_facet_id,
+                               status, payload_json
+                           ) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?)""",
+                        (
+                            event.session_id,
+                            effective_question_count,
+                            str(follow_up["question_id"]),
+                            str(follow_up["card_key"]),
+                            str(follow_up["learning_item_id"]),
+                            str(follow_up["prompt_facet_id"]),
+                            str(follow_up["answer_facet_id"]),
+                            follow_up_json,
+                        ),
+                    )
+                    effective_question_count += 1
+                if next_position < effective_question_count:
                     connection.execute(
                         """UPDATE session_items
                            SET status = 'presented'
@@ -842,11 +883,13 @@ class SQLiteStorage:
                     )
                 cursor = connection.execute(
                     """UPDATE sessions
-                       SET version = ?, current_position = ?, last_activity_at_utc = ?
+                       SET version = ?, current_position = ?, question_count = ?,
+                           last_activity_at_utc = ?
                        WHERE id = ? AND version = ? AND status = 'active'""",
                     (
                         resulting_version,
                         next_position,
+                        effective_question_count,
                         now,
                         event.session_id,
                         expected_version,
