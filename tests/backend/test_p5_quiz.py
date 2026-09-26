@@ -176,7 +176,8 @@ async def test_free_text_wrong_can_be_recovered_as_unrecognized() -> None:
     )
     assert wrong["result"] == "wrong"
     assert wrong["reportable"] is True
-    assert wrong["correct_answer"] == "Answer 1"
+    assert wrong["correct_answer"] is None
+    assert wrong["reveal_correct_answer"] is False
 
     recovered = await service.async_evaluate(
         "session-1",
@@ -189,6 +190,91 @@ async def test_free_text_wrong_can_be_recovered_as_unrecognized() -> None:
     )
     assert recovered["result"] == "unrecognized"
     assert recovered["reportable"] is True
+
+
+@pytest.mark.asyncio
+async def test_provisional_free_text_cannot_change_after_grading() -> None:
+    meta = _meta(1)
+    session = {
+        "id": "session-1",
+        "type": "quiz",
+        "track_id": "track-1",
+        "current_question": {
+            "question_id": "q1",
+            "card_key": meta.card_key,
+            "payload": {
+                "quiz": {
+                    "format": "free_text",
+                    "prompt_text": "Prompt",
+                    "context_hint": None,
+                    "options": [],
+                    "idk_available": True,
+                    "reportable": True,
+                    "hint_blocks": [],
+                    "content_type": "vocabulary",
+                }
+            },
+        },
+    }
+    service = _service(sessions=_Sessions(session))
+
+    async def load_catalog(track_id: str) -> dict[str, _QuizCardMeta]:
+        return {meta.card_key: meta}
+
+    service._load_catalog = load_catalog  # type: ignore[method-assign]
+    await service.async_evaluate(
+        "session-1",
+        "q1",
+        {"kind": "quiz", "submitted_text": "wrong"},
+    )
+
+    with pytest.raises(Exception, match="already evaluated"):
+        await service.async_evaluate(
+            "session-1",
+            "q1",
+            {"kind": "quiz", "submitted_text": "Answer 1"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_choice_evaluation_requires_atomic_submission() -> None:
+    meta = _meta(1)
+    session = {
+        "id": "session-1",
+        "type": "quiz",
+        "track_id": "track-1",
+        "current_question": {
+            "question_id": "q1",
+            "card_key": meta.card_key,
+            "payload": {
+                "quiz": {
+                    "format": "mcq",
+                    "prompt_text": "Prompt",
+                    "context_hint": None,
+                    "options": [
+                        {"answer_id": "term-1", "text": "Answer 1"},
+                    ],
+                    "idk_available": True,
+                    "reportable": True,
+                    "hint_blocks": [],
+                    "content_type": "vocabulary",
+                }
+            },
+        },
+    }
+    service = _service(sessions=_Sessions(session))
+
+    async def load_catalog(track_id: str) -> dict[str, _QuizCardMeta]:
+        return {meta.card_key: meta}
+
+    service._load_catalog = load_catalog  # type: ignore[method-assign]
+
+    with pytest.raises(Exception, match="atomic quiz submission"):
+        await service.async_evaluate(
+            "session-1",
+            "q1",
+            {"kind": "quiz", "selected_answer_id": "term-1"},
+        )
 
 
 @pytest.mark.asyncio
