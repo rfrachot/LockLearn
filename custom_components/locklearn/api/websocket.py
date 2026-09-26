@@ -21,6 +21,7 @@ from ..const import (
 from ..core.acl import LastOwnerError, ProfilePermission, ProfileRole
 from ..core.content import GradingOutcome, GradingPolicyKind
 from ..core.content_reports import ContentReportError
+from ..core.dashboard import DashboardServiceError
 from ..core.difficulties import DifficultyServiceError
 from ..core.grading import FreeTextGradingResult
 from ..core.integrity import IntegrityServiceError
@@ -29,7 +30,6 @@ from ..core.progress_state import ProgressUserStateError
 from ..core.scheduler import SchedulerValidationError
 from ..core.session_selection import SessionSelectionError
 from ..core.sessions import SessionQuestion, SessionValidationError
-from ..core.dashboard import DashboardServiceError
 from ..core.stats import StatsServiceError
 from ..core.tracks import TrackValidationError
 from ..runtime import LockLearnRuntime
