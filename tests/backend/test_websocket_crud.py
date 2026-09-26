@@ -140,6 +140,31 @@ async def test_bootstrap_profile_crud_privacy_share_and_pagination(
     assert shared["success"] is True
     assert shared["result"]["role"] == "viewer"
 
+    await owner.send_json_auto_id(
+        {"type": "locklearn/profiles/members", "profile_id": second_id}
+    )
+    members = await owner.receive_json()
+    assert members["success"] is True
+    assert {item["ha_user_id"] for item in members["result"]} >= {
+        hass_read_only_user.id
+    }
+
+    await owner.send_json_auto_id(
+        {"type": "locklearn/profiles/share_targets", "profile_id": second_id}
+    )
+    targets = await owner.receive_json()
+    assert targets["success"] is True
+    assert any(item["ha_user_id"] == hass_read_only_user.id for item in targets["result"])
+
+    for command in (
+        {"type": "locklearn/profiles/members", "profile_id": second_id},
+        {"type": "locklearn/profiles/share_targets", "profile_id": second_id},
+    ):
+        await outsider.send_json_auto_id(command)
+        private_acl = await outsider.receive_json()
+        assert private_acl["success"] is False
+        assert private_acl["error"]["code"] == "locklearn/forbidden"
+
     await outsider.send_json_auto_id({"type": "locklearn/profiles/list"})
     visible = await outsider.receive_json()
     assert visible["success"] is True
@@ -336,6 +361,64 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
         version="v2",
         active_item_ids=(ITEM_A, ITEM_B),
     )
+
+    plan = {
+        "track_id": track_id,
+        "max_new_per_day_cards": 2,
+        "max_reviews_per_day_cards": 20,
+        "max_notification_new_teasers": 1,
+        "target_date": None,
+        "target_coverage": 1.0,
+        "target_retention": 0.9,
+    }
+    await client.send_json_auto_id({"type": "locklearn/tracks/plan_preview", **plan})
+    preview = await client.receive_json()
+    assert preview["success"] is True
+    assert preview["result"]["selected_cards"] == 1
+
+    await client.send_json_auto_id(
+        {"type": "locklearn/tracks/list", "profile_id": profile_id, "limit": 10}
+    )
+    preview_did_not_persist = await client.receive_json()
+    assert "learning_plan" not in preview_did_not_persist["result"]["items"][0]["settings"]
+
+    await outsider.send_json_auto_id({"type": "locklearn/tracks/plan_preview", **plan})
+    viewer_plan = await outsider.receive_json()
+    assert viewer_plan["success"] is False
+    assert viewer_plan["error"]["code"] == "locklearn/forbidden"
+
+    await client.send_json_auto_id({"type": "locklearn/tracks/plan_set", **plan})
+    plan_set = await client.receive_json()
+    assert plan_set["success"] is True
+
+    await client.send_json_auto_id(
+        {
+            "type": "locklearn/tracks/preview_pack_update",
+            "track_id": track_id,
+            "pack_version_id": "locklearn:pack-version:v2",
+        }
+    )
+    preview_update = await client.receive_json()
+    assert preview_update["success"] is True
+    assert preview_update["result"]["added_learning_item_ids"] == [ITEM_B]
+
+    await client.send_json_auto_id(
+        {"type": "locklearn/tracks/list", "profile_id": profile_id, "limit": 10}
+    )
+    still_v1 = await client.receive_json()
+    assert still_v1["result"]["items"][0]["pack_version_id"] == "locklearn:pack-version:v1"
+
+    await outsider.send_json_auto_id(
+        {
+            "type": "locklearn/tracks/preview_pack_update",
+            "track_id": track_id,
+            "pack_version_id": "locklearn:pack-version:v2",
+        }
+    )
+    viewer_preview = await outsider.receive_json()
+    assert viewer_preview["success"] is False
+    assert viewer_preview["error"]["code"] == "locklearn/forbidden"
+
     await outsider.send_json_auto_id(
         {
             "type": "locklearn/tracks/integrate_pack_update",
