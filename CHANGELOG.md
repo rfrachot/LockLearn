@@ -5,6 +5,10 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P5.2 ACL-protected Home dashboard aggregation for per-Track due counts,
+  recent verified retention/accuracy, latest session summary and next notification.
+- Profile switcher grouped into owned and shared Profiles using only
+  backend-authorized profile discovery, with typed frontend dashboard loading.
 - P5.1 versioned frontend bootstrap handshake, dependency-free panel routing,
   permission-aware navigation visibility and explicit stale-bundle/full-reload UX.
 - Lit/Vite shell modules and frontend tests for protocol mismatch, paginated
