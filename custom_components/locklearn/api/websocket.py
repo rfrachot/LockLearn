@@ -36,6 +36,7 @@ from ..core.session_selection import SessionSelectionError
 from ..core.sessions import SessionQuestion, SessionValidationError
 from ..core.stats import StatsServiceError
 from ..core.tracks import TrackValidationError
+from ..datasets.manager import DatasetManagerError, DatasetStatus
 from ..runtime import LockLearnRuntime
 from ..storage.database import SessionNotFoundError, StaleSessionError
 from ..storage.repositories import CardReference, ContentReferenceError, StateRepositoryError
@@ -65,6 +66,58 @@ def _require_runtime(
     if runtime is None:
         connection.send_error(message_id, ERR_NOT_FOUND, "LockLearn is not loaded")
     return runtime
+
+
+def _require_admin(connection: ActiveConnection, message_id: int) -> bool:
+    """Require Home Assistant administrator privileges for global dataset mutations."""
+    if connection.user.is_admin:
+        return True
+    connection.send_error(message_id, ERR_FORBIDDEN, "Home Assistant administrator required")
+    return False
+
+
+def _dataset_status_payload(
+    status: DatasetStatus,
+    inventory: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Serialize one global dataset status without exposing private learning state."""
+    installed = status.installed
+    latest = status.latest
+    details = inventory.get(status.definition.dataset_id, {})
+    return {
+        "dataset_id": status.definition.dataset_id,
+        "name": status.definition.name,
+        "state": status.state,
+        "installed_version": None if installed is None else installed.version,
+        "available_version": None if latest is None else latest.version,
+        "update_available": status.update_available,
+        "source_age_days": status.source_age_days,
+        "stale_sources": list(status.stale_sources),
+        "cache_bytes": status.cache_bytes,
+        "error": status.error,
+        "changelog": None if latest is None else latest.changelog,
+        "release_url": None if latest is None else latest.release_url,
+        "artifact_size": None if latest is None else latest.artifact_size,
+        "built_at_utc": None if installed is None else installed.built_at_utc,
+        "dataset_version_id": None if installed is None else installed.dataset_version_id,
+        "canonical_content_hash": (
+            None if installed is None else installed.canonical_content_hash
+        ),
+        "sources": list(details.get("source_details", ())),
+        "licenses": list(details.get("license_details", ())),
+        "pack_version_ids": (
+            [] if installed is None else list(installed.pack_version_ids)
+        ),
+    }
+
+
+async def _dataset_statuses_payload(runtime: LockLearnRuntime) -> list[dict[str, Any]]:
+    inventory_rows = await runtime.storage.async_dataset_inventory()
+    inventory = {str(item["dataset_id"]): item for item in inventory_rows}
+    return [
+        _dataset_status_payload(status, inventory)
+        for status in await runtime.datasets.async_statuses()
+    ]
 
 
 def _paginate(
@@ -221,6 +274,7 @@ async def ws_bootstrap(
             "backend_version": INTEGRATION_VERSION,
             "panel_path": f"/{PANEL_URL_PATH}",
             "authenticated_user_id": connection.user.id,
+            "is_admin": connection.user.is_admin,
             "personal_profile": personal_profile,
         },
     )
@@ -968,13 +1022,63 @@ async def ws_datasets_list(
     runtime = _require_runtime(hass, connection, msg["id"])
     if runtime is None:
         return
-    items = await runtime.storage.async_dataset_inventory()
+    items = await _dataset_statuses_payload(runtime)
     try:
         result = _paginate(items, limit=msg["limit"], cursor=msg.get("cursor"))
     except ValueError as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "locklearn/datasets/refresh"}
+)
+@websocket_api.async_response
+async def ws_datasets_refresh(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Refresh official release discovery; global network mutations are admin-only."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None or not _require_admin(connection, msg["id"]):
+        return
+    await runtime.datasets.async_refresh()
+    connection.send_result(msg["id"], {"items": await _dataset_statuses_payload(runtime)})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/datasets/install",
+        vol.Required("dataset_id"): str,
+        vol.Optional("version"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_datasets_install(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Install one verified official dataset release for an HA administrator."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None or not _require_admin(connection, msg["id"]):
+        return
+    try:
+        result = await runtime.datasets.async_install(
+            msg["dataset_id"],
+            version=msg.get("version"),
+        )
+    except DatasetManagerError as err:
+        connection.send_error(msg["id"], ERR_DATASET_UNAVAILABLE, str(err))
+        return
+    connection.send_result(
+        msg["id"],
+        {
+            "dataset_id": result.dataset_id,
+            "version": result.version,
+            "generation_id": result.generation_id,
+            "previous_generation_id": result.previous_generation_id,
+            "statuses": await _dataset_statuses_payload(runtime),
+        },
+    )
 
 
 @websocket_api.websocket_command(
@@ -2246,6 +2350,8 @@ COMMANDS = (
     ws_tracks_plan_set,
     ws_packs_list,
     ws_datasets_list,
+    ws_datasets_refresh,
+    ws_datasets_install,
     ws_content_report,
     ws_content_report_question,
     ws_progress_set_user_state,
