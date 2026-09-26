@@ -2,8 +2,8 @@
 
 ## Status
 
-Proposed for P5.2. Mark Accepted only after the backend/frontend quality gate
-and real Home Assistant qualification pass.
+Accepted after the backend/frontend quality gate and real Home Assistant
+qualification on 2026-09-26.
 
 ## Context
 
@@ -117,3 +117,31 @@ canonical correctness numerator.
 - one Profile switch causes one dashboard request rather than a shell bootstrap;
 - later P5 milestones may add actions/details without changing the P5.2 metric
   authority model.
+
+## Final qualification — 2026-09-26
+
+The complete `feat/p5-frontend` component was deployed directly to Home
+Assistant 2026.7.4. The deployed backend reported state schema 5, used
+`_initialize_state_database`, and contained no legacy `state=True` initializer
+call. The Config Entry loaded after Core restart, storage integrity and foreign
+keys were clean, and no LockLearn `ERROR` or `CRITICAL` record remained.
+
+Firefox 156 loaded the cache-busted bundle whose SHA-256 matched the committed
+artifact. A temporary owner Profile, active Track and `1/2` persistent session
+were created and removed through public WebSocket APIs. The real panel showed:
+
+- the personal bootstrap Profile as the initial selection;
+- owner Profiles under “Mes profils”;
+- Track name and languages, due count, verified retention/accuracy empty states,
+  last session as `1/2 répondues`, and the empty notification state;
+- exactly one `locklearn/dashboard/get` and no bootstrap/Profile-list call when
+  changing Profile;
+- exactly one bootstrap, Profile-list and dashboard call after a full reload;
+- a usable switcher, three-column navigation and no horizontal overflow at the
+  browser's 500 px responsive viewport.
+
+Seven hundred ordinary `hass` reassignments over three minutes produced no
+additional LockLearn request, reload loop or global loading flash. Only one HA
+user token is available, so the real outsider/share scenario was not run; the
+not-found behavior before sharing and visibility after READ sharing remain
+covered by automated backend tests.
