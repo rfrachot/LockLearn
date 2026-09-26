@@ -25,6 +25,7 @@ function bootstrap(
     backend_version: "0.0.2",
     panel_path: "/locklearn",
     authenticated_user_id: "user-1",
+    is_admin: false,
     personal_profile: personalProfile,
   };
 }
