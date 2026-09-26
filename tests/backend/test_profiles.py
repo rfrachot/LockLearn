@@ -177,3 +177,43 @@ async def test_profile_creation_rejects_invalid_identity_inputs(tmp_path: Path) 
             )
     finally:
         await storage.async_close()
+
+
+async def test_profile_settings_are_validated_server_side(tmp_path: Path) -> None:
+    storage, service = await _service(tmp_path, ["profile-settings"])
+    try:
+        profile = await service.async_create_profile(
+            name="Settings",
+            preset="standard",
+            timezone="Europe/Paris",
+            owner_ha_user_ids=("owner",),
+        )
+        with pytest.raises(ProfileValidationError, match="session_length_cards"):
+            await service.async_update_profile(
+                profile_id=profile["profile_id"],
+                settings_patch={"session_length_cards": 0},
+            )
+        with pytest.raises(ProfileValidationError, match="daily_push_budget"):
+            await service.async_update_profile(
+                profile_id=profile["profile_id"],
+                settings_patch={"daily_push_budget": -1},
+            )
+        with pytest.raises(ProfileValidationError, match="quiet_hours.start"):
+            await service.async_update_profile(
+                profile_id=profile["profile_id"],
+                settings_patch={"quiet_hours": {"start": "25:00", "end": "08:00"}},
+            )
+
+        updated = await service.async_update_profile(
+            profile_id=profile["profile_id"],
+            settings_patch={
+                "session_length_cards": 12,
+                "max_new_per_day_cards": 4,
+                "daily_push_budget": 5,
+                "quiet_hours": {"start": "21:30", "end": "07:45"},
+            },
+        )
+        assert updated["settings"]["session_length_cards"] == 12
+        assert updated["settings"]["quiet_hours"]["start"] == "21:30"
+    finally:
+        await storage.async_close()
