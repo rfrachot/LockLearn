@@ -9,6 +9,7 @@ import {
   getDashboard,
   getSession,
   installDataset,
+  listDatasetAttributions,
   listDatasets,
   listProfileMembers,
   listShareTargets,
