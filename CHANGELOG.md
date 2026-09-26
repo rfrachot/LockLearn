@@ -5,6 +5,9 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- P5.6 realistic-content qualification recipe and local harness using the
+  existing streaming JMdict adapter, signed package pipeline, generation
+  activation/rollback path and measured hot-query scale checks.
 - P5.2 ACL-protected Home dashboard aggregation for per-Track due counts,
   recent verified retention/accuracy, latest session summary and next notification.
 - Profile switcher grouped into owned and shared Profiles using only

@@ -1513,7 +1513,7 @@ class SQLiteStorage:
         def query(connection: sqlite3.Connection) -> list[str]:
             rows = connection.execute(
                 """SELECT card.card_key
-                   FROM content.pack_items AS member
+                   FROM content.pack_items AS member INDEXED BY pack_items_version_item
                    JOIN content.learning_items AS item
                      ON item.learning_item_id = member.learning_item_id
                     AND item.lifecycle_status = 'active'

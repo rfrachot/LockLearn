@@ -916,7 +916,7 @@ class TracksRepository:
                 """SELECT card.card_key, card.learning_item_id,
                           card.prompt_facet_id, card.answer_facet_id,
                           item.content_type
-                   FROM content.pack_items AS member
+                   FROM content.pack_items AS member INDEXED BY pack_items_version_item
                    JOIN content.learning_items AS item
                      ON item.learning_item_id = member.learning_item_id
                     AND item.lifecycle_status = 'active'
@@ -1319,7 +1319,7 @@ class TracksRepository:
                    JOIN content.learning_items AS item
                      ON item.learning_item_id = card.learning_item_id
                     AND item.lifecycle_status = 'active'
-                   JOIN content.pack_items AS pack_item
+                   JOIN content.pack_items AS pack_item INDEXED BY pack_items_version_item
                      ON pack_item.pack_version_id = ?
                     AND pack_item.learning_item_id = item.learning_item_id
                    LEFT JOIN progress
@@ -1367,6 +1367,55 @@ class TracksRepository:
                 }
                 for row in rows
             )
+
+        return await self._storage._async_reader(read)
+
+    async def async_has_selection_constraints(self, pack_version_id: str) -> bool:
+        """Check whether a PackVersion can require per-card constraint evaluation."""
+
+        def read(connection: sqlite3.Connection) -> bool:
+            row = connection.execute(
+                """WITH selected_items AS (
+                           SELECT learning_item_id
+                           FROM content.pack_items
+                           WHERE pack_version_id = ?
+                       )
+                       SELECT (
+                           EXISTS(
+                               SELECT 1
+                               FROM content.pack_item_prerequisites AS prerequisite
+                               JOIN selected_items AS item
+                                 ON item.learning_item_id = prerequisite.learning_item_id
+                               WHERE prerequisite.pack_version_id = ?
+                           )
+                           OR EXISTS(
+                               SELECT 1
+                               FROM content.pack_item_unlock_conditions AS unlock
+                               JOIN selected_items AS item
+                                 ON item.learning_item_id = unlock.learning_item_id
+                               WHERE unlock.pack_version_id = ?
+                           )
+                           OR EXISTS(
+                               SELECT 1
+                               FROM content.confusable_group_items AS member
+                               JOIN content.confusable_groups AS group_row
+                                 ON group_row.confusable_group_id = member.confusable_group_id
+                               JOIN selected_items AS item
+                                 ON item.learning_item_id = member.learning_item_id
+                               WHERE group_row.pack_version_id = ?
+                           )
+                           OR EXISTS(
+                               SELECT 1
+                               FROM selected_items AS item
+                               JOIN content.learning_item_concepts AS relation
+                                 ON relation.learning_item_id = item.learning_item_id
+                               GROUP BY relation.concept_id
+                               HAVING COUNT(*) > 1
+                           )
+                       )""",
+                (pack_version_id, pack_version_id, pack_version_id, pack_version_id),
+            ).fetchone()
+            return bool(row and row[0])
 
         return await self._storage._async_reader(read)
 

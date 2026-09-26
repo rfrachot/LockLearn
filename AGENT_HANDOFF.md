@@ -4,7 +4,13 @@
 
 P5.4 remains **COMPLETE / PASS** on `feat/p5-frontend`.
 
-P5.5 is **IMPLEMENTED / REAL-HA QUALIFICATION PENDING**. P5.6 has not started.
+P5.5 remains **IMPLEMENTED / REAL-HA QUALIFICATION PENDING** in the repository
+handoff. The P5.6 mission brief supplied a qualified P5.5 starting point; this
+mission did not rerun the separate P5.5 UI gate.
+
+P5.6 realistic-content scale qualification is **COMPLETE / PASS locally**.
+This is the scale qualification requested by the mission brief and is distinct
+from the roadmap's future P5.6 Dataset updates/Sources UI work.
 
 P5.5 provides management routes for Profiles, Tracks, Packs and Settings. Profile owners can create/edit/archive/delete Profiles and manage HA-user sharing roles. Owners/editors can create/edit/delete Tracks, including direction, priority, content weights, scheduler learning/quiz demand and scoped notification targets. Viewers remain read-only.
 
@@ -37,4 +43,26 @@ Deployment safety for Luna/Codex:
 - never modify/remove Advanced SSH & Web Terminal credentials;
 - temporary SSH_ASKPASS helpers only may be deleted.
 
-Do not start P5.6 until P5.5 real-HA qualification is recorded.
+P5.6 scale evidence is recorded in `docs/P5_6_REALISTIC_SCALE_QUALIFICATION.md`.
+The local generated ZIP/database and raw JMdict download remain ignored build
+artifacts; no private signing key was committed.
+
+Scale qualification state:
+- 20,000 LearningItems, 40,000 CardDefinitions, one PackVersion;
+- signed package validation, schema/integrity/foreign-key validation, two
+  generation activations and rollback all PASS;
+- next-card selection p95 19.81 ms; session preparation 0.43 s after removing
+  the observed unconstrained-pack N+1 constraint reads;
+- REAL HA: NOT EXECUTED — HARNESS UNAVAILABLE.
+
+Checks on 2026-09-26:
+- Ruff format PASS;
+- Ruff lint PASS;
+- mypy PASS — 150 source files including the qualification harness;
+- resource registries PASS;
+- pytest PASS — 392 tests.
+
+Commit: `feat(scale): qualify realistic content volume` (local only).
+Push: not executed; explicit push authorization was not provided.
+Next action: review the P5.5 real-HA gate separately, then decide whether to
+promote the scale harness into a later CI/release qualification.

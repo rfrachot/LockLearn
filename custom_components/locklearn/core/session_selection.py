@@ -175,6 +175,11 @@ class SessionSelectionService:
             profile_id=profile_id,
             track_id=track_id,
         )
+        constraints_required = True
+        probe = getattr(self._tracks, "async_has_selection_constraints", None)
+        pack_version_id = track.get("pack_version_id")
+        if callable(probe) and isinstance(pack_version_id, str) and pack_version_id:
+            constraints_required = bool(await probe(pack_version_id))
         now = self._clock.now()
         candidates: list[_Candidate] = []
         for row in raw_candidates:
@@ -188,6 +193,9 @@ class SessionSelectionService:
             if self._weight(candidate.content_type, weights) <= 0:
                 continue
             if not self._state_available(candidate, now=now, session_type=session_type):
+                continue
+            if not constraints_required:
+                candidates.append(candidate)
                 continue
             try:
                 decision = await self._constraints.async_evaluate(

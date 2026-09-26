@@ -131,6 +131,41 @@ class _Constraints:
         return SelectionDecision(eligible=True, reasons=())
 
 
+class _CountingConstraints(_Constraints):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def async_evaluate(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        card_key: str,
+        learning_item_id: str,
+        state: str,
+    ) -> SelectionDecision:
+        self.calls += 1
+        return await super().async_evaluate(
+            profile_id=profile_id,
+            track_id=track_id,
+            card_key=card_key,
+            learning_item_id=learning_item_id,
+            state=state,
+        )
+
+
+class _UnconstrainedTracks(_Tracks):
+    async def async_get(self, track_id: str) -> dict[str, Any] | None:
+        track = await super().async_get(track_id)
+        if track is not None:
+            track["pack_version_id"] = "pack-version-1"
+        return track
+
+    async def async_has_selection_constraints(self, pack_version_id: str) -> bool:
+        assert pack_version_id == "pack-version-1"
+        return False
+
+
 def _candidate(
     index: int,
     *,
@@ -170,6 +205,28 @@ def _service(
         _Constraints(),
         clock=_FixedClock(datetime(2026, 9, 23, 12, 0, tzinfo=UTC)),
     )
+
+
+@pytest.mark.asyncio
+async def test_unconstrained_pack_skips_per_card_constraint_reads() -> None:
+    constraints = _CountingConstraints()
+    service = SessionSelectionService(
+        _UnconstrainedTracks((_candidate(1, state="new", content_type="vocabulary"),)),
+        _Profiles(),
+        _Reviews(),
+        constraints,
+        clock=_FixedClock(datetime(2026, 9, 23, 12, 0, tzinfo=UTC)),
+    )
+
+    selected = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="learn",
+        settings={"requested_cards": 1},
+    )
+
+    assert len(selected) == 1
+    assert constraints.calls == 0
 
 
 @pytest.mark.asyncio
