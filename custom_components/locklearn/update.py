@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.components.update import UpdateEntity, UpdateEntityFeature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+
 from .const import DATA_RUNTIME, DOMAIN
 from .datasets.manager import DatasetDefinition, DatasetManager, DatasetStatus
 from .runtime import LockLearnRuntime
