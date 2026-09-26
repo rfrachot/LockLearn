@@ -12,8 +12,7 @@ unavailable on that instance; automated backend coverage remains authoritative
 for those paths. Firefox WebDriver's 500 px minimum remains a harness limit for
 the exact narrow-mobile viewport.
 
-Roadmap P5.6 — Dataset updates, Sources & Licences UI — is **IMPLEMENTED /
-AUTOMATED QUALIFICATION PASS / REAL-HA PENDING**.
+Roadmap P5.6 — Dataset updates, Sources & Licences UI — is **PASS**.
 
 P5.6 provides:
 - a dedicated Sources & Licences route;
@@ -50,25 +49,33 @@ The generated bundle was materialized by GitHub Actions and committed before the
 final reproducibility gate. The temporary branch-only qualification workflow was
 removed afterward; no PR, merge, tag or release was created.
 
+REAL HA qualification on 2026-09-27 passed on Home Assistant 2026.7.4 after
+deploying the complete tree from this branch and restarting Core. Firefox
+verified the route and backend-fed dataset facts, admin refresh, 722-record
+individual attribution fixture with pagination, keyboard actions and HTTP(S)
+source/licence/release links. The installed and discovered versions were both
+1.0.0; refresh left the content hash and PackVersion unchanged. No Track, safe
+new release, invalid/repaired state or second non-admin token was available, so
+those scenarios are explicitly `FIXTURE UNAVAILABLE`. Firefox's requested
+390-pixel viewport was clamped to 500 px (`HARNESS LIMIT`); the available mobile
+viewport had no horizontal overflow or off-screen action.
+
+The first log pass found a blocking synchronous read of bundled registry JSON
+during runtime creation. `runtime.py` now loads all five registries through
+`hass.async_add_executor_job`, with a lifecycle regression assertion; the
+post-fix redeployment/restart produced no LockLearn WARNING, ERROR or CRITICAL
+system-log entries. The authoritative post-fix gates passed Ruff format/lint,
+mypy (149 sources), resource registries, pytest (393 tests), TypeScript, Vitest
+(13 files / 37 tests), Vite (155.07 kB / 31.41 kB gzip) and bundle diff.
+
 The earlier realistic-content scale qualification remains **PASS** and is
 separate from roadmap P5.6. Evidence: 20,000 LearningItems, 40,000
 CardDefinitions, next-card p95 19.81 ms, generation activation/rollback PASS.
 
-## Remaining gate
+## Next action
 
-REAL HA P5.6 has not been executed in this session because the real HA/browser
-harness is not available here. Qualify on the development HA instance:
-1. open Sources & Licences as an HA admin;
-2. verify installed/version/source-age/cache/changelog and provenance/licence;
-3. expand individual attribution details where fixture content provides them;
-4. run check-for-updates without changing content unexpectedly;
-5. verify a non-admin can read provenance but cannot refresh/install;
-6. if a safe update fixture/version exists, verify install → activation and
-   explicit Track PackVersion pinning remains unchanged;
-7. verify keyboard/mobile layout and clean LockLearn logs;
-8. clean temporary fixtures.
-
-After REAL HA PASS, mark P5.6 complete and proceed to P5.7.
+P5.6 is complete. P5.7 may be considered separately; it was not started by
+this qualification mission.
 
 Deployment safety:
 - deploy the complete `custom_components/locklearn/` tree;

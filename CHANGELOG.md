@@ -4,6 +4,10 @@ All notable changes will be documented here.
 
 ## [Unreleased]
 
+### Fixed
+- Load bundled dataset registries through Home Assistant's executor during
+  runtime setup, avoiding blocking-call warnings on the HA event loop.
+
 ### Added
 - P5.6 Sources & Licences product UI with installed/available dataset status,
   source freshness and disk-cache visibility, changelog links, persisted

@@ -9,8 +9,18 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.locklearn.const import DATA_RUNTIME, DOMAIN, PANEL_URL_PATH
 
 
-async def test_setup_unload_and_reload_have_no_duplicate_panel(hass: HomeAssistant) -> None:
+async def test_setup_unload_and_reload_have_no_duplicate_panel(
+    hass: HomeAssistant, monkeypatch
+) -> None:
     """Every entry resource is removed or drained before reload."""
+    executor_calls: list[str] = []
+    async_add_executor_job = hass.async_add_executor_job
+
+    def record_executor_call(function, *args):
+        executor_calls.append(getattr(function, "__name__", repr(function)))
+        return async_add_executor_job(function, *args)
+
+    monkeypatch.setattr(hass, "async_add_executor_job", record_executor_call)
     entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, data={})
     entry.add_to_hass(hass)
 
@@ -18,6 +28,13 @@ async def test_setup_unload_and_reload_have_no_duplicate_panel(hass: HomeAssista
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.LOADED
     assert DATA_RUNTIME in hass.data[DOMAIN]
+    assert {
+        "load_runtime_dataset_definitions",
+        "load_runtime_trust_store",
+        "from_runtime",
+        "load_runtime_source_freshness",
+        "load_runtime_bundled_datasets",
+    } <= set(executor_calls)
     assert PANEL_URL_PATH in hass.data["frontend_panels"]
 
     runtime = hass.data[DOMAIN][DATA_RUNTIME]

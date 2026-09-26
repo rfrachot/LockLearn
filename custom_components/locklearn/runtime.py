@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
@@ -128,17 +129,30 @@ class LockLearnRuntime:
             return result_as_boolean(rendered)
 
         try:
+            (
+                dataset_definitions,
+                trust_store,
+                dataset_policy,
+                freshness_targets,
+                bundled_datasets,
+            ) = await asyncio.gather(
+                hass.async_add_executor_job(load_runtime_dataset_definitions),
+                hass.async_add_executor_job(load_runtime_trust_store),
+                hass.async_add_executor_job(OfficialRegistryPolicy.from_runtime),
+                hass.async_add_executor_job(load_runtime_source_freshness),
+                hass.async_add_executor_job(load_runtime_bundled_datasets),
+            )
             datasets = DatasetManager(
                 storage=storage,
                 transport=HomeAssistantDatasetTransport(hass),
-                definitions=load_runtime_dataset_definitions(),
-                trust_store=load_runtime_trust_store(),
-                policy=OfficialRegistryPolicy.from_runtime(),
-                freshness_targets=load_runtime_source_freshness(),
+                definitions=dataset_definitions,
+                trust_store=trust_store,
+                policy=dataset_policy,
+                freshness_targets=freshness_targets,
                 issue_callback=report_issue,
                 issue_clear_callback=clear_issue,
             )
-            for bundled in load_runtime_bundled_datasets():
+            for bundled in bundled_datasets:
                 # DatasetManager already raises a persistent Repair. Keep HA usable
                 # and preserve the empty/last-known-good generation.
                 with suppress(Exception):
