@@ -424,6 +424,20 @@ describe("frontend protocol", () => {
         if (message.type === "locklearn/datasets/refresh") {
           return { items: [status] } as T;
         }
+        if (message.type === "locklearn/datasets/attributions") {
+          return {
+            items: [{
+              source_record_id: "42",
+              author: "Contributor",
+              language_tag: "ja",
+              modified_from_source: false,
+              attribution_text: "Contributor / source",
+              license_id: "CC-BY-2.0-FR",
+              license_scope: "dataset",
+            }],
+            cursor: null,
+          } as T;
+        }
         return {
           dataset_id: status.dataset_id,
           version: "1.1.0",
@@ -435,10 +449,20 @@ describe("frontend protocol", () => {
     };
 
     expect((await listDatasets(hass))[0]?.dataset_id).toBe(status.dataset_id);
+    expect(
+      (await listDatasetAttributions(hass, status.dataset_id, "tatoeba")).items[0]
+        ?.attribution_text,
+    ).toBe("Contributor / source");
     expect((await refreshDatasets(hass))[0]?.available_version).toBe("1.1.0");
     expect((await installDataset(hass, status.dataset_id, "1.1.0")).version).toBe("1.1.0");
     expect(messages).toEqual([
       { type: "locklearn/datasets/list", limit: 100 },
+      {
+        type: "locklearn/datasets/attributions",
+        dataset_id: "locklearn:starter",
+        source_id: "tatoeba",
+        limit: 50,
+      },
       { type: "locklearn/datasets/refresh" },
       {
         type: "locklearn/datasets/install",
