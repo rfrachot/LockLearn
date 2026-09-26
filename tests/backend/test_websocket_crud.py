@@ -9,7 +9,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.locklearn.const import DOMAIN
+from custom_components.locklearn.const import DOMAIN, FRONTEND_PROTOCOL_VERSION
 from tests.backend.content_db_helpers import DATASET_ID, ITEM_A, ITEM_B, create_package
 
 
@@ -68,7 +68,7 @@ async def test_bootstrap_profile_crud_privacy_share_and_pagination(
     await owner.send_json_auto_id({"type": "locklearn/bootstrap"})
     bootstrap = await owner.receive_json()
     assert bootstrap["success"] is True
-    assert bootstrap["result"]["frontend_protocol"] == 1
+    assert bootstrap["result"]["frontend_protocol"] == FRONTEND_PROTOCOL_VERSION
     assert bootstrap["result"]["backend_version"] == "0.0.2"
     assert bootstrap["result"]["panel_path"] == "/locklearn"
     personal = bootstrap["result"]["personal_profile"]

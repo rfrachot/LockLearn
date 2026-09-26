@@ -3155,7 +3155,6 @@ class ContentReportsRepository:
 
         return await self._storage._async_writer(write)
 
-
     async def async_create_question_report(
         self,
         *,
