@@ -565,4 +565,4 @@ def test_cloze_requires_explicit_maskable_content() -> None:
     }
 
     assert service._cloze_prompt(plain, accepted) is None
-    assert service._cloze_prompt(masked, accepted) == "＿＿ is here."
+    assert service._cloze_prompt(masked, accepted) == "____ is here."
