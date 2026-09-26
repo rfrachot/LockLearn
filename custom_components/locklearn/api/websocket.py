@@ -1492,7 +1492,7 @@ async def ws_session_get(
 async def ws_quiz_evaluate(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Evaluate one current quiz answer without advancing the session."""
+    """Provisionally grade current free text without advancing the session."""
     runtime = _require_runtime(hass, connection, msg["id"])
     if runtime is None:
         return
