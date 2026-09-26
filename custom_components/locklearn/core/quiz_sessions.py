@@ -100,6 +100,9 @@ class QuizSessionService:
         self._event_emitter = event_emitter
         self._clock = clock or SystemClock()
         self._learning = LearningStateMachine(clock=self._clock)
+        self._pending_evaluations: dict[
+            tuple[str, str], tuple[dict[str, Any], dict[str, Any]]
+        ] = {}
 
     async def async_prepare_questions(
         self,
@@ -199,11 +202,29 @@ class QuizSessionService:
         question_id: str,
         answer: object,
     ) -> dict[str, Any]:
-        """Evaluate the current answer without mutating the session or SRS."""
+        """Provisionally grade free text without revealing the accepted answer."""
         session = await self._sessions.async_get(session_id)
         if session is None:
             raise QuizSessionError("session not found")
-        return await self._evaluate_current(session, question_id, answer)
+        feedback = await self._evaluate_current(session, question_id, answer)
+        if str(feedback["format"]) != "free_text":
+            raise QuizSessionError("choice questions must use atomic quiz submission")
+
+        if not isinstance(answer, dict):
+            raise QuizSessionError("quiz answer must be an object")
+        key = (session_id, question_id)
+        prior = self._pending_evaluations.get(key)
+        if prior is not None:
+            prior_answer, prior_feedback = prior
+            if not self._same_provisional_answer(prior_answer, answer):
+                raise QuizSessionError("free-text answer was already evaluated")
+            return dict(prior_feedback)
+
+        safe = dict(feedback)
+        safe["correct_answer"] = None
+        safe["reveal_correct_answer"] = False
+        self._pending_evaluations[key] = (dict(answer), dict(safe))
+        return safe
 
     async def async_answer(
         self,
@@ -216,8 +237,22 @@ class QuizSessionService:
         session = await self._sessions.async_get(session_id)
         if session is None:
             raise QuizSessionError("session not found")
-        feedback = await self._evaluate_current(session, question_id, answer)
         current = session.get("current_question")
+        if not isinstance(current, dict):
+            raise QuizSessionError("question is no longer current")
+        raw_payload = current.get("payload")
+        quiz_payload = raw_payload.get("quiz") if isinstance(raw_payload, dict) else None
+        quiz_format = str(quiz_payload.get("format", "")) if isinstance(quiz_payload, dict) else ""
+        if quiz_format == "free_text":
+            key = (session_id, question_id)
+            prior = self._pending_evaluations.get(key)
+            if prior is not None:
+                prior_answer, _prior_feedback = prior
+                if not isinstance(answer, dict) or not self._same_provisional_answer(
+                    prior_answer, answer
+                ):
+                    raise QuizSessionError("free-text submission changed after evaluation")
+        feedback = await self._evaluate_current(session, question_id, answer)
         assert isinstance(current, dict)
         track_id = session.get("track_id")
         if not isinstance(track_id, str) or not track_id:
@@ -295,8 +330,19 @@ class QuizSessionService:
             answer=answer,
         )
         self._sessions.publish(session_id, state)
+        self._pending_evaluations.pop((session_id, question_id), None)
         self._emit_event(event.id, profile_id, track_id, meta.card_key, session_id, mode, result)
-        return state
+        return {"feedback": feedback, "session": state}
+
+    @staticmethod
+    def _same_provisional_answer(
+        prior: dict[str, Any],
+        current: dict[str, Any],
+    ) -> bool:
+        return (
+            prior.get("submitted_text") == current.get("submitted_text")
+            and prior.get("hint_used", False) == current.get("hint_used", False)
+        )
 
     async def _evaluate_current(
         self,
