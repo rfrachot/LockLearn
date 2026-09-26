@@ -2,9 +2,17 @@
 
 ## Current state
 
-P5.1 is **closed PASS** on `feat/p5-frontend`. The qualified implementation and
-committed bundle HEAD is `7460f55` (`build(frontend): update P5.1 bundled panel`);
-the branch also contains the subsequent closure-documentation commit.
+P5.1 is **reopened pending regression qualification** on `feat/p5-frontend`.
+The original qualification passed, but real use on 2026-09-26 exposed a live
+panel refresh loop: Home Assistant repeatedly reassigns the `hass` property,
+and the shell's `updated()` hook restarted bootstrap/profile loading for every
+new object. That caused repeated loading renders and reset the mobile horizontal
+navigation position.
+
+The fix now gates bootstrap to one initial load per panel instance, leaving retry
+explicit for the error state, and changes the small-screen navigation from a
+horizontal scrolling strip to a compact three-column grid. A pure lifecycle
+regression test covers the no-rebootstrap invariant. P5.2 remains unstarted.
 
 Final repository gate on 2026-09-25: Ruff format PASS (247 files), Ruff lint
 PASS, mypy PASS (141 sources), resource registries PASS, pytest PASS (379 tests
