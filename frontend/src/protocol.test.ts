@@ -8,6 +8,13 @@ import {
   createCardAnnotation,
   getDashboard,
   getSession,
+  listProfileMembers,
+  listShareTargets,
+  listTracks,
+  listPacks,
+  previewPackUpdate,
+  previewTrackPlan,
+  setTrackPlan,
   listVisibleProfiles,
   reportQuestion,
   reportFreeTextShouldBeAccepted,
@@ -297,6 +304,79 @@ describe("frontend protocol", () => {
         grading_policy_version: 1,
         normalization_version: 1,
       },
+    ]);
+  });
+
+  it("uses explicit P5.5 management preview contracts", async () => {
+    const messages: Record<string, unknown>[] = [];
+    const hass: HomeAssistantLike = {
+      callWS: async <T>(message: Record<string, unknown>): Promise<T> => {
+        messages.push(message);
+        if (message.type === "locklearn/profiles/members") return [] as T;
+        if (message.type === "locklearn/profiles/share_targets") return [] as T;
+        if (message.type === "locklearn/tracks/list" || message.type === "locklearn/packs/list") {
+          return { items: [], cursor: null } as T;
+        }
+        if (message.type === "locklearn/tracks/preview_pack_update") {
+          return {
+            from_pack_version_id: "v1",
+            to_pack_version_id: "v2",
+            added_learning_item_ids: [],
+            removed_learning_item_ids: [],
+            changed_learning_item_ids: [],
+          } as T;
+        }
+        return {
+          selected_cards: 0,
+          introduced_cards: 0,
+          target_cards: 0,
+          remaining_target_cards: 0,
+          required_new_per_day: 0,
+          planned_new_per_day: 0,
+          reviews_per_day_in_3_weeks: 0,
+          reviews_per_day_in_3_months: 0,
+          due_now: 0,
+          notification_deliverable_in_3_weeks: 0,
+          active_session_cards_in_3_weeks: 0,
+          notification_deliverable_in_3_months: 0,
+          active_session_cards_in_3_months: 0,
+          target_date_feasible: true,
+          review_capacity_feasible_in_3_weeks: true,
+          review_capacity_feasible_in_3_months: true,
+          warnings: [],
+          assumptions: [],
+        } as T;
+      },
+    };
+    const plan = {
+      max_new_per_day_cards: 4,
+      max_reviews_per_day_cards: 30,
+      max_notification_new_teasers: 2,
+      target_date: null,
+      target_coverage: 1,
+      target_retention: 0.9,
+    };
+
+    await listProfileMembers(hass, "p1");
+    await listShareTargets(hass, "p1");
+    await listTracks(hass, "p1");
+    await listPacks(hass);
+    await previewPackUpdate(hass, "t1", "v2");
+    await previewTrackPlan(hass, "t1", plan);
+    await setTrackPlan(hass, "t1", plan);
+
+    expect(messages).toEqual([
+      { type: "locklearn/profiles/members", profile_id: "p1" },
+      { type: "locklearn/profiles/share_targets", profile_id: "p1" },
+      { type: "locklearn/tracks/list", limit: 100, profile_id: "p1" },
+      { type: "locklearn/packs/list", limit: 100 },
+      {
+        type: "locklearn/tracks/preview_pack_update",
+        track_id: "t1",
+        pack_version_id: "v2",
+      },
+      { type: "locklearn/tracks/plan_preview", track_id: "t1", ...plan },
+      { type: "locklearn/tracks/plan_set", track_id: "t1", ...plan },
     ]);
   });
 
