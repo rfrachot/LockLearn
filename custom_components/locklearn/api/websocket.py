@@ -100,14 +100,10 @@ def _dataset_status_payload(
         "artifact_size": None if latest is None else latest.artifact_size,
         "built_at_utc": None if installed is None else installed.built_at_utc,
         "dataset_version_id": None if installed is None else installed.dataset_version_id,
-        "canonical_content_hash": (
-            None if installed is None else installed.canonical_content_hash
-        ),
+        "canonical_content_hash": (None if installed is None else installed.canonical_content_hash),
         "sources": list(details.get("source_details", ())),
         "licenses": list(details.get("license_details", ())),
-        "pack_version_ids": (
-            [] if installed is None else list(installed.pack_version_ids)
-        ),
+        "pack_version_ids": ([] if installed is None else list(installed.pack_version_ids)),
     }
 
 
@@ -1059,9 +1055,7 @@ async def ws_datasets_list(
     connection.send_result(msg["id"], result)
 
 
-@websocket_api.websocket_command(
-    {vol.Required("type"): "locklearn/datasets/refresh"}
-)
+@websocket_api.websocket_command({vol.Required("type"): "locklearn/datasets/refresh"})
 @websocket_api.async_response
 async def ws_datasets_refresh(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
