@@ -387,6 +387,26 @@ export class LockLearnPanel extends LitElement {
     void this.loadDashboard();
   }
 
+  private async refreshManagement(): Promise<void> {
+    if (this.hass === undefined) return;
+    const selected = this.selectedProfileId;
+    try {
+      const profiles = await listVisibleProfiles(this.hass);
+      this.profiles = profiles;
+      this.selectedProfileId =
+        selected !== null && profiles.some((profile) => profile.profile_id === selected)
+          ? selected
+          : defaultProfileId(profiles, this.bootstrapState);
+      if (!isRouteVisible(this.activeRoute, profiles)) {
+        this.activeRoute = "home";
+        navigateToRoute("home");
+      }
+      await this.loadDashboard();
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    }
+  }
+
   private async loadDashboard(): Promise<void> {
     if (this.hass === undefined || this.selectedProfileId === null) {
       this.dashboard = undefined;
@@ -528,7 +548,7 @@ export class LockLearnPanel extends LitElement {
                           (profile) => profile.profile_id === this.selectedProfileId,
                         )}
                         .route=${this.activeRoute as ManagementRoute}
-                        @locklearn-refresh=${() => void this.load()}
+                        @locklearn-refresh=${() => void this.refreshManagement()}
                       ></locklearn-management-view>`
                     : html`<section class="page">
                     <h1>${this.routeLabel(this.activeRoute)}</h1>
