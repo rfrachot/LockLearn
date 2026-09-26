@@ -10,8 +10,8 @@ from .clock import Clock, SystemClock
 from .learning import LearningStateMachine
 from .review_policy import ReviewPolicyV1, ReviewTransition
 from .reviews import ReviewEventService
-from .signals import SignalMode, SignalPolicy
 from .sessions import SessionService
+from .signals import SignalMode, SignalPolicy
 
 
 class LearningSessionError(ValueError):
