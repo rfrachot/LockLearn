@@ -376,11 +376,7 @@ class QuizSessionService:
         )
         feedback = self._quiz.feedback(question, selected_answer_id=selected)
         selected_text = next(
-            (
-                option.display_text
-                for option in question.options
-                if option.answer_id == selected
-            ),
+            (option.display_text for option in question.options if option.answer_id == selected),
             None,
         )
         return {
@@ -555,9 +551,7 @@ class QuizSessionService:
         if not isinstance(raw_options, list) or not raw_options:
             raise QuizSessionError("choice question has no options")
         by_answer_id = {
-            card.canonical_answer.term_id: card
-            for card in catalog.values()
-            if card.answer_terms
+            card.canonical_answer.term_id: card for card in catalog.values() if card.answer_terms
         }
         options: list[QuizCandidate] = []
         correct_index: int | None = None
@@ -740,9 +734,7 @@ class QuizSessionService:
             return "free_text" if self._free_text_supported(meta) else None
         if requested == "cloze_mcq":
             return (
-                "cloze_mcq"
-                if meta.content_type == "grammar" and cloze_prompt is not None
-                else None
+                "cloze_mcq" if meta.content_type == "grammar" and cloze_prompt is not None else None
             )
         if meta.content_type == "grammar" and cloze_prompt is not None:
             return "cloze_mcq"
