@@ -235,9 +235,7 @@ def test_cloze_requires_explicit_maskable_content() -> None:
     service = _service()
     accepted = (_meta(1).canonical_answer,)
     plain = {
-        "introduction_blocks": [
-            {"mask_strategy": "none", "payload": {"text": "Answer 1 is here."}}
-        ]
+        "introduction_blocks": [{"mask_strategy": "none", "payload": {"text": "Answer 1 is here."}}]
     }
     masked = {
         "introduction_blocks": [
