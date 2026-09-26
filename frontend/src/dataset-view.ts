@@ -4,8 +4,10 @@ import { property, state } from "lit/decorators.js";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
 import {
   installDataset,
+  listDatasetAttributions,
   listDatasets,
   refreshDatasets,
+  type DatasetAttributionRecord,
   type DatasetStatusRecord,
   type HomeAssistantLike,
 } from "./protocol";
@@ -40,6 +42,10 @@ export class LockLearnDatasetView extends LitElement {
   @state() private loading = false;
   @state() private errorMessage = "";
   @state() private notice = "";
+  @state() private attributionPages: Record<
+    string,
+    { items: DatasetAttributionRecord[]; cursor: string | null; expanded: boolean; loading: boolean }
+  > = {};
 
   static styles = css`
     :host, .stack, .grid, .card, .actions, button, a { box-sizing: border-box; min-width: 0; max-width: 100%; }
@@ -134,6 +140,74 @@ export class LockLearnDatasetView extends LitElement {
     }
   }
 
+  private attributionKey(datasetId: string, sourceId: string): string {
+    return `${datasetId}\u0000${sourceId}`;
+  }
+
+  private async toggleAttributions(datasetId: string, sourceId: string): Promise<void> {
+    if (this.hass === undefined) return;
+    const key = this.attributionKey(datasetId, sourceId);
+    const current = this.attributionPages[key];
+    if (current !== undefined) {
+      this.attributionPages = {
+        ...this.attributionPages,
+        [key]: { ...current, expanded: !current.expanded },
+      };
+      return;
+    }
+    this.attributionPages = {
+      ...this.attributionPages,
+      [key]: { items: [], cursor: null, expanded: true, loading: true },
+    };
+    try {
+      const page = await listDatasetAttributions(this.hass, datasetId, sourceId);
+      this.attributionPages = {
+        ...this.attributionPages,
+        [key]: { ...page, expanded: true, loading: false },
+      };
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.attributionPages = {
+        ...this.attributionPages,
+        [key]: { items: [], cursor: null, expanded: true, loading: false },
+      };
+    }
+  }
+
+  private async loadMoreAttributions(datasetId: string, sourceId: string): Promise<void> {
+    if (this.hass === undefined) return;
+    const key = this.attributionKey(datasetId, sourceId);
+    const current = this.attributionPages[key];
+    if (current === undefined || current.cursor === null || current.loading) return;
+    this.attributionPages = {
+      ...this.attributionPages,
+      [key]: { ...current, loading: true },
+    };
+    try {
+      const page = await listDatasetAttributions(
+        this.hass,
+        datasetId,
+        sourceId,
+        current.cursor,
+      );
+      this.attributionPages = {
+        ...this.attributionPages,
+        [key]: {
+          items: [...current.items, ...page.items],
+          cursor: page.cursor,
+          expanded: true,
+          loading: false,
+        },
+      };
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.attributionPages = {
+        ...this.attributionPages,
+        [key]: { ...current, loading: false },
+      };
+    }
+  }
+
   protected render() {
     return html`
       <section class="stack">
@@ -198,21 +272,72 @@ export class LockLearnDatasetView extends LitElement {
         <h3>${this.t("datasets.sources")}</h3>
         ${dataset.sources.length === 0
           ? html`<p class="muted">${this.t("datasets.noSources")}</p>`
-          : html`<ul>${dataset.sources.map((source) => html`
-              <li>
-                <strong>${source.name}</strong> — ${source.provider}
-                <div class="meta">${source.attribution_template}</div>
-                <div class="meta">
-                  ${this.t("datasets.upstream")}: ${source.upstream_version}
-                  ${source.upstream_date ? html` · ${source.upstream_date}` : nothing}
-                  · ${source.provenance_records} ${this.t("datasets.records")}
-                  ${source.modified_records > 0 ? html` · ${source.modified_records} ${this.t("datasets.modified")}` : nothing}
-                </div>
-                ${safeExternalUrl(source.homepage)
-                  ? html`<a href=${safeExternalUrl(source.homepage)!} target="_blank" rel="noopener noreferrer">${this.t("datasets.sourcePage")}</a>`
-                  : nothing}
-              </li>
-            `)}</ul>`}
+          : html`<ul>${dataset.sources.map((source) => {
+              const sourceUrl = safeExternalUrl(source.homepage);
+              const key = this.attributionKey(dataset.dataset_id, source.source_id);
+              const page = this.attributionPages[key];
+              return html`
+                <li>
+                  <strong>${source.name}</strong> — ${source.provider}
+                  <div class="meta">${source.attribution_template}</div>
+                  <div class="meta">
+                    ${this.t("datasets.upstream")}: ${source.upstream_version}
+                    ${source.upstream_date ? html` · ${source.upstream_date}` : nothing}
+                    · ${source.provenance_records} ${this.t("datasets.records")}
+                    ${source.modified_records > 0 ? html` · ${source.modified_records} ${this.t("datasets.modified")}` : nothing}
+                  </div>
+                  ${sourceUrl
+                    ? html`<a href=${sourceUrl} target="_blank" rel="noopener noreferrer">${this.t("datasets.sourcePage")}</a>`
+                    : nothing}
+                  ${source.attribution_records > 0
+                    ? html`
+                        <div class="actions">
+                          <button
+                            type="button"
+                            @click=${() => void this.toggleAttributions(dataset.dataset_id, source.source_id)}
+                          >
+                            ${page?.expanded
+                              ? this.t("datasets.hideAttributions")
+                              : this.t("datasets.showAttributions")}
+                          </button>
+                        </div>
+                        ${page?.expanded
+                          ? html`
+                              <div class="notice">
+                                <strong>${this.t("datasets.individualAttributions")}</strong>
+                                ${page.loading && page.items.length === 0
+                                  ? html`<p>${this.t("datasets.loading")}</p>`
+                                  : html`<ul>
+                                      ${page.items.map((item) => html`
+                                        <li>
+                                          ${item.attribution_text}
+                                          <div class="meta">
+                                            ${item.source_record_id ?? "—"}
+                                            ${item.author ? html` · ${item.author}` : nothing}
+                                            ${item.language_tag ? html` · ${item.language_tag}` : nothing}
+                                            ${item.modified_from_source
+                                              ? html` · ${this.t("datasets.modified")}`
+                                              : nothing}
+                                          </div>
+                                        </li>
+                                      `)}
+                                    </ul>`}
+                                ${page.cursor !== null
+                                  ? html`<button
+                                      type="button"
+                                      ?disabled=${page.loading}
+                                      @click=${() => void this.loadMoreAttributions(dataset.dataset_id, source.source_id)}
+                                    >
+                                      ${this.t("datasets.loadMore")}
+                                    </button>`
+                                  : nothing}
+                              </div>`
+                          : nothing}
+                      `
+                    : nothing}
+                </li>
+              `;
+            })}</ul>`}
         <h3>${this.t("datasets.licenses")}</h3>
         ${dataset.licenses.length === 0
           ? html`<p class="muted">${this.t("datasets.noLicenses")}</p>`
