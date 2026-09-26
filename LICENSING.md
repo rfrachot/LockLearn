@@ -89,7 +89,10 @@ fallback license for LockLearn editorial content or third-party datasets.
 
 Exact source snapshots and per-object provenance retain the source record,
 author/language when required, whether LockLearn modified the source material,
-and attribution text needed for later Sources & Licences UI.
+and attribution text surfaced by the P5.6 Sources & Licences UI. The product
+view derives attribution, modification counts and licence details from the
+active signed content generation; it does not treat a hard-coded frontend
+catalog as legal truth.
 
 
 ## Public Asset license boundary
