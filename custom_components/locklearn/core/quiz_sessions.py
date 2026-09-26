@@ -9,8 +9,8 @@ from typing import Any
 
 from ..storage.database import SQLiteStorage
 from .clock import Clock, SystemClock
-from .content import GradingOutcome, GradingPolicyKind
-from .grading import FreeTextGrader, FreeTextGradingResult, GradingError
+from .content import GradingOutcome
+from .grading import FreeTextGrader, GradingError
 from .learning import LearningStateMachine
 from .localization import (
     CaseMode,
