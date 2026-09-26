@@ -2,8 +2,12 @@
 
 ## Status
 
-Accepted after the P5.1 repository gate, reproducible bundled-artifact check and
-real Home Assistant browser qualification on 2026-09-25.
+Accepted design, with P5.1 implementation qualification temporarily reopened on
+2026-09-26 after a live-panel regression was observed: Home Assistant repeatedly
+reassigns the `hass` property while the panel is open, and the original shell
+restarted bootstrap on every such update. A regression fix is implemented and
+must pass repository/frontend gates plus real-HA requalification before P5.1 is
+closed PASS again.
 
 ## Context
 
