@@ -3957,6 +3957,56 @@ class SchedulerRepository:
 
         return await self._storage._async_reader(read)
 
+    async def async_next_slot(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        after_utc: str,
+    ) -> dict[str, Any] | None:
+        """Return the next effective unsent scheduler slot for one Track."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT slot_id, profile_id, track_id, target_id, slot_type,
+                          scheduled_for_utc, deferred_until_utc, status,
+                          CASE
+                              WHEN status = 'deferred'
+                                   AND deferred_until_utc IS NOT NULL
+                              THEN deferred_until_utc
+                              ELSE scheduled_for_utc
+                          END AS effective_for_utc
+                   FROM scheduled_slots
+                   WHERE profile_id = ?
+                     AND track_id = ?
+                     AND status IN ('scheduled', 'deferred')
+                     AND CASE
+                             WHEN status = 'deferred'
+                                  AND deferred_until_utc IS NOT NULL
+                             THEN deferred_until_utc
+                             ELSE scheduled_for_utc
+                         END >= ?
+                   ORDER BY effective_for_utc, slot_id
+                   LIMIT 1""",
+                (profile_id, track_id, after_utc),
+            ).fetchone()
+            if row is None:
+                return None
+            keys = (
+                "slot_id",
+                "profile_id",
+                "track_id",
+                "target_id",
+                "slot_type",
+                "scheduled_for_utc",
+                "deferred_until_utc",
+                "status",
+                "effective_for_utc",
+            )
+            return dict(zip(keys, row, strict=True))
+
+        return await self._storage._async_reader(read)
+
     async def async_list_device_slots(
         self,
         *,
