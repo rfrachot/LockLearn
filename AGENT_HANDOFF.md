@@ -2,6 +2,39 @@
 
 ## Current state
 
+P5.2 implementation is pushed on `feat/p5-frontend` and is **pending
+qualification**. The previously exposed development HA token rotation is
+explicitly deferred by Renaud for now; P5.1 remains documented as pending that
+security housekeeping, but development is continuing on the same branch.
+
+P5.2 adds `locklearn/dashboard/get`, protected by existing Profile READ ACL.
+`DashboardService` aggregates canonical P3.13 StatsService output, the latest
+persistent Track session summary, and the next effective P4 scheduler slot. The
+frontend does not calculate due state, retention or verified accuracy.
+
+The Home payload is deliberately content-agnostic: Profile/Track presentation
+metadata, due count, recent verified retention/accuracy, state counts, generic
+answered/total session summary and next notification time only. CardDefinition,
+LearningItem and learned text are omitted.
+
+The Profile switcher uses only `locklearn/profiles/list`, which is already
+filtered by backend ACL. UI grouping is owner => “Mes profils / My profiles” and
+editor/viewer => “Partagés avec moi / Shared with me”. The initial choice prefers
+the visible personal bootstrap Profile, then an owned Profile, then a shared
+Profile. Selecting another Profile issues only one new dashboard request and
+does not rerun P5.1 bootstrap/Profile discovery.
+
+Backend tests cover a real Profile/Track/session/scheduler payload plus an
+unauthorized viewer seeing `locklearn/not_found` and no Profile identity before
+sharing. Frontend tests cover switcher grouping/default selection, dashboard
+WebSocket scope and a content-agnostic dashboard payload contract. ADR-0045
+records the authority/privacy decisions.
+
+P5.3 is not started. Next concrete action: run the complete Python/frontend gate
+on current `feat/p5-frontend`, rebuild the bundled panel, remediate findings,
+then perform a focused real-HA Home/profile-switcher qualification before closing
+P5.2.
+
 P5.1 remains **open pending security token rotation** on `feat/p5-frontend` at
 `b3eb538`. The refresh-loop implementation and real-HA regression qualification
 are PASS, but the credential-safety prerequisite is not proven: `.env` has not
