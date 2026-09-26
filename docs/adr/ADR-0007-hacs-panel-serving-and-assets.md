@@ -22,6 +22,9 @@ without leaving duplicate HA registrations.
   remove the mutable panel per loaded Config Entry.
 - Use no runtime CDN or third-party HTML. Future media/assets follow the same
   local, versioned and allowlisted boundary.
+- Use HACS only for published tags/releases. Development branches deploy the
+  complete `custom_components/locklearn/` tree directly to the development
+  instance so backend and frontend remain on the same revision.
 
 ## Evidence
 
@@ -37,5 +40,8 @@ also returned after a real HAOS restore.
 - Every user-visible frontend change requires a rebuilt committed artifact; formal releases also bump the integration release version.
 - Reliance on HA frontend internals stays isolated in the panel integration
   boundary and remains part of the compatibility matrix.
-- HACS installation/update, not a manual copy into `custom_components`, is the
-  release qualification path.
+- HACS installation/update is the release qualification path; direct deployment
+  is reserved for development branches and must never be a frontend-only copy.
+- HACS “Redownload” must not restore an older public release over a development
+  instance whose `state.db` already uses a newer schema. The database is not
+  downgraded or rewritten to accommodate old code.

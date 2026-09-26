@@ -68,6 +68,26 @@ Commands that depend on Home Assistant or npm packages become authoritative only
 after activating `.venv`; P0 verified every command above on the dev VM. The
 minimum/current HA matrix is also reproducible through `.github/workflows/ci.yml`.
 
+## Development and release deployment
+
+- Development branches (`feat/*`, `fix/*`, and other non-release branches) are
+  deployed to the development Home Assistant instance by copying the complete
+  `custom_components/locklearn/` directory directly to
+  `/config/custom_components/locklearn/`. Stage and rename on the same
+  filesystem when the available access method permits it; never deploy only the
+  frontend bundle or otherwise leave frontend/backend versions mixed.
+- HACS is the release path only. It installs published tags/releases and is not
+  a development-branch deployment mechanism.
+- Verify the deployed backend schema marker and frontend bundle SHA-256 before
+  restarting Home Assistant Core.
+
+> Do not use HACS “Redownload” during development to return to the public
+> release when `state.db` has already been migrated by a newer development
+> branch.
+
+Never delete, recreate, downgrade or manually rewrite the development database
+to make an older release accept a newer schema. Deploy compatible code instead.
+
 ## Architecture invariants
 
 ```text
