@@ -396,7 +396,9 @@ export class LockLearnPanel extends LitElement {
       this.selectedProfileId =
         selected !== null && profiles.some((profile) => profile.profile_id === selected)
           ? selected
-          : defaultProfileId(profiles, this.bootstrapState);
+          : this.bootstrapState === undefined
+            ? (profiles[0]?.profile_id ?? null)
+            : defaultProfileId(profiles, this.bootstrapState);
       if (!isRouteVisible(this.activeRoute, profiles)) {
         this.activeRoute = "home";
         navigateToRoute("home");
