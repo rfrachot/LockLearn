@@ -2,7 +2,11 @@ import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 
 import { languageFallback, translate, type UiLanguage } from "./i18n";
-import { canAnswerProfile, isIntroductionQuestion } from "./learn-model";
+import {
+  canAnswerProfile,
+  isIntroductionQuestion,
+  questionAvailableAtMs,
+} from "./learn-model";
 import {
   answerSession,
   completeSession,
@@ -40,9 +44,11 @@ export class LockLearnLearnView extends LitElement {
   @state() private pendingIdkLatency?: number;
   @state() private mnemonic = "";
   @state() private reportMessage = "";
+  @state() private waitingUntil?: string;
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
+  private availabilityTimer?: ReturnType<typeof globalThis.setTimeout>;
 
   static styles = css`
     :host {
@@ -218,6 +224,11 @@ export class LockLearnLearnView extends LitElement {
     }
   `;
 
+  disconnectedCallback(): void {
+    this.clearAvailabilityTimer();
+    super.disconnectedCallback();
+  }
+
   protected updated(changed: Map<PropertyKey, unknown>): void {
     if (changed.has("profile") || changed.has("dashboard")) {
       const available = this.tracks();
@@ -263,6 +274,8 @@ export class LockLearnLearnView extends LitElement {
   }
 
   private resetQuestionUi(): void {
+    this.clearAvailabilityTimer();
+    this.waitingUntil = undefined;
     this.revealed = false;
     this.hintUsed = false;
     this.pendingIdk = false;
@@ -274,11 +287,32 @@ export class LockLearnLearnView extends LitElement {
     this.questionId = this.session?.current_question?.question_id ?? null;
   }
 
+  private clearAvailabilityTimer(): void {
+    if (this.availabilityTimer !== undefined) {
+      globalThis.clearTimeout(this.availabilityTimer);
+      this.availabilityTimer = undefined;
+    }
+  }
+
+  private scheduleCurrentQuestionAvailability(): void {
+    const availableAt = questionAvailableAtMs(this.session?.current_question);
+    if (availableAt === null || availableAt <= Date.now()) return;
+    this.waitingUntil = new Date(availableAt).toISOString();
+    this.availabilityTimer = globalThis.setTimeout(() => {
+      this.availabilityTimer = undefined;
+      this.waitingUntil = undefined;
+      this.questionStartedAt = nowMs();
+    }, availableAt - Date.now());
+  }
+
   private applySession(session: SessionState): void {
     const nextQuestionId = session.current_question?.question_id ?? null;
     const changed = nextQuestionId !== this.questionId;
     this.session = session;
-    if (changed) this.resetQuestionUi();
+    if (changed) {
+      this.resetQuestionUi();
+      this.scheduleCurrentQuestionAvailability();
+    }
   }
 
   private elapsedMs(): number {
@@ -554,9 +588,32 @@ export class LockLearnLearnView extends LitElement {
         </section>
       `;
     }
+    if (this.waitingUntil !== undefined) {
+      return this.renderWaiting(this.session.current_question);
+    }
     return isIntroductionQuestion(this.session.current_question)
       ? this.renderIntroduction(this.session.current_question)
       : this.renderRetrieval(this.session.current_question);
+  }
+
+  private renderWaiting(question: SessionQuestion) {
+    const waitingUntil = this.waitingUntil;
+    if (waitingUntil === undefined) return nothing;
+    const due = new Date(waitingUntil);
+    const formatted = Number.isNaN(due.getTime())
+      ? ""
+      : new Intl.DateTimeFormat(this.locale(), { timeStyle: "medium" }).format(due);
+    return html`
+      <article class="learn-card" aria-live="polite">
+        ${this.renderProgress(question)}
+        <div class="stage">${this.t("learn.waiting")}</div>
+        <p>${this.t("learn.waitingBody")}</p>
+        <p>
+          ${this.t("learn.waitingUntil")}
+          <time datetime=${waitingUntil}>${formatted}</time>
+        </p>
+      </article>
+    `;
   }
 
   private renderProgress(question: SessionQuestion) {

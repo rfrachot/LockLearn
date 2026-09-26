@@ -58,12 +58,16 @@ jobs:
       - run: python -m pytest -q --tb=short tests/backend
 
   frontend:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
@@ -71,6 +75,15 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Commit generated frontend bundle for qualification
+        run: |
+          git add ../custom_components/locklearn/frontend/locklearn-panel.js
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "build(frontend): update P5.3 delayed-retrieval bundle"
+            git push origin HEAD:${GITHUB_HEAD_REF}
+          fi
       - run: git diff --exit-code -- ../custom_components/locklearn/frontend/locklearn-panel.js
 
   home-assistant-validation:
