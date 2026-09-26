@@ -337,6 +337,25 @@ class QuizSessionService:
             raise QuizSessionError("quiz card metadata is unavailable")
 
         if quiz_format == "free_text":
+            if str(answer.get("action", "")).strip().lower() == "idk":
+                return {
+                    "format": quiz_format,
+                    "result": "idk",
+                    "immediate": True,
+                    "reveal_correct_answer": True,
+                    "correct_answer": meta.canonical_answer.text,
+                    "contrastive_feedback": None,
+                    "submitted_text": None,
+                    "normalized_submission": None,
+                    "reportable": False,
+                    "grading_policy_kind": meta.grading_policy_kind,
+                    "grading_policy_version": meta.grading_policy_version,
+                    "normalization_version": meta.canonical_answer.normalization_version,
+                    "grading_reason": "explicit_idk",
+                    "hint_used": hint_used,
+                    "presentation_to_answer_ms": latency,
+                    "selected_answer_id": None,
+                }
             result = self._evaluate_free_text(meta, answer)
             return {
                 **result,
@@ -700,7 +719,11 @@ class QuizSessionService:
 
     @staticmethod
     def _free_text_supported(meta: _QuizCardMeta) -> bool:
-        return meta.grading_policy_kind in {"exact", "any_of", "fuzzy_normalized"}
+        # exact/any_of are self-contained in CardDefinition metadata. A
+        # fuzzy_normalized card additionally needs the dataset's explicit
+        # normalization policy, which is not yet exposed by the runtime catalog.
+        # Refuse to guess language/script transformations in the panel.
+        return meta.grading_policy_kind in {"exact", "any_of"}
 
     def _resolve_format(
         self,
@@ -729,8 +752,8 @@ class QuizSessionService:
         return NormalizationPolicy(
             policy_id="quiz_free_text",
             normalization_version=answer.normalization_version,
-            unicode_normalization=UnicodeNormalization.NFKC,
-            case_mode=CaseMode.CASEFOLD,
+            unicode_normalization=UnicodeNormalization.NFC,
+            case_mode=CaseMode.PRESERVE,
             whitespace_mode=WhitespaceMode.COLLAPSE,
             punctuation_mode=PunctuationMode.PRESERVE,
             allowed_scripts=() if answer.script is None else (answer.script,),
@@ -739,7 +762,7 @@ class QuizSessionService:
     async def _load_catalog(self, track_id: str) -> dict[str, _QuizCardMeta]:
         def read(connection: sqlite3.Connection) -> dict[str, _QuizCardMeta]:
             rows = connection.execute(
-                """SELECT card.card_key, card.learning_item_id,
+                """SELECT DISTINCT card.card_key, card.learning_item_id,
                           card.prompt_facet_id, card.answer_facet_id,
                           item.content_type, card.grading_policy_kind,
                           card.grading_policy_version, answer.language_tag,
