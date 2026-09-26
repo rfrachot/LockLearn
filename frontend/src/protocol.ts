@@ -1,4 +1,4 @@
-export const FRONTEND_PROTOCOL_VERSION = 1;
+export const FRONTEND_PROTOCOL_VERSION = 2;
 
 export type ProfileRole = "owner" | "editor" | "viewer";
 
@@ -137,5 +137,189 @@ export async function getDashboard(
   return hass.callWS<DashboardResponse>({
     type: "locklearn/dashboard/get",
     profile_id: profileId,
+  });
+}
+
+
+export interface LearnContentBlock {
+  content_block_id: string;
+  position: number;
+  kind: string;
+  role: string;
+  reveals_answer: boolean;
+  mask_strategy: string;
+  payload: Record<string, unknown>;
+  language_tag?: string;
+  script?: string | null;
+}
+
+export interface LearnFacetPresentation {
+  facet_id: string;
+  kind: string;
+  facet_key: string;
+  language_tag: string;
+  script: string | null;
+  blocks: LearnContentBlock[];
+}
+
+export interface LearnCardPresentation {
+  card_key: string;
+  learning_item_id: string;
+  content_type: string;
+  prompt: LearnFacetPresentation;
+  answer: LearnFacetPresentation;
+  context: LearnFacetPresentation[];
+  introduction_blocks: LearnContentBlock[];
+  hint_blocks: LearnContentBlock[];
+  mnemonic_blocks: LearnContentBlock[];
+  example_blocks: LearnContentBlock[];
+}
+
+export interface SessionQuestion {
+  position: number;
+  question_id: string;
+  card_key: string;
+  learning_item_id: string;
+  prompt_facet_id: string;
+  answer_facet_id: string;
+  status: string;
+  payload: {
+    selection?: {
+      content_type?: string;
+      progress_state?: string;
+      reason?: string;
+      pack_position?: number;
+      content_weight?: number;
+    };
+    presentation?: LearnCardPresentation;
+    [key: string]: unknown;
+  };
+}
+
+export interface SessionState {
+  id: string;
+  profile_id: string;
+  track_id: string | null;
+  type: string;
+  strategy: string;
+  status: string;
+  version: number;
+  current_position: number;
+  started_at_utc: string;
+  last_activity_at_utc: string;
+  completed_at_utc: string | null;
+  question_count: number;
+  settings: Record<string, unknown>;
+  items: SessionQuestion[];
+  answers: Array<{
+    id: number;
+    question_id: string;
+    answer: unknown;
+    resulting_version: number;
+    created_at_utc: string;
+  }>;
+  current_question: SessionQuestion | null;
+  fatigue_advice?: Record<string, unknown>;
+}
+
+export async function startLearnSession(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  requestedCards = 20,
+): Promise<SessionState> {
+  return hass.callWS<SessionState>({
+    type: "locklearn/session/start",
+    profile_id: profileId,
+    track_id: trackId,
+    session_type: "learn",
+    strategy: "default",
+    settings: { requested_cards: requestedCards },
+  });
+}
+
+export async function getSession(
+  hass: HomeAssistantLike,
+  sessionId: string,
+): Promise<SessionState> {
+  return hass.callWS<SessionState>({
+    type: "locklearn/session/get",
+    session_id: sessionId,
+  });
+}
+
+export async function answerSession(
+  hass: HomeAssistantLike,
+  session: SessionState,
+  questionId: string,
+  answer: Record<string, unknown>,
+): Promise<SessionState> {
+  return hass.callWS<SessionState>({
+    type: "locklearn/session/answer",
+    session_id: session.id,
+    expected_version: session.version,
+    question_id: questionId,
+    answer,
+  });
+}
+
+export async function completeSession(
+  hass: HomeAssistantLike,
+  session: SessionState,
+): Promise<SessionState> {
+  return hass.callWS<SessionState>({
+    type: "locklearn/session/complete",
+    session_id: session.id,
+    expected_version: session.version,
+  });
+}
+
+export async function setCardUserState(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  cardKey: string,
+  userState: "known_already" | "suspended",
+): Promise<Record<string, unknown>> {
+  return hass.callWS<Record<string, unknown>>({
+    type: "locklearn/progress/set_user_state",
+    profile_id: profileId,
+    track_id: trackId,
+    card_key: cardKey,
+    user_state: userState,
+  });
+}
+
+export async function reportQuestion(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  question: SessionQuestion,
+  message?: string,
+): Promise<{ report_id: number; srs_penalized: boolean }> {
+  return hass.callWS({
+    type: "locklearn/content/report_question",
+    profile_id: profileId,
+    track_id: trackId,
+    card_key: question.card_key,
+    learning_item_id: question.learning_item_id,
+    prompt_facet_id: question.prompt_facet_id,
+    answer_facet_id: question.answer_facet_id,
+    reason: "user_reported_question",
+    ...(message === undefined || message.trim() === "" ? {} : { message: message.trim() }),
+  });
+}
+
+export async function createCardAnnotation(
+  hass: HomeAssistantLike,
+  profileId: string,
+  cardKey: string,
+  note: string,
+): Promise<Record<string, unknown>> {
+  return hass.callWS<Record<string, unknown>>({
+    type: "locklearn/annotations/create",
+    profile_id: profileId,
+    card_key: cardKey,
+    note: note.trim(),
   });
 }
