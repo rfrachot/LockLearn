@@ -99,7 +99,7 @@
 
 - **P5.1** — Frontend shell, protocol/bootstrap and routing (functional real-HA regression qualification complete; deferred token-rotation debt remains)
 - **P5.2** — Home dashboard and profile switcher (complete)
-- **P5.3** — Learn UI and introduction/reveal flow (implemented; real-HA keyboard/mobile/accessibility qualification pending)
+- **P5.3** — Learn UI and introduction/reveal flow (complete)
 - **P5.4** — Quiz/free-text/cloze UI
 - **P5.5** — Profiles/tracks/packs/settings management UI
 - **P5.6** — Dataset updates, Sources & Licences UI
