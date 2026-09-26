@@ -291,8 +291,8 @@ async def test_free_text_wrong_can_be_recovered_as_unrecognized() -> None:
     assert wrong["correct_answer"] is None
     assert wrong["reveal_correct_answer"] is False
 
-    recovered = await service.async_evaluate(
-        "session-1",
+    recovered = await service._evaluate_current(
+        session,
         "q1",
         {
             "kind": "quiz",
@@ -425,7 +425,8 @@ async def test_free_text_idk_is_explicit_without_fake_submission() -> None:
         {"kind": "quiz", "action": "idk"},
     )
     assert feedback["result"] == "idk"
-    assert feedback["reveal_correct_answer"] is True
+    assert feedback["reveal_correct_answer"] is False
+    assert feedback["correct_answer"] is None
     assert feedback["submitted_text"] is None
 
 
