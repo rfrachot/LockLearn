@@ -57,6 +57,14 @@ function objectSetting(
     : {};
 }
 
+export function canManageProfileRole(role: ProfileRole | undefined): boolean {
+  return role === "owner";
+}
+
+export function canEditTrackRole(role: ProfileRole | undefined): boolean {
+  return role === "owner" || role === "editor";
+}
+
 export class LockLearnManagementView extends LitElement {
   @property({ attribute: false }) hass?: HomeAssistantLike;
   @property({ attribute: false }) profile?: VisibleProfile;
@@ -135,11 +143,11 @@ export class LockLearnManagementView extends LitElement {
   }
 
   private isOwner(): boolean {
-    return this.profile?.role === "owner";
+    return canManageProfileRole(this.profile?.role);
   }
 
   private canEditTrack(): boolean {
-    return this.profile?.role === "owner" || this.profile?.role === "editor";
+    return canEditTrackRole(this.profile?.role);
   }
 
   private async load(): Promise<void> {
