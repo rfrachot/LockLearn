@@ -18,9 +18,11 @@ from .core.dashboard import DashboardService
 from .core.difficulties import DifficultyService
 from .core.grading import FreeTextGrader
 from .core.integrity import IntegrityService
+from .core.learning_sessions import LearningSessionService
 from .core.notification_selection import NotificationSelectionService
 from .core.operations import OperationRegistry
 from .core.planning import LearningPlanService
+from .core.presentation import CardPresentationService
 from .core.profiles import ProfileService
 from .core.progress_state import ProgressUserStateService
 from .core.quiz import QuizEngine
@@ -57,6 +59,8 @@ class LockLearnRuntime:
 
     storage: SQLiteStorage
     sessions: SessionService
+    learning_sessions: LearningSessionService
+    presentation: CardPresentationService
     operations: OperationRegistry
     profiles: ProfileService
     acl: ProfileACLService
@@ -180,6 +184,18 @@ class LockLearnRuntime:
                 issue_clear_callback=clear_issue,
                 receptive_evaluator=evaluate_receptive_when,
             )
+            sessions = SessionService(storage)
+            learning_sessions = LearningSessionService(
+                storage,
+                sessions,
+                reviews,
+                review_policy,
+                signal_policy,
+                dataset_generation=lambda: (
+                    storage.content_generations.active_metadata.generation_id
+                ),
+            )
+            presentation = CardPresentationService(storage)
             scheduler_ha = SchedulerHomeAssistantBridge(
                 hass,
                 storage.repositories.profiles,
@@ -213,7 +229,9 @@ class LockLearnRuntime:
             )
             runtime = cls(
                 storage=storage,
-                sessions=SessionService(storage),
+                sessions=sessions,
+                learning_sessions=learning_sessions,
+                presentation=presentation,
                 operations=OperationRegistry(),
                 profiles=ProfileService(storage.repositories.profiles),
                 acl=acl,

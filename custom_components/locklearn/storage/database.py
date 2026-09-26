@@ -22,7 +22,7 @@ from .content import (
     ContentGenerationManager,
     GenerationMetadata,
 )
-from .repositories import StateRepositories
+from .repositories import ReviewEventRecord, ReviewEventsRepository, StateRepositories
 from .schema import STATE_SCHEMA
 
 T = TypeVar("T")
@@ -694,6 +694,184 @@ class SQLiteStorage:
             return dict(zip(keys, row, strict=True))
 
         return await self._async_reader(read)
+
+    async def async_answer_learning_session(
+        self,
+        event: ReviewEventRecord,
+        *,
+        expected_version: int,
+        question_id: str,
+        answer: Any,
+    ) -> dict[str, Any]:
+        """Atomically append a ReviewEvent projection and advance one session question."""
+        valid = await self.async_validate_card_reference(
+            card_key=event.card_key,
+            learning_item_id=event.learning_item_id,
+            prompt_facet_id=event.prompt_facet_id,
+            answer_facet_id=event.answer_facet_id,
+        )
+        if not valid:
+            raise RuntimeError(f"unknown active card reference: {event.card_key}")
+        ReviewEventsRepository._validate_projection_identity(event, event.post_state_snapshot)
+        pre_json = json.dumps(
+            event.pre_state_snapshot,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        post_json = json.dumps(
+            event.post_state_snapshot,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        answer_json = json.dumps(answer, ensure_ascii=False, separators=(",", ":"))
+        now = self._clock.now().isoformat()
+
+        def answer_cas(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                session = connection.execute(
+                    """SELECT profile_id, track_id, status, version,
+                              current_position, question_count
+                       FROM sessions WHERE id = ?""",
+                    (event.session_id,),
+                ).fetchone()
+                if session is None:
+                    connection.rollback()
+                    raise SessionNotFoundError(str(event.session_id))
+                profile_id, track_id, status, version, position, question_count = session
+                if (
+                    event.session_id is None
+                    or str(profile_id) != event.profile_id
+                    or str(track_id) != event.track_id
+                    or str(status) != "active"
+                    or int(version) != expected_version
+                ):
+                    connection.rollback()
+                    raise StaleSessionError(str(event.session_id))
+                item = connection.execute(
+                    """SELECT question_id, card_key, learning_item_id,
+                              prompt_facet_id, answer_facet_id, status
+                       FROM session_items
+                       WHERE session_id = ? AND position = ?""",
+                    (event.session_id, int(position)),
+                ).fetchone()
+                if (
+                    item is None
+                    or str(item[0]) != question_id
+                    or str(item[1]) != event.card_key
+                    or str(item[2]) != event.learning_item_id
+                    or str(item[3]) != event.prompt_facet_id
+                    or str(item[4]) != event.answer_facet_id
+                    or str(item[5]) not in {"queued", "presented"}
+                ):
+                    connection.rollback()
+                    raise StaleSessionError(str(event.session_id))
+
+                connection.execute(
+                    """INSERT INTO review_events(
+                           id, profile_id, track_id, learning_item_id,
+                           prompt_facet_id, answer_facet_id, card_key, mode,
+                           question_type, result, answer_id, expected_answer_id,
+                           hint_used, retrieval_occurred, scheduled_interval_days,
+                           elapsed_days, grading_result, signal_quality,
+                           policy_version, dataset_generation, normalization_version,
+                           pre_state_snapshot, post_state_snapshot,
+                           presentation_to_answer_ms, delivery_to_action_ms,
+                           session_id, notification_id, created_at_utc, local_date,
+                           timezone_name, utc_offset_minutes
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        event.id,
+                        event.profile_id,
+                        event.track_id,
+                        event.learning_item_id,
+                        event.prompt_facet_id,
+                        event.answer_facet_id,
+                        event.card_key,
+                        event.mode,
+                        event.question_type,
+                        event.result,
+                        event.answer_id,
+                        event.expected_answer_id,
+                        int(event.hint_used),
+                        int(event.retrieval_occurred),
+                        event.scheduled_interval_days,
+                        event.elapsed_days,
+                        event.grading_result,
+                        event.signal_quality,
+                        event.policy_version,
+                        event.dataset_generation,
+                        event.normalization_version,
+                        pre_json,
+                        post_json,
+                        event.presentation_to_answer_ms,
+                        event.delivery_to_action_ms,
+                        event.session_id,
+                        event.notification_id,
+                        event.created_at_utc,
+                        event.local_date,
+                        event.timezone_name,
+                        event.utc_offset_minutes,
+                    ),
+                )
+                ReviewEventsRepository._upsert_progress(connection, event.post_state_snapshot)
+                ReviewEventsRepository._rebuild_stats_day_in_connection(
+                    connection,
+                    profile_id=event.profile_id,
+                    track_id=event.track_id,
+                    local_date=event.local_date,
+                )
+
+                resulting_version = expected_version + 1
+                next_position = int(position) + 1
+                connection.execute(
+                    """UPDATE session_items
+                       SET status = 'answered'
+                       WHERE session_id = ? AND position = ?""",
+                    (event.session_id, int(position)),
+                )
+                if next_position < int(question_count):
+                    connection.execute(
+                        """UPDATE session_items
+                           SET status = 'presented'
+                           WHERE session_id = ? AND position = ? AND status = 'queued'""",
+                        (event.session_id, next_position),
+                    )
+                cursor = connection.execute(
+                    """UPDATE sessions
+                       SET version = ?, current_position = ?, last_activity_at_utc = ?
+                       WHERE id = ? AND version = ? AND status = 'active'""",
+                    (
+                        resulting_version,
+                        next_position,
+                        now,
+                        event.session_id,
+                        expected_version,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    connection.rollback()
+                    raise StaleSessionError(str(event.session_id))
+                connection.execute(
+                    """INSERT INTO session_answers(
+                           session_id, question_id, answer_json,
+                           resulting_version, created_at_utc
+                       ) VALUES (?, ?, ?, ?, ?)""",
+                    (event.session_id, question_id, answer_json, resulting_version, now),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._async_writer(answer_cas)
+        session = await self.async_get_session(str(event.session_id))
+        assert session is not None
+        return session
 
     async def async_answer_session(
         self,

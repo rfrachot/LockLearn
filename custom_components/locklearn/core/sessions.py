@@ -211,6 +211,10 @@ class SessionService:
 
         return unsubscribe
 
+    def publish(self, session_id: str, state: dict[str, Any]) -> None:
+        """Publish one already-committed session snapshot to subscribers."""
+        self._publish(session_id, state)
+
     def _publish(self, session_id: str, state: dict[str, Any]) -> None:
         for listener in tuple(self._listeners.get(session_id, ())):
             listener(state)
