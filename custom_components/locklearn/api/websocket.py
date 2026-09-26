@@ -425,7 +425,9 @@ async def ws_profiles_members(
         result.append(
             {
                 **member,
-                "name": member["ha_user_id"] if user is None else (user.name or member["ha_user_id"]),
+                "name": member["ha_user_id"]
+                if user is None
+                else (user.name or member["ha_user_id"]),
             }
         )
     connection.send_result(msg["id"], result)
@@ -456,11 +458,7 @@ async def ws_profiles_share_targets(
     users = await hass.auth.async_get_users()
     connection.send_result(
         msg["id"],
-        [
-            {"ha_user_id": user.id, "name": user.name or user.id}
-            for user in users
-            if user.is_active
-        ],
+        [{"ha_user_id": user.id, "name": user.name or user.id} for user in users if user.is_active],
     )
 
 
