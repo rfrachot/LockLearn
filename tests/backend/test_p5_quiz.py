@@ -535,7 +535,7 @@ async def test_real_ws_quiz_answer_is_atomic_and_generic_session_answer_is_rejec
         track_id=track_id,
     )
     assert len(events) == 1
-    assert events[0]["mode"] == "panel_free_text"
+    assert events[0]["mode"] == "verified_free_text"
     assert events[0]["retrieval_occurred"] is True
     assert events[0]["result"] == "wrong"
 
