@@ -14,6 +14,7 @@ import {
   setCardUserState,
   startLearnSession,
   startQuizSession,
+  submitQuizAnswer,
   evaluateQuizAnswer,
   ProtocolMismatchError,
   type HomeAssistantLike,
@@ -239,6 +240,10 @@ describe("frontend protocol", () => {
       kind: "quiz",
       submitted_text: "answr",
     });
+    await submitQuizAnswer(hass, session, "q1", {
+      kind: "quiz",
+      selected_answer_id: "a1",
+    });
     await reportFreeTextShouldBeAccepted(
       hass,
       "p1",
@@ -270,6 +275,13 @@ describe("frontend protocol", () => {
         session_id: "quiz-1",
         question_id: "q1",
         answer: { kind: "quiz", submitted_text: "answr" },
+      },
+      {
+        type: "locklearn/quiz/answer",
+        session_id: "quiz-1",
+        expected_version: 2,
+        question_id: "q1",
+        answer: { kind: "quiz", selected_answer_id: "a1" },
       },
       {
         type: "locklearn/content/report",
