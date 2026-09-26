@@ -9,6 +9,7 @@ import {
   deleteTrack,
   integratePackUpdate,
   listPacks,
+  listNotificationTargets,
   listProfileMembers,
   listShareTargets,
   listTracks,
@@ -22,6 +23,7 @@ import {
   type HomeAssistantLike,
   type LearningPlanInput,
   type LoadForecast,
+  type NotificationTargetSummary,
   type PackVersionDiff,
   type PackVersionRecord,
   type ProfileMember,
@@ -73,6 +75,7 @@ export class LockLearnManagementView extends LitElement {
 
   @state() private tracks: TrackRecord[] = [];
   @state() private packs: PackVersionRecord[] = [];
+  @state() private notificationTargets: NotificationTargetSummary[] = [];
   @state() private members: ProfileMember[] = [];
   @state() private shareTargets: ShareTarget[] = [];
   @state() private selectedTrackId = "";
@@ -156,6 +159,7 @@ export class LockLearnManagementView extends LitElement {
     if (this.profile === undefined) {
       this.tracks = [];
       this.packs = [];
+      this.notificationTargets = [];
       this.members = [];
       this.shareTargets = [];
       return;
@@ -167,6 +171,9 @@ export class LockLearnManagementView extends LitElement {
         listTracks(this.hass, this.profile.profile_id),
         listPacks(this.hass),
       ]);
+      this.notificationTargets = this.canEditTrack()
+        ? await listNotificationTargets(this.hass, this.profile.profile_id)
+        : [];
       if (!this.tracks.some((item) => item.track_id === this.selectedTrackId)) {
         this.selectedTrackId = this.tracks[0]?.track_id ?? "";
       }
@@ -395,6 +402,11 @@ export class LockLearnManagementView extends LitElement {
   }
 
   private renderTrack(track: TrackRecord) {
+    const scheduler = objectSetting(track.settings, "scheduler");
+    const targetIds = Array.isArray(scheduler.target_ids)
+      ? scheduler.target_ids.map(String)
+      : [];
+    const weights = track.content_weights ?? {};
     return html`
       <article class="card">
         <h2>${track.name}</h2>
@@ -405,12 +417,25 @@ export class LockLearnManagementView extends LitElement {
             event.preventDefault();
             const data = new FormData(event.currentTarget as HTMLFormElement);
             if (this.hass === undefined) return;
+            const selectedTargets = data.getAll("notificationTarget").map(String);
+            const contentWeights = {
+              vocabulary: asFloat(data.get("weightVocabulary"), Number(weights.vocabulary ?? 1), 0, 100),
+              kanji: asFloat(data.get("weightKanji"), Number(weights.kanji ?? 1), 0, 100),
+              grammar: asFloat(data.get("weightGrammar"), Number(weights.grammar ?? 1), 0, 100),
+              expression: asFloat(data.get("weightExpression"), Number(weights.expression ?? 1), 0, 100),
+            };
             void this.mutate(() => updateTrack(this.hass!, track.track_id, {
               name: String(data.get("name") ?? track.name),
               source_language: String(data.get("source") ?? track.source_language ?? "").trim(),
               target_language: String(data.get("target") ?? track.target_language ?? "").trim(),
               status: String(data.get("status") ?? track.status),
               priority: asInt(data.get("priority"), track.priority, 1),
+              content_weights: contentWeights,
+              scheduler_settings: {
+                learning_count: asInt(data.get("learningCount"), Number(scheduler.learning_count ?? 0), 0),
+                quiz_count: asInt(data.get("quizCount"), Number(scheduler.quiz_count ?? 0), 0),
+                ...(selectedTargets.length === 0 ? {} : { target_ids: selectedTargets }),
+              },
             }), this.t("manage.saved"));
           }}>
             <label>${this.t("manage.name")}<input name="name" .value=${track.name} /></label>
@@ -422,9 +447,30 @@ export class LockLearnManagementView extends LitElement {
             <label>${this.t("manage.sourceLanguage")}<input name="source" .value=${track.source_language ?? ""} required /></label>
             <label>${this.t("manage.targetLanguage")}<input name="target" .value=${track.target_language ?? ""} required /></label>
             <label>${this.t("manage.priority")}<input name="priority" type="number" min="1" .value=${String(track.priority)} /></label>
+            <label>${this.t("manage.weightVocabulary")}<input name="weightVocabulary" type="number" min="0" step=".1" .value=${String(weights.vocabulary ?? 1)} /></label>
+            <label>${this.t("manage.weightKanji")}<input name="weightKanji" type="number" min="0" step=".1" .value=${String(weights.kanji ?? 1)} /></label>
+            <label>${this.t("manage.weightGrammar")}<input name="weightGrammar" type="number" min="0" step=".1" .value=${String(weights.grammar ?? 1)} /></label>
+            <label>${this.t("manage.weightExpression")}<input name="weightExpression" type="number" min="0" step=".1" .value=${String(weights.expression ?? 1)} /></label>
+            <label>${this.t("manage.learningNotifications")}<input name="learningCount" type="number" min="0" .value=${String(scheduler.learning_count ?? 0)} /></label>
+            <label>${this.t("manage.quizNotifications")}<input name="quizCount" type="number" min="0" .value=${String(scheduler.quiz_count ?? 0)} /></label>
+            <label>${this.t("manage.notificationTargets")}
+              <select name="notificationTarget" multiple size=${Math.min(4, Math.max(2, this.notificationTargets.length))}>
+                ${this.notificationTargets.map((target) => html`
+                  <option value=${target.target_id} ?selected=${targetIds.includes(target.target_id)}>
+                    ${target.friendly_name} · ${target.platform}
+                  </option>`)}
+              </select>
+              <span class="meta">${this.notificationTargets.length === 0
+                ? this.t("manage.noNotificationTargets")
+                : this.t("manage.notificationTargetsHelp")}</span>
+            </label>
             <div class="actions">
               <button type="submit">${this.t("manage.save")}</button>
-              <button type="button" @click=${() => { this.selectedTrackId = track.track_id; this.forecast = undefined; }}>${this.t("manage.plan")}</button>
+              <button type="button" @click=${() => {
+                this.selectedTrackId = track.track_id;
+                this.forecast = undefined;
+                this.forecastPlan = undefined;
+              }}>${this.t("manage.plan")}</button>
               <button type="button" @click=${() => this.removeTrack(track.track_id)}>${this.t("manage.delete")}</button>
             </div>
           </form>
@@ -522,7 +568,9 @@ export class LockLearnManagementView extends LitElement {
           <dt>${this.t("manage.reviews3Weeks")}</dt><dd>${forecast.reviews_per_day_in_3_weeks}</dd>
           <dt>${this.t("manage.reviews3Months")}</dt><dd>${forecast.reviews_per_day_in_3_months}</dd>
           <dt>${this.t("manage.notifications3Weeks")}</dt><dd>${forecast.notification_deliverable_in_3_weeks}</dd>
+          <dt>${this.t("manage.notifications3Months")}</dt><dd>${forecast.notification_deliverable_in_3_months}</dd>
           <dt>${this.t("manage.sessionLoad3Weeks")}</dt><dd>${forecast.active_session_cards_in_3_weeks}</dd>
+          <dt>${this.t("manage.sessionLoad3Months")}</dt><dd>${forecast.active_session_cards_in_3_months}</dd>
         </dl>
         ${forecast.warnings.length === 0 ? nothing : html`<ul>${forecast.warnings.map((item) => html`<li>${item}</li>`)}</ul>`}
         <div class="actions"><button class="primary" @click=${() => this.applyPlan(track)}>${this.t("manage.applyPlan")}</button></div>
@@ -588,16 +636,30 @@ export class LockLearnManagementView extends LitElement {
 
   private async applyPackUpdate(): Promise<void> {
     if (this.hass === undefined || !this.packDiffTrack || !this.packDiffTarget) return;
+    const trackId = this.packDiffTrack;
+    const targetId = this.packDiffTarget;
     await this.mutate(
-      () => integratePackUpdate(this.hass!, this.packDiffTrack, this.packDiffTarget),
+      () => integratePackUpdate(this.hass!, trackId, targetId),
       this.t("manage.packIntegrated"),
     );
+    if (this.errorMessage === "") {
+      this.packDiff = undefined;
+      this.packDiffTrack = "";
+      this.packDiffTarget = "";
+    }
   }
 
   private renderSettings() {
     if (!this.isOwner()) return html`<div class="card"><p>${this.t("manage.readOnly")}</p></div>`;
     const settings = this.profile?.settings ?? {};
     const quiet = objectSetting(settings, "quiet_hours");
+    const scheduler = objectSetting(settings, "scheduler");
+    const windows = Array.isArray(scheduler.active_windows)
+      ? scheduler.active_windows
+      : [];
+    const firstWindow = typeof windows[0] === "object" && windows[0] !== null
+      ? windows[0] as Record<string, unknown>
+      : {};
     return html`
       <article class="card">
         <h2>${this.t("manage.profileSettings")}</h2>
@@ -615,6 +677,13 @@ export class LockLearnManagementView extends LitElement {
                 start: String(data.get("quietStart") ?? "22:00"),
                 end: String(data.get("quietEnd") ?? "08:00"),
               },
+              scheduler: {
+                ...scheduler,
+                active_windows: [{
+                  start: String(data.get("activeStart") ?? "08:00"),
+                  end: String(data.get("activeEnd") ?? "20:00"),
+                }],
+              },
             },
           }), this.t("manage.saved"));
         }}>
@@ -623,6 +692,8 @@ export class LockLearnManagementView extends LitElement {
           <label>${this.t("manage.pushBudget")}<input name="push" type="number" min="0" .value=${String(settings.daily_push_budget ?? 6)} /></label>
           <label>${this.t("manage.quietStart")}<input name="quietStart" type="time" .value=${String(quiet.start ?? "22:00")} /></label>
           <label>${this.t("manage.quietEnd")}<input name="quietEnd" type="time" .value=${String(quiet.end ?? "08:00")} /></label>
+          <label>${this.t("manage.activeStart")}<input name="activeStart" type="time" .value=${String(firstWindow.start ?? "08:00")} /></label>
+          <label>${this.t("manage.activeEnd")}<input name="activeEnd" type="time" .value=${String(firstWindow.end ?? "20:00")} /></label>
           <div class="actions"><button class="primary" type="submit">${this.t("manage.save")}</button></div>
         </form>
       </article>
