@@ -198,7 +198,7 @@ async def test_profile_settings_are_validated_server_side(tmp_path: Path) -> Non
                 profile_id=profile["profile_id"],
                 settings_patch={"daily_push_budget": -1},
             )
-        with pytest.raises(ProfileValidationError, match="quiet_hours.start"):
+        with pytest.raises(ProfileValidationError, match=r"quiet_hours\.start"):
             await service.async_update_profile(
                 profile_id=profile["profile_id"],
                 settings_patch={"quiet_hours": {"start": "25:00", "end": "08:00"}},
