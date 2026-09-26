@@ -33,7 +33,11 @@ export class LockLearnPanel extends LitElement {
   @property({ attribute: false }) hass?: HomeAssistantLike;
 
   @state() private status: ShellStatus = "loading";
-  @state() private route: RouteName = parseRoute(globalThis.location?.pathname ?? "/locklearn");
+  // Home Assistant assigns its own `route` object to custom panels. Keep the
+  // shell's selected route under a distinct name so HA cannot overwrite it.
+  @state() private activeRoute: RouteName = parseRoute(
+    globalThis.location?.pathname ?? "/locklearn",
+  );
   @state() private bootstrapState?: BootstrapResponse;
   @state() private profiles: VisibleProfile[] = [];
   @state() private errorMessage = "";
@@ -208,7 +212,7 @@ export class LockLearnPanel extends LitElement {
 
   private readonly handlePopState = (): void => {
     const next = parseRoute(globalThis.location?.pathname ?? "/locklearn");
-    this.route = isRouteVisible(next, this.profiles) ? next : "home";
+    this.activeRoute = isRouteVisible(next, this.profiles) ? next : "home";
   };
 
   private locale(): UiLanguage {
@@ -238,7 +242,7 @@ export class LockLearnPanel extends LitElement {
       this.bootstrapState = bootstrapState;
       this.profiles = profiles;
       const requested = parseRoute(globalThis.location?.pathname ?? bootstrapState.panel_path);
-      this.route = isRouteVisible(requested, profiles) ? requested : "home";
+      this.activeRoute = isRouteVisible(requested, profiles) ? requested : "home";
       this.status = "ready";
     } catch (error) {
       if (generation !== this.loadGeneration) return;
@@ -260,7 +264,7 @@ export class LockLearnPanel extends LitElement {
 
   private selectRoute(route: RouteName): void {
     if (!isRouteVisible(route, this.profiles)) return;
-    this.route = route;
+    this.activeRoute = route;
     navigateToRoute(route);
   }
 
@@ -314,7 +318,7 @@ export class LockLearnPanel extends LitElement {
               (item) => html`
                 <button
                   class="nav-button"
-                  aria-current=${this.route === item.route ? "page" : nothing}
+                  aria-current=${this.activeRoute === item.route ? "page" : nothing}
                   @click=${() => this.selectRoute(item.route)}
                 >
                   ${this.t(item.labelKey as Parameters<typeof translate>[1])}
@@ -330,7 +334,7 @@ export class LockLearnPanel extends LitElement {
                 <p>${this.t("state.noProfiles")}</p>
               </section>`
             : html`<section class="page">
-                <h1>${this.routeLabel(this.route)}</h1>
+                <h1>${this.routeLabel(this.activeRoute)}</h1>
                 <p>${this.t("route.placeholder")}</p>
               </section>`}
         </main>
