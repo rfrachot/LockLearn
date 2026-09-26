@@ -10,6 +10,16 @@ import {
   type HomeAssistantLike,
 } from "./protocol";
 
+export function safeExternalUrl(value: string | null): string | null {
+  if (value === null) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export function formatDatasetBytes(value: number): string {
   if (value < 1024) return `${value} B`;
   const units = ["KiB", "MiB", "GiB"];
@@ -151,6 +161,7 @@ export class LockLearnDatasetView extends LitElement {
 
   private renderDataset(dataset: DatasetStatusRecord) {
     const hasWarning = dataset.error !== null || dataset.stale_sources.length > 0;
+    const releaseUrl = safeExternalUrl(dataset.release_url);
     return html`
       <article class="card">
         <h2>${dataset.name}</h2>
@@ -174,8 +185,8 @@ export class LockLearnDatasetView extends LitElement {
         ${dataset.changelog
           ? html`<h3>${this.t("datasets.changelog")}</h3><p>${dataset.changelog}</p>`
           : nothing}
-        ${dataset.release_url
-          ? html`<p><a href=${dataset.release_url} target="_blank" rel="noopener noreferrer">${this.t("datasets.release")}</a></p>`
+        ${releaseUrl
+          ? html`<p><a href=${releaseUrl} target="_blank" rel="noopener noreferrer">${this.t("datasets.release")}</a></p>`
           : nothing}
         ${this.admin && (dataset.update_available || dataset.installed_version === null) && dataset.available_version
           ? html`<div class="actions">
@@ -197,7 +208,9 @@ export class LockLearnDatasetView extends LitElement {
                   · ${source.provenance_records} ${this.t("datasets.records")}
                   ${source.modified_records > 0 ? html` · ${source.modified_records} ${this.t("datasets.modified")}` : nothing}
                 </div>
-                <a href=${source.homepage} target="_blank" rel="noopener noreferrer">${this.t("datasets.sourcePage")}</a>
+                ${safeExternalUrl(source.homepage)
+                  ? html`<a href=${safeExternalUrl(source.homepage)!} target="_blank" rel="noopener noreferrer">${this.t("datasets.sourcePage")}</a>`
+                  : nothing}
               </li>
             `)}</ul>`}
         <h3>${this.t("datasets.licenses")}</h3>
@@ -212,7 +225,9 @@ export class LockLearnDatasetView extends LitElement {
                   · ${license.commercial_use_allowed ? this.t("datasets.commercialAllowed") : this.t("datasets.commercialBlocked")}
                   ${license.share_alike ? html` · ${this.t("datasets.shareAlike")}` : nothing}
                 </div>
-                <a href=${license.source_url} target="_blank" rel="noopener noreferrer">${this.t("datasets.licensePage")}</a>
+                ${safeExternalUrl(license.source_url)
+                  ? html`<a href=${safeExternalUrl(license.source_url)!} target="_blank" rel="noopener noreferrer">${this.t("datasets.licensePage")}</a>`
+                  : nothing}
               </li>
             `)}</ul>`}
       </article>
