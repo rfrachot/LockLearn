@@ -76,7 +76,7 @@ jobs:
           path: custom_components/locklearn/frontend/locklearn-panel.js
           if-no-files-found: error
       - name: Materialize bundled panel
-        working-directory: ..
+        working-directory: ${{ github.workspace }}
         run: |
           if git diff --quiet -- custom_components/locklearn/frontend/locklearn-panel.js; then
             exit 0
