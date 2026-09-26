@@ -647,6 +647,54 @@ class SQLiteStorage:
         status["backup_active"] = self._backup_active
         return status
 
+    async def async_latest_session_summary(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+    ) -> dict[str, Any] | None:
+        """Return the most recently active session summary for one Track."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT s.id, s.profile_id, s.track_id, s.type, s.status,
+                          s.started_at_utc, s.last_activity_at_utc,
+                          s.completed_at_utc, s.question_count,
+                          (
+                              SELECT COUNT(*)
+                              FROM session_items AS item
+                              WHERE item.session_id = s.id
+                                AND item.status = 'answered'
+                          ) AS answered_count
+                   FROM sessions AS s
+                   WHERE s.profile_id = ? AND s.track_id = ?
+                   ORDER BY COALESCE(
+                                s.completed_at_utc,
+                                s.last_activity_at_utc,
+                                s.started_at_utc
+                            ) DESC,
+                            s.id DESC
+                   LIMIT 1""",
+                (profile_id, track_id),
+            ).fetchone()
+            if row is None:
+                return None
+            keys = (
+                "session_id",
+                "profile_id",
+                "track_id",
+                "session_type",
+                "status",
+                "started_at_utc",
+                "last_activity_at_utc",
+                "completed_at_utc",
+                "question_count",
+                "answered_count",
+            )
+            return dict(zip(keys, row, strict=True))
+
+        return await self._async_reader(read)
+
     async def async_answer_session(
         self,
         session_id: str,
