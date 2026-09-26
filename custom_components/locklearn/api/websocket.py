@@ -769,19 +769,21 @@ def _forecast_payload(forecast: Any) -> dict[str, Any]:
     }
 
 
-_PLAN_SCHEMA = {
-    vol.Required("track_id"): str,
-    vol.Required("max_new_per_day_cards"): vol.All(int, vol.Range(min=0)),
-    vol.Required("max_reviews_per_day_cards"): vol.All(int, vol.Range(min=1)),
-    vol.Required("max_notification_new_teasers"): vol.All(int, vol.Range(min=0)),
-    vol.Optional("target_date"): vol.Any(str, None),
-    vol.Required("target_coverage"): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1.0)),
-    vol.Required("target_retention"): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1.0)),
-}
-
-
 @websocket_api.websocket_command(
-    {vol.Required("type"): "locklearn/tracks/plan_preview", **_PLAN_SCHEMA}
+    {
+        vol.Required("type"): "locklearn/tracks/plan_preview",
+        vol.Required("track_id"): str,
+        vol.Required("max_new_per_day_cards"): vol.All(int, vol.Range(min=0)),
+        vol.Required("max_reviews_per_day_cards"): vol.All(int, vol.Range(min=1)),
+        vol.Required("max_notification_new_teasers"): vol.All(int, vol.Range(min=0)),
+        vol.Optional("target_date"): vol.Any(str, None),
+        vol.Required("target_coverage"): vol.All(
+            vol.Coerce(float), vol.Range(min=0.01, max=1.0)
+        ),
+        vol.Required("target_retention"): vol.All(
+            vol.Coerce(float), vol.Range(min=0.01, max=1.0)
+        ),
+    }
 )
 @websocket_api.async_response
 async def ws_tracks_plan_preview(
@@ -814,7 +816,20 @@ async def ws_tracks_plan_preview(
 
 
 @websocket_api.websocket_command(
-    {vol.Required("type"): "locklearn/tracks/plan_set", **_PLAN_SCHEMA}
+    {
+        vol.Required("type"): "locklearn/tracks/plan_set",
+        vol.Required("track_id"): str,
+        vol.Required("max_new_per_day_cards"): vol.All(int, vol.Range(min=0)),
+        vol.Required("max_reviews_per_day_cards"): vol.All(int, vol.Range(min=1)),
+        vol.Required("max_notification_new_teasers"): vol.All(int, vol.Range(min=0)),
+        vol.Optional("target_date"): vol.Any(str, None),
+        vol.Required("target_coverage"): vol.All(
+            vol.Coerce(float), vol.Range(min=0.01, max=1.0)
+        ),
+        vol.Required("target_retention"): vol.All(
+            vol.Coerce(float), vol.Range(min=0.01, max=1.0)
+        ),
+    }
 )
 @websocket_api.async_response
 async def ws_tracks_plan_set(
