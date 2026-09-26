@@ -26,6 +26,7 @@ from ..core.difficulties import DifficultyServiceError
 from ..core.grading import FreeTextGradingResult
 from ..core.integrity import IntegrityServiceError
 from ..core.learning_sessions import LearningSessionError
+from ..core.planning import LearningPlan, LearningPlanValidationError
 from ..core.presentation import PresentationError
 from ..core.profiles import ProfileValidationError
 from ..core.progress_state import ProgressUserStateError
@@ -397,6 +398,74 @@ async def ws_profiles_share(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "locklearn/profiles/members",
+        vol.Required("profile_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_profiles_members(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List visible Profile members with friendly HA user names."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        msg["profile_id"],
+        ProfilePermission.READ,
+    ):
+        return
+    members = await runtime.storage.repositories.profiles.async_list_members(msg["profile_id"])
+    result: list[dict[str, str]] = []
+    for member in members:
+        user = await hass.auth.async_get_user(member["ha_user_id"])
+        result.append(
+            {
+                **member,
+                "name": member["ha_user_id"] if user is None else (user.name or member["ha_user_id"]),
+            }
+        )
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/profiles/share_targets",
+        vol.Required("profile_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_profiles_share_targets(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List active HA users available to an owner for explicit sharing."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        msg["profile_id"],
+        ProfilePermission.MANAGE_ACL,
+    ):
+        return
+    users = await hass.auth.async_get_users()
+    connection.send_result(
+        msg["id"],
+        [
+            {"ha_user_id": user.id, "name": user.name or user.id}
+            for user in users
+            if user.is_active
+        ],
+    )
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "locklearn/tracks/list",
         vol.Required("profile_id"): str,
         vol.Optional("limit", default=_DEFAULT_PAGE_LIMIT): vol.All(
@@ -616,6 +685,168 @@ async def ws_tracks_integrate_pack_update(
             "changed_learning_item_ids": list(diff.changed_learning_item_ids),
         },
     )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/tracks/preview_pack_update",
+        vol.Required("track_id"): str,
+        vol.Required("pack_version_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_tracks_preview_pack_update(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Preview a pinned PackVersion update without mutating the Track."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _require_track_permission(
+            runtime,
+            connection,
+            msg["id"],
+            msg["track_id"],
+            ProfilePermission.EDIT_TRACK,
+        )
+        is None
+    ):
+        return
+    try:
+        diff = await runtime.tracks.async_preview_pack_update(
+            track_id=msg["track_id"],
+            target_pack_version_id=msg["pack_version_id"],
+        )
+    except ContentReferenceError as err:
+        connection.send_error(msg["id"], ERR_DATASET_UNAVAILABLE, str(err))
+        return
+    except TrackValidationError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(
+        msg["id"],
+        {
+            "from_pack_version_id": diff.from_pack_version_id,
+            "to_pack_version_id": diff.to_pack_version_id,
+            "added_learning_item_ids": list(diff.added_learning_item_ids),
+            "removed_learning_item_ids": list(diff.removed_learning_item_ids),
+            "changed_learning_item_ids": list(diff.changed_learning_item_ids),
+        },
+    )
+
+
+def _learning_plan_from_message(msg: dict[str, Any]) -> LearningPlan:
+    raw_target_date = msg.get("target_date")
+    return LearningPlan(
+        max_new_per_day_cards=msg["max_new_per_day_cards"],
+        max_reviews_per_day_cards=msg["max_reviews_per_day_cards"],
+        max_notification_new_teasers=msg["max_notification_new_teasers"],
+        target_date=None if raw_target_date is None else date.fromisoformat(raw_target_date),
+        target_coverage=msg["target_coverage"],
+        target_retention=msg["target_retention"],
+    )
+
+
+def _forecast_payload(forecast: Any) -> dict[str, Any]:
+    return {
+        "selected_cards": forecast.selected_cards,
+        "introduced_cards": forecast.introduced_cards,
+        "target_cards": forecast.target_cards,
+        "remaining_target_cards": forecast.remaining_target_cards,
+        "required_new_per_day": forecast.required_new_per_day,
+        "planned_new_per_day": forecast.planned_new_per_day,
+        "reviews_per_day_in_3_weeks": forecast.reviews_per_day_in_3_weeks,
+        "reviews_per_day_in_3_months": forecast.reviews_per_day_in_3_months,
+        "due_now": forecast.due_now,
+        "notification_deliverable_in_3_weeks": forecast.notification_deliverable_in_3_weeks,
+        "active_session_cards_in_3_weeks": forecast.active_session_cards_in_3_weeks,
+        "notification_deliverable_in_3_months": forecast.notification_deliverable_in_3_months,
+        "active_session_cards_in_3_months": forecast.active_session_cards_in_3_months,
+        "target_date_feasible": forecast.target_date_feasible,
+        "review_capacity_feasible_in_3_weeks": forecast.review_capacity_feasible_in_3_weeks,
+        "review_capacity_feasible_in_3_months": forecast.review_capacity_feasible_in_3_months,
+        "warnings": list(forecast.warnings),
+        "assumptions": list(forecast.assumptions),
+    }
+
+
+_PLAN_SCHEMA = {
+    vol.Required("track_id"): str,
+    vol.Required("max_new_per_day_cards"): vol.All(int, vol.Range(min=0)),
+    vol.Required("max_reviews_per_day_cards"): vol.All(int, vol.Range(min=1)),
+    vol.Required("max_notification_new_teasers"): vol.All(int, vol.Range(min=0)),
+    vol.Optional("target_date"): vol.Any(str, None),
+    vol.Required("target_coverage"): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1.0)),
+    vol.Required("target_retention"): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1.0)),
+}
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "locklearn/tracks/plan_preview", **_PLAN_SCHEMA}
+)
+@websocket_api.async_response
+async def ws_tracks_plan_preview(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Preview Track workload before persisting quotas or a target."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _require_track_permission(
+            runtime,
+            connection,
+            msg["id"],
+            msg["track_id"],
+            ProfilePermission.EDIT_TRACK,
+        )
+        is None
+    ):
+        return
+    try:
+        forecast = await runtime.planning.async_preview_plan(
+            track_id=msg["track_id"],
+            plan=_learning_plan_from_message(msg),
+        )
+    except (LearningPlanValidationError, ValueError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], _forecast_payload(forecast))
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): "locklearn/tracks/plan_set", **_PLAN_SCHEMA}
+)
+@websocket_api.async_response
+async def ws_tracks_plan_set(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Persist a Track learning plan after explicit user confirmation."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _require_track_permission(
+            runtime,
+            connection,
+            msg["id"],
+            msg["track_id"],
+            ProfilePermission.EDIT_TRACK,
+        )
+        is None
+    ):
+        return
+    try:
+        forecast = await runtime.planning.async_set_plan(
+            track_id=msg["track_id"],
+            plan=_learning_plan_from_message(msg),
+        )
+    except (LearningPlanValidationError, ValueError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    await runtime.scheduler_ha.async_refresh()
+    connection.send_result(msg["id"], _forecast_payload(forecast))
 
 
 @websocket_api.websocket_command(
@@ -1924,11 +2155,16 @@ COMMANDS = (
     ws_profiles_update,
     ws_profiles_delete,
     ws_profiles_share,
+    ws_profiles_members,
+    ws_profiles_share_targets,
     ws_tracks_list,
     ws_tracks_create,
     ws_tracks_update,
     ws_tracks_delete,
     ws_tracks_integrate_pack_update,
+    ws_tracks_preview_pack_update,
+    ws_tracks_plan_preview,
+    ws_tracks_plan_set,
     ws_packs_list,
     ws_datasets_list,
     ws_content_report,
