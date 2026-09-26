@@ -24,6 +24,7 @@ describe("permission-aware navigation", () => {
       (item) => item.route,
     );
     expect(routes).toContain("home");
+    expect(routes).toContain("sources");
     expect(routes).not.toContain("settings");
   });
 
