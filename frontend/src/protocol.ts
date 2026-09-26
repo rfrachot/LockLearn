@@ -1,4 +1,4 @@
-export const FRONTEND_PROTOCOL_VERSION = 2;
+export const FRONTEND_PROTOCOL_VERSION = 3;
 
 export type ProfileRole = "owner" | "editor" | "viewer";
 
@@ -192,6 +192,7 @@ export interface SessionQuestion {
       content_weight?: number;
     };
     presentation?: LearnCardPresentation;
+    quiz?: QuizQuestionPayload;
     [key: string]: unknown;
   };
 }
@@ -220,6 +221,111 @@ export interface SessionState {
   }>;
   current_question: SessionQuestion | null;
   fatigue_advice?: Record<string, unknown>;
+}
+
+
+export type QuizFormat = "mixed" | "mcq" | "free_text" | "cloze_mcq";
+
+export interface QuizOption {
+  answer_id: string;
+  text: string;
+}
+
+export interface QuizQuestionPayload {
+  format: Exclude<QuizFormat, "mixed">;
+  prompt_text: string;
+  context_hint: string | null;
+  options: QuizOption[];
+  idk_available: boolean;
+  reportable: boolean;
+  hint_blocks: LearnContentBlock[];
+  content_type: string;
+}
+
+export interface QuizFeedback {
+  format: Exclude<QuizFormat, "mixed">;
+  result: "correct" | "wrong" | "idk" | "unrecognized";
+  immediate: boolean;
+  reveal_correct_answer: boolean;
+  correct_answer: string | null;
+  contrastive_feedback: string | null;
+  selected_answer_id?: string | null;
+  selected_answer?: string | null;
+  submitted_text?: string | null;
+  normalized_submission?: string | null;
+  reportable: boolean;
+  grading_policy_kind?: "exact" | "any_of" | "fuzzy_normalized";
+  grading_policy_version?: number;
+  normalization_version?: number;
+  grading_reason?: string;
+  hint_used: boolean;
+  presentation_to_answer_ms?: number | null;
+}
+
+export async function startQuizSession(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  requestedCards = 10,
+  quizFormat: QuizFormat = "mixed",
+): Promise<SessionState> {
+  return hass.callWS<SessionState>({
+    type: "locklearn/session/start",
+    profile_id: profileId,
+    track_id: trackId,
+    session_type: "quiz",
+    strategy: "default",
+    settings: {
+      requested_cards: requestedCards,
+      quiz_format: quizFormat,
+      option_count: 4,
+    },
+  });
+}
+
+export async function evaluateQuizAnswer(
+  hass: HomeAssistantLike,
+  sessionId: string,
+  questionId: string,
+  answer: Record<string, unknown>,
+): Promise<QuizFeedback> {
+  return hass.callWS<QuizFeedback>({
+    type: "locklearn/quiz/evaluate",
+    session_id: sessionId,
+    question_id: questionId,
+    answer,
+  });
+}
+
+export async function reportFreeTextShouldBeAccepted(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  question: SessionQuestion,
+  feedback: QuizFeedback,
+): Promise<{ report_id: number; grading_result: string; srs_penalized: boolean }> {
+  if (
+    typeof feedback.submitted_text !== "string" ||
+    feedback.grading_policy_kind === undefined ||
+    feedback.grading_policy_version === undefined ||
+    feedback.normalization_version === undefined
+  ) {
+    throw new Error("free-text report metadata is incomplete");
+  }
+  return hass.callWS({
+    type: "locklearn/content/report",
+    profile_id: profileId,
+    track_id: trackId,
+    card_key: question.card_key,
+    learning_item_id: question.learning_item_id,
+    prompt_facet_id: question.prompt_facet_id,
+    answer_facet_id: question.answer_facet_id,
+    submitted_text: feedback.submitted_text,
+    normalized_submission: feedback.normalized_submission ?? null,
+    grading_policy_kind: feedback.grading_policy_kind,
+    grading_policy_version: feedback.grading_policy_version,
+    normalization_version: feedback.normalization_version,
+  });
 }
 
 export async function startLearnSession(
