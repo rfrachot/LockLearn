@@ -10,8 +10,11 @@ import {
   getSession,
   listVisibleProfiles,
   reportQuestion,
+  reportFreeTextShouldBeAccepted,
   setCardUserState,
   startLearnSession,
+  startQuizSession,
+  evaluateQuizAnswer,
   ProtocolMismatchError,
   type HomeAssistantLike,
 } from "./protocol";
@@ -176,6 +179,111 @@ describe("frontend protocol", () => {
         answer_facet_id: "answer",
         reason: "user_reported_question",
         message: "ambiguous",
+      },
+    ]);
+  });
+
+  it("uses explicit Quiz evaluate/report/session contracts", async () => {
+    const messages: Record<string, unknown>[] = [];
+    const session = {
+      id: "quiz-1",
+      profile_id: "p1",
+      track_id: "t1",
+      type: "quiz",
+      strategy: "default",
+      status: "active",
+      version: 2,
+      current_position: 0,
+      started_at_utc: "2026-09-26T20:00:00+00:00",
+      last_activity_at_utc: "2026-09-26T20:00:00+00:00",
+      completed_at_utc: null,
+      question_count: 1,
+      settings: {},
+      items: [],
+      answers: [],
+      current_question: null,
+    };
+    const hass: HomeAssistantLike = {
+      callWS: async <T>(message: Record<string, unknown>): Promise<T> => {
+        messages.push(message);
+        if (message.type === "locklearn/quiz/evaluate") {
+          return {
+            format: "free_text",
+            result: "wrong",
+            immediate: true,
+            reveal_correct_answer: true,
+            correct_answer: "answer",
+            contrastive_feedback: null,
+            submitted_text: "answr",
+            normalized_submission: null,
+            reportable: true,
+            grading_policy_kind: "exact",
+            grading_policy_version: 1,
+            normalization_version: 1,
+            hint_used: false,
+          } as T;
+        }
+        if (message.type === "locklearn/content/report") {
+          return {
+            report_id: 1,
+            grading_result: "unrecognized",
+            srs_penalized: false,
+          } as T;
+        }
+        return session as unknown as T;
+      },
+    };
+
+    await startQuizSession(hass, "p1", "t1", 7, "mixed");
+    const feedback = await evaluateQuizAnswer(hass, "quiz-1", "q1", {
+      kind: "quiz",
+      submitted_text: "answr",
+    });
+    await reportFreeTextShouldBeAccepted(
+      hass,
+      "p1",
+      "t1",
+      {
+        position: 0,
+        question_id: "q1",
+        card_key: "card",
+        learning_item_id: "item",
+        prompt_facet_id: "prompt",
+        answer_facet_id: "answer",
+        status: "presented",
+        payload: {},
+      },
+      feedback,
+    );
+
+    expect(messages).toEqual([
+      {
+        type: "locklearn/session/start",
+        profile_id: "p1",
+        track_id: "t1",
+        session_type: "quiz",
+        strategy: "default",
+        settings: { requested_cards: 7, quiz_format: "mixed", option_count: 4 },
+      },
+      {
+        type: "locklearn/quiz/evaluate",
+        session_id: "quiz-1",
+        question_id: "q1",
+        answer: { kind: "quiz", submitted_text: "answr" },
+      },
+      {
+        type: "locklearn/content/report",
+        profile_id: "p1",
+        track_id: "t1",
+        card_key: "card",
+        learning_item_id: "item",
+        prompt_facet_id: "prompt",
+        answer_facet_id: "answer",
+        submitted_text: "answr",
+        normalized_submission: null,
+        grading_policy_kind: "exact",
+        grading_policy_version: 1,
+        normalization_version: 1,
       },
     ]);
   });
