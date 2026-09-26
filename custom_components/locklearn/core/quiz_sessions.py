@@ -447,8 +447,12 @@ class QuizSessionService:
         submitted = answer.get("submitted_text")
         if not isinstance(submitted, str) or not submitted.strip():
             raise QuizSessionError("free_text answer requires submitted_text")
-        accepted = tuple(term.text for term in meta.answer_terms)
         canonical = meta.canonical_answer
+        accepted = (
+            (canonical.text,)
+            if meta.grading_policy_kind == "exact"
+            else tuple(term.text for term in meta.answer_terms)
+        )
         policy = self._normalization_policy(canonical)
         try:
             grade = self._grading.grade(
