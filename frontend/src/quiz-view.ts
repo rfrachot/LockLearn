@@ -9,13 +9,13 @@ import {
   quizPayload,
 } from "./quiz-model";
 import {
-  answerSession,
   completeSession,
   evaluateQuizAnswer,
   getSession,
   reportFreeTextShouldBeAccepted,
   reportQuestion,
   startQuizSession,
+  submitQuizAnswer,
   type DashboardResponse,
   type DashboardTrack,
   type HomeAssistantLike,
@@ -45,6 +45,7 @@ export class LockLearnQuizView extends LitElement {
   @state() private notice = "";
   @state() private feedback?: QuizFeedback;
   @state() private pendingAnswer?: Record<string, unknown>;
+  @state() private pendingSession?: SessionState;
   @state() private freeText = "";
   @state() private hintUsed = false;
 
@@ -302,6 +303,7 @@ export class LockLearnQuizView extends LitElement {
   private resetQuestionUi(): void {
     this.feedback = undefined;
     this.pendingAnswer = undefined;
+    this.pendingSession = undefined;
     this.freeText = "";
     this.hintUsed = false;
     this.notice = "";
@@ -378,7 +380,16 @@ export class LockLearnQuizView extends LitElement {
     this.errorMessage = error instanceof Error ? error.message : String(error);
   }
 
-  private async evaluate(answer: Record<string, unknown>): Promise<void> {
+  private enrichAnswer(answer: Record<string, unknown>): Record<string, unknown> {
+    return {
+      ...answer,
+      kind: "quiz",
+      hint_used: this.hintUsed,
+      presentation_to_answer_ms: this.elapsedMs(),
+    };
+  }
+
+  private async evaluateFreeText(answer: Record<string, unknown>): Promise<void> {
     const question = this.session?.current_question;
     if (
       this.hass === undefined ||
@@ -386,12 +397,7 @@ export class LockLearnQuizView extends LitElement {
       question === null ||
       question === undefined
     ) return;
-    const enriched = {
-      ...answer,
-      kind: "quiz",
-      hint_used: this.hintUsed,
-      presentation_to_answer_ms: this.elapsedMs(),
-    };
+    const enriched = this.enrichAnswer(answer);
     this.loading = true;
     this.errorMessage = "";
     try {
@@ -409,33 +415,84 @@ export class LockLearnQuizView extends LitElement {
     }
   }
 
-  private async commit(answer?: Record<string, unknown>): Promise<void> {
+  private async submitDirect(answer: Record<string, unknown>): Promise<void> {
     const question = this.session?.current_question;
-    const committedAnswer = answer ?? this.pendingAnswer;
+    if (
+      this.hass === undefined ||
+      this.session === undefined ||
+      question === null ||
+      question === undefined
+    ) return;
+    const enriched = this.enrichAnswer(answer);
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      const result = await submitQuizAnswer(
+        this.hass,
+        this.session,
+        question.question_id,
+        enriched,
+      );
+      this.feedback = result.feedback;
+      this.pendingAnswer = undefined;
+      this.pendingSession = result.session;
+    } catch (error) {
+      await this.recover(error);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private async submitProvisional(): Promise<void> {
+    const question = this.session?.current_question;
     if (
       this.hass === undefined ||
       this.session === undefined ||
       question === null ||
       question === undefined ||
-      committedAnswer === undefined
+      this.pendingAnswer === undefined
     ) return;
     this.loading = true;
     this.errorMessage = "";
     try {
-      let next = await answerSession(
+      const result = await submitQuizAnswer(
         this.hass,
         this.session,
         question.question_id,
-        committedAnswer,
+        this.pendingAnswer,
       );
-      if (
-        next.status === "active" &&
-        next.current_question === null &&
-        next.question_count > 0
-      ) {
-        next = await completeSession(this.hass, next);
+      if (this.feedback?.result === "correct") {
+        await this.advanceSession(result.session);
+        return;
       }
-      this.applySession(next);
+      this.feedback = result.feedback;
+      this.pendingSession = result.session;
+    } catch (error) {
+      await this.recover(error);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private async advanceSession(session: SessionState): Promise<void> {
+    let next = session;
+    if (
+      this.hass !== undefined &&
+      next.status === "active" &&
+      next.current_question === null &&
+      next.question_count > 0
+    ) {
+      next = await completeSession(this.hass, next);
+    }
+    this.applySession(next);
+  }
+
+  private async advanceCommitted(): Promise<void> {
+    if (this.pendingSession === undefined) return;
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      await this.advanceSession(this.pendingSession);
     } catch (error) {
       await this.recover(error);
     } finally {
@@ -473,20 +530,13 @@ export class LockLearnQuizView extends LitElement {
         ...this.pendingAnswer,
         should_be_accepted: true,
       };
-      let next = await answerSession(
+      const result = await submitQuizAnswer(
         this.hass,
         this.session,
         question.question_id,
         answer,
       );
-      if (
-        next.status === "active" &&
-        next.current_question === null &&
-        next.question_count > 0
-      ) {
-        next = await completeSession(this.hass, next);
-      }
-      this.applySession(next);
+      await this.advanceSession(result.session);
       this.notice = this.t("quiz.reportAccepted");
     } catch (error) {
       await this.recover(error);
@@ -661,7 +711,7 @@ export class LockLearnQuizView extends LitElement {
               <button
                 class="option"
                 @click=${() =>
-                  void this.evaluate({
+                  void this.submitDirect({
                     selected_answer_id: option.answer_id,
                   })}
                 ?disabled=${this.loading}
@@ -671,7 +721,7 @@ export class LockLearnQuizView extends LitElement {
             `,
           )}
           <button
-            @click=${() => void this.evaluate({ selected_answer_id: null })}
+            @click=${() => void this.submitDirect({ selected_answer_id: null })}
             ?disabled=${this.loading}
           >
             ${this.t("quiz.idk")}
@@ -685,7 +735,7 @@ export class LockLearnQuizView extends LitElement {
         @submit=${(event: SubmitEvent) => {
           event.preventDefault();
           if (this.freeText.trim() !== "") {
-            void this.evaluate({ submitted_text: this.freeText });
+            void this.evaluateFreeText({ submitted_text: this.freeText });
           }
         }}
       >
@@ -711,7 +761,7 @@ export class LockLearnQuizView extends LitElement {
           </button>
           <button
             type="button"
-            @click=${() => void this.evaluate({ action: "idk" })}
+            @click=${() => void this.submitDirect({ action: "idk" })}
             ?disabled=${this.loading}
           >
             ${this.t("quiz.idk")}
@@ -739,9 +789,23 @@ export class LockLearnQuizView extends LitElement {
           ? html`<p class="feedback-detail">${this.t("quiz.contrastive")}</p>`
           : nothing}
         <div class="actions">
-          <button class="primary" @click=${() => void this.commit()} ?disabled=${this.loading}>
-            ${this.t("quiz.continue")}
-          </button>
+          ${this.pendingSession !== undefined
+            ? html`<button
+                class="primary"
+                @click=${() => void this.advanceCommitted()}
+                ?disabled=${this.loading}
+              >
+                ${this.t("quiz.continue")}
+              </button>`
+            : html`<button
+                class="primary"
+                @click=${() => void this.submitProvisional()}
+                ?disabled=${this.loading}
+              >
+                ${feedback.result === "wrong"
+                  ? this.t("quiz.showCorrection")
+                  : this.t("quiz.continue")}
+              </button>`}
           ${canReportFreeText(feedback)
             ? html`<button
                 @click=${() => void this.acceptReportedFreeText()}
