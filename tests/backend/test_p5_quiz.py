@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import json
+import sqlite3
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.locklearn.const import DATA_RUNTIME, DOMAIN
 from custom_components.locklearn.core.grading import FreeTextGrader
 from custom_components.locklearn.core.quiz import QuizEngine
 from custom_components.locklearn.core.quiz_sessions import (
@@ -17,6 +23,111 @@ from custom_components.locklearn.core.quiz_sessions import (
 from custom_components.locklearn.core.review_policy import ReviewPolicyV1
 from custom_components.locklearn.core.session_selection import PreparedSessionSelection
 from custom_components.locklearn.core.signals import SignalPolicy
+from tests.backend.content_db_helpers import (
+    CONCEPT_ID,
+    DATASET_ID,
+    ITEM_A,
+    TERM_ID,
+    card_identity,
+    create_package,
+    facet_ids,
+)
+
+
+async def _activate_quiz_package(hass: HomeAssistant, tmp_path: Path) -> str:
+    runtime = hass.data[DOMAIN][DATA_RUNTIME]
+    package = create_package(
+        tmp_path / "p5-4.db",
+        "p5-4",
+        active_item_ids=(ITEM_A,),
+    )
+    prompt_id, answer_id = facet_ids(ITEM_A)
+    with sqlite3.connect(package) as connection:
+        connection.execute(
+            "UPDATE facets SET language_tag = 'en', script = 'Latn' WHERE facet_id = ?",
+            (prompt_id,),
+        )
+        connection.execute(
+            "UPDATE facets SET language_tag = 'fr', script = 'Latn' WHERE facet_id = ?",
+            (answer_id,),
+        )
+        connection.execute(
+            """UPDATE terms
+               SET language_tag = 'en', script = 'Latn',
+                   text = 'prompt', normalized_text = 'prompt'
+               WHERE term_id = ?""",
+            (TERM_ID,),
+        )
+        connection.execute(
+            """INSERT INTO terms(
+                   term_id, dataset_id, language_tag, script, text,
+                   normalized_text, normalization_version
+               ) VALUES (
+                   'locklearn:term:p5-4-answer', ?, 'fr', 'Latn',
+                   'réponse', 'réponse', 1
+               )""",
+            (DATASET_ID,),
+        )
+        connection.execute(
+            "INSERT INTO concept_terms(concept_id, term_id) VALUES (?, ?)",
+            (CONCEPT_ID, "locklearn:term:p5-4-answer"),
+        )
+        connection.execute(
+            """INSERT INTO content_blocks(
+                   content_block_id, learning_item_id, position, kind, role,
+                   reveals_answer, mask_strategy, payload_json
+               ) VALUES (?, ?, 1, 'text', 'answer', 1, 'none', ?)""",
+            (
+                "locklearn:block:p5-4-answer",
+                ITEM_A,
+                json.dumps({"text": "réponse"}, ensure_ascii=False),
+            ),
+        )
+        connection.commit()
+
+    candidate = runtime.storage.paths.content_staging_dir / "generation-p5-4.db"
+    await runtime.storage.async_build_content_generation(
+        (package,),
+        candidate,
+        generation_id="generation-p5-4",
+    )
+    await runtime.storage.async_activate_content_generation(candidate)
+    return card_identity(ITEM_A)[1]
+
+
+async def _seed_review_progress(
+    hass: HomeAssistant,
+    *,
+    profile_id: str,
+    track_id: str,
+    card_key: str,
+) -> None:
+    runtime = hass.data[DOMAIN][DATA_RUNTIME]
+    prompt_id, answer_id = facet_ids(ITEM_A)
+
+    def insert(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """INSERT INTO progress(
+                   profile_id, track_id, card_key, learning_item_id,
+                   prompt_facet_id, answer_facet_id, state,
+                   next_due_at_utc, dataset_generation,
+                   normalization_version, updated_at_utc
+               ) VALUES (?, ?, ?, ?, ?, ?, 'review', ?, ?, 1, ?)""",
+            (
+                profile_id,
+                track_id,
+                card_key,
+                ITEM_A,
+                prompt_id,
+                answer_id,
+                "2026-01-01T00:00:00+00:00",
+                runtime.storage.content_generations.active_metadata.generation_id,
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+        connection.commit()
+
+    await runtime.storage._async_writer(insert)
 
 
 def _meta(index: int, *, content_type: str = "vocabulary") -> _QuizCardMeta:
@@ -316,6 +427,126 @@ async def test_free_text_idk_is_explicit_without_fake_submission() -> None:
     assert feedback["result"] == "idk"
     assert feedback["reveal_correct_answer"] is True
     assert feedback["submitted_text"] is None
+
+
+@pytest.mark.asyncio
+async def test_real_ws_quiz_answer_is_atomic_and_generic_session_answer_is_rejected(
+    hass: HomeAssistant,
+    hass_ws_client: Any,
+    tmp_path: Path,
+) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    card_key = await _activate_quiz_package(hass, tmp_path)
+    runtime = hass.data[DOMAIN][DATA_RUNTIME]
+
+    owner = await hass_ws_client(hass)
+    await owner.send_json_auto_id(
+        {
+            "type": "locklearn/profiles/create",
+            "name": "P5.4",
+            "preset": "standard",
+            "timezone": "Europe/Paris",
+        }
+    )
+    profile = await owner.receive_json()
+    assert profile["success"] is True
+    profile_id = str(profile["result"]["profile_id"])
+
+    await owner.send_json_auto_id(
+        {
+            "type": "locklearn/tracks/create",
+            "profile_id": profile_id,
+            "name": "P5.4 quiz",
+            "pack_version_id": "locklearn:pack-version:p5-4",
+            "source_language": "en",
+            "target_language": "fr",
+            "explicit_card_keys": [card_key],
+        }
+    )
+    track = await owner.receive_json()
+    assert track["success"] is True
+    track_id = str(track["result"]["track_id"])
+    await _seed_review_progress(
+        hass,
+        profile_id=profile_id,
+        track_id=track_id,
+        card_key=card_key,
+    )
+
+    await owner.send_json_auto_id(
+        {
+            "type": "locklearn/session/start",
+            "profile_id": profile_id,
+            "track_id": track_id,
+            "session_type": "quiz",
+            "strategy": "default",
+            "settings": {
+                "requested_cards": 1,
+                "quiz_format": "free_text",
+                "option_count": 4,
+            },
+        }
+    )
+    started = await owner.receive_json()
+    assert started["success"] is True
+    state = started["result"]
+    question = state["current_question"]
+    assert question is not None
+    assert question["payload"]["quiz"]["format"] == "free_text"
+    assert "correct_answer" not in question["payload"]["quiz"]
+
+    await owner.send_json_auto_id(
+        {
+            "type": "locklearn/session/answer",
+            "session_id": state["id"],
+            "expected_version": state["version"],
+            "question_id": question["question_id"],
+            "answer": {"kind": "quiz", "submitted_text": "wrong"},
+        }
+    )
+    bypass = await owner.receive_json()
+    assert bypass["success"] is False
+    assert bypass["error"]["code"] == "locklearn/invalid_request"
+
+    await owner.send_json_auto_id(
+        {
+            "type": "locklearn/quiz/answer",
+            "session_id": state["id"],
+            "expected_version": state["version"],
+            "question_id": question["question_id"],
+            "answer": {
+                "kind": "quiz",
+                "submitted_text": "wrong",
+                "hint_used": False,
+            },
+        }
+    )
+    answered = await owner.receive_json()
+    assert answered["success"] is True
+    assert answered["result"]["feedback"]["result"] == "wrong"
+    assert answered["result"]["feedback"]["correct_answer"] == "réponse"
+    assert answered["result"]["session"]["current_question"] is None
+
+    events = await runtime.storage.repositories.review_events.async_list_scope_events(
+        profile_id=profile_id,
+        track_id=track_id,
+    )
+    assert len(events) == 1
+    assert events[0]["mode"] == "panel_free_text"
+    assert events[0]["retrieval_occurred"] is True
+    assert events[0]["result"] == "wrong"
+
+    progress = await runtime.storage.repositories.progress.async_get(
+        profile_id=profile_id,
+        track_id=track_id,
+        card_key=card_key,
+    )
+    assert progress is not None
+    assert progress["verified_wrong_count"] == 1
+
+    await hass.config_entries.async_unload(entry.entry_id)
 
 
 def test_cloze_requires_explicit_maskable_content() -> None:
