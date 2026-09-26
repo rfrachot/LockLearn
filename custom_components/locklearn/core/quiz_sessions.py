@@ -898,7 +898,13 @@ class QuizSessionService:
                 )
             return {
                 key: _QuizCardMeta(
-                    **entry,
+                    card_key=str(entry["card_key"]),
+                    learning_item_id=str(entry["learning_item_id"]),
+                    prompt_facet_id=str(entry["prompt_facet_id"]),
+                    answer_facet_id=str(entry["answer_facet_id"]),
+                    content_type=str(entry["content_type"]),
+                    grading_policy_kind=str(entry["grading_policy_kind"]),
+                    grading_policy_version=int(entry["grading_policy_version"]),
                     answer_terms=tuple(entry["answer_terms"]),
                     concept_ids=frozenset(concepts.get(key, ())),
                     tag_ids=frozenset(tags.get(key, ())),
