@@ -71,7 +71,7 @@ async def test_dashboard_is_private_and_aggregates_track_home_state(
     )
     await runtime.storage.async_answer_session(
         "session-dashboard",
-        0,
+        1,
         "q1",
         {"result": "known"},
     )
