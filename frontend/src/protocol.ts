@@ -103,6 +103,17 @@ export interface TrackRecord {
   pack_version_id: string | null;
   dataset_generation: string | null;
   integrated_at_utc: string | null;
+  content_weights: Record<string, number>;
+}
+
+export interface NotificationTargetSummary {
+  target_id: string;
+  friendly_name: string;
+  platform: string;
+  shared_device: boolean;
+  lockscreen_visibility: string;
+  enabled: boolean;
+  daily_push_budget: number | null;
 }
 
 export interface PackVersionRecord {
@@ -271,6 +282,15 @@ export async function listTracks(
   });
 }
 
+export async function listNotificationTargets(
+  hass: HomeAssistantLike,
+  profileId: string,
+): Promise<NotificationTargetSummary[]> {
+  return listPaged<NotificationTargetSummary>(hass, "locklearn/targets/list", {
+    profile_id: profileId,
+  });
+}
+
 export async function createTrack(
   hass: HomeAssistantLike,
   input: {
@@ -280,6 +300,12 @@ export async function createTrack(
     source_language: string;
     target_language: string;
     priority: number;
+    content_weights?: Record<string, number>;
+    scheduler_settings?: {
+      learning_count: number;
+      quiz_count: number;
+      target_ids?: string[];
+    };
   },
 ): Promise<TrackRecord> {
   return hass.callWS<TrackRecord>({
