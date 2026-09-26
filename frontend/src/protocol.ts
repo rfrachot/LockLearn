@@ -157,6 +157,16 @@ export interface DatasetSourceRecord {
   attribution_records: number;
 }
 
+export interface DatasetAttributionRecord {
+  source_record_id: string | null;
+  author: string | null;
+  language_tag: string | null;
+  modified_from_source: boolean;
+  attribution_text: string;
+  license_id: string;
+  license_scope: string;
+}
+
 export interface DatasetLicenseRecord {
   license_id: string;
   license_scope: string;
@@ -412,6 +422,21 @@ export async function listDatasets(
   hass: HomeAssistantLike,
 ): Promise<DatasetStatusRecord[]> {
   return listPaged<DatasetStatusRecord>(hass, "locklearn/datasets/list");
+}
+
+export async function listDatasetAttributions(
+  hass: HomeAssistantLike,
+  datasetId: string,
+  sourceId: string,
+  cursor?: string | null,
+): Promise<{ items: DatasetAttributionRecord[]; cursor: string | null }> {
+  return hass.callWS({
+    type: "locklearn/datasets/attributions",
+    dataset_id: datasetId,
+    source_id: sourceId,
+    limit: 50,
+    ...(cursor ? { cursor } : {}),
+  });
 }
 
 export async function refreshDatasets(
