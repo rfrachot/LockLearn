@@ -2,22 +2,40 @@
 
 ## Current state
 
-P5.3 is **COMPLETE / PASS** on `feat/p5-frontend`. P5.4 has not started.
+P5.3 remains **COMPLETE / PASS** on `feat/p5-frontend`.
 
-The final P5.3 code/bundle gate is rooted at `28bc6f58ae1a7c0b16524b1fb94db30307ad1845`; the documentation-only commits that follow do not change runtime code.
+P5.4 is **IMPLEMENTED / REAL-HA QUALIFICATION PENDING**. P5.5 has not started.
 
-P5.3 provides the Learn UI and backend contract for direction-aware CardDefinition presentation, explicit introduction, reveal / I-don't-know / hint / known / review interactions, known-already/suspend, question reporting and personal mnemonic creation. The frontend remains non-authoritative: permissions, CardDefinition identity, presentation mapping, progress mutation and learning-signal semantics are enforced by the backend.
+The P5.4 implementation adds the Quiz route and backend-owned orchestration for V1 panel formats: MCQ (4–6 supported by the backend, UI default 4), free_text, and grammar cloze-MCQ. Quiz answers use the dedicated `locklearn/quiz/answer` CAS path; generic `session/answer` is rejected for quiz sessions.
 
-Two qualification defects were found and corrected before closure:
-1. Introduction originally set `next_due_at_utc` but could end a one-card session without the mandatory first retrieval. The fix atomically appends a learning-step retrieval to the same persistent session. Its `available_at_utc == progress.next_due_at_utc`; the backend rejects answers before that instant and the frontend reveals no prompt/answer/hint until due.
-2. At a real 390×844 viewport, the essential “Continuer” action overflowed horizontally. Responsive containment was corrected and the real-instance requalification passed at 390×844.
+Important contracts already qualified automatically:
+- MCQ/cloze session payloads do not expose `correct_index` or `correct_answer`.
+- Choice answers grade and persist atomically.
+- Explicit IDK is supported for choice and free-text.
+- Free-text provisional grading does not advance the session and does not reveal the correct answer on a wrong provisional result.
+- A disputed free-text answer can be reported as “should be accepted”; it is recorded as `unrecognized` and does not create an automatic SRS failure.
+- Cloze-MCQ requires grammar content plus explicit maskable source content; it does not synthesize a blank from unmarked prose.
+- Known-confusable distractors can emit contrastive corrective feedback.
+- Feedback is textual and not color-only.
+- Hint usage, when content exposes a hint, is included in the quiz signal.
 
-Real Home Assistant 2026.7.4 qualification passed introduction, delayed first retrieval in the same session, answer hiding before due, reveal/known, IDK, keyboard operation, mobile 390×844 and clean LockLearn logs.
+Authoritative automated evidence on 2026-09-26:
+- pre-bundle code HEAD `3f7047697d8dc56565cf717106d52c6e3823cfab`;
+- Ruff format PASS — 256 files;
+- Ruff lint PASS;
+- mypy PASS — 148 source files;
+- registries PASS;
+- pytest PASS — 389 tests;
+- HA 2025.2.5 PASS — 296 backend tests;
+- HA 2026.9.3 PASS — 296 backend tests;
+- TypeScript PASS;
+- Vitest PASS — 11 files / 31 tests;
+- Vite PASS — 29 modules, 97.71 kB / 20.94 kB gzip;
+- generated frontend bundle materialized;
+- normal frontend reproducibility gate PASS on `948bb03e5a974ec5b68fb99ed076990bc9dcea8a`.
 
-The active pack contained no card with `hint_blocks` or `mnemonic_blocks` among the 100 cards inspected, so real-instance hint interaction could not be exercised. Automated backend/frontend tests cover hint visibility and persistence of `hint_used=true`; this is recorded as a content-fixture limitation, not a P5.3 runtime failure.
+HACS metadata validation remains red only for repository description/topics/brand assets; that is release-packaging debt outside P5.4.
 
-Final post-fix CI: backend-quality PASS; frontend PASS including generated-bundle reproducibility; HA 2025.2.5 PASS; HA 2026.9.3 PASS; hassfest PASS. HACS metadata validation still fails only for missing repository description, valid topics and brand asset, which remains release-packaging debt outside P5.3.
+Remaining P5.4 gate: real Home Assistant qualification of the three V1 quiz formats on desktop/mobile/keyboard. Exercise unrecognized/report and contrastive-feedback paths only when suitable real/temporary fixture content is available; absence of such content must be reported as a fixture limitation rather than a runtime failure.
 
-P5.2 remains COMPLETE / PASS. The previously exposed HA development token still requires rotation; Renaud has explicitly deferred that security debt.
-
-Next concrete action: begin P5.4 only when explicitly requested.
+Do not start P5.5 until P5.4 real-HA qualification is recorded.
