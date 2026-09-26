@@ -281,9 +281,7 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
         "quiz_count": 1,
     }
 
-    await client.send_json_auto_id(
-        {"type": "locklearn/targets/list", "profile_id": profile_id}
-    )
+    await client.send_json_auto_id({"type": "locklearn/targets/list", "profile_id": profile_id})
     targets = await client.receive_json()
     assert targets["success"] is True
     assert targets["result"]["items"] == []
@@ -304,9 +302,7 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
     )
     assert (await client.receive_json())["success"] is True
 
-    await outsider.send_json_auto_id(
-        {"type": "locklearn/targets/list", "profile_id": profile_id}
-    )
+    await outsider.send_json_auto_id({"type": "locklearn/targets/list", "profile_id": profile_id})
     viewer_targets = await outsider.receive_json()
     assert viewer_targets["success"] is False
     assert viewer_targets["error"]["code"] == "locklearn/forbidden"

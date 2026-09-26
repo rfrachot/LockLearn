@@ -109,9 +109,7 @@ def _validate_profile_settings(settings: Mapping[str, Any]) -> None:
         raise ProfileValidationError("scheduler.active_windows must be a non-empty list")
     for index, window in enumerate(active_windows):
         if not isinstance(window, Mapping):
-            raise ProfileValidationError(
-                f"scheduler.active_windows[{index}] must be an object"
-            )
+            raise ProfileValidationError(f"scheduler.active_windows[{index}] must be an object")
         start_value = window.get("start")
         end_value = window.get("end")
         _validate_hhmm(start_value, f"scheduler.active_windows[{index}].start")

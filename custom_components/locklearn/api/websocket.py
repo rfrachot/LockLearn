@@ -94,11 +94,9 @@ async def _with_track_management(
 ) -> dict[str, Any]:
     """Attach editable Track configuration kept in normalized side tables."""
     enriched = dict(track)
-    enriched["content_weights"] = (
-        await runtime.storage.repositories.tracks.async_get_content_weights(
-            str(track["track_id"])
-        )
-    )
+    enriched[
+        "content_weights"
+    ] = await runtime.storage.repositories.tracks.async_get_content_weights(str(track["track_id"]))
     return enriched
 
 
@@ -503,9 +501,7 @@ async def ws_tracks_list(
     ):
         return
     tracks = await runtime.storage.repositories.tracks.async_list_for_profile(profile_id)
-    configured_tracks = [
-        await _with_track_management(runtime, track) for track in tracks
-    ]
+    configured_tracks = [await _with_track_management(runtime, track) for track in tracks]
     try:
         result = _paginate(
             configured_tracks,

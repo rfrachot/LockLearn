@@ -207,9 +207,7 @@ async def test_profile_settings_are_validated_server_side(tmp_path: Path) -> Non
             await service.async_update_profile(
                 profile_id=profile["profile_id"],
                 settings_patch={
-                    "scheduler": {
-                        "active_windows": [{"start": "08:00", "end": "08:00"}]
-                    }
+                    "scheduler": {"active_windows": [{"start": "08:00", "end": "08:00"}]}
                 },
             )
 
@@ -220,9 +218,7 @@ async def test_profile_settings_are_validated_server_side(tmp_path: Path) -> Non
                 "max_new_per_day_cards": 4,
                 "daily_push_budget": 5,
                 "quiet_hours": {"start": "21:30", "end": "07:45"},
-                "scheduler": {
-                    "active_windows": [{"start": "07:00", "end": "19:30"}]
-                },
+                "scheduler": {"active_windows": [{"start": "07:00", "end": "19:30"}]},
             },
         )
         assert updated["settings"]["session_length_cards"] == 12
