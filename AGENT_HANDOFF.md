@@ -2,41 +2,46 @@
 
 ## Current state
 
-P5.1 is **reopened pending regression qualification** on `feat/p5-frontend`.
-The original qualification passed, but real use on 2026-09-26 exposed a live
-panel refresh loop: Home Assistant repeatedly reassigns the `hass` property,
-and the shell's `updated()` hook restarted bootstrap/profile loading for every
-new object. That caused repeated loading renders and reset the mobile horizontal
-navigation position.
+P5.1 remains **open pending security token rotation** on `feat/p5-frontend` at
+`b3eb538`. The refresh-loop implementation and real-HA regression qualification
+are PASS, but the credential-safety prerequisite is not proven: `.env` has not
+changed since 2026-09-21, and its working token maps to the instance's sole
+long-lived access token created before the accidental disclosure. No token value
+was printed. Renaud must revoke the exposed token, create a replacement, update
+`.env`, and confirm the replacement authenticates before the P5.1 tracking/docs
+are closed. P5.2 remains unstarted.
 
-The fix now gates bootstrap to one initial load per panel instance, leaving retry
-explicit for the error state, and changes the small-screen navigation from a
-horizontal scrolling strip to a compact three-column grid. A pure lifecycle
-regression test covers the no-rebootstrap invariant. P5.2 remains unstarted.
+The delivered refresh fix gates bootstrap to one initial load per panel
+instance, preserves explicit retry from the error state, and changes mobile
+navigation from a horizontal strip to a compact three-column grid. Real Firefox
+qualification also found that Home Assistant assigns a framework-owned `route`
+object to custom panels; this overwrote the shell's string route state after an
+in-panel navigation. Commit `90da626` renames that state to `activeRoute` and
+adds a non-collision regression assertion. Commit `b3eb538` contains its exact
+generated bundle.
 
-Final repository gate on 2026-09-25: Ruff format PASS (247 files), Ruff lint
+Final repository gate on 2026-09-26: Ruff format PASS (247 files), Ruff lint
 PASS, mypy PASS (141 sources), resource registries PASS, pytest PASS (379 tests
-in 18.82 seconds), TypeScript typecheck PASS, Vitest PASS (14/14), and Vite build
-PASS (34.19 kB, 10.48 kB gzip). Consecutive builds reproduced SHA-256
-`a92882a7fc77e59428941852438aaabd1ea24a5a2b96ae50673f83990a653dce` with
-no `frontend/` drift.
+in 18.90 seconds), TypeScript typecheck PASS, Vitest PASS (7 files / 17 tests),
+and Vite PASS (24 modules, 34.67 kB, 10.61 kB gzip). Consecutive/final builds
+reproduced SHA-256
+`7decdaafd8ee580551e4553fab0c5e57211dcf4987165dc48730d43c9e648a8a`.
 
-The branch was downloaded through HACS onto real Home Assistant 2026.7.4 and
-Core restarted. Bootstrap returned protocol 1, backend 0.0.2 and `/locklearn`;
-the loaded module URL was
-`/locklearn_static/locklearn-panel.js?v=0.0.2-a92882a7fc77`, and its bytes matched
-the committed bundle. One loaded Config Entry/panel remained and the LockLearn
-system log had zero ERROR/CRITICAL records.
+HACS redownloaded `feat/p5-frontend` onto real Home Assistant 2026.7.4 and Core
+restarted. The served URL is
+`/locklearn_static/locklearn-panel.js?v=0.0.2-7decdaafd8ee`; its bytes match the
+committed bundle. Exactly one LockLearn Config Entry is loaded, bootstrap reports
+protocol 1/backend 0.0.2, and the system log has zero LockLearn ERROR/CRITICAL
+records.
 
-Firefox 156 real-browser qualification passed sidebar load, Home, Quiz,
-owner-visible Settings, unknown-route fallback, full reload at `/locklearn/quiz`,
-stale-element no-redefinition/full-reload UX, and bootstrap mismatch fail-closed
-behavior before Profile loading. Viewer/editor UI visibility was not run because
-only one owner token was available; this scenario was optional and remains
-covered by automated navigation/ACL tests.
-
-P5.2 is not started. Next concrete action: review the pushed P5.1 closure and,
-only when explicitly requested, begin P5.2 Home dashboard/profile switcher work.
+Firefox 156 real-browser qualification passed Home/Quiz/Settings navigation,
+three minutes pinned on Quiz through 719 forced `hass` reassignments, zero loading
+flashes and exactly one bootstrap/profile-list pair. Full reload at
+`/locklearn/quiz` stayed on Quiz. A mobile viewport rendered nine tabs in three
+columns with Settings fully visible and no horizontal overflow, then stayed on
+Settings through 119 more `hass` reassignments. Bootstrap mismatch stopped before
+Profile loading, and a protocol-999 stale constructor was preserved while the
+explicit full-reload overlay rendered.
 
 P4.9 and the complete P4 phase are closed PASS on `feat/p4-scheduler`.
 P4.9 ships three Home Assistant automation blueprints under
