@@ -4,6 +4,8 @@ import { property, state } from "lit/decorators.js";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
 import "./learn-view";
 import "./quiz-view";
+import "./management-view";
+import type { ManagementRoute } from "./management-view";
 import { isRouteVisible, visibleNavigation } from "./navigation";
 import { defaultProfileId, groupProfiles } from "./profile-switcher";
 import {
@@ -519,10 +521,19 @@ export class LockLearnPanel extends LitElement {
                       )}
                       .dashboard=${this.dashboard}
                     ></locklearn-quiz-view>`
-                  : html`<section class="page">
-                  <h1>${this.routeLabel(this.activeRoute)}</h1>
-                  <p>${this.t("route.placeholder")}</p>
-                </section>`}
+                  : ["profiles", "tracks", "packs", "settings"].includes(this.activeRoute)
+                    ? html`<locklearn-management-view
+                        .hass=${this.hass}
+                        .profile=${this.profiles.find(
+                          (profile) => profile.profile_id === this.selectedProfileId,
+                        )}
+                        .route=${this.activeRoute as ManagementRoute}
+                        @locklearn-refresh=${() => void this.load()}
+                      ></locklearn-management-view>`
+                    : html`<section class="page">
+                    <h1>${this.routeLabel(this.activeRoute)}</h1>
+                    <p>${this.t("route.placeholder")}</p>
+                  </section>`}
         </main>
       </div>
     `;
