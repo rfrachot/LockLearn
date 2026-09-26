@@ -1200,28 +1200,53 @@ class SQLiteStorage:
             ) in package_rows:
                 dataset_id = str(raw_dataset_id)
                 source_rows = connection.execute(
-                    """SELECT DISTINCT source.source_id, snapshot.upstream_version,
+                    """SELECT source.source_id, source.name, source.provider,
+                              source.homepage, source.license_id,
+                              source.attribution_template, source.adapter_id,
+                              source.refresh_policy, source.commercial_compatible,
+                              source.notes, snapshot.upstream_version,
                               snapshot.upstream_date, snapshot.retrieved_at,
-                              snapshot.source_url, snapshot.adapter_version
+                              snapshot.source_url, snapshot.adapter_version,
+                              COUNT(provenance.provenance_id),
+                              SUM(CASE WHEN provenance.modified_from_source = 1
+                                       THEN 1 ELSE 0 END),
+                              SUM(CASE WHEN provenance.attribution_text IS NOT NULL
+                                            AND trim(provenance.attribution_text) <> ''
+                                       THEN 1 ELSE 0 END)
                        FROM content.provenance_records AS provenance
                        JOIN content.source_snapshots AS snapshot
                          ON snapshot.snapshot_id = provenance.source_snapshot_id
                        JOIN content.sources AS source
                          ON source.source_id = snapshot.source_id
                        WHERE provenance.dataset_id = ?
+                       GROUP BY source.source_id, source.name, source.provider,
+                                source.homepage, source.license_id,
+                                source.attribution_template, source.adapter_id,
+                                source.refresh_policy, source.commercial_compatible,
+                                source.notes, snapshot.snapshot_id,
+                                snapshot.upstream_version, snapshot.upstream_date,
+                                snapshot.retrieved_at, snapshot.source_url,
+                                snapshot.adapter_version
                        ORDER BY source.source_id, snapshot.snapshot_id""",
                     (dataset_id,),
                 ).fetchall()
-                licenses = [
-                    str(row[0])
-                    for row in connection.execute(
-                        """SELECT DISTINCT license_id
-                           FROM content.dataset_licenses
-                           WHERE dataset_id = ?
-                           ORDER BY license_id""",
-                        (dataset_id,),
-                    ).fetchall()
-                ]
+                license_rows = connection.execute(
+                    """SELECT dataset_license.license_id,
+                              dataset_license.license_scope,
+                              license.spdx_or_internal_id, license.name,
+                              license.version, license.commercial_use_allowed,
+                              license.derivatives_allowed, license.share_alike,
+                              license.attribution_required, license.source_url,
+                              license.notes
+                       FROM content.dataset_licenses AS dataset_license
+                       JOIN content.licenses AS license
+                         ON license.license_id = dataset_license.license_id
+                       WHERE dataset_license.dataset_id = ?
+                       ORDER BY dataset_license.license_id,
+                                dataset_license.license_scope""",
+                    (dataset_id,),
+                ).fetchall()
+                licenses = sorted({str(row[0]) for row in license_rows})
                 pack_versions = [
                     str(row[0])
                     for row in connection.execute(
@@ -1244,15 +1269,54 @@ class SQLiteStorage:
                         "sources": tuple(
                             {
                                 "source_id": str(row[0]),
-                                "upstream_version": str(row[1]),
-                                "upstream_date": None if row[2] is None else str(row[2]),
-                                "retrieved_at": str(row[3]),
-                                "source_url": str(row[4]),
-                                "adapter_version": str(row[5]),
+                                "upstream_version": str(row[10]),
+                                "upstream_date": None if row[11] is None else str(row[11]),
+                                "retrieved_at": str(row[12]),
+                                "source_url": str(row[13]),
+                                "adapter_version": str(row[14]),
+                            }
+                            for row in source_rows
+                        ),
+                        "source_details": tuple(
+                            {
+                                "source_id": str(row[0]),
+                                "name": str(row[1]),
+                                "provider": str(row[2]),
+                                "homepage": str(row[3]),
+                                "license_id": str(row[4]),
+                                "attribution_template": str(row[5]),
+                                "adapter_id": str(row[6]),
+                                "refresh_policy": str(row[7]),
+                                "commercial_compatible": bool(row[8]),
+                                "notes": str(row[9]),
+                                "upstream_version": str(row[10]),
+                                "upstream_date": None if row[11] is None else str(row[11]),
+                                "retrieved_at": str(row[12]),
+                                "source_url": str(row[13]),
+                                "adapter_version": str(row[14]),
+                                "provenance_records": int(row[15]),
+                                "modified_records": int(row[16] or 0),
+                                "attribution_records": int(row[17] or 0),
                             }
                             for row in source_rows
                         ),
                         "licenses": tuple(licenses),
+                        "license_details": tuple(
+                            {
+                                "license_id": str(row[0]),
+                                "license_scope": str(row[1]),
+                                "spdx_or_internal_id": str(row[2]),
+                                "name": str(row[3]),
+                                "version": str(row[4]),
+                                "commercial_use_allowed": bool(row[5]),
+                                "derivatives_allowed": bool(row[6]),
+                                "share_alike": bool(row[7]),
+                                "attribution_required": bool(row[8]),
+                                "source_url": str(row[9]),
+                                "notes": str(row[10]),
+                            }
+                            for row in license_rows
+                        ),
                         "pack_version_ids": tuple(pack_versions),
                     }
                 )
