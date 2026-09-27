@@ -5,11 +5,16 @@ from __future__ import annotations
 import asyncio
 import json
 import tempfile
+import sys
 from datetime import date
 from pathlib import Path
 from statistics import quantiles
 from time import perf_counter
 from typing import Any, cast
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 from custom_components.locklearn.core.scheduler import SchedulerConfig, SchedulerService
 from custom_components.locklearn.storage.database import SQLiteStorage, StoragePaths
