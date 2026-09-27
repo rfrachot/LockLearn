@@ -31,6 +31,8 @@ from custom_components.locklearn.storage.database import (  # noqa: E402
 SESSION_SAMPLES = 100
 NEXT_CARD_SAMPLES = 40
 NEXT_CARD_CANDIDATES = 20_000
+SESSION_PLAN_SAMPLES = 10
+SESSION_PLAN_CARDS = 20
 SCHEDULER_SAMPLES = 40
 SESSION_ANSWER_P95_BUDGET_MS = 100.0
 NEXT_CARD_P95_BUDGET_MS = 150.0
@@ -166,7 +168,7 @@ class _BenchmarkReviews:
         return ()
 
 
-async def _next_card_selection_p95() -> float:
+async def _selection_p95(*, requested_cards: int, samples_count: int) -> float:
     service = SessionSelectionService(
         _BenchmarkTracks(),
         _BenchmarkProfiles(),
@@ -175,17 +177,19 @@ async def _next_card_selection_p95() -> float:
         clock=_BenchmarkClock(),
     )
     samples: list[float] = []
-    for _ in range(NEXT_CARD_SAMPLES):
+    for _ in range(samples_count):
         started = perf_counter()
         selected = await service.async_prepare(
             profile_id="p5-9-profile",
             track_id="p5-9-track",
             session_type="review",
-            settings={"requested_cards": 20},
+            settings={"requested_cards": requested_cards},
         )
         elapsed = (perf_counter() - started) * 1000
-        if len(selected) != 20:
-            raise RuntimeError(f"expected 20 selected cards, got {len(selected)}")
+        if len(selected) != requested_cards:
+            raise RuntimeError(
+                f"expected {requested_cards} selected cards, got {len(selected)}"
+            )
         samples.append(elapsed)
     return _p95(samples)
 
@@ -230,7 +234,14 @@ def _scheduler_day_p95() -> float:
 async def _run() -> dict[str, float | int]:
     with tempfile.TemporaryDirectory(prefix="locklearn-p5-9-") as temporary:
         session_p95 = await _session_answer_p95(Path(temporary))
-    next_card_p95 = await _next_card_selection_p95()
+    next_card_p95 = await _selection_p95(
+        requested_cards=1,
+        samples_count=NEXT_CARD_SAMPLES,
+    )
+    session_plan_p95 = await _selection_p95(
+        requested_cards=SESSION_PLAN_CARDS,
+        samples_count=SESSION_PLAN_SAMPLES,
+    )
     scheduler_p95 = _scheduler_day_p95()
     return {
         "session_samples": SESSION_SAMPLES,
@@ -240,6 +251,9 @@ async def _run() -> dict[str, float | int]:
         "next_card_candidates": NEXT_CARD_CANDIDATES,
         "next_card_p95_ms": round(next_card_p95, 3),
         "next_card_budget_ms": NEXT_CARD_P95_BUDGET_MS,
+        "session_plan_samples": SESSION_PLAN_SAMPLES,
+        "session_plan_cards": SESSION_PLAN_CARDS,
+        "session_plan_p95_ms": round(session_plan_p95, 3),
         "scheduler_samples": SCHEDULER_SAMPLES,
         "scheduler_day_p95_ms": round(scheduler_p95, 3),
         "scheduler_day_budget_ms": SCHEDULER_DAY_P95_BUDGET_MS,
