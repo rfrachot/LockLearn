@@ -2,8 +2,7 @@
 
 ## Status
 
-Accepted for implementation on 2026-09-27. Reference-hardware qualification
-is required before P6.7 is marked PASS.
+Accepted and qualified on 2026-09-27. P6.7 is PASS.
 
 ## Context
 
@@ -95,3 +94,20 @@ for unresolved targets and operational failures.
   before the plan is marked PASS.
 - Optimization remains evidence-driven: a budget miss must be profiled before
   code is tuned.
+
+## Qualification evidence
+
+Reference qualification ran at HEAD
+`f05aab04b48baf8f8f73937cb8b3c5039e4d5b3d` on CPython 3.14.4 / Linux 7.0
+with 6 logical CPUs and 15 GiB RAM.
+
+- P5.9: session answer p95 1.137 ms, next-card p95 62.046 ms, scheduler-day
+  p95 4.064 ms; all normative budgets passed.
+- Integrated P6.7 hot paths: 1.150 ms, 65.403 ms and 3.983 ms respectively.
+- 60,000 cards: 137,302,016-byte package, 177,299,456-byte candidate/active
+  generation, 4.724 s build, 1.640 s activation.
+- Activation free-space requirement: 388,153,344 bytes; gate passed.
+- 1,826-day state projection: 218,955,776 bytes, 41.74 MiB/year,
+  integrity_check=ok and zero foreign-key violations.
+- Ruff format/lint, mypy, resource validation, targeted/full pytest and
+  frontend typecheck/tests/build passed. The frontend bundle remained unchanged.
