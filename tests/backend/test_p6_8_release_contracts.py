@@ -110,7 +110,10 @@ COMMAND_GROUPS = (
 
 def _command_blocks(source: str) -> dict[str, str]:
     blocks: dict[str, str] = {}
-    starts = [match.start() for match in re.finditer(r"(?=@websocket_api\.websocket_command)", source)]
+    starts = [
+        match.start()
+        for match in re.finditer(r"(?=@websocket_api\.websocket_command)", source)
+    ]
     starts.append(len(source))
     for index, start in enumerate(starts[:-1]):
         block = source[start : starts[index + 1]]

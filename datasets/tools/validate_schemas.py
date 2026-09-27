@@ -26,7 +26,9 @@ INSTANCE_GROUPS: dict[str, tuple[Path, ...]] = {
     "source-build-registry.schema.json": (DATASET_RESOURCES / "source_builds.json",),
     "official-dataset-registry.schema.json": (RUNTIME_RESOURCES / "official_datasets.json",),
     "bundled-dataset-registry.schema.json": (RUNTIME_RESOURCES / "bundled_datasets.json",),
-    "dataset-build-config.schema.json": tuple(sorted((ROOT / "datasets" / "configs").glob("*.json"))),
+    "dataset-build-config.schema.json": tuple(
+        sorted((ROOT / "datasets" / "configs").glob("*.json"))
+    ),
 }
 
 
@@ -49,7 +51,10 @@ def validate() -> int:
         for instance_path in INSTANCE_GROUPS.get(schema_path.name, ()):
             if not instance_path.is_file():
                 raise ValueError(f"schema instance is missing: {instance_path.relative_to(ROOT)}")
-            errors = sorted(validator.iter_errors(_load(instance_path)), key=lambda item: list(item.path))
+            errors = sorted(
+                validator.iter_errors(_load(instance_path)),
+                key=lambda item: list(item.path),
+            )
             if errors:
                 details = "; ".join(
                     f"{instance_path.relative_to(ROOT)}:{'/'.join(map(str, error.path))}: "
