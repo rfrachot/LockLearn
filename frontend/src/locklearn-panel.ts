@@ -19,6 +19,7 @@ import {
   type BootstrapResponse,
   type DashboardResponse,
   type HomeAssistantLike,
+  type SessionState,
   type VisibleProfile,
 } from "./protocol";
 import {
@@ -54,6 +55,7 @@ export class LockLearnPanel extends LitElement {
   @state() private dashboardLoading = false;
   @state() private dashboardError = "";
   @state() private errorMessage = "";
+  @state() private handoffSession?: SessionState;
 
   private loadGeneration = 0;
   private dashboardGeneration = 0;
@@ -387,7 +389,26 @@ export class LockLearnPanel extends LitElement {
     const profileId = target.value;
     if (!this.profiles.some((profile) => profile.profile_id === profileId)) return;
     this.selectedProfileId = profileId;
+    this.handoffSession = undefined;
     void this.loadDashboard();
+  }
+
+  private openTargetedSession(event: CustomEvent<{ session: SessionState }>): void {
+    const session = event.detail?.session;
+    if (
+      session === undefined ||
+      this.selectedProfileId === null ||
+      session.profile_id !== this.selectedProfileId
+    ) {
+      return;
+    }
+    this.handoffSession = session;
+    this.activeRoute = "learn";
+    navigateToRoute("learn");
+  }
+
+  private clearSessionHandoff(): void {
+    this.handoffSession = undefined;
   }
 
   private async refreshManagement(): Promise<void> {
@@ -539,6 +560,8 @@ export class LockLearnPanel extends LitElement {
                       (profile) => profile.profile_id === this.selectedProfileId,
                     )}
                     .dashboard=${this.dashboard}
+                    .externalSession=${this.handoffSession}
+                    @locklearn-session-handoff-consumed=${this.clearSessionHandoff}
                   ></locklearn-learn-view>`
                 : this.activeRoute === "quiz"
                   ? html`<locklearn-quiz-view
@@ -554,6 +577,7 @@ export class LockLearnPanel extends LitElement {
                         .profile=${this.profiles.find(
                           (profile) => profile.profile_id === this.selectedProfileId,
                         )}
+                        @locklearn-open-session=${this.openTargetedSession}
                       ></locklearn-stats-view>`
                     : this.activeRoute === "sources"
                     ? html`<locklearn-dataset-view
