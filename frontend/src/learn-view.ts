@@ -1,6 +1,11 @@
 import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 
+import {
+  contentRendererStyles,
+  interactiveAccessibilityStyles,
+  renderContentBlock,
+} from "./content-renderer";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
 import {
   canAnswerProfile,
@@ -18,7 +23,6 @@ import {
   type DashboardResponse,
   type DashboardTrack,
   type HomeAssistantLike,
-  type LearnContentBlock,
   type SessionQuestion,
   type SessionState,
   type VisibleProfile,
@@ -52,6 +56,9 @@ export class LockLearnLearnView extends LitElement {
   private availabilityTimer?: ReturnType<typeof globalThis.setTimeout>;
 
   static styles = css`
+    ${contentRendererStyles}
+    ${interactiveAccessibilityStyles}
+
     :host {
       display: block;
       min-width: 0;
@@ -175,11 +182,6 @@ export class LockLearnLearnView extends LitElement {
     .content {
       display: grid;
       gap: 12px;
-    }
-
-    .content-block {
-      overflow-wrap: anywhere;
-      line-height: 1.5;
     }
 
     .content-block.primary-content {
@@ -826,18 +828,8 @@ export class LockLearnLearnView extends LitElement {
     `;
   }
 
-  private renderBlock(block: LearnContentBlock, primary: boolean) {
-    const raw = block.payload.text;
-    if (typeof raw !== "string" || raw === "") return nothing;
-    const language = block.language_tag ?? undefined;
-    return html`
-      <div
-        class="content-block ${primary ? "primary-content" : ""}"
-        lang=${language ?? nothing}
-      >
-        ${raw}
-      </div>
-    `;
+  private renderBlock(block: Parameters<typeof renderContentBlock>[0], primary: boolean) {
+    return renderContentBlock(block, primary);
   }
 }
 
