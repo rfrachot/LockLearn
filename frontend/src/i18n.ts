@@ -591,8 +591,14 @@ const CATALOG = {
 export type TranslationKey = keyof (typeof CATALOG)["en"];
 
 export function languageFallback(locale: string): UiLanguage {
-  const normalized = locale.toLowerCase();
-  if (normalized === "fr" || normalized.startsWith("fr-")) return "fr";
+  const normalized = locale.trim().toLowerCase().replaceAll("_", "-");
+  if ((UI_LANGUAGES as readonly string[]).includes(normalized)) {
+    return normalized as UiLanguage;
+  }
+  const base = normalized.split("-", 1)[0];
+  if ((UI_LANGUAGES as readonly string[]).includes(base)) {
+    return base as UiLanguage;
+  }
   return "en";
 }
 
