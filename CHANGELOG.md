@@ -9,6 +9,10 @@ All notable changes will be documented here.
   runtime setup, avoiding blocking-call warnings on the HA event loop.
 
 ### Added
+- P5.8 frontend i18n/accessibility hardening with exact→base→English locale
+  fallback, shared safe CJK/ruby rendering for Learn/Quiz, system Japanese font
+  stack, readable CJK sizing, focus-visible keyboard affordances and long-text
+  containment across panel views.
 - P5.7 Stats & difficulties UI backed by the existing private P3.13/P3.11 read
   models, with due/SRS state, trusted verified accuracy and retention,
   metacognitive calibration, leeches, confusions, recent daily activity and an
