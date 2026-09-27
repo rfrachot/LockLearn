@@ -111,3 +111,46 @@ Public dataset Assets are separate from future private user media and
 export/import attachments. Private/export media must not inherit an Asset
 license merely because it is served by LockLearn, and it must not be inserted
 into the signed public `assets_metadata` namespace.
+
+
+## Explicit official-dataset allow/deny policy
+
+The machine registry is authoritative, but the human policy is:
+
+### Allowed when scope/attribution obligations are satisfied
+
+- CC0 1.0;
+- CC BY 4.0;
+- CC BY-SA 4.0;
+- CC BY 2.0 FR for the reviewed Tatoeba text boundary;
+- CC BY-SA 3.0 for the reviewed KanjiVG dataset/asset boundary;
+- other licenses only after an explicit registry + audit change demonstrating
+  commercial use, derivatives and attribution compatibility.
+
+### Forbidden for official datasets/assets
+
+- NonCommercial (NC);
+- NoDerivatives (ND);
+- unknown or missing license;
+- commercial-use ambiguity;
+- a license used outside the scopes allowed by the registry.
+
+MIT is approved for LockLearn software/tooling, not as a fallback dataset or
+editorial-content license.
+
+## Documentation and contributions
+
+Project documentation authored in this repository follows the repository software
+licensing boundary unless a document states otherwise. Learning/editorial
+contributions must carry an explicit content license suitable for their scope.
+
+Contributors must not submit third-party learning data/assets merely because they
+are publicly downloadable. Source identity, license, attribution and provenance
+must be reviewable and machine-declared before official distribution.
+
+## Commercial compatibility
+
+LockLearn intentionally permits donations, sponsorship and commercial services
+around the software. That does not remove attribution or ShareAlike obligations
+from third-party datasets/assets. Official distributions must remain commercially
+usable under every included source license.

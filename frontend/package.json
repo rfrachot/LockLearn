@@ -11,7 +11,8 @@
     "dev": "vite --host 127.0.0.1",
     "test:e2e": "playwright test",
     "check:bundle": "node scripts/check-bundle.mjs",
-    "check:no-polling": "node scripts/check-no-polling.mjs"
+    "check:no-polling": "node scripts/check-no-polling.mjs",
+    "docs:screenshot": "LOCKLEARN_DOCS_CAPTURE=1 playwright test e2e/tests/docs-screenshot.spec.ts"
   },
   "dependencies": {
     "lit": "^3.0.0"
