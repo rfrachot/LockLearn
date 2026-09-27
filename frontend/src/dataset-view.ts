@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 
+import { interactiveAccessibilityStyles } from "./content-renderer";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
 import {
   installDataset,
@@ -48,6 +49,7 @@ export class LockLearnDatasetView extends LitElement {
   > = {};
 
   static styles = css`
+    ${interactiveAccessibilityStyles}
     :host, .stack, .grid, .card, .actions, button, a { box-sizing: border-box; min-width: 0; max-width: 100%; }
     :host { display: block; }
     .stack { display: grid; gap: 16px; }
