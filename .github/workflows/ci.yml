@@ -175,6 +175,14 @@ jobs:
       - run: npm install
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - name: Capture documentation screenshot
+        run: npm run docs:screenshot
+      - name: Upload documentation screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: locklearn-docs-screenshot
+          path: docs/assets/locklearn-home.png
+          if-no-files-found: error
 
   home-assistant-validation:
     runs-on: ubuntu-latest
