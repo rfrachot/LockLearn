@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/e2e/");
-  await expect(page.getByText("E2E Profile", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "E2E Profile" })).toBeVisible();
 });
 
 test("core shell routes through Home, Learn, Quiz, Stats and Profiles", async ({ page }) => {
@@ -43,5 +43,5 @@ test("keyboard navigation exposes visible focus without polling", async ({ page 
   expect(outlineStyle.width).not.toBe("0px");
 
   await page.waitForTimeout(250);
-  await expect(page.getByText("E2E Profile", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "E2E Profile" })).toBeVisible();
 });
