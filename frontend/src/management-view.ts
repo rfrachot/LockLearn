@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 
+import { interactiveAccessibilityStyles } from "./content-renderer";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
 import {
   createProfile,
@@ -89,6 +90,7 @@ export class LockLearnManagementView extends LitElement {
   @state() private notice = "";
 
   static styles = css`
+    ${interactiveAccessibilityStyles}
     :host, .stack, .grid, .card, .form-grid, .actions, label, input, select, button {
       box-sizing: border-box;
       min-width: 0;
