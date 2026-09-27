@@ -9,6 +9,10 @@ All notable changes will be documented here.
   runtime setup, avoiding blocking-call warnings on the HA event loop.
 
 ### Added
+- P5.9 permanent frontend performance/compatibility gates: 500 KiB gzip budget,
+  direct-network/permanent-polling audit, Playwright Chromium core-flow smoke,
+  minimum/latest Home Assistant compatibility, and reproducible §80 p95
+  benchmarks for session answer, next-card selection and scheduler generation.
 - P5.8 frontend i18n/accessibility hardening with exact→base→English locale
   fallback, shared safe CJK/ruby rendering for Learn/Quiz, system Japanese font
   stack, readable CJK sizing, focus-visible keyboard affordances and long-text
