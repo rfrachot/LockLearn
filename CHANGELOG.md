@@ -9,6 +9,10 @@ All notable changes will be documented here.
   runtime setup, avoiding blocking-call warnings on the HA event loop.
 
 ### Added
+- P6.10 release readiness with the untagged 1.0.0 runtime candidate, isolated
+  HACS-payload import/resource smoke, a real v0.0.2 state-schema upgrade
+  contract, explicit SemVer/HACS compatibility policy and release-payload gates
+  across the supported Home Assistant CI matrix.
 - P6.9 documentation architecture with complete root reference docs, generated
   state/content SQLite and WebSocket contracts, CI drift detection, source/
   licensing detail derived from machine registries and reproducible Playwright

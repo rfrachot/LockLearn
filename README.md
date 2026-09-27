@@ -7,9 +7,9 @@ integration. It combines active study sessions, deterministic spaced repetition,
 actionable Companion notifications, multi-user learner Profiles and signed
 versioned datasets without requiring a LockLearn cloud account.
 
-**Status:** pre-1.0 development. The V1 implementation is in hardening/release
-preparation; P6.1 through P6.8 are qualified, while documentation/release/final
-acceptance remain in progress.
+**Status:** 1.0.0 release-candidate hardening. P6.1 through P6.9 are qualified;
+P6.10 release packaging is implemented pending independent qualification, and
+P6.11 final acceptance remains.
 
 SPEC_V1.md is the normative product and architecture source of truth.
 
@@ -108,9 +108,9 @@ upstream network access.
 
 | Contract | Current V1 hardening value |
 |---|---|
-| LockLearn runtime | 0.0.2 pre-1.0 |
-| Minimum Home Assistant | 2025.2 |
-| Minimum CI lane | 2025.2.5 |
+| LockLearn runtime | 1.0.0 release candidate (untagged) |
+| HACS minimum Home Assistant | 2025.2.0 |
+| Minimum full CI lane | 2025.2.5 |
 | Current full harness lane | 2026.9.3 |
 | Latest stable smoke tested | 2026.9.4 |
 | Config Entry schema | 1 |

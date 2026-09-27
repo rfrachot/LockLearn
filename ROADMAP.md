@@ -15,7 +15,7 @@ V1 work through P6 release hardening:
 - lifecycle/recovery/security/privacy;
 - documentation/contracts, release packaging and final acceptance.
 
-Current next work: P6.9 documentation/contracts, then P6.10 release readiness and
+Current next work: independently qualify P6.10 release readiness, then execute
 P6.11 V1 acceptance.
 
 ## Candidate

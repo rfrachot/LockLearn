@@ -26,9 +26,9 @@
 | P1 | Content core + signed starter dataset | complete | yes | `docs/plan/P1.md` |
 | P2 | Profiles/tracks/ACL | complete | yes | `docs/plan/P2.md` |
 | P3 | Learning/SRS/sessions/stats | complete | yes | `docs/plan/P3.md` |
-| P4 | Scheduler/notifications/HA automation | queued | yes | `docs/plan/P4.md` |
-| P5 | Useful panel | queued | yes | `docs/plan/P5.md` |
-| P6 | Hardening/release | queued | yes | `docs/plan/P6.md` |
+| P4 | Scheduler/notifications/HA automation | complete | yes | `docs/plan/P4.md` |
+| P5 | Useful panel | complete | yes | `docs/plan/P5.md` |
+| P6 | Hardening/release | in progress | yes | `docs/plan/P6.md` |
 | P7 | V1.1/research | later | no | `docs/plan/P7.md` |
 
 ## Work-package index

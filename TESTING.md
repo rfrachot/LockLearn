@@ -60,6 +60,21 @@ Normative wall-clock budgets are qualified on documented P6.7 reference hardware
 GitHub-hosted runners execute the same hot paths as telemetry but are not normative
 performance hardware.
 
+## Release payload and upgrade readiness
+
+P6.10 adds a repository-independent HACS payload smoke:
+
+```bash
+python scripts/p6_10_release_smoke.py
+python -m pytest -q --tb=short tests/backend/test_p6_10_release_readiness.py
+```
+
+The payload smoke copies only `custom_components/locklearn/` into a temporary
+install root, imports it without the repository on `PYTHONPATH`, loads bundled
+runtime resources and verifies the signed starter artifact. The upgrade contract
+uses the exact state schema shipped by real release `v0.0.2` and exercises the
+sequential migration to the current state schema.
+
 ## CI
 
 `.github/workflows/ci.yml` gates:
@@ -67,7 +82,8 @@ performance hardware.
 - backend format/lint/types/tests;
 - generated/resource/schema contracts;
 - dataset policy/reproducibility;
-- HA minimum/current/latest smoke;
+- HA minimum/current/latest smoke, including the isolated release payload;
+- P6.10 release packaging and v0.0.2 upgrade contracts;
 - frontend + E2E;
 - hassfest + HACS.
 

@@ -4,61 +4,38 @@
 
 Branch: `feat/p6-hardening`.
 
-P5 and its real-HA exit gate remain PASS. P6.1 through P6.8 are PASS.
+P5 and its real-HA exit gate remain PASS. P6.1 through P6.9 are PASS.
 
-P6.9 — documentation set and generated contracts — is implementation complete
-and final qualification is pending. P6.10 has not started.
+P6.10 — release packaging, versioning and HACS readiness — is implementation
+complete and requires independent qualification. P6.11 has not started.
 
-## P6.9 implementation
+## P6.10 implementation
 
-Human reference docs now exist for the SPEC §102–127 set, including:
+- Runtime release candidate bumped to `1.0.0` in both Home Assistant manifest and
+  `INTEGRATION_VERSION`.
+- HACS support floor deliberately remains `2025.2.0`; the minimum tested patch remains
+  HA `2025.2.5`, with current harness `2026.9.3` and latest-stable smoke `2026.9.4`.
+- The private npm frontend package version is explicitly non-authoritative; the shipped
+  frontend is identified by integration version plus bundle hash.
+- `scripts/p6_10_release_smoke.py` validates a HACS-like isolated copy containing only
+  `custom_components/locklearn/`, checks runtime imports/resources, the signed bundled
+  starter, frontend artifact and absence of private-key material.
+- `tests/backend/test_p6_10_release_readiness.py` anchors the upgrade smoke to the exact
+  state schema shipped by real GitHub release `v0.0.2` and verifies migration to the
+  current schema without loss of legacy session/progress/audit rows.
+- CI runs the P6.10 payload smoke in backend quality, minimum/current HA matrix lanes
+  and the latest-stable HA smoke. HACS/hassfest remain release gates.
+- `RELEASE.md` now defines the SemVer authority, HACS payload boundary, v0.0.2 upgrade
+  floor, preflight, publication and rollback procedures.
 
-- README/user entry point;
-- architecture and data model;
-- database and migration policy;
-- pack/dataset/source/licensing contracts;
-- permissions/privacy/security;
-- SRS, scheduler and notifications;
-- frontend and WebSocket API;
-- development, testing, release and troubleshooting;
-- roadmap.
+No tag, GitHub Release, PR, merge or P6.11 work is part of this implementation.
 
-Existing detailed documents were preserved where stronger than the new overview
-(e.g. MIGRATIONS.md history).
+## Independent qualification
 
-Generated contracts:
+Run targeted P6.10 tests and payload smoke first, then the full P6.9/P6.8/backend/
+frontend/Playwright gates. GitHub Actions must remain green for backend, datasets,
+frontend, minimum/current/latest HA and HACS/hassfest.
 
-- `scripts/generate_docs_contracts.py`;
-- `docs/generated/STATE_DB.md`;
-- `docs/generated/CONTENT_DB.md`;
-- `docs/generated/WEBSOCKET_CONTRACTS.md`;
-- `docs/generated/websocket-contracts.json`.
+P6.10 becomes PASS only after that independent qualification. Then the next work is:
 
-The generator reads runtime DDL/WebSocket sources and has a `--check` mode wired
-into CI. `tests/backend/test_p6_9_documentation_contracts.py` gates the required
-documentation set/sections. ADR-0053 defines the documentation source-of-truth
-layers.
-
-Official source documentation is now derived from the machine registries and
-covers provider, format, adapter, licence/attribution, imported/excluded fields,
-known risks and refresh policy.
-
-README screenshots represent real rendered UI. The deterministic Playwright
-capture test lives at `frontend/e2e/tests/docs-screenshot.spec.ts`. Its canonical
-output is committed at `docs/assets/locklearn-home.png` and referenced by README;
-the normal frontend-e2e CI job also uploads the full-resolution capture artifact.
-
-Do not mark P6.9 PASS until all local/CI documentation gates are green.
-
-## Next qualification work
-
-1. run Ruff/lint/mypy, generated-doc check, P6.9 tests, full pytest, frontend
-   lint/typecheck/Vitest/E2E/build and git diff check;
-2. verify the committed screenshot and README reference;
-3. run CI and verify every existing P6.8 job remains green plus the new generated
-   documentation/P6.9 gates.
-
-Known non-blocking warnings remain the duplicate `profile.json` test fixture and
-GitHub's future ubuntu-latest migration notice.
-
-Do not start P6.10 until P6.9 is PASS.
+`P6.11 — V1 end-to-end acceptance scenarios`.
