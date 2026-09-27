@@ -163,8 +163,7 @@ def _project_five_year_state(path: Path, *, days: int) -> dict[str, Any]:
                 for item_index in range(STANDARD_SESSION_CARDS):
                     review_index = session_index * STANDARD_SESSION_CARDS + item_index
                     global_card = (
-                        day_index * STANDARD_REVIEW_CAPACITY_PER_DAY
-                        + review_index
+                        day_index * STANDARD_REVIEW_CAPACITY_PER_DAY + review_index
                     ) % progress_count
                     card_key = f"p6-7-card-{global_card}"
                     question_id = f"p6-7-q-{day_index}-{session_index}-{item_index}"
@@ -380,9 +379,7 @@ def _project_five_year_state(path: Path, *, days: int) -> dict[str, Any]:
         page_count = int(connection.execute("PRAGMA page_count").fetchone()[0])
         page_size = int(connection.execute("PRAGMA page_size").fetchone()[0])
         row_counts = {
-            table: int(
-                connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-            )
+            table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
             for table in (
                 "progress",
                 "review_events",
@@ -523,12 +520,9 @@ def _passes(result: dict[str, Any]) -> bool:
     content = result["content_scale"]
     state = result["state_projection"]
     return (
-        float(hot["session_answer_p95_ms"])
-        < p5_9_performance.SESSION_ANSWER_P95_BUDGET_MS
-        and float(hot["next_card_p95_ms"])
-        < p5_9_performance.NEXT_CARD_P95_BUDGET_MS
-        and float(hot["scheduler_day_p95_ms"])
-        < p5_9_performance.SCHEDULER_DAY_P95_BUDGET_MS
+        float(hot["session_answer_p95_ms"]) < p5_9_performance.SESSION_ANSWER_P95_BUDGET_MS
+        and float(hot["next_card_p95_ms"]) < p5_9_performance.NEXT_CARD_P95_BUDGET_MS
+        and float(hot["scheduler_day_p95_ms"]) < p5_9_performance.SCHEDULER_DAY_P95_BUDGET_MS
         and bool(content["free_space_gate_pass"])
         and state["integrity_check"] == "ok"
         and int(state["foreign_key_violation_count"]) == 0

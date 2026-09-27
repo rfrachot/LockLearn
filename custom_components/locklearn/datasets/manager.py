@@ -637,8 +637,7 @@ class DatasetManager:
             await asyncio.to_thread(_store_package_atomically, extracted, package_path)
             packages = tuple(
                 sorted(
-                    package_path if path == extracted else path
-                    for path in packages_for_estimate
+                    package_path if path == extracted else path for path in packages_for_estimate
                 )
             )
             generation_id = f"dataset-update-{uuid.uuid4().hex}"
