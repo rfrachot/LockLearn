@@ -1,3 +1,4 @@
+import type { TemplateResult } from "lit";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -62,7 +63,8 @@ describe("P5.8 content renderer", () => {
       block({ text: "<script>alert(1)</script>" }, "en"),
     );
     expect(rendered).toBeTruthy();
-    expect(rendered.values).toContain("<script>alert(1)</script>");
+    const template = rendered as TemplateResult;
+    expect(template.values).toContain("<script>alert(1)</script>");
   });
 
   it("ships the system CJK stack, ruby styling and visible keyboard focus", () => {
