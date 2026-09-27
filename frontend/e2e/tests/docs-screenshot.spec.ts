@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 
 test("capture canonical documentation screenshot", async ({ page }) => {
@@ -8,6 +9,7 @@ test("capture canonical documentation screenshot", async ({ page }) => {
     return;
   }
 
+  await mkdir("../docs/assets", { recursive: true });
   await page.screenshot({
     path: "../docs/assets/locklearn-home.png",
     fullPage: true,
