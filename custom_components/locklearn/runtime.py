@@ -107,7 +107,12 @@ class LockLearnRuntime:
         ) -> None:
             severity = (
                 ir.IssueSeverity.WARNING
-                if translation_key in {"dataset_discovery_failed", "dataset_sources_stale"}
+                if translation_key
+                in {
+                    "dataset_discovery_failed",
+                    "dataset_sources_stale",
+                    "dataset_cache_budget_warning",
+                }
                 else ir.IssueSeverity.ERROR
             )
             ir.async_create_issue(

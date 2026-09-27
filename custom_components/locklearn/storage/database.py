@@ -13,9 +13,11 @@ from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Any, TypeVar
 
 from ..const import DB_SCHEMA_VERSION
+from ..observability import INTERNAL_METRICS
 from ..core.clock import Clock, SystemClock
 from .content import (
     ContentBuildResult,
@@ -669,7 +671,12 @@ class SQLiteStorage:
     async def _async_writer(self, operation: Callable[[sqlite3.Connection], T]) -> T:
         if self._closed:
             raise RuntimeError("LockLearn storage is closed")
+        queue_started = perf_counter()
         async with self._writes_gate:
+            INTERNAL_METRICS.record(
+                "storage.writer_queue_wait_ms",
+                (perf_counter() - queue_started) * 1000,
+            )
             loop = asyncio.get_running_loop()
             return await loop.run_in_executor(self._writer_executor, self._run_writer, operation)
 
@@ -1188,9 +1195,11 @@ class SQLiteStorage:
                     connection.rollback()
                 raise
 
+        answer_started = perf_counter()
         await self._async_writer(answer_cas)
         session = await self.async_get_session(str(event.session_id))
         assert session is not None
+        INTERNAL_METRICS.record("session.answer_ms", (perf_counter() - answer_started) * 1000)
         return session
 
     async def async_answer_session(
@@ -1279,9 +1288,11 @@ class SQLiteStorage:
                     connection.rollback()
                 raise
 
+        answer_started = perf_counter()
         await self._async_writer(answer_cas)
         session = await self.async_get_session(session_id)
         assert session is not None
+        INTERNAL_METRICS.record("session.answer_ms", (perf_counter() - answer_started) * 1000)
         return session
 
     async def async_set_session_status(
@@ -1929,6 +1940,7 @@ class SQLiteStorage:
         generation_id: str | None = None,
     ) -> ContentBuildResult:
         """Build a validated candidate without making it visible to readers."""
+        build_started = perf_counter()
         package_list = tuple(packages)
         selected_generation_id = generation_id or f"generation-{uuid.uuid4().hex}"
         async with await self.content_generations.acquire_reader() as lease:
@@ -1953,6 +1965,7 @@ class SQLiteStorage:
                     cancelled = True
             if cancelled:
                 raise asyncio.CancelledError
+            INTERNAL_METRICS.record("content.build_ms", (perf_counter() - build_started) * 1000)
             return result
 
     async def _async_reconcile_progress_content_status(self) -> None:
@@ -2014,6 +2027,7 @@ class SQLiteStorage:
 
     async def async_activate_content_generation(self, candidate: Path) -> GenerationMetadata:
         """Activate a validated candidate and reconcile persistent content tombstones."""
+        activation_started = perf_counter()
         metadata = await self.content_generations.async_activate(candidate)
         try:
             await self._async_reconcile_progress_content_status()
@@ -2021,6 +2035,10 @@ class SQLiteStorage:
             await self.content_generations.async_rollback()
             await self._async_reconcile_progress_content_status()
             raise
+        INTERNAL_METRICS.record(
+            "content.activation_ms",
+            (perf_counter() - activation_started) * 1000,
+        )
         return metadata
 
     async def async_rollback_content_generation(self) -> GenerationMetadata:

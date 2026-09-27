@@ -19,6 +19,7 @@ from .const import (
     DOMAIN,
     INTEGRATION_VERSION,
 )
+from .observability import INTERNAL_METRICS
 from .runtime import LockLearnRuntime
 from .storage import StoragePaths
 from .storage.database import validate_state_database_file
@@ -34,6 +35,7 @@ _REPAIR_CATEGORY_BY_TRANSLATION_KEY = {
     "state_integrity_failure": "db_integrity_failure",
     "scheduler_configuration_infeasible": "scheduler_infeasible",
     "backup_cache_anomaly": "backup_cache_anomaly",
+    "dataset_cache_budget_warning": "dataset_cache_budget",
 }
 
 
@@ -104,6 +106,9 @@ async def async_get_config_entry_diagnostics(
         datasets["stale_dataset_count"] = None
         datasets["error_dataset_count"] = None
         datasets["error_types"] = ()
+        datasets["cache_bytes"] = None
+        datasets["cache_warning_bytes"] = None
+        datasets["cache_budget_exceeded"] = None
         scheduler = {
             "listener_active": False,
             "configured_entity_count": None,
@@ -124,6 +129,7 @@ async def async_get_config_entry_diagnostics(
         "database": database,
         "datasets": datasets,
         "scheduler": scheduler,
+        "performance": INTERNAL_METRICS.snapshot(),
         "storage": {
             "state_bytes": usage.state_bytes,
             "content_cache_bytes": usage.content_cache_bytes,

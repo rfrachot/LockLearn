@@ -41,6 +41,7 @@ from custom_components.locklearn.datasets import (
     SourceReference,
     serialize_manifest,
 )
+from custom_components.locklearn.datasets.storage_budget import activation_required_free_disk
 from custom_components.locklearn.storage import (
     ContentGenerationValidator,
     initialize_content_database,
@@ -1070,7 +1071,10 @@ def _build_manifest(
         removed_count=spec.removed_count,
         asset_count=len(prepared_assets),
         entry_count=len(files),
-        required_free_disk=spec.required_free_disk,
+        required_free_disk=max(
+            spec.required_free_disk,
+            activation_required_free_disk(database_path.stat().st_size),
+        ),
         canonical_content_hash=canonical_hash,
         files=tuple(files),
     )

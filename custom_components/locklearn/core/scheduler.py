@@ -6,9 +6,11 @@ import hashlib
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from time import perf_counter
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from ..observability import INTERNAL_METRICS
 from ..storage.repositories import (
     NotificationTargetsRepository,
     ProfilesRepository,
@@ -1481,6 +1483,7 @@ class SchedulerService:
         not_before_utc: datetime | None,
         occupied: tuple[datetime, ...] = (),
     ) -> tuple[SchedulerSlotDraft, ...]:
+        generation_started = perf_counter()
         seed = self._seed(config.profile_id, local_date, config.version)
         candidates = _minute_candidates(
             config,
@@ -1508,7 +1511,7 @@ class SchedulerService:
         if selected is None:
             selected = capacity
 
-        return tuple(
+        drafts = tuple(
             SchedulerSlotDraft(
                 slot_id=_slot_id(
                     config.profile_id,
@@ -1524,6 +1527,11 @@ class SchedulerService:
             )
             for scheduled_for_utc in selected
         )
+        INTERNAL_METRICS.record(
+            "scheduler.slot_generation_ms",
+            (perf_counter() - generation_started) * 1000,
+        )
+        return drafts
 
     @staticmethod
     def _seed(profile_id: str, local_date: date, config_version: int) -> str:

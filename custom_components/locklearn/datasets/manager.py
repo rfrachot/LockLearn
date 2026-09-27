@@ -25,9 +25,14 @@ from ..storage import ContentGenerationValidator, SQLiteStorage
 from .manifest import DatasetManifest, FileRole
 from .package import validate_dataset_package
 from .policy import OfficialRegistryPolicy
+from .storage_budget import (
+    ACTIVATION_SAFETY_MARGIN_DEFAULT_BYTES,
+    DATASET_CACHE_WARNING_DEFAULT_BYTES,
+    OFFICIAL_DATASET_ARTIFACT_DEFAULT_MAX_BYTES,
+    activation_required_free_disk,
+)
 from .trust import KeyStatus, KeyUsage, TrustedKey, TrustError, TrustStore
 
-_OFFICIAL_ARTIFACT_DEFAULT_MAX_BYTES = 150 * 1024 * 1024
 _CATALOG_MAX_BYTES = 1024 * 1024
 _STREAM_CHUNK_SIZE = 1024 * 1024
 
@@ -56,7 +61,7 @@ class DatasetDefinition:
     name: str
     catalog_url: str
     artifact_hosts: frozenset[str]
-    artifact_max_bytes: int = _OFFICIAL_ARTIFACT_DEFAULT_MAX_BYTES
+    artifact_max_bytes: int = OFFICIAL_DATASET_ARTIFACT_DEFAULT_MAX_BYTES
 
     def __post_init__(self) -> None:
         if not self.dataset_id or not self.name or not self.catalog_url:
@@ -213,6 +218,8 @@ class DatasetManager:
         freshness_targets: Mapping[str, int] | None = None,
         issue_callback: IssueCallback | None = None,
         issue_clear_callback: IssueClearCallback | None = None,
+        cache_warning_bytes: int = DATASET_CACHE_WARNING_DEFAULT_BYTES,
+        activation_margin_bytes: int = ACTIVATION_SAFETY_MARGIN_DEFAULT_BYTES,
     ) -> None:
         self._storage = storage
         self._transport = transport
@@ -224,6 +231,20 @@ class DatasetManager:
         self._freshness_targets = dict(freshness_targets or {})
         self._issue_callback = issue_callback
         self._issue_clear_callback = issue_clear_callback
+        if (
+            isinstance(cache_warning_bytes, bool)
+            or not isinstance(cache_warning_bytes, int)
+            or cache_warning_bytes <= 0
+        ):
+            raise DatasetManagerError("cache_warning_bytes must be a positive integer")
+        if (
+            isinstance(activation_margin_bytes, bool)
+            or not isinstance(activation_margin_bytes, int)
+            or activation_margin_bytes < 0
+        ):
+            raise DatasetManagerError("activation_margin_bytes must be an integer >= 0")
+        self._cache_warning_bytes = cache_warning_bytes
+        self._activation_margin_bytes = activation_margin_bytes
         self._available: dict[str, tuple[DatasetRelease, ...]] = {}
         self._errors: dict[str, str] = {}
         self._error_kinds: dict[str, str] = {}
@@ -325,7 +346,28 @@ class DatasetManager:
                 )
             else:
                 await self._clear_issue(stale_issue_id)
+        await self._async_update_cache_budget_issue()
         return tuple(statuses)
+
+    async def _async_update_cache_budget_issue(self) -> int:
+        """Create or clear the aggregate reconstructible-cache budget warning."""
+        cache_bytes = await asyncio.to_thread(
+            _cached_roots_size,
+            self._packages_root,
+            self._assets_root,
+        )
+        if cache_bytes > self._cache_warning_bytes:
+            await self._report_issue(
+                "dataset_cache_budget",
+                "dataset_cache_budget_warning",
+                {
+                    "cache_bytes": str(cache_bytes),
+                    "budget_bytes": str(self._cache_warning_bytes),
+                },
+            )
+        else:
+            await self._clear_issue("dataset_cache_budget")
+        return cache_bytes
 
     async def async_diagnostic_status(self) -> dict[str, object]:
         """Return aggregate dataset status without IDs, URLs, or raw errors."""
@@ -348,6 +390,11 @@ class DatasetManager:
             if _stale_sources(active, self._freshness_targets, now):
                 stale_dataset_count += 1
 
+        cache_bytes = await asyncio.to_thread(
+            _cached_roots_size,
+            self._packages_root,
+            self._assets_root,
+        )
         return {
             "official_dataset_count": len(self._definitions),
             "installed_dataset_count": len(installed_rows),
@@ -355,6 +402,9 @@ class DatasetManager:
             "stale_dataset_count": stale_dataset_count,
             "error_dataset_count": len(self._errors),
             "error_types": tuple(sorted(set(self._error_kinds.values()))),
+            "cache_bytes": cache_bytes,
+            "cache_warning_bytes": self._cache_warning_bytes,
+            "cache_budget_exceeded": cache_bytes > self._cache_warning_bytes,
         }
 
     async def async_status(self, dataset_id: str) -> DatasetStatus:
@@ -541,9 +591,19 @@ class DatasetManager:
                 dataset_id=dataset_id,
                 version=version,
             )
-            if shutil.disk_usage(self._storage.paths.content_root).free < (
-                validated.manifest.required_free_disk
-            ):
+            database_bytes = next(
+                item.size for item in validated.manifest.files if item.role is FileRole.DATABASE
+            )
+            active_content_bytes = self._storage.content_generations.active_path.stat().st_size
+            estimated_generated_bytes = active_content_bytes + database_bytes
+            required_free_disk = max(
+                validated.manifest.required_free_disk,
+                activation_required_free_disk(
+                    estimated_generated_bytes,
+                    margin_bytes=self._activation_margin_bytes,
+                ),
+            )
+            if shutil.disk_usage(self._storage.paths.content_root).free < required_free_disk:
                 raise DatasetInstallError("insufficient free disk for dataset installation")
             await asyncio.to_thread(_extract_dataset_database, archive, extracted)
             package = await asyncio.to_thread(self._validator.validate_package, extracted)
@@ -1110,6 +1170,16 @@ def _sha256_file(path: Path) -> str:
         while chunk := stream.read(_STREAM_CHUNK_SIZE):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _cached_roots_size(packages_root: Path, assets_root: Path) -> int:
+    return sum(
+        path.stat().st_size
+        for root in (packages_root, assets_root)
+        if root.is_dir()
+        for path in root.rglob("*")
+        if path.is_file()
+    )
 
 
 def _cached_dataset_size(
