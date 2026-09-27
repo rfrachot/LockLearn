@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 
+import { interactiveAccessibilityStyles } from "./content-renderer";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
 import {
   createCardAnnotation,
@@ -81,6 +82,7 @@ export class LockLearnStatsView extends LitElement {
   private loadGeneration = 0;
 
   static styles = css`
+    ${interactiveAccessibilityStyles}
     :host, section, article, div, select { box-sizing: border-box; min-width: 0; max-width: 100%; }
     :host { display: block; }
     .stack { display: grid; gap: 18px; }
