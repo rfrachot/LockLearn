@@ -178,6 +178,8 @@ def test_ci_release_matrix_contains_every_normative_gate() -> None:
         "python -m mypy custom_components datasets tests",
         "python datasets/tools/validate_resources.py",
         "python datasets/tools/validate_schemas.py",
+        "python scripts/generate_docs_contracts.py --check",
+        "tests/backend/test_p6_9_documentation_contracts.py",
         "tests/backend/test_p6_8_acl_matrix.py",
         "tests/backend/test_state_foundation.py",
         "tests/backend/test_storage_lifecycle.py",
