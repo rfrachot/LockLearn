@@ -92,7 +92,7 @@ def test_readme_uses_committed_real_panel_screenshot() -> None:
     screenshot = ROOT / "docs" / "assets" / "locklearn-home.png"
     assert screenshot.is_file()
     assert screenshot.stat().st_size > 0
-    assert screenshot.read_bytes().startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+    assert screenshot.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "![LockLearn Home dashboard](docs/assets/locklearn-home.png)" in readme
