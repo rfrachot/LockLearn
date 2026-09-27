@@ -1046,11 +1046,58 @@ export async function createCardAnnotation(
   profileId: string,
   cardKey: string,
   note: string,
-): Promise<Record<string, unknown>> {
-  return hass.callWS<Record<string, unknown>>({
+): Promise<DifficultyAnnotation> {
+  return hass.callWS<DifficultyAnnotation>({
     type: "locklearn/annotations/create",
     profile_id: profileId,
     card_key: cardKey,
     note: note.trim(),
+  });
+}
+
+export async function updateCardAnnotation(
+  hass: HomeAssistantLike,
+  profileId: string,
+  annotationId: string,
+  note: string,
+): Promise<DifficultyAnnotation> {
+  return hass.callWS<DifficultyAnnotation>({
+    type: "locklearn/annotations/update",
+    profile_id: profileId,
+    annotation_id: annotationId,
+    note: note.trim(),
+  });
+}
+
+export async function reactivateLeech(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  cardKey: string,
+): Promise<Record<string, unknown>> {
+  return hass.callWS<Record<string, unknown>>({
+    type: "locklearn/leeches/reactivate",
+    profile_id: profileId,
+    track_id: trackId,
+    card_key: cardKey,
+  });
+}
+
+export async function startLeechSession(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  requestedCards = 20,
+): Promise<SessionState> {
+  return hass.callWS<SessionState>({
+    type: "locklearn/session/start",
+    profile_id: profileId,
+    track_id: trackId,
+    session_type: "learn",
+    strategy: "default",
+    settings: {
+      requested_cards: requestedCards,
+      leeches_only: true,
+    },
   });
 }
