@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-import tempfile
 import sys
+import tempfile
 from datetime import date
 from pathlib import Path
 from statistics import quantiles
@@ -16,8 +16,14 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from custom_components.locklearn.core.scheduler import SchedulerConfig, SchedulerService
-from custom_components.locklearn.storage.database import SQLiteStorage, StoragePaths
+from custom_components.locklearn.core.scheduler import (  # noqa: E402
+    SchedulerConfig,
+    SchedulerService,
+)
+from custom_components.locklearn.storage.database import (  # noqa: E402
+    SQLiteStorage,
+    StoragePaths,
+)
 
 SESSION_SAMPLES = 100
 SCHEDULER_SAMPLES = 40
@@ -89,7 +95,7 @@ def _scheduler_day_p95() -> float:
     samples: list[float] = []
     for _ in range(SCHEDULER_SAMPLES):
         started = perf_counter()
-        drafts = service._generate(  # noqa: SLF001 - deliberate performance gate
+        drafts = service._generate(
             config,
             local_date=date(2026, 9, 27),
             daily_push_budget=12,
