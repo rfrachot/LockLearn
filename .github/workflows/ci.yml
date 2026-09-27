@@ -25,6 +25,7 @@ jobs:
       - run: python -m mypy custom_components datasets tests
       - run: python datasets/tools/validate_resources.py
       - run: python -m pytest -q --tb=short
+      - run: python scripts/p5_9_performance.py
 
   home-assistant-compatibility:
     strategy:
