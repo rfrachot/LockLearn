@@ -1,24 +1,5 @@
 # AGENT_HANDOFF.md
 
-## P6.4 qualification — 2026-09-27
-
-P6.4 review/correction is complete on `feat/p6-hardening`; P6.5 was not
-started. The review added owner-bound import claims to prevent concurrent
-duplicate applies, complete profile-state purge coverage, content lifecycle
-status mapping, installation-binding stripping, strict settings/JSON checks,
-private-root safety, hostile ZIP regressions and authenticated HTTP route
-coverage. Existing unrelated handoff history below is preserved.
-
-Verification on this tree:
-- targeted backend: `54 passed`;
-- backend full gate: `433 passed`, Ruff format/check PASS, mypy PASS, resource
-  validation PASS;
-- frontend: typecheck PASS, Vitest `15 files / 48 tests` PASS, Vite build PASS;
-- generated bundle: `custom_components/locklearn/frontend/locklearn-panel.js`,
-  rebuilt from current frontend sources; bundle budget and no-polling checks
-  PASS;
-- no push or remote PR action performed.
-
 ## Current state
 
 Branch: `feat/p6-hardening`.
@@ -29,97 +10,82 @@ P6.1 — database/config/content migrations and recovery — PASS.
 
 P6.2 — backup hooks, unload/reload and uninstall/recovery UX — PASS.
 
-P6.3 — Repairs and diagnostics — PASS at `aadab0b` and pushed before P6.4
-started.
+P6.3 — Repairs and diagnostics — PASS.
 
-P6.4 — secure export/import and data deletion — has an implementation
-candidate. Final qualification is intentionally pending.
+P6.4 — secure export/import and data deletion — PASS at `8f1a0ab` and pushed
+before P6.5 started.
 
-## P6.4 implementation
+P6.5 — HA entity/sensor privacy contract and optional integration boundary —
+has an implementation candidate. Final qualification is intentionally pending.
 
-### Private export/import
+## P6.5 implementation
 
-- new `profile_transfer.py` implements Profile export schema v1;
-- private transfers live under the OS temporary directory, outside HA config,
-  LockLearn static paths and normal backup roots;
-- temp directory/file modes are 0700/0600;
-- runtime startup wipes abandoned transfer files, runs TTL cleanup, and unload
-  removes the private transfer root;
-- export tokens are random, authenticated-user-bound, five-minute, one-shot
-  capabilities;
-- export download is an authenticated HA HTTP route with `no-store`;
-- import upload is authenticated, size-bounded and user-bound for fifteen
-  minutes;
-- export/apply use the existing cancellable OperationRegistry;
-- import dry-run validates without mutating state;
-- archive manifest contains exact member size + SHA-256.
+P6.5 deliberately does **not** add `sensor.py` or forward
+`Platform.SENSOR`. LockLearn 1.0 may therefore ship no optional private
+learning sensors and still satisfy the V1 spec.
 
-Hostile import validation rejects traversal/absolute/backslash/NUL paths,
-directories, links/special files, encryption, unsupported compression,
-unexpected members, duplicates/casefold collisions, oversized members/archive,
-excessive expansion, membership mismatch, size/hash mismatch and unsupported
-Profile preset/timezone/settings.
+A new executable `ha_entity_contract.py` defines the rules any future optional
+learning sensor implementation must obey:
 
-Import always remaps Profile/Track/Session IDs, creates the importing HA user as
-the sole owner, strips source ACL/notification targets/scheduler target IDs, and
-creates the Profile and Tracks archived. Missing PackVersions remain unbound;
-missing cards remain progress tombstones.
+- Track-scoped stable unique IDs use canonical Track UUID +
+  `:<metric_key>`;
+- Profile UUID defines the logical LockLearn Device identifier;
+- HA display names/entity IDs never participate in stable identity;
+- every optional learning sensor is disabled by default;
+- exposure requires explicit double opt-in in Profile and Track settings;
+- Track opt-in names an allowlist of known metric keys; unknown metrics fail
+  closed;
+- ACL membership, HA-admin status or dashboard visibility never imply sensor
+  consent;
+- metrics are aggregate-only;
+- default extra-state attributes are empty;
+- minimum publish/debounce interval is five minutes;
+- Recorder guidance is explicit per metric;
+- only mastery, quiz accuracy and last exam score use
+  `SensorStateClass.MEASUREMENT`;
+- due/streak/consecutive/session/daily-goal snapshot counters deliberately use
+  no `state_class`;
+- no learning metric uses TOTAL/TOTAL_INCREASING.
 
-### Profile deletion
+The existing dataset `UpdateEntity` platform remains separate: it exposes
+public dataset/update/provenance metadata, not private learner state.
 
-- existing `profiles/delete` defaults to safe archive for older clients;
-- archive pauses active sessions, cancels future slots and clears pending
-  notification interactions while preserving history/statistics;
-- permanent delete requires owner ACL plus exact `DELETE <profile_id>`;
-- deletion cascade removes Profile-scoped user state;
-- ProfileService performs the private-export cleanup callback after permanent
-  deletion, so the cleanup invariant is not WebSocket-specific;
-- frontend now separates Archive Profile from Delete permanently and requires
-  the exact confirmation phrase.
+`PRIVACY.md` now reflects the shipped P6.4 export boundary and the P6.5
+entity/privacy contract.
 
-### Content tombstones
+ADR-0050 records the logical-device, identity, opt-in, Recorder and state-class
+decision.
 
-Content generation activation/rollback now reconciles
-`progress.content_status` against the active card lifecycle. Removed/absent
-content becomes `removed`, superseded remains `superseded`, and restored
-stable identities become `active`. Rows/history are preserved.
+No optional private SensorEntity implementation is included. No P6.6 threat
+matrix work is included.
 
-ADR-0049 records the transfer/deletion/tombstone design.
+## P6.5 test coverage
 
-No P6.5 entity/sensor implementation and no P6.6 general threat-test expansion
-is included.
+New `tests/backend/test_ha_entity_contract.py` verifies:
 
-## P6.4 test coverage added/updated
-
-- export/import round-trip with new identity mapping;
-- one-shot owner-bound private export capability;
-- dry-run counts/missing-content mapping;
-- missing-card tombstone preservation;
-- Track rules/weights and review/session history round-trip;
-- hostile ZIP traversal rejection and import owner mismatch;
-- archive quiescence;
-- permanent deletion strong confirmation and personal-data cascade;
-- WebSocket permanent-delete contract;
-- content generation removed -> rollback-active progress tombstone
-  reconciliation.
+- 1.0 forwards only `Platform.UPDATE`, not `Platform.SENSOR`;
+- every future optional sensor contract is disabled by default,
+  aggregate-only, attribute-empty and debounced >= 5 minutes;
+- only valid measurement metrics receive `MEASUREMENT`;
+- UUID-based identity rejects names/noncanonical UUIDs;
+- no content-bearing attribute/key surface is allowed;
+- Profile + Track double opt-in is required;
+- unknown opt-in metrics fail closed.
 
 ## Verification state
 
-The final P6.4 gate has **not** been run by design.
+Final P6.5 qualification has **not** been run by design.
 
-Recommended targeted backend gate:
+Recommended targeted gate:
 
 ```text
 .venv/bin/python -m pytest -q --tb=short \
-  tests/backend/test_profile_transfer.py \
-  tests/backend/test_profiles.py \
-  tests/backend/test_websocket_crud.py \
-  tests/backend/test_content_generations.py \
-  tests/backend/test_lifecycle.py \
-  tests/backend/test_operations.py
+  tests/backend/test_ha_entity_contract.py \
+  tests/backend/test_dataset_update_entity.py \
+  tests/backend/test_lifecycle.py
 ```
 
-Then backend full gate:
+Then run:
 
 ```text
 .venv/bin/python -m ruff format --check .
@@ -129,16 +95,7 @@ Then backend full gate:
 .venv/bin/python -m pytest -q --tb=short
 ```
 
-P6.4 changes frontend source. Qualification must also run:
+P6.5 changes no frontend source and no generated frontend artifact. Do not run
+or rebuild frontend unless qualification changes frontend code.
 
-```text
-cd frontend
-npm run typecheck
-npm test
-npm run build
-```
-
-If the build updates the committed HA frontend bundle, include that generated
-artifact in the qualification commit after verifying its expected hash/path.
-
-Do not start P6.5 during qualification.
+Do not start P6.6 during qualification.

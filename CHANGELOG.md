@@ -9,6 +9,11 @@ All notable changes will be documented here.
   runtime setup, avoiding blocking-call warnings on the HA event loop.
 
 ### Added
+- P6.5 executable Home Assistant entity/privacy contract: stable Track-UUID
+  identity, Profile logical-device grouping, explicit Profile+Track double
+  opt-in, aggregate-only/no-attribute defaults, five-minute debounce, Recorder
+  guidance and conservative state_class semantics while keeping optional
+  private learning sensors out of the 1.0 platform set.
 - P6.4 private versioned Profile export/import with authenticated one-shot
   transfers, hostile-archive validation and dry-run mapping, plus archive versus
   strongly confirmed permanent deletion and progress tombstone reconciliation.
