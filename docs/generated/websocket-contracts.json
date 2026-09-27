@@ -1,0 +1,961 @@
+{
+  "protocol_version": 3,
+  "commands": [
+    {
+      "command": "locklearn/admin/rebuild_progress",
+      "handler": "ws_admin_rebuild_progress",
+      "access": "ha-admin",
+      "required_request_fields": [],
+      "optional_request_fields": [
+        "profile_id",
+        "track_id"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/admin/rebuild_stats",
+      "handler": "ws_admin_rebuild_stats",
+      "access": "ha-admin",
+      "required_request_fields": [],
+      "optional_request_fields": [
+        "profile_id",
+        "track_id"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/admin/recompute_progress",
+      "handler": "ws_admin_recompute_progress",
+      "access": "ha-admin",
+      "required_request_fields": [
+        "policy_version"
+      ],
+      "optional_request_fields": [
+        "profile_id",
+        "track_id"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/admin/storage/status",
+      "handler": "ws_admin_storage_status",
+      "access": "ha-admin",
+      "required_request_fields": [],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/annotations/create",
+      "handler": "ws_annotations_create",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id",
+        "note"
+      ],
+      "optional_request_fields": [
+        "learning_item_id",
+        "card_key"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/annotations/delete",
+      "handler": "ws_annotations_delete",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id",
+        "annotation_id"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_NOT_FOUND"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/annotations/list",
+      "handler": "ws_annotations_list",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [
+        "learning_item_id",
+        "card_key"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/annotations/update",
+      "handler": "ws_annotations_update",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id",
+        "annotation_id",
+        "note"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/bootstrap",
+      "handler": "ws_bootstrap",
+      "access": "authenticated",
+      "required_request_fields": [],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/calibration/sample",
+      "handler": "ws_calibration_sample",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id",
+        "track_id"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST",
+        "ERR_NOT_FOUND"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/confusions/list",
+      "handler": "ws_confusions_list",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [
+        "track_id",
+        "card_key"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_NOT_FOUND"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/content/report",
+      "handler": "ws_content_report",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id",
+        "track_id",
+        "card_key",
+        "learning_item_id",
+        "prompt_facet_id",
+        "answer_facet_id",
+        "submitted_text",
+        "grading_policy_kind",
+        "grading_policy_version",
+        "normalization_version"
+      ],
+      "optional_request_fields": [
+        "normalized_submission"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST",
+        "ERR_NOT_FOUND"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/content/report_question",
+      "handler": "ws_content_report_question",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id",
+        "track_id",
+        "card_key",
+        "learning_item_id",
+        "prompt_facet_id",
+        "answer_facet_id"
+      ],
+      "optional_request_fields": [
+        "message"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/dashboard/get",
+      "handler": "ws_dashboard_get",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/datasets/attributions",
+      "handler": "ws_datasets_attributions",
+      "access": "authenticated",
+      "required_request_fields": [
+        "dataset_id",
+        "source_id"
+      ],
+      "optional_request_fields": [
+        "cursor"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/datasets/install",
+      "handler": "ws_datasets_install",
+      "access": "ha-admin",
+      "required_request_fields": [
+        "dataset_id"
+      ],
+      "optional_request_fields": [
+        "version"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_DATASET_UNAVAILABLE"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/datasets/list",
+      "handler": "ws_datasets_list",
+      "access": "authenticated",
+      "required_request_fields": [],
+      "optional_request_fields": [
+        "cursor"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/datasets/refresh",
+      "handler": "ws_datasets_refresh",
+      "access": "ha-admin",
+      "required_request_fields": [],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/difficulties/list",
+      "handler": "ws_difficulties_list",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [
+        "track_id"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_NOT_FOUND"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/leeches/reactivate",
+      "handler": "ws_leeches_reactivate",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id",
+        "track_id",
+        "card_key"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/notifications/unrecorded_responses",
+      "handler": "ws_notification_unrecorded_responses",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/operations/cancel",
+      "handler": "ws_operation_cancel",
+      "access": "operation-owner-or-admin",
+      "required_request_fields": [
+        "operation_id"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_FORBIDDEN",
+        "ERR_NOT_FOUND"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/operations/subscribe",
+      "handler": "ws_operation_subscribe",
+      "access": "operation-owner-or-admin",
+      "required_request_fields": [
+        "operation_id"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": true,
+      "errors": [
+        "ERR_FORBIDDEN",
+        "ERR_NOT_FOUND"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/packs/list",
+      "handler": "ws_packs_list",
+      "access": "authenticated",
+      "required_request_fields": [],
+      "optional_request_fields": [
+        "cursor"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/profiles/create",
+      "handler": "ws_profiles_create",
+      "access": "authenticated",
+      "required_request_fields": [
+        "name"
+      ],
+      "optional_request_fields": [
+        "timezone"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/profiles/delete",
+      "handler": "ws_profiles_delete",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [
+        "confirmation"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST",
+        "ERR_NOT_FOUND"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/profiles/export",
+      "handler": "ws_profiles_export",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/profiles/import_apply",
+      "handler": "ws_profiles_import_apply",
+      "access": "owner-bound-upload-capability",
+      "required_request_fields": [
+        "upload_token"
+      ],
+      "optional_request_fields": [
+        "name_override"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/profiles/import_dry_run",
+      "handler": "ws_profiles_import_dry_run",
+      "access": "owner-bound-upload-capability",
+      "required_request_fields": [
+        "upload_token"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/profiles/list",
+      "handler": "ws_profiles_list",
+      "access": "authenticated",
+      "required_request_fields": [],
+      "optional_request_fields": [
+        "cursor"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/profiles/members",
+      "handler": "ws_profiles_members",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/profiles/share",
+      "handler": "ws_profiles_share",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id",
+        "target_user_id"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/profiles/share_targets",
+      "handler": "ws_profiles_share_targets",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/profiles/update",
+      "handler": "ws_profiles_update",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [
+        "name",
+        "timezone",
+        "status",
+        "settings_patch"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/progress/set_user_state",
+      "handler": "ws_progress_set_user_state",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id",
+        "track_id",
+        "card_key",
+        "user_state"
+      ],
+      "optional_request_fields": [
+        "suspend_until_utc"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST",
+        "ERR_NOT_FOUND"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/progress/undo_last",
+      "handler": "ws_progress_undo_last",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [
+        "track_id",
+        "card_key"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/quiz/answer",
+      "handler": "ws_quiz_answer",
+      "access": "session-via-profile-acl",
+      "required_request_fields": [
+        "session_id",
+        "expected_version",
+        "question_id",
+        "answer"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST",
+        "ERR_NOT_FOUND",
+        "ERR_STALE_SESSION"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/quiz/evaluate",
+      "handler": "ws_quiz_evaluate",
+      "access": "session-via-profile-acl",
+      "required_request_fields": [
+        "session_id",
+        "question_id",
+        "answer"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/scheduler/preview",
+      "handler": "ws_scheduler_preview",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [
+        "local_date"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/session/answer",
+      "handler": "ws_session_answer",
+      "access": "session-via-profile-acl",
+      "required_request_fields": [
+        "session_id",
+        "expected_version",
+        "question_id",
+        "answer"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST",
+        "ERR_NOT_FOUND",
+        "ERR_STALE_SESSION"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/session/complete",
+      "handler": "ws_session_complete",
+      "access": "session-via-profile-acl",
+      "required_request_fields": [
+        "session_id",
+        "expected_version"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_NOT_FOUND",
+        "ERR_STALE_SESSION"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/session/get",
+      "handler": "ws_session_get",
+      "access": "session-via-profile-acl",
+      "required_request_fields": [
+        "session_id"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/session/pause",
+      "handler": "ws_session_pause",
+      "access": "session-via-profile-acl",
+      "required_request_fields": [
+        "session_id",
+        "expected_version"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_NOT_FOUND",
+        "ERR_STALE_SESSION"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/session/start",
+      "handler": "ws_session_start",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [
+        "track_id"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST",
+        "ERR_NOT_FOUND"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/session/subscribe",
+      "handler": "ws_session_subscribe",
+      "access": "session-via-profile-acl",
+      "required_request_fields": [
+        "session_id"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": true,
+      "errors": [],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/session/undo",
+      "handler": "ws_session_undo",
+      "access": "session-via-profile-acl",
+      "required_request_fields": [
+        "session_id",
+        "expected_version"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_NOT_FOUND",
+        "ERR_STALE_SESSION"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/stats/get",
+      "handler": "ws_stats_get",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [
+        "track_id"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/targets/list",
+      "handler": "ws_targets_list",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [
+        "cursor"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/tracks/create",
+      "handler": "ws_tracks_create",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id",
+        "name",
+        "pack_version_id",
+        "source_language",
+        "target_language"
+      ],
+      "optional_request_fields": [
+        "content_weights",
+        "explicit_card_keys",
+        "scheduler_settings"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_DATASET_UNAVAILABLE",
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/tracks/delete",
+      "handler": "ws_tracks_delete",
+      "access": "track-via-profile-acl",
+      "required_request_fields": [
+        "track_id"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_NOT_FOUND"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/tracks/integrate_pack_update",
+      "handler": "ws_tracks_integrate_pack_update",
+      "access": "track-via-profile-acl",
+      "required_request_fields": [
+        "track_id",
+        "pack_version_id"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_DATASET_UNAVAILABLE",
+        "ERR_INVALID_REQUEST",
+        "ERR_PACK_VERSION_MISMATCH"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/tracks/list",
+      "handler": "ws_tracks_list",
+      "access": "profile-acl",
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "optional_request_fields": [
+        "cursor"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/tracks/plan_preview",
+      "handler": "ws_tracks_plan_preview",
+      "access": "track-via-profile-acl",
+      "required_request_fields": [
+        "track_id",
+        "max_new_per_day_cards",
+        "max_reviews_per_day_cards",
+        "max_notification_new_teasers",
+        "target_coverage",
+        "target_retention"
+      ],
+      "optional_request_fields": [
+        "target_date"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/tracks/plan_set",
+      "handler": "ws_tracks_plan_set",
+      "access": "track-via-profile-acl",
+      "required_request_fields": [
+        "track_id",
+        "max_new_per_day_cards",
+        "max_reviews_per_day_cards",
+        "max_notification_new_teasers",
+        "target_coverage",
+        "target_retention"
+      ],
+      "optional_request_fields": [
+        "target_date"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/tracks/preview_pack_update",
+      "handler": "ws_tracks_preview_pack_update",
+      "access": "track-via-profile-acl",
+      "required_request_fields": [
+        "track_id",
+        "pack_version_id"
+      ],
+      "optional_request_fields": [],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_DATASET_UNAVAILABLE",
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    },
+    {
+      "command": "locklearn/tracks/update",
+      "handler": "ws_tracks_update",
+      "access": "track-via-profile-acl",
+      "required_request_fields": [
+        "track_id"
+      ],
+      "optional_request_fields": [
+        "name",
+        "source_language",
+        "target_language",
+        "status",
+        "priority",
+        "content_weights",
+        "explicit_card_keys",
+        "scheduler_settings"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false,
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "protocol_version": 3
+    }
+  ]
+}
