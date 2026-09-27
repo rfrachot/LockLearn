@@ -6,81 +6,122 @@ Branch: `feat/p6-hardening`.
 
 P5 and its real-HA exit gate remain PASS. P6.1 through P6.7 are PASS.
 
-P6.7 — performance, scale and storage-budget validation — is fully implemented
-and qualified. No P6.8 implementation has started.
+P6.8 — full test matrix and CI release gates — is implementation complete and
+qualification-pending. No P6.9 implementation has started.
 
-## P6.7 qualification
+## P6.8 implementation
 
-Qualified on 2026-09-27 at HEAD:
+### Permanent access-contract gates
 
-`f05aab04b48baf8f8f73937cb8b3c5039e4d5b3d`
+`tests/backend/test_p6_8_release_contracts.py` classifies all 56 registered
+WebSocket commands into exactly one access boundary:
 
-Reference VM:
-- CPython 3.14.4;
-- Linux 7.0.0-30-generic x86_64;
-- 6 logical CPUs;
-- 15 GiB RAM.
+- authenticated/global;
+- owner-bound import capability;
+- Profile ACL;
+- Track -> Profile ACL;
+- Session -> Profile ACL;
+- Home Assistant administrator;
+- owner-bound long operation.
 
-Permanent P5.9 budgets:
-- session answer p95: 1.137 ms / 100 ms budget;
-- next-card p95: 62.046 ms / 150 ms budget;
-- scheduler-day p95: 4.064 ms / 250 ms budget.
+The test fails if a future command is unclassified or if a protected command
+loses its expected backend guard.
 
-Integrated P6.7 run:
-- session answer p95: 1.150 ms;
-- next-card p95: 65.403 ms;
-- scheduler-day p95: 3.983 ms.
+`tests/backend/test_p6_8_acl_matrix.py` performs real negative WebSocket calls
+for outsider, viewer and non-admin users across protected Profile/Track/Session,
+dataset-admin, import-capability and operation endpoints.
 
-60,000-card content scale:
-- package: 137,302,016 bytes;
-- candidate/active generation: 177,299,456 bytes;
-- build: 4.724 s;
-- activation: 1.640 s;
-- required activation free space: 388,153,344 bytes;
-- free-space gate: PASS;
-- maximum attached databases: 2.
+The same release-contract suite scans critical `core/` domain logic and
+rejects direct wall-clock calls outside `core/clock.py`.
 
-Five-year state projection:
-- 1,826 days;
-- state.db: 218,955,776 bytes;
-- 41.74 MiB/year;
-- 146,080 review events;
-- 14,608 progress rows;
-- integrity_check: ok;
-- foreign-key violations: 0.
+### Dataset and frontend release gates
 
-Quality gates:
-- Ruff format: PASS — 285 files formatted;
-- Ruff lint: PASS;
-- mypy: PASS — 166 sources;
-- resource validation: PASS;
-- targeted pytest: 57 passed;
-- full pytest: 464 passed, one known duplicate `profile.json` ZIP warning;
-- frontend typecheck: PASS;
-- frontend tests: 49 passed / 15 files;
-- frontend build: PASS;
-- git diff check: PASS.
+New `datasets/tools/validate_schemas.py` validates every committed JSON Schema
+and each mapped committed registry/config instance.
 
-Frontend bundle unchanged:
+Dataset CI explicitly gates resource/licence policy, provenance/signature/
+archive contracts, bundled starter/assets/SVG and canonical-content
+reproducibility.
 
-`d1626186b8fe1cf50f81efb5a4f3dd05de3dd54e22ec86b20612000c9b259385`
+Frontend CI now has an explicit source lint in addition to typecheck, Vitest,
+no-polling/direct-network audit, build, gzip budget, committed-bundle diff and
+Playwright E2E.
 
-## P6.7 architecture retained
+### Home Assistant compatibility
 
-- P5.9 remains authoritative for normative session-answer, next-card and
-  scheduler wall-clock budgets.
-- `scripts/p6_7_scale_validation.py` remains the scale/storage evidence harness.
-- Dataset policy remains 150 MiB per official artifact, 500 MiB aggregate-cache
-  warning and activation free space >= 2x estimated generation + 32 MiB margin.
-- Runtime metrics remain bounded, process-local, aggregate-only and never become
-  Home Assistant sensors.
-- No DB schema migration or frontend production-source change was required.
+The historical matrix previously named HA versions but did not explicitly
+install/verify the matrix HA package. P6.8 fixes this.
 
-ADR-0052 contains the design and final qualification evidence.
+Full backend integration suites:
+- minimum supported: HA 2025.2.5 + matching harness 0.13.215;
+- current upstream harness: HA 2026.9.3 + harness 0.13.366.
 
-## Next work
+HA 2026.9.4 was published on 2026-09-27 after harness 0.13.366, which explicitly
+pins HA 2026.9.3. Until a matching harness is published, CI additionally runs
+`scripts/p6_8_ha_smoke.py` against real HA 2026.9.4. Do not falsely label
+2026.9.3 as latest stable.
 
-P6.8 — Full test matrix and CI release gates.
+HACS and hassfest remain mandatory CI jobs.
 
-Do not reopen P6.7 unless a regression, spec change or materially different
-reference-hardware result requires it.
+## Qualification — Luna executes only
+
+Luna must not edit, format, commit, push, merge or start P6.9.
+
+Run from the qualification worktree after pulling `feat/p6-hardening`:
+
+~~~bash
+git pull --ff-only origin feat/p6-hardening
+git status --short --branch
+git rev-parse HEAD
+
+.venv/bin/python -m ruff format --check .
+.venv/bin/python -m ruff check .
+.venv/bin/python -m mypy custom_components datasets tests
+
+.venv/bin/python datasets/tools/validate_resources.py
+.venv/bin/python datasets/tools/validate_schemas.py
+
+.venv/bin/python -m pytest -q --tb=short \
+  tests/backend/test_p6_8_release_contracts.py \
+  tests/backend/test_p6_8_acl_matrix.py
+
+.venv/bin/python -m pytest -q --tb=short \
+  tests/backend/test_state_foundation.py \
+  tests/backend/test_lifecycle.py \
+  tests/backend/test_storage_lifecycle.py
+
+.venv/bin/python -m pytest -q --tb=short
+
+.venv/bin/python scripts/p5_9_performance.py
+.venv/bin/python scripts/p6_7_scale_validation.py
+
+cd frontend
+npm run lint
+npm run typecheck
+npm test
+npm run check:no-polling
+npm run build
+npm run check:bundle
+npm run test:e2e
+cd ..
+
+sha256sum custom_components/locklearn/frontend/locklearn-panel.js
+git diff --check
+git status --short --branch
+git rev-parse HEAD
+~~~
+
+The local VM does not replace GitHub-hosted HACS/hassfest or the compatibility
+matrix. After local gates are green, the branch must be exercised through the
+CI workflow so these jobs are evidenced:
+
+- backend-quality;
+- dataset-contracts;
+- HA minimum 2025.2.5;
+- HA current-harness 2026.9.3;
+- HA latest-stable 2026.9.4 smoke;
+- frontend;
+- frontend-e2e;
+- home-assistant-validation (hassfest + HACS).
+
+P6.8 remains pending until both local and GitHub-hosted gates are reviewed.
