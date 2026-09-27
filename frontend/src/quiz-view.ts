@@ -1,6 +1,11 @@
 import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 
+import {
+  contentRendererStyles,
+  interactiveAccessibilityStyles,
+  renderContentBlock,
+} from "./content-renderer";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
 import {
   canQuizProfile,
@@ -19,7 +24,6 @@ import {
   type DashboardResponse,
   type DashboardTrack,
   type HomeAssistantLike,
-  type LearnContentBlock,
   type QuizFeedback,
   type QuizFormat,
   type QuizQuestionPayload,
@@ -53,6 +57,9 @@ export class LockLearnQuizView extends LitElement {
   private questionId: string | null = null;
 
   static styles = css`
+    ${contentRendererStyles}
+    ${interactiveAccessibilityStyles}
+
     :host {
       display: block;
       min-width: 0;
@@ -832,10 +839,8 @@ export class LockLearnQuizView extends LitElement {
     return this.t("quiz.unrecognized");
   }
 
-  private renderBlock(block: LearnContentBlock) {
-    const raw = block.payload.text;
-    if (typeof raw !== "string" || raw === "") return nothing;
-    return html`<div lang=${block.language_tag ?? nothing}>${raw}</div>`;
+  private renderBlock(block: Parameters<typeof renderContentBlock>[0]) {
+    return renderContentBlock(block);
   }
 }
 
