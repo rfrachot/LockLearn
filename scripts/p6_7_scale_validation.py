@@ -21,23 +21,13 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from custom_components.locklearn.const import DB_SCHEMA_VERSION  # noqa: E402
-from custom_components.locklearn.datasets.storage_budget import (  # noqa: E402
-    ACTIVATION_SAFETY_MARGIN_DEFAULT_BYTES,
-    DATASET_CACHE_WARNING_DEFAULT_BYTES,
-    OFFICIAL_DATASET_ARTIFACT_DEFAULT_MAX_BYTES,
-    activation_required_free_disk,
-)
-from custom_components.locklearn.observability import INTERNAL_METRICS  # noqa: E402
-from custom_components.locklearn.storage import SQLiteStorage, StoragePaths  # noqa: E402
-from custom_components.locklearn.storage.schema import STATE_SCHEMA  # noqa: E402
-from scripts.p5_9_performance import (  # noqa: E402
-    NEXT_CARD_P95_BUDGET_MS,
-    SCHEDULER_DAY_P95_BUDGET_MS,
-    SESSION_ANSWER_P95_BUDGET_MS,
-    _run as run_hot_path_gate,
-)
-from tests.backend.content_db_helpers import create_package  # noqa: E402
+import custom_components.locklearn.const as locklearn_const  # noqa: E402
+import custom_components.locklearn.datasets.storage_budget as storage_budget  # noqa: E402
+import custom_components.locklearn.observability as observability  # noqa: E402
+import custom_components.locklearn.storage as locklearn_storage  # noqa: E402
+import custom_components.locklearn.storage.schema as storage_schema  # noqa: E402
+import scripts.p5_9_performance as p5_9_performance  # noqa: E402
+import tests.backend.content_db_helpers as content_db_helpers  # noqa: E402
 
 REFERENCE_CARD_COUNT = 60_000
 STATE_DAYS = 1_826
@@ -70,10 +60,10 @@ def _initialize_state_projection(path: Path) -> sqlite3.Connection:
     connection.execute("PRAGMA journal_mode = WAL")
     connection.execute("PRAGMA synchronous = NORMAL")
     connection.execute("PRAGMA foreign_keys = ON")
-    connection.executescript(STATE_SCHEMA)
+    connection.executescript(storage_schema.STATE_SCHEMA)
     connection.execute(
         "INSERT INTO schema_version(version) VALUES (?)",
-        (DB_SCHEMA_VERSION,),
+        (locklearn_const.DB_SCHEMA_VERSION,),
     )
     return connection
 
@@ -442,14 +432,14 @@ def _project_five_year_state(path: Path, *, days: int) -> dict[str, Any]:
 
 async def _content_scale(root: Path, *, card_count: int) -> dict[str, Any]:
     item_ids = tuple(f"locklearn:item:p6-7-{index:05d}" for index in range(card_count))
-    package = create_package(
+    package = content_db_helpers.create_package(
         root / "p6-7-scale-package.db",
         "p6-7-scale",
         active_item_ids=item_ids,
     )
     package_bytes = package.stat().st_size
-    storage = SQLiteStorage(
-        StoragePaths(
+    storage = locklearn_storage.SQLiteStorage(
+        locklearn_storage.StoragePaths(
             root / "state" / "state.db",
             root / "content" / "current.db",
         )
@@ -466,7 +456,7 @@ async def _content_scale(root: Path, *, card_count: int) -> dict[str, Any]:
         )
         build_s = perf_counter() - build_started
         candidate_bytes = candidate.stat().st_size
-        required_free = activation_required_free_disk(candidate_bytes)
+        required_free = storage_budget.activation_required_free_disk(candidate_bytes)
         activation_started = perf_counter()
         await storage.async_activate_content_generation(candidate)
         activation_s = perf_counter() - activation_started
@@ -492,8 +482,8 @@ async def _content_scale(root: Path, *, card_count: int) -> dict[str, Any]:
 
 
 async def _run(card_count: int, state_days: int) -> dict[str, Any]:
-    INTERNAL_METRICS.clear()
-    hot_paths = await run_hot_path_gate()
+    observability.INTERNAL_METRICS.clear()
+    hot_paths = await p5_9_performance._run()
     with tempfile.TemporaryDirectory(prefix="locklearn-p6-7-") as temporary:
         root = Path(temporary)
         state_projection = _project_five_year_state(
@@ -509,20 +499,20 @@ async def _run(card_count: int, state_days: int) -> dict[str, Any]:
             "free_bytes": filesystem.free,
         },
         "normative_budgets": {
-            "session_answer_p95_ms": SESSION_ANSWER_P95_BUDGET_MS,
-            "next_card_p95_ms": NEXT_CARD_P95_BUDGET_MS,
-            "scheduler_day_p95_ms": SCHEDULER_DAY_P95_BUDGET_MS,
+            "session_answer_p95_ms": p5_9_performance.SESSION_ANSWER_P95_BUDGET_MS,
+            "next_card_p95_ms": p5_9_performance.NEXT_CARD_P95_BUDGET_MS,
+            "scheduler_day_p95_ms": p5_9_performance.SCHEDULER_DAY_P95_BUDGET_MS,
             "official_dataset_artifact_default_max_bytes": (
-                OFFICIAL_DATASET_ARTIFACT_DEFAULT_MAX_BYTES
+                storage_budget.OFFICIAL_DATASET_ARTIFACT_DEFAULT_MAX_BYTES
             ),
-            "dataset_cache_warning_default_bytes": DATASET_CACHE_WARNING_DEFAULT_BYTES,
-            "activation_safety_margin_bytes": ACTIVATION_SAFETY_MARGIN_DEFAULT_BYTES,
+            "dataset_cache_warning_default_bytes": storage_budget.DATASET_CACHE_WARNING_DEFAULT_BYTES,
+            "activation_safety_margin_bytes": storage_budget.ACTIVATION_SAFETY_MARGIN_DEFAULT_BYTES,
             "activation_policy": "free >= 2x generated content + configured safety margin",
         },
         "hot_paths": hot_paths,
         "content_scale": content_scale,
         "state_projection": state_projection,
-        "internal_metrics": INTERNAL_METRICS.snapshot(),
+        "internal_metrics": observability.INTERNAL_METRICS.snapshot(),
     }
 
 
@@ -532,11 +522,11 @@ def _passes(result: dict[str, Any]) -> bool:
     state = result["state_projection"]
     return (
         float(hot["session_answer_p95_ms"])
-        < SESSION_ANSWER_P95_BUDGET_MS
+        < p5_9_performance.SESSION_ANSWER_P95_BUDGET_MS
         and float(hot["next_card_p95_ms"])
-        < NEXT_CARD_P95_BUDGET_MS
+        < p5_9_performance.NEXT_CARD_P95_BUDGET_MS
         and float(hot["scheduler_day_p95_ms"])
-        < SCHEDULER_DAY_P95_BUDGET_MS
+        < p5_9_performance.SCHEDULER_DAY_P95_BUDGET_MS
         and bool(content["free_space_gate_pass"])
         and state["integrity_check"] == "ok"
         and int(state["foreign_key_violation_count"]) == 0
