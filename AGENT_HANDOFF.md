@@ -4,6 +4,8 @@
 
 Branch: `feat/p6-hardening`.
 
+P6.5 qualification fixes are committed locally (not pushed).
+
 P5 and its real-HA exit gate remain PASS.
 
 P6.1 — database/config/content migrations and recovery — PASS.
@@ -16,7 +18,7 @@ P6.4 — secure export/import and data deletion — PASS at `8f1a0ab` and pushed
 before P6.5 started.
 
 P6.5 — HA entity/sensor privacy contract and optional integration boundary —
-has an implementation candidate. Final qualification is intentionally pending.
+PASS after review and qualification on 2026-09-27.
 
 ## P6.5 implementation
 
@@ -72,9 +74,22 @@ New `tests/backend/test_ha_entity_contract.py` verifies:
 - Profile + Track double opt-in is required;
 - unknown opt-in metrics fail closed.
 
+`tests/backend/test_dataset_update_entity.py` verifies that the existing public
+dataset `UpdateEntity` exposes provenance/update metadata only and remains
+separate from private learning state. Review also fixed strict canonical UUID
+validation (including uppercase rejection), rejected non-string metric keys,
+and aligned the attribute-surface test with the allowed `session_accuracy`
+aggregate metric.
+
 ## Verification state
 
-Final P6.5 qualification has **not** been run by design.
+The originally requested targeted command could not start because the
+referenced `tests/backend/test_dataset_update_entity.py` file was absent. The
+missing separation test was added, after which the targeted gate passed:
+
+```text
+12 passed in 0.71s
+```
 
 Recommended targeted gate:
 
@@ -97,5 +112,18 @@ Then run:
 
 P6.5 changes no frontend source and no generated frontend artifact. Do not run
 or rebuild frontend unless qualification changes frontend code.
+
+The complete backend gate passed:
+
+```text
+275 files already formatted
+All checks passed!
+Success: no issues found in 159 source files
+LockLearn resource registries: OK
+440 passed, 1 warning in 21.77s
+```
+
+The warning is the expected duplicate ZIP member warning from the hostile
+archive test fixture. No P6.6 work was started.
 
 Do not start P6.6 during qualification.

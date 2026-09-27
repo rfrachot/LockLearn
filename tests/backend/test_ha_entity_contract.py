@@ -19,9 +19,8 @@ from custom_components.locklearn.ha_entity_contract import (
     resolve_optional_sensor_metrics,
 )
 
-
 _PROFILE_ID = "11111111-1111-4111-8111-111111111111"
-_TRACK_ID = "22222222-2222-4222-8222-222222222222"
+_TRACK_ID = "a2222222-2222-4222-8222-222222222222"
 
 
 def test_v1_ships_without_optional_private_sensor_platform() -> None:
@@ -32,7 +31,7 @@ def test_v1_ships_without_optional_private_sensor_platform() -> None:
 
 def test_every_optional_sensor_is_explicitly_opt_in_aggregate_only_and_debounced() -> None:
     """Future sensor implementations inherit a fail-closed privacy contract."""
-    assert OPTIONAL_SENSOR_DEBOUNCE >= timedelta(minutes=5)
+    assert timedelta(minutes=5) <= OPTIONAL_SENSOR_DEBOUNCE
     assert OPTIONAL_SENSOR_CONTRACTS
 
     keys: set[str] = set()
@@ -96,16 +95,14 @@ def test_contract_contains_no_content_bearing_attribute_surface() -> None:
         "annotation",
         "learning_item",
         "facet",
-        "session",
         "target",
         "profile_name",
         "track_name",
     }
     for contract in OPTIONAL_SENSOR_CONTRACTS:
-        serialized = " ".join(
-            (contract.key, *contract.extra_state_attribute_keys)
-        ).lower()
+        serialized = " ".join(contract.extra_state_attribute_keys).lower()
         assert all(fragment not in serialized for fragment in forbidden_fragments)
+        assert contract.extra_state_attribute_keys == ()
 
 
 def test_sensor_exposure_requires_profile_and_track_double_opt_in() -> None:
@@ -120,14 +117,20 @@ def test_sensor_exposure_requires_profile_and_track_double_opt_in() -> None:
 
     assert resolve_optional_sensor_metrics({}, track_settings) == frozenset()
     assert resolve_optional_sensor_metrics(profile_settings, {}) == frozenset()
-    assert resolve_optional_sensor_metrics(
-        {"ha_sensors": {"enabled": False}},
-        track_settings,
-    ) == frozenset()
-    assert resolve_optional_sensor_metrics(
-        profile_settings,
-        {"ha_sensors": {"enabled": False, "metrics": ["mastery"]}},
-    ) == frozenset()
+    assert (
+        resolve_optional_sensor_metrics(
+            {"ha_sensors": {"enabled": False}},
+            track_settings,
+        )
+        == frozenset()
+    )
+    assert (
+        resolve_optional_sensor_metrics(
+            profile_settings,
+            {"ha_sensors": {"enabled": False, "metrics": ["mastery"]}},
+        )
+        == frozenset()
+    )
     assert resolve_optional_sensor_metrics(
         profile_settings,
         track_settings,
@@ -142,4 +145,10 @@ def test_sensor_exposure_requires_profile_and_track_double_opt_in() -> None:
                     "metrics": ["mastery", "last_learned_word"],
                 }
             },
+        )
+
+    with pytest.raises(ValueError, match="only strings"):
+        resolve_optional_sensor_metrics(
+            profile_settings,
+            {"ha_sensors": {"enabled": True, "metrics": ["mastery", 1]}},
         )

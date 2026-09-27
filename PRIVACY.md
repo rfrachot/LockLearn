@@ -43,6 +43,7 @@ metadata only.
 Any future learning sensor must obey `ha_entity_contract.py`:
 
 - exposure requires explicit Profile **and** Track opt-in;
+- Track opt-in is an allowlist of known metrics; unknown metric keys fail closed;
 - every metric is disabled by default;
 - entity identity derives from the stable Track UUID, never display names;
 - sensors for a Profile share one logical Profile Device;
@@ -50,6 +51,7 @@ Any future learning sensor must obey `ha_entity_contract.py`:
   annotations, target/device details or Profile/Track names;
 - publish cadence is debounced to at least five minutes;
 - Recorder exclusion is recommended for noisy counters/snapshots;
+- `state.db` remains the canonical source for complete learning history;
 - `state_class` is used only when the HA long-term-statistics semantics are
   genuinely valid.
 

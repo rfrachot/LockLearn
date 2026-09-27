@@ -7,9 +7,9 @@ sensor implementation must obey.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
-from collections.abc import Mapping
 from enum import StrEnum
 from uuid import UUID
 
@@ -120,12 +120,14 @@ _CONTRACT_BY_KEY = {contract.key: contract for contract in OPTIONAL_SENSOR_CONTR
 
 def _canonical_uuid(value: str, *, field: str) -> str:
     """Require a canonical stable UUID before it can become HA entity identity."""
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a UUID")
     try:
         parsed = UUID(value)
-    except ValueError as err:
+    except (AttributeError, TypeError, ValueError) as err:
         raise ValueError(f"{field} must be a UUID") from err
     canonical = str(parsed)
-    if value.lower() != canonical:
+    if value != canonical:
         raise ValueError(f"{field} must use canonical UUID form")
     return canonical
 
@@ -167,7 +169,9 @@ def resolve_optional_sensor_metrics(
     metrics = track_raw.get("metrics")
     if not isinstance(metrics, (list, tuple, set, frozenset)):
         raise ValueError("ha_sensors.metrics must be a collection")
-    normalized = frozenset(str(metric) for metric in metrics)
+    if not all(isinstance(metric, str) for metric in metrics):
+        raise ValueError("ha_sensors.metrics must contain only strings")
+    normalized = frozenset(metrics)
     unknown = normalized - _CONTRACT_BY_KEY.keys()
     if unknown:
         raise ValueError(f"unsupported optional sensor metrics: {sorted(unknown)!r}")
