@@ -211,6 +211,143 @@ export interface DatasetInstallResult {
   statuses: DatasetStatusRecord[];
 }
 
+export interface StatsAccuracy {
+  correct: number;
+  total: number;
+  accuracy: number | null;
+  window_limit: number;
+}
+
+export interface StatsRetention {
+  result: string;
+  retained: boolean;
+  card_key: string;
+  created_at_utc: string;
+  local_date: string;
+}
+
+export interface StatsStateCounts {
+  new: number;
+  learning: number;
+  review: number;
+  relearning: number;
+  leech: number;
+}
+
+export interface StatsMastery {
+  value: number | null;
+  card_count: number;
+  secondary_indicator: boolean;
+}
+
+export interface StatsCalibration {
+  window_days: number;
+  declared_known_cards: number;
+  later_verified_cards: number;
+  later_verified_correct: number;
+  later_verified_wrong: number;
+  later_verified_accuracy: number | null;
+  awaiting_verified_followup: number;
+}
+
+export interface StatsStreak {
+  days: number;
+  grace_days: number;
+  grace_days_used: number;
+  goal_fraction: number;
+  goal_minimum_cards: number;
+  today: {
+    due_opening: number;
+    treated_due: number;
+    target: number;
+    status: "neutral" | "success" | "missed";
+    timezone_name?: string;
+  };
+}
+
+export interface ConfusionRecord {
+  card_key: string;
+  expected_answer_id: string;
+  chosen_answer_id: string;
+  count: number;
+}
+
+export interface StatsDailyRecord {
+  profile_id: string;
+  track_id: string;
+  local_date: string;
+  timezone_name: string;
+  utc_offset_minutes: number;
+  policy_version: string;
+  learning_exposures: number;
+  verified_retrievals: number;
+  self_known: number;
+  verified_correct: number;
+  verified_wrong: number;
+  quiz_total: number;
+  free_text_total: number;
+  hints_used: number;
+  new_cards: number;
+  reviewed_cards: number;
+  relearning_cards: number;
+  leech_cards: number;
+  active_seconds: number;
+}
+
+export interface StatsResponse {
+  profile_id: string;
+  track_id: string | null;
+  generated_at_utc: string;
+  local_date: string;
+  due_today: number;
+  states: StatsStateCounts;
+  latest_verified_retention: StatsRetention | null;
+  recent_verified_accuracy: StatsAccuracy;
+  mastery: StatsMastery;
+  calibration: StatsCalibration;
+  streak: StatsStreak;
+  confusions: ConfusionRecord[];
+  daily: StatsDailyRecord[];
+}
+
+export interface DifficultyAnnotation {
+  annotation_id: string;
+  profile_id: string;
+  learning_item_id: string | null;
+  card_key: string | null;
+  note: string;
+  created_at_utc: string;
+  updated_at_utc: string;
+}
+
+export interface DifficultyRecord {
+  profile_id: string;
+  track_id: string;
+  card_key: string;
+  learning_item_id: string;
+  prompt_facet_id: string;
+  answer_facet_id: string;
+  mastery: number;
+  box: number;
+  seen_count: number;
+  verified_correct_count: number;
+  verified_wrong_count: number;
+  next_due_at_utc: string | null;
+  leech_score: number;
+  difficulty_factor: number;
+  user_state: string;
+  content_status: string;
+  policy_version: string;
+  updated_at_utc: string;
+  confusions: ConfusionRecord[];
+  annotations: DifficultyAnnotation[];
+  recommended_remediation: "create_personal_mnemonic" | "edit_personal_mnemonic";
+  targeted_session_settings: {
+    leeches_only: boolean;
+    requested_cards: number;
+  };
+}
+
 export interface LearningPlanInput {
   max_new_per_day_cards: number;
   max_reviews_per_day_cards: number;
@@ -365,6 +502,34 @@ export async function listNotificationTargets(
   return listPaged<NotificationTargetSummary>(hass, "locklearn/targets/list", {
     profile_id: profileId,
   });
+}
+
+export async function getStats(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId?: string | null,
+): Promise<StatsResponse> {
+  return hass.callWS<StatsResponse>({
+    type: "locklearn/stats/get",
+    profile_id: profileId,
+    recent_verified_limit: 30,
+    calibration_days: 7,
+    confusion_limit: 20,
+    ...(trackId ? { track_id: trackId } : {}),
+  });
+}
+
+export async function listDifficulties(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId?: string | null,
+): Promise<DifficultyRecord[]> {
+  const result = await hass.callWS<{ items: DifficultyRecord[] }>({
+    type: "locklearn/difficulties/list",
+    profile_id: profileId,
+    ...(trackId ? { track_id: trackId } : {}),
+  });
+  return result.items;
 }
 
 export async function createTrack(
