@@ -31,13 +31,13 @@ Core principles:
 
 ## Screenshots
 
-The panel has an automated Playwright documentation-capture path based on the same
-deterministic browser harness used by E2E tests. The canonical screenshot is
-generated during P6.9 qualification and will be committed under
-docs/assets/locklearn-home.png before P6.9 is marked PASS.
+![LockLearn Home dashboard](docs/assets/locklearn-home.png)
 
-This section deliberately does not use a hand-drawn mockup: documentation imagery
-must represent the actual rendered panel.
+The screenshot above is captured from the real compiled LockLearn panel by the
+same deterministic Playwright harness used by E2E tests. It is not a hand-drawn
+mockup. CI also regenerates the full-resolution panel capture as the
+`locklearn-docs-screenshot` workflow artifact so documentation imagery remains
+tied to tested UI behavior.
 
 ## Features
 

@@ -88,8 +88,12 @@ def test_spec_remains_normative_in_reference_docs() -> None:
         assert "SPEC_V1.md" in content
 
 
-def test_readme_does_not_claim_p6_9_complete_before_screenshot_exists() -> None:
+def test_readme_uses_committed_real_panel_screenshot() -> None:
     screenshot = ROOT / "docs" / "assets" / "locklearn-home.png"
+    assert screenshot.is_file()
+    assert screenshot.stat().st_size > 0
+    assert screenshot.read_bytes().startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    if not screenshot.is_file():
-        assert "before P6.9 is marked PASS" in readme
+    assert "![LockLearn Home dashboard](docs/assets/locklearn-home.png)" in readme
+    assert "deterministic Playwright harness" in readme

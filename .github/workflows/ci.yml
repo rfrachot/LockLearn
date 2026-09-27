@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, feat/p6-hardening]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -193,35 +193,3 @@ jobs:
         with:
           category: integration
           comment: false
-
-  canonical-docs-screenshot:
-    if: github.ref == 'refs/heads/feat/p6-hardening' && !contains(github.event.head_commit.message, '[skip ci]')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: feat/p6-hardening
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm install
-      - name: Install Playwright Chromium
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium
-      - name: Capture canonical documentation screenshot
-        working-directory: frontend
-        run: npm run docs:screenshot
-      - name: Commit canonical screenshot
-        run: |
-          test -s docs/assets/locklearn-home.png
-          file docs/assets/locklearn-home.png
-          sha256sum docs/assets/locklearn-home.png
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/assets/locklearn-home.png
-          git commit -m "docs(hardening): add canonical P6.9 screenshot [skip ci]"
-          git push origin HEAD:feat/p6-hardening

@@ -6,9 +6,8 @@ Branch: `feat/p6-hardening`.
 
 P5 and its real-HA exit gate remain PASS. P6.1 through P6.8 are PASS.
 
-P6.9 — documentation set and generated contracts — is implementation-complete
-except for the canonical README screenshot and final qualification. P6.10 has
-not started.
+P6.9 — documentation set and generated contracts — is implementation complete
+and final qualification is pending. P6.10 has not started.
 
 ## P6.9 implementation
 
@@ -44,29 +43,19 @@ Official source documentation is now derived from the machine registries and
 covers provider, format, adapter, licence/attribution, imported/excluded fields,
 known risks and refresh policy.
 
-README screenshots must represent real rendered UI. A Playwright capture test
-exists at `frontend/e2e/tests/docs-screenshot.spec.ts`, invoked with:
+README screenshots represent real rendered UI. The deterministic Playwright
+capture test lives at `frontend/e2e/tests/docs-screenshot.spec.ts`. Its canonical
+output is committed at `docs/assets/locklearn-home.png` and referenced by README;
+the normal frontend-e2e CI job also uploads the full-resolution capture artifact.
 
-~~~bash
-cd frontend
-npm run docs:screenshot
-~~~
-
-Expected output:
-
-`docs/assets/locklearn-home.png`
-
-Do not mark P6.9 PASS until that generated screenshot is committed and referenced
-by README, then all local/CI documentation gates are green.
+Do not mark P6.9 PASS until all local/CI documentation gates are green.
 
 ## Next qualification work
 
-1. generate the canonical screenshot from the deterministic E2E harness;
-2. commit the exact PNG without editing/re-styling it;
-3. replace the README pending screenshot note with the committed image;
-4. run Ruff/lint/mypy, generated-doc check, P6.9 tests, full pytest, frontend
+1. run Ruff/lint/mypy, generated-doc check, P6.9 tests, full pytest, frontend
    lint/typecheck/Vitest/E2E/build and git diff check;
-5. run CI and verify every existing P6.8 job remains green plus the new generated
+2. verify the committed screenshot and README reference;
+3. run CI and verify every existing P6.8 job remains green plus the new generated
    documentation/P6.9 gates.
 
 Known non-blocking warnings remain the duplicate `profile.json` test fixture and
