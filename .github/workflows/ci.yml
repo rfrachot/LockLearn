@@ -70,8 +70,24 @@ jobs:
       - run: npm install
       - run: npm run typecheck
       - run: npm test
+      - run: npm run check:no-polling
       - run: npm run build
+      - run: npm run check:bundle
       - run: git diff --exit-code -- ../custom_components/locklearn/frontend/locklearn-panel.js
+
+  frontend-e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
 
   home-assistant-validation:
     runs-on: ubuntu-latest
