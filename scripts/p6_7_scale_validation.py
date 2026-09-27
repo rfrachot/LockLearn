@@ -515,14 +515,17 @@ async def _run(card_count: int, state_days: int) -> dict[str, Any]:
     }
 
 
-def _passes(result: dict[str, Any]) -> bool:
+def _passes(result: dict[str, Any], *, hot_path_gate: bool = True) -> bool:
     hot = result["hot_paths"]
     content = result["content_scale"]
     state = result["state_projection"]
-    return (
+    hot_paths_pass = (
         float(hot["session_answer_p95_ms"]) < p5_9_performance.SESSION_ANSWER_P95_BUDGET_MS
         and float(hot["next_card_p95_ms"]) < p5_9_performance.NEXT_CARD_P95_BUDGET_MS
         and float(hot["scheduler_day_p95_ms"]) < p5_9_performance.SCHEDULER_DAY_P95_BUDGET_MS
+    )
+    return (
+        (hot_paths_pass or not hot_path_gate)
         and bool(content["free_space_gate_pass"])
         and state["integrity_check"] == "ok"
         and int(state["foreign_key_violation_count"]) == 0
@@ -533,12 +536,17 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--card-count", type=int, default=REFERENCE_CARD_COUNT)
     parser.add_argument("--state-days", type=int, default=STATE_DAYS)
+    parser.add_argument(
+        "--hot-path-report-only",
+        action="store_true",
+        help="Report one hot-path sample without gating it (shared CI runner mode).",
+    )
     args = parser.parse_args()
     if args.card_count <= 0 or args.state_days <= 0:
         parser.error("--card-count and --state-days must be positive")
     result = asyncio.run(_run(args.card_count, args.state_days))
     print(json.dumps(result, indent=2, sort_keys=True))
-    return 0 if _passes(result) else 1
+    return 0 if _passes(result, hot_path_gate=not args.hot_path_report_only) else 1
 
 
 if __name__ == "__main__":

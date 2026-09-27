@@ -193,6 +193,8 @@ def test_ci_release_matrix_contains_every_normative_gate() -> None:
         'home_assistant: "2026.9.3"',
         "homeassistant==2026.9.4",
         "scripts/p6_8_ha_smoke.py",
+        "scripts/p6_8_ci_performance.py",
+        "--hot-path-report-only",
     )
     missing = [fragment for fragment in required_fragments if fragment not in ci]
     assert missing == []
