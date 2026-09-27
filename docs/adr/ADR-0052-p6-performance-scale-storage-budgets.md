@@ -111,3 +111,18 @@ with 6 logical CPUs and 15 GiB RAM.
   integrity_check=ok and zero foreign-key violations.
 - Ruff format/lint, mypy, resource validation, targeted/full pytest and
   frontend typecheck/tests/build passed. The frontend bundle remained unchanged.
+
+
+## Hosted CI performance policy
+
+GitHub-hosted runners are not the documented P6.7 reference hardware and do
+not enforce the normative wall-clock budgets. P6.8 still executes the same
+P5.9 benchmark three times on hosted CI and records the median p95 values plus
+whether those values would satisfy the reference budgets. This is telemetry,
+not a substitute reference platform.
+
+The authoritative budgets remain unchanged (100 ms session answer, 150 ms
+next-card selection, 250 ms scheduler generation) and remain gated by the
+documented P6.7 reference-hardware qualification. Hosted CI fails only if the
+benchmark cannot execute or its surrounding release contracts fail; runner
+speed alone does not redefine product performance requirements.

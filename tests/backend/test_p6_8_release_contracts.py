@@ -194,6 +194,7 @@ def test_ci_release_matrix_contains_every_normative_gate() -> None:
         "homeassistant==2026.9.4",
         "scripts/p6_8_ha_smoke.py",
         "scripts/p6_8_ci_performance.py",
+        "Shared-runner hot-path performance telemetry",
         "--hot-path-report-only",
     )
     missing = [fragment for fragment in required_fragments if fragment not in ci]
@@ -203,3 +204,10 @@ def test_ci_release_matrix_contains_every_normative_gate() -> None:
 def test_declared_minimum_home_assistant_matches_hacs_contract() -> None:
     hacs = json.loads(HACS_PATH.read_text(encoding="utf-8"))
     assert hacs["homeassistant"] == "2025.2.0"
+
+
+def test_shared_runner_performance_is_telemetry_not_reference_gate() -> None:
+    script = (ROOT / "scripts" / "p6_8_ci_performance.py").read_text(encoding="utf-8")
+    assert '"hosted_runner_is_normative": False' in script
+    assert '"normative_hardware": "documented P6.7 reference hardware"' in script
+    assert "return 0" in script

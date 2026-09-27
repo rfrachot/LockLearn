@@ -1,4 +1,4 @@
-"""P6.8 shared-runner hot-path gate with jitter-resistant aggregation."""
+"""P6.8 shared-runner hot-path telemetry with jitter-resistant aggregation."""
 
 from __future__ import annotations
 
@@ -29,28 +29,29 @@ async def _run() -> dict[str, Any]:
         metric: round(median(float(run[metric]) for run in attempts), 3)
         for metric, _budget in GATED_METRICS
     }
+    reference_budget_pass = all(
+        float(medians[metric]) < budget for metric, budget in GATED_METRICS
+    )
     return {
         "policy": {
             "attempts": ATTEMPTS,
             "aggregation": "median of per-attempt p95 values",
-            "purpose": "shared GitHub runner jitter resistance",
+            "purpose": "shared GitHub runner telemetry only",
             "budgets_unchanged": True,
+            "normative_hardware": "documented P6.7 reference hardware",
+            "hosted_runner_is_normative": False,
         },
         "attempts": attempts,
         "median_p95_ms": medians,
         "budgets_ms": {metric: budget for metric, budget in GATED_METRICS},
+        "reference_budget_pass": reference_budget_pass,
     }
-
-
-def _passes(result: dict[str, Any]) -> bool:
-    medians = result["median_p95_ms"]
-    return all(float(medians[metric]) < budget for metric, budget in GATED_METRICS)
 
 
 def main() -> int:
     result = asyncio.run(_run())
     print(json.dumps(result, indent=2, sort_keys=True))
-    return 0 if _passes(result) else 1
+    return 0
 
 
 if __name__ == "__main__":

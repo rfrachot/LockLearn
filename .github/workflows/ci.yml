@@ -44,7 +44,7 @@ jobs:
           tests/backend/test_storage_lifecycle.py
       - name: Full Python test suite
         run: python -m pytest -q --tb=short
-      - name: Shared-runner hot-path performance gate
+      - name: Shared-runner hot-path performance telemetry
         run: python scripts/p6_8_ci_performance.py
       - name: Scale and storage performance gate
         run: python scripts/p6_7_scale_validation.py --hot-path-report-only

@@ -63,6 +63,15 @@ pins HA 2026.9.3. Until a matching harness is published, CI additionally runs
 
 HACS and hassfest remain mandatory CI jobs.
 
+### Hosted-runner performance policy
+
+The 100/150/250 ms wall-clock budgets remain normative and unchanged. They were
+qualified on the documented P6.7 reference VM. GitHub-hosted runners execute
+three P5.9 measurements and report median p95 telemetry plus
+`reference_budget_pass`, but hosted runner speed is not a normative release
+platform. `scripts/p6_8_ci_performance.py` therefore fails only if execution
+itself fails; it does not redefine the reference-hardware gate.
+
 ## Qualification — Luna executes only
 
 Luna must not edit, format, commit, push, merge or start P6.9.
