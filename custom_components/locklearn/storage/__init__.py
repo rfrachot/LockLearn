@@ -14,6 +14,7 @@ from .content import (
 )
 from .database import (
     SQLiteStorage,
+    StateIntegrityError,
     StateMigrationError,
     StoragePaths,
     UnsupportedStateSchemaError,
@@ -51,6 +52,7 @@ __all__ = [
     "ProfileRecord",
     "ReviewEventRecord",
     "SQLiteStorage",
+    "StateIntegrityError",
     "StateMigrationError",
     "StateRepositories",
     "StoragePaths",

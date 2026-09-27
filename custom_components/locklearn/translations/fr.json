@@ -34,6 +34,28 @@
     "notification_target_unavailable": {
       "title": "Cible de notification indisponible",
       "description": "LockLearn ne peut actuellement ni résoudre ni envoyer vers {friendly_name} ({target_id}). La notification n’est pas enregistrée comme envoyée."
+    },
+    "state_integrity_failure": {
+      "title": "Les données utilisateur LockLearn nécessitent une récupération",
+      "description": "LockLearn n’a pas ouvert son writer d’état car state.db a échoué à la validation d’intégrité. {snapshot_count} snapshot(s) de récupération validé(s) sont actuellement disponible(s). Ouvrez les options de l’intégration LockLearn pour inspecter le stockage et restaurer explicitement un snapshot. LockLearn n’écrase jamais automatiquement l’unique copie des données utilisateur."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Stockage, sauvegarde et récupération",
+        "description": "État persistant : {state_size}. Cache de contenu reconstructible : {content_cache_size}, dont ressources : {asset_size}. Snapshots de récupération : {recovery_size} ({snapshot_count} disponible(s)). Avec le plancher de compatibilité Home Assistant 2025.2, le cache reconstructible est inclus dans les sauvegardes HA ; LockLearn effectue un checkpoint puis un snapshot cohérent de l’état avant l’archive. Choisissez ce que LockLearn pourra supprimer si l’entrée de configuration est ensuite retirée. La restauration d’un snapshot est explicite et met d’abord les fichiers actuels en quarantaine bornée.",
+        "data": {
+          "uninstall_data_policy": "Politique de données lors de la suppression de LockLearn",
+          "restore_snapshot": "Restaurer maintenant un snapshot de récupération validé",
+          "purge_content_cache": "Purger maintenant le cache de contenu reconstructible puis le reconstruire"
+        }
+      }
+    },
+    "error": {
+      "storage_unload_failed": "LockLearn n’a pas pu être déchargé proprement. Aucune action sur le stockage n’a été effectuée.",
+      "storage_action_failed": "L’action demandée sur le stockage a échoué. Les données existantes ont été conservées ou restaurées.",
+      "storage_reload_failed": "L’action sur le stockage est terminée, mais LockLearn n’a pas pu se recharger. Consultez la réparation avant de continuer."
     }
   }
 }

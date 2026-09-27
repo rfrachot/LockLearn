@@ -16,5 +16,10 @@ STATIC_URL_PATH = "/locklearn_static"
 
 CONF_CREATE_PERSONAL_PROFILE = "create_personal_profile"
 CONF_UI_LANGUAGE = "ui_language"
+CONF_UNINSTALL_DATA_POLICY = "uninstall_data_policy"
+CONF_RESTORE_SNAPSHOT = "restore_snapshot"
+CONF_PURGE_CONTENT_CACHE = "purge_content_cache"
 DEFAULT_UI_LANGUAGE = "en"
 SUPPORTED_UI_LANGUAGES = ("en", "fr")
+
+DEFAULT_UNINSTALL_DATA_POLICY = "keep_user_data"

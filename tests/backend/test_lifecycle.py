@@ -4,9 +4,18 @@ from pathlib import Path
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.locklearn.const import DATA_RUNTIME, DOMAIN, PANEL_URL_PATH
+from custom_components.locklearn import async_remove_entry
+from custom_components.locklearn.const import (
+    CONF_UNINSTALL_DATA_POLICY,
+    DATA_RUNTIME,
+    DOMAIN,
+    PANEL_URL_PATH,
+)
+from custom_components.locklearn.storage import StoragePaths
+from custom_components.locklearn.storage.lifecycle import UninstallDataPolicy
 
 
 async def test_setup_unload_and_reload_have_no_duplicate_panel(
@@ -74,3 +83,51 @@ async def test_setup_unload_and_reload_have_no_duplicate_panel(
     )
 
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_integrity_failure_creates_recovery_issue_without_runtime(
+    hass: HomeAssistant,
+) -> None:
+    """Corrupt state never reaches the writer and is surfaced as a persistent Repair."""
+    paths = StoragePaths.from_config_dir(hass.config.config_dir)
+    paths.state_db.parent.mkdir(parents=True, exist_ok=True)
+    paths.state_db.write_bytes(b"not-a-sqlite-database")
+
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, data={})
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id) is False
+    await hass.async_block_till_done()
+
+    assert DATA_RUNTIME not in hass.data.get(DOMAIN, {})
+    registry = ir.async_get(hass)
+    assert any(
+        issue.domain == DOMAIN and issue.issue_id == "state_integrity_failure"
+        for issue in registry.issues.values()
+    )
+    assert paths.state_db.read_bytes() == b"not-a-sqlite-database"
+
+
+async def test_remove_entry_applies_explicit_cache_only_policy(
+    hass: HomeAssistant,
+) -> None:
+    """The HA removal hook preserves state unless its destructive option says otherwise."""
+    paths = StoragePaths.from_config_dir(hass.config.config_dir)
+    paths.state_db.parent.mkdir(parents=True, exist_ok=True)
+    paths.state_db.write_bytes(b"state")
+    paths.content_db.parent.mkdir(parents=True, exist_ok=True)
+    paths.content_db.write_bytes(b"cache")
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=DOMAIN,
+        data={},
+        options={
+            CONF_UNINSTALL_DATA_POLICY: UninstallDataPolicy.DELETE_CONTENT_CACHE.value,
+        },
+    )
+
+    await async_remove_entry(hass, entry)
+
+    assert paths.state_db.is_file()
+    assert not paths.content_root.exists()

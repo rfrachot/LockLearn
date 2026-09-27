@@ -6,47 +6,81 @@ Branch: `feat/p6-hardening`.
 
 P5 and its real-HA exit gate remain PASS.
 
-P6.1 — database/config/content migrations and recovery — is implemented and
-qualified PASS. The local qualification commit is at `HEAD` and has not been
-pushed.
+P6.1 — database/config/content migrations and recovery — is qualified PASS at
+`38656cc`.
 
-No P6.2+ implementation is included.
+P6.2 — backup hooks, unload/reload and uninstall/recovery UX — has an
+implementation candidate. Final qualification is intentionally pending.
 
-## P6.1 implementation
+## P6.2 implementation
 
-- state migrations are now an explicit sequential registry: v1 -> v2 -> v3 -> v4 -> v5;
-- a pre-migration recovery snapshot is created with `Connection.backup()`, validated, then atomically published without deleting the previous snapshot first;
-- in-place steps mutate schema + `schema_version` in one transaction and validate integrity/foreign keys before commit;
-- current-version state DBs are structurally validated instead of being silently repaired by rerunning `CREATE ... IF NOT EXISTS`;
-- future/malformed state schema versions fail explicitly;
-- `StateMigrationError` exposes the recovery snapshot path for later Repairs/recovery UX;
-- Config Entry versioning now has a separate `async_migrate_entry()` boundary without an artificial version bump;
-- content packages remain immutable inputs rebuilt into a new current content generation;
-- `MIGRATIONS.md` documents the four separate migration/versioning domains.
+- existing state databases are validated through a read-only SQLite connection
+  before any writer/journal mutation is allowed;
+- integrity or foreign-key failure prevents runtime startup and creates the
+  focused `state_integrity_failure` Home Assistant Repair;
+- HA pre-backup holds the write gate, checkpoints WAL and atomically publishes a
+  validated `Connection.backup()` snapshot at
+  `.storage/locklearn/snapshots/ha-backup-latest.db`;
+- backup preparation releases its write gate on all exceptions/cancellation;
+- the 10-second HA backup-hook timeout remains in `backup.py`;
+- HA 2025.2 cannot safely exclude LockLearn's per-integration content cache, so
+  the Options Flow reports that policy honestly instead of claiming exclusion;
+- Options Flow surfaces state/cache/asset/recovery sizes and provides explicit
+  content-cache purge/rebuild;
+- cache purge and snapshot recovery unload the Config Entry before touching
+  files, then set it up again;
+- recovery validates the snapshot and replacement candidate, quarantines the
+  current DB/WAL/SHM first, then atomically publishes the restored DB;
+- recovery retention is bounded: one HA backup snapshot, three migration
+  snapshots, two pre-recovery quarantines;
+- Config Entry Options persist one explicit uninstall policy:
+  `keep_user_data`, `delete_user_state`, `delete_content_cache` or
+  `delete_everything`;
+- default/unknown uninstall policy preserves user data;
+- `async_remove_entry` performs only the persisted deletion choice;
+- no P6.3 diagnostics catalogue or P6.4 personal-data export/delete work is
+  included.
 
-## Added/updated tests
+ADR-0047 records the lifecycle/recovery/uninstall decision and ADR-0004 remains
+the source for the HA 2025.2 backup-exclusion limitation.
 
-- historical state fixtures v1/v2/v3/v4 -> current;
-- future/current-malformed state refusal;
-- injected mid-chain failure: rollback, original backup integrity, preserved sentinel data, and deterministic retry;
-- Config Entry current/legacy/future boundary;
-- legacy content-schema package merged into a current generation without package mutation.
+## P6.2 test coverage added
+
+- coherent HA recovery snapshot with persisted sentinel state;
+- corrupt live state rejected before writer mutation;
+- explicit recovery restores the snapshot and quarantines the corrupt live copy;
+- all four uninstall policies delete only their selected roots;
+- storage-size/backup-policy reporting;
+- Config Entry Options persist the uninstall policy;
+- explicit cache purge runs offline before setup/rebuild;
+- integrity failure creates a persistent Repair without a runtime;
+- HA remove hook applies the selected cache-only policy.
 
 ## Verification state
 
-All P6.1 verification gates pass in the repository `.venv` (Python 3.14.4,
-Home Assistant 2026.9.3):
+The final P6.2 gate has **not** been run by design. The implementation was
+prepared without the full test matrix so Luna can perform final qualification.
+
+Recommended targeted gate:
 
 ```text
-targeted pytest: 37 passed in 1.81s
-ruff format --check: 261 files already formatted
-ruff check: All checks passed!
-mypy: Success: no issues found in 149 source files
-resource validation: LockLearn resource registries: OK
-full pytest: 399 passed in 22.46s
+python3 -m pytest -q --tb=short \
+  tests/backend/test_storage.py \
+  tests/backend/test_storage_lifecycle.py \
+  tests/backend/test_lifecycle.py \
+  tests/backend/test_config_flow.py \
+  tests/backend/test_state_foundation.py
 ```
 
-The only corrections required during qualification were Ruff formatting in the
-P6.1 implementation/tests and one import-order fix in `config_flow.py`; no
-behavioral migration defect was found. No frontend code changed, so frontend
-rebuild/tests were not required for this P6.1 validation.
+Then run:
+
+```text
+python3 -m ruff format --check .
+python3 -m ruff check .
+python3 -m mypy custom_components datasets tests
+python3 datasets/tools/validate_resources.py
+python3 -m pytest -q --tb=short
+```
+
+No frontend source file is changed by P6.2. Frontend build/tests are not
+required unless qualification changes frontend code.

@@ -34,6 +34,28 @@
     "notification_target_unavailable": {
       "title": "Notification target unavailable",
       "description": "LockLearn cannot currently resolve or deliver to {friendly_name} ({target_id}). The notification was not recorded as sent."
+    },
+    "state_integrity_failure": {
+      "title": "LockLearn user state needs recovery",
+      "description": "LockLearn did not open its state writer because state.db failed integrity validation. {snapshot_count} validated recovery snapshot(s) are currently available. Open the LockLearn integration options to inspect storage and explicitly restore a snapshot. LockLearn will never overwrite the only user-state copy automatically."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Storage, backup and recovery",
+        "description": "Persistent state: {state_size}. Reconstructible content cache: {content_cache_size}, including assets: {asset_size}. Recovery snapshots: {recovery_size} ({snapshot_count} available). On the Home Assistant 2025.2 compatibility floor the reconstructible content cache is included in HA backups; LockLearn checkpoints and snapshots state coherently before the archive is created. Choose what LockLearn may delete if the Config Entry is later removed. Restoring a snapshot is explicit and preserves the current live files in a bounded quarantine first.",
+        "data": {
+          "uninstall_data_policy": "Data policy when LockLearn is removed",
+          "restore_snapshot": "Restore a validated recovery snapshot now",
+          "purge_content_cache": "Purge the reconstructible content cache now and rebuild it"
+        }
+      }
+    },
+    "error": {
+      "storage_unload_failed": "LockLearn could not unload safely. No storage action was performed.",
+      "storage_action_failed": "The requested storage action failed. The existing data was preserved or rolled back.",
+      "storage_reload_failed": "The storage action completed, but LockLearn could not reload. Check the Repair before continuing."
     }
   }
 }

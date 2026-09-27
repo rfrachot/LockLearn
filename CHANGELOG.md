@@ -9,6 +9,10 @@ All notable changes will be documented here.
   runtime setup, avoiding blocking-call warnings on the HA event loop.
 
 ### Added
+- P6.2 backup/recovery lifecycle hardening with coherent atomic state snapshots,
+  fail-closed read-only integrity validation, explicit snapshot recovery,
+  bounded maintenance retention, storage/backup-size visibility, reconstructible
+  cache purge/rebuild, and persisted uninstall data-retention choices.
 - P5.9 permanent frontend performance/compatibility gates: 500 KiB gzip budget,
   direct-network/permanent-polling audit, Playwright Chromium core-flow smoke,
   minimum/latest Home Assistant compatibility, and reproducible §80 p95

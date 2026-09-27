@@ -26,6 +26,7 @@ from .repositories import ReviewEventRecord, ReviewEventsRepository, StateReposi
 from .schema import STATE_REQUIRED_INDEXES, STATE_REQUIRED_TABLES, STATE_SCHEMA
 
 T = TypeVar("T")
+_MAX_MIGRATION_SNAPSHOTS = 3
 
 
 class SessionNotFoundError(LookupError):
@@ -48,12 +49,31 @@ class UnsupportedStateSchemaError(StateMigrationError):
     """Raised when a state database version cannot be opened by this build."""
 
 
+class StateIntegrityError(StateMigrationError):
+    """Raised when persistent user state fails SQLite integrity validation."""
+
+
 @dataclass(frozen=True, slots=True)
 class StoragePaths:
     """Physically separate persistent-state and reconstructible-content paths."""
 
     state_db: Path
     content_db: Path
+
+    @property
+    def state_root(self) -> Path:
+        """Return the root containing persistent state and recovery snapshots."""
+        return self.state_db.parent
+
+    @property
+    def state_snapshots_dir(self) -> Path:
+        """Return the bounded maintenance-snapshot directory."""
+        return self.state_root / "snapshots"
+
+    @property
+    def ha_backup_snapshot(self) -> Path:
+        """Return the latest coherent snapshot prepared for a Home Assistant backup."""
+        return self.state_snapshots_dir / "ha-backup-latest.db"
 
     @property
     def content_root(self) -> Path:
@@ -125,9 +145,9 @@ def _validate_state_connection(
         )
     integrity = connection.execute("PRAGMA integrity_check").fetchall()
     if integrity != [("ok",)]:
-        raise StateMigrationError(f"State database failed integrity_check: {path}")
+        raise StateIntegrityError(f"State database failed integrity_check: {path}")
     if connection.execute("PRAGMA foreign_key_check").fetchall():
-        raise StateMigrationError(f"State database failed foreign_key_check: {path}")
+        raise StateIntegrityError(f"State database failed foreign_key_check: {path}")
     if not require_current_schema:
         return
 
@@ -146,6 +166,36 @@ def _validate_state_connection(
         raise StateMigrationError(
             f"State database is missing required indexes: {sorted(missing_indexes)!r}"
         )
+
+
+def validate_state_database_file(path: Path) -> int:
+    """Validate one state DB read-only and return its supported schema version."""
+    if not path.is_file():
+        raise StateIntegrityError(f"State database does not exist: {path}")
+    try:
+        connection = sqlite3.connect(_read_only_uri(path), uri=True)
+    except sqlite3.DatabaseError as err:
+        raise StateIntegrityError(f"State database could not be opened read-only: {path}") from err
+    try:
+        try:
+            version = _read_state_schema_version(connection, path)
+            if version > DB_SCHEMA_VERSION:
+                raise UnsupportedStateSchemaError(
+                    f"Unsupported future schema version {version} for {path}"
+                )
+            _validate_state_connection(
+                connection,
+                path,
+                expected_version=version,
+                require_current_schema=version == DB_SCHEMA_VERSION,
+            )
+            return version
+        except sqlite3.DatabaseError as err:
+            raise StateIntegrityError(
+                f"State database failed SQLite validation: {path}"
+            ) from err
+    finally:
+        connection.close()
 
 
 def _initialize_state_database(path: Path, schema: str, version: int) -> None:
@@ -167,23 +217,20 @@ def _initialize_state_database(path: Path, schema: str, version: int) -> None:
             connection.close()
         return
 
-    backup: Path | None = None
+    # Existing user state is inspected read-only before any writer connection or
+    # journal-mode mutation is allowed. Integrity failure therefore leaves the
+    # only live copy untouched for recovery.
+    current = validate_state_database_file(path)
+    if current > version:
+        raise UnsupportedStateSchemaError(
+            f"Unsupported future schema version {current} for {path}"
+        )
+    if current == version:
+        return
+
     connection = sqlite3.connect(path)
     try:
         _configure_state_connection(connection)
-        current = _read_state_schema_version(connection, path)
-        if current > version:
-            raise UnsupportedStateSchemaError(
-                f"Unsupported future schema version {current} for {path}"
-            )
-        if current == version:
-            _validate_state_connection(
-                connection,
-                path,
-                expected_version=version,
-                require_current_schema=True,
-            )
-            return
         backup = _create_state_migration_backup(connection, path, current)
     finally:
         connection.close()
@@ -197,17 +244,7 @@ def _initialize_state_database(path: Path, schema: str, version: int) -> None:
             backup_path=backup,
         ) from err
 
-    connection = sqlite3.connect(path)
-    try:
-        _configure_state_connection(connection)
-        _validate_state_connection(
-            connection,
-            path,
-            expected_version=version,
-            require_current_schema=True,
-        )
-    finally:
-        connection.close()
+    validate_state_database_file(path)
 
 
 def _unlink_sqlite_files(path: Path) -> None:
@@ -247,7 +284,50 @@ def _create_state_migration_backup(
         os.replace(candidate, backup)
     finally:
         _unlink_sqlite_files(candidate)
+
+    snapshots = sorted(
+        path.parent.glob(f"{path.name}.pre-migration-v*.bak"),
+        key=lambda item: item.stat().st_mtime_ns,
+        reverse=True,
+    )
+    for stale in snapshots[_MAX_MIGRATION_SNAPSHOTS:]:
+        try:
+            stale.unlink()
+        except OSError:
+            pass
     return backup
+
+
+def _create_atomic_state_snapshot(
+    connection: sqlite3.Connection,
+    destination: Path,
+) -> Path:
+    """Publish a validated current-state snapshot without exposing a partial file."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    candidate = destination.with_name(
+        f".{destination.name}.{uuid.uuid4().hex}.tmp"
+    )
+    _unlink_sqlite_files(candidate)
+
+    target = sqlite3.connect(candidate)
+    try:
+        connection.backup(target)
+        _validate_state_connection(
+            target,
+            candidate,
+            expected_version=DB_SCHEMA_VERSION,
+            require_current_schema=True,
+        )
+    finally:
+        target.close()
+
+    try:
+        _unlink_sqlite_sidecars(destination)
+        os.replace(candidate, destination)
+    finally:
+        _unlink_sqlite_files(candidate)
+    return destination
 
 
 type StateMigrationOperation = Callable[[sqlite3.Connection], None]
@@ -1849,21 +1929,14 @@ class SQLiteStorage:
         return await self.content_generations.async_rollback()
 
     async def async_backup_to(self, destination: Path) -> None:
-        """Create a coherent state snapshot using SQLite's backup API."""
+        """Create and atomically publish a coherent state snapshot."""
 
-        def backup(connection: sqlite3.Connection) -> None:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            target = sqlite3.connect(destination)
-            try:
-                connection.backup(target)
-            finally:
-                target.close()
-
-        await self._async_writer(backup)
+        await self._async_writer(
+            lambda connection: _create_atomic_state_snapshot(connection, destination)
+        )
 
     async def async_prepare_ha_backup(self) -> None:
-        """Pause new writes and checkpoint WAL until HA finishes archiving."""
+        """Quiesce writes and publish the latest coherent HA recovery snapshot."""
         if self._backup_active:
             return
         await self._writes_gate.acquire()
@@ -1873,9 +1946,13 @@ class SQLiteStorage:
             await loop.run_in_executor(
                 self._writer_executor,
                 self._run_writer,
-                lambda connection: connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall(),
+                lambda connection: _create_atomic_state_snapshot(
+                    connection,
+                    self.paths.ha_backup_snapshot,
+                ),
             )
-        except Exception:
+        except BaseException:
+            # asyncio timeout/cancellation must never strand the write gate.
             self._backup_active = False
             self._writes_gate.release()
             raise
