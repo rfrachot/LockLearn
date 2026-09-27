@@ -9,6 +9,10 @@ All notable changes will be documented here.
   runtime setup, avoiding blocking-call warnings on the HA event loop.
 
 ### Added
+- P6.9 documentation architecture with complete root reference docs, generated
+  state/content SQLite and WebSocket contracts, CI drift detection, source/
+  licensing detail derived from machine registries and reproducible Playwright
+  documentation screenshot tooling.
 - P6.8 release-gate matrix with explicit negative WebSocket ACL classification,
   deterministic-clock enforcement, machine-readable JSON Schema validation,
   frontend source lint, dataset licence/provenance/reproducibility CI gates,
