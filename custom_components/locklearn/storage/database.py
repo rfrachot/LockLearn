@@ -92,9 +92,7 @@ def _read_state_schema_version(connection: sqlite3.Connection, path: Path) -> in
            WHERE type = 'table' AND name = 'schema_version'"""
     ).fetchone()
     if table is None:
-        raise UnsupportedStateSchemaError(
-            f"State database has no schema_version table: {path}"
-        )
+        raise UnsupportedStateSchemaError(f"State database has no schema_version table: {path}")
     rows = connection.execute("SELECT version FROM schema_version").fetchall()
     if len(rows) != 1:
         raise UnsupportedStateSchemaError(
@@ -448,9 +446,7 @@ def _migrate_state_v3_to_v4(path: Path, schema: str) -> None:
             for row in connection.execute("PRAGMA table_info(scheduled_slots)").fetchall()
         }
         if "deferred_until_utc" not in columns:
-            connection.execute(
-                "ALTER TABLE scheduled_slots ADD COLUMN deferred_until_utc TEXT"
-            )
+            connection.execute("ALTER TABLE scheduled_slots ADD COLUMN deferred_until_utc TEXT")
         if "defer_reason" not in columns:
             connection.execute("ALTER TABLE scheduled_slots ADD COLUMN defer_reason TEXT")
         connection.execute(

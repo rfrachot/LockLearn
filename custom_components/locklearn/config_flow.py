@@ -6,9 +6,9 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 
 from .const import (
-    CONFIG_ENTRY_VERSION,
     CONF_CREATE_PERSONAL_PROFILE,
     CONF_UI_LANGUAGE,
+    CONFIG_ENTRY_VERSION,
     DEFAULT_UI_LANGUAGE,
     DOMAIN,
     SUPPORTED_UI_LANGUAGES,

@@ -4,11 +4,13 @@
 
 Branch: `feat/p6-hardening`.
 
-Base: `955998b5ed676fc0da8d5bb81c2a2499ba4a50dc` (`docs(qualify): close P5.9 real HA gate`).
-
 P5 and its real-HA exit gate remain PASS.
 
-P6.1 — Database/config/content migrations and recovery — has an implementation candidate. Final qualification is intentionally pending so the full verification can be run separately.
+P6.1 — database/config/content migrations and recovery — is implemented and
+qualified PASS. The local qualification commit is at `HEAD` and has not been
+pushed.
+
+No P6.2+ implementation is included.
 
 ## P6.1 implementation
 
@@ -32,20 +34,19 @@ P6.1 — Database/config/content migrations and recovery — has an implementati
 
 ## Verification state
 
-The full final gate has **not** been run in this handoff by design.
-
-Recommended final verification:
+All P6.1 verification gates pass in the repository `.venv` (Python 3.14.4,
+Home Assistant 2026.9.3):
 
 ```text
-python3 -m ruff format --check .
-python3 -m ruff check .
-python3 -m mypy custom_components datasets tests
-python3 datasets/tools/validate_resources.py
-python3 -m pytest -q --tb=short
+targeted pytest: 37 passed in 1.81s
+ruff format --check: 261 files already formatted
+ruff check: All checks passed!
+mypy: Success: no issues found in 149 source files
+resource validation: LockLearn resource registries: OK
+full pytest: 399 passed in 22.46s
 ```
 
-Run targeted migration/config/content tests first if a fast failure signal is wanted.
-
-No frontend code changed, so frontend rebuild/tests are not expected to be necessary for P6.1 unless the final reviewer chooses to rerun the complete release matrix.
-
-No P6.2+ implementation is included.
+The only corrections required during qualification were Ruff formatting in the
+P6.1 implementation/tests and one import-order fix in `config_flow.py`; no
+behavioral migration defect was found. No frontend code changed, so frontend
+rebuild/tests were not required for this P6.1 validation.

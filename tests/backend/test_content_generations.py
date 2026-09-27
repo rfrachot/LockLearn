@@ -740,9 +740,7 @@ async def test_legacy_content_package_is_rebuilt_without_in_place_migration(
     """Supported old content schemas are immutable input to a new current generation."""
     package = create_package(tmp_path / "legacy-schema-v1.db", "legacy-schema-v1")
     with sqlite3.connect(package) as connection:
-        connection.execute(
-            "UPDATE schema_version SET version = 1 WHERE singleton = 1"
-        )
+        connection.execute("UPDATE schema_version SET version = 1 WHERE singleton = 1")
         connection.commit()
     package_before = package.read_bytes()
 

@@ -61,6 +61,7 @@ CREATE TABLE audit_events (
 );
 """
 
+
 def _state_schema_for_version(version: int) -> str:
     """Reconstruct the schema deltas that existed for state versions 2 through 4."""
     if version not in {2, 3, 4}:
@@ -85,9 +86,7 @@ def _state_schema_for_version(version: int) -> str:
 """
     if version <= 3:
         schema = schema.replace(selection_columns, "", 1)
-        receptivity_start = schema.index(
-            "CREATE TABLE IF NOT EXISTS receptivity_samples ("
-        )
+        receptivity_start = schema.index("CREATE TABLE IF NOT EXISTS receptivity_samples (")
         receptivity_end = schema.index(
             "CREATE TABLE IF NOT EXISTS stats_daily (",
             receptivity_start,
@@ -577,9 +576,7 @@ async def test_future_state_schema_is_rejected_without_mutation(tmp_path: Path) 
     finally:
         connection.close()
 
-    storage = SQLiteStorage(
-        StoragePaths(state_path, tmp_path / "content-future" / "current.db")
-    )
+    storage = SQLiteStorage(StoragePaths(state_path, tmp_path / "content-future" / "current.db"))
     with pytest.raises(UnsupportedStateSchemaError, match="future schema version"):
         await storage.async_open()
 
@@ -610,9 +607,7 @@ async def test_current_state_schema_is_validated_not_silently_repaired(
     finally:
         connection.close()
 
-    storage = SQLiteStorage(
-        StoragePaths(state_path, tmp_path / "content-malformed" / "current.db")
-    )
+    storage = SQLiteStorage(StoragePaths(state_path, tmp_path / "content-malformed" / "current.db"))
     with pytest.raises(StateMigrationError, match="missing required tables"):
         await storage.async_open()
 
@@ -656,9 +651,7 @@ async def test_mid_chain_migration_failure_preserves_backup_rolls_back_and_retri
         del schema
 
         def fail_inside_transaction(connection: sqlite3.Connection) -> None:
-            connection.execute(
-                "ALTER TABLE scheduled_slots ADD COLUMN injected_failure TEXT"
-            )
+            connection.execute("ALTER TABLE scheduled_slots ADD COLUMN injected_failure TEXT")
             raise RuntimeError("injected migration failure")
 
         storage_database._run_transactional_state_migration(
@@ -670,9 +663,7 @@ async def test_mid_chain_migration_failure_preserves_backup_rolls_back_and_retri
 
     monkeypatch.setitem(storage_database._STATE_MIGRATIONS, 3, fail_v3_to_v4)
 
-    storage = SQLiteStorage(
-        StoragePaths(state_path, tmp_path / "content-failure" / "current.db")
-    )
+    storage = SQLiteStorage(StoragePaths(state_path, tmp_path / "content-failure" / "current.db"))
     with pytest.raises(StateMigrationError, match="recovery snapshot preserved") as error:
         await storage.async_open()
 
@@ -684,8 +675,7 @@ async def test_mid_chain_migration_failure_preserves_backup_rolls_back_and_retri
     try:
         assert failed.execute("SELECT version FROM schema_version").fetchone() == (3,)
         columns = {
-            str(row[1])
-            for row in failed.execute("PRAGMA table_info(scheduled_slots)").fetchall()
+            str(row[1]) for row in failed.execute("PRAGMA table_info(scheduled_slots)").fetchall()
         }
         assert "injected_failure" not in columns
         assert failed.execute(
@@ -711,9 +701,7 @@ async def test_mid_chain_migration_failure_preserves_backup_rolls_back_and_retri
         3,
         original_v3_to_v4,
     )
-    retry = SQLiteStorage(
-        StoragePaths(state_path, tmp_path / "content-retry" / "current.db")
-    )
+    retry = SQLiteStorage(StoragePaths(state_path, tmp_path / "content-retry" / "current.db"))
     await retry.async_open()
     try:
         migrated = sqlite3.connect(state_path)
