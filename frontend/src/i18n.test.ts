@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { languageFallback } from "./i18n";
+import { CATALOG, languageFallback } from "./i18n";
 
 describe("languageFallback", () => {
+  it("keeps the FR and EN catalogs in complete key parity", () => {
+    expect(Object.keys(CATALOG.fr).sort()).toEqual(Object.keys(CATALOG.en).sort());
+  });
+
+
   it("uses exact supported locales", () => {
     expect(languageFallback("fr")).toBe("fr");
     expect(languageFallback("en")).toBe("en");
