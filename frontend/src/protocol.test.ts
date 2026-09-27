@@ -8,6 +8,7 @@ import {
   createCardAnnotation,
   getDashboard,
   getSession,
+  getStats,
   installDataset,
   listDatasetAttributions,
   listDatasets,
@@ -16,6 +17,7 @@ import {
   listTracks,
   listPacks,
   listNotificationTargets,
+  listDifficulties,
   previewPackUpdate,
   previewTrackPlan,
   refreshDatasets,
@@ -469,6 +471,71 @@ describe("frontend protocol", () => {
         type: "locklearn/datasets/install",
         dataset_id: "locklearn:starter",
         version: "1.1.0",
+      },
+    ]);
+  });
+
+  it("uses P5.7 stats and difficulties read contracts", async () => {
+    const messages: Record<string, unknown>[] = [];
+    const hass: HomeAssistantLike = {
+      callWS: async <T>(message: Record<string, unknown>): Promise<T> => {
+        messages.push(message);
+        if (message.type === "locklearn/stats/get") {
+          return {
+            profile_id: "p1",
+            track_id: "t1",
+            generated_at_utc: "2026-09-27T00:00:00+00:00",
+            local_date: "2026-09-27",
+            due_today: 3,
+            states: { new: 4, learning: 2, review: 5, relearning: 1, leech: 1 },
+            latest_verified_retention: null,
+            recent_verified_accuracy: {
+              correct: 8,
+              total: 10,
+              accuracy: 0.8,
+              window_limit: 30,
+            },
+            mastery: { value: 0.72, card_count: 9, secondary_indicator: true },
+            calibration: {
+              window_days: 7,
+              declared_known_cards: 4,
+              later_verified_cards: 3,
+              later_verified_correct: 2,
+              later_verified_wrong: 1,
+              later_verified_accuracy: 2 / 3,
+              awaiting_verified_followup: 1,
+            },
+            streak: {
+              days: 4,
+              grace_days: 1,
+              grace_days_used: 0,
+              goal_fraction: 0.8,
+              goal_minimum_cards: 1,
+              today: { due_opening: 3, treated_due: 2, target: 3, status: "missed" },
+            },
+            confusions: [],
+            daily: [],
+          } as T;
+        }
+        return { items: [] } as T;
+      },
+    };
+
+    expect((await getStats(hass, "p1", "t1")).recent_verified_accuracy.total).toBe(10);
+    expect(await listDifficulties(hass, "p1", "t1")).toEqual([]);
+    expect(messages).toEqual([
+      {
+        type: "locklearn/stats/get",
+        profile_id: "p1",
+        recent_verified_limit: 30,
+        calibration_days: 7,
+        confusion_limit: 20,
+        track_id: "t1",
+      },
+      {
+        type: "locklearn/difficulties/list",
+        profile_id: "p1",
+        track_id: "t1",
       },
     ]);
   });
