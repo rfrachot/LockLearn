@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canManageDifficulties,
   evidenceTotals,
   formatPercent,
   recentDaily,
@@ -37,6 +38,20 @@ function row(
 }
 
 describe("P5.7 statistics view helpers", () => {
+  it("keeps remediation controls owner/editor only", () => {
+    const base = {
+      profile_id: "p1",
+      name: "Profile",
+      preset: "standard",
+      timezone: "Europe/Paris",
+      status: "active",
+    };
+    expect(canManageDifficulties({ ...base, role: "owner" })).toBe(true);
+    expect(canManageDifficulties({ ...base, role: "editor" })).toBe(true);
+    expect(canManageDifficulties({ ...base, role: "viewer" })).toBe(false);
+    expect(canManageDifficulties(undefined)).toBe(false);
+  });
+
   it("keeps exposure counts separate from verified retrieval evidence", () => {
     const totals = evidenceTotals([
       row("2026-09-26", "t1", 12, 3),
