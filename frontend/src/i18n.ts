@@ -67,6 +67,7 @@ const CATALOG = {
     "learn.newSession": "Start another session",
     "learn.error": "The learning session could not be updated.",
     "learn.reloaded": "The session changed on another client. The latest state was reloaded.",
+    "learn.targetedSession": "Targeted difficulty session started.",
     "quiz.title": "Quiz",
     "quiz.track": "Track",
     "quiz.format": "Format",
