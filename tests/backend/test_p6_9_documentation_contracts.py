@@ -7,16 +7,36 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 REQUIRED_DOCUMENTS = {
-    "README.md": ("## Vision", "## Screenshots", "## Installation", "## Quick start", "## Compatibility"),
+    "README.md": (
+        "## Vision",
+        "## Screenshots",
+        "## Installation",
+        "## Quick start",
+        "## Compatibility",
+    ),
     "ARCHITECTURE.md": ("## System view", "## Backend", "## Frontend", "## Databases"),
-    "DATA_MODEL.md": ("## Content concepts", "## User/runtime model", "CardDefinition", "ReviewEvent"),
+    "DATA_MODEL.md": (
+        "## Content concepts",
+        "## User/runtime model",
+        "CardDefinition",
+        "ReviewEvent",
+    ),
     "DATABASE.md": ("## state.db", "## content.db", "## Migration policy", "## Backup/recovery"),
-    "PACK_FORMAT.md": ("## Package envelope", "## Manifest and signature", "## Machine-readable schemas"),
-    "DATA_SOURCES.md": ("## Priority V1 candidates",),
+    "PACK_FORMAT.md": (
+        "## Package envelope",
+        "## Manifest and signature",
+        "## Machine-readable schemas",
+    ),
+    "DATA_SOURCES.md": ("## Source inventory", "## Provenance contract", "## Source audit"),
     "DATA_UPDATES.md": ("## P1.8 implementation", "## P1.9 runtime update path"),
     "LICENSING.md": ("## Software", "## Third-party datasets and assets"),
     "PERMISSIONS.md": ("owner", "editor", "viewer"),
-    "SRS.md": ("## States", "## Short learning steps", "## Long-review intervals", "## Leech policy"),
+    "SRS.md": (
+        "## States",
+        "## Short learning steps",
+        "## Long-review intervals",
+        "## Leech policy",
+    ),
     "SCHEDULER.md": ("## Configuration", "## DST and timezone", "## Restart and clock jumps"),
     "NOTIFICATIONS.md": ("## Platforms", "## Lifecycle", "## Threat model"),
     "FRONTEND.md": ("## Architecture", "## WebSocket interface", "## Rendering and sanitization"),
@@ -27,7 +47,10 @@ REQUIRED_DOCUMENTS = {
     "DEVELOPMENT.md": ("## Bootstrap", "## Backend workflow", "## Frontend workflow"),
     "TESTING.md": ("## Backend/unit/integration", "## Frontend", "## CI"),
     "RELEASE.md": ("## Before tagging", "## Release"),
-    "TROUBLESHOOTING.md": ("## Notifications do not arrive", "## Database migration/integrity failure"),
+    "TROUBLESHOOTING.md": (
+        "## Notifications do not arrive",
+        "## Database migration/integrity failure",
+    ),
     "ROADMAP.md": ("## Committed", "## Candidate", "## Ideas", "## Rejected / out of V1"),
     "AGENTS.md": ("## 3. Non-negotiable architecture invariants", "## 9. Definition of Done"),
     "CHANGELOG.md": ("### Added", "### Fixed", "### Changed"),
