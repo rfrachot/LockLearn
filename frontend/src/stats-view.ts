@@ -47,6 +47,16 @@ export function recentDaily(rows: StatsDailyRecord[], limit = 14): StatsDailyRec
     .reverse();
 }
 
+export function evidenceTotals(rows: StatsDailyRecord[]): {
+  exposures: number;
+  verifiedRetrievals: number;
+} {
+  return {
+    exposures: rows.reduce((sum, row) => sum + row.learning_exposures, 0),
+    verifiedRetrievals: rows.reduce((sum, row) => sum + row.verified_retrievals, 0),
+  };
+}
+
 export class LockLearnStatsView extends LitElement {
   @property({ attribute: false }) hass?: HomeAssistantLike;
   @property({ attribute: false }) profile?: VisibleProfile;
@@ -180,8 +190,7 @@ export class LockLearnStatsView extends LitElement {
     const accuracy = stats.recent_verified_accuracy;
     const calibration = stats.calibration;
     const daily = recentDaily(stats.daily);
-    const exposureTotal = daily.reduce((sum, row) => sum + row.learning_exposures, 0);
-    const verifiedTotal = daily.reduce((sum, row) => sum + row.verified_retrievals, 0);
+    const evidence = evidenceTotals(daily);
 
     return html`
       <section class="grid" aria-label=${this.t("stats.verifiedGroup")}>
@@ -226,12 +235,12 @@ export class LockLearnStatsView extends LitElement {
         <div class="grid">
           <div class="metric">
             <span>${this.t("stats.exposures")}</span>
-            <strong>${exposureTotal}</strong>
+            <strong>${evidence.exposures}</strong>
             <div class="meta">${this.t("stats.notAccuracy")}</div>
           </div>
           <div class="metric">
             <span>${this.t("stats.verifiedRetrievals")}</span>
-            <strong>${verifiedTotal}</strong>
+            <strong>${evidence.verifiedRetrievals}</strong>
             <div class="meta">${this.t("stats.countsAccuracy")}</div>
           </div>
         </div>
