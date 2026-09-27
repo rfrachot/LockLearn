@@ -3,9 +3,13 @@ import { property, state } from "lit/decorators.js";
 
 import { languageFallback, translate, type UiLanguage } from "./i18n";
 import {
+  createCardAnnotation,
   getStats,
   listDifficulties,
   listTracks,
+  reactivateLeech,
+  startLeechSession,
+  updateCardAnnotation,
   type DifficultyRecord,
   type HomeAssistantLike,
   type StatsDailyRecord,
@@ -57,6 +61,10 @@ export function evidenceTotals(rows: StatsDailyRecord[]): {
   };
 }
 
+export function canManageDifficulties(profile: VisibleProfile | undefined): boolean {
+  return profile?.role === "owner" || profile?.role === "editor";
+}
+
 export class LockLearnStatsView extends LitElement {
   @property({ attribute: false }) hass?: HomeAssistantLike;
   @property({ attribute: false }) profile?: VisibleProfile;
@@ -67,6 +75,9 @@ export class LockLearnStatsView extends LitElement {
   @state() private selectedTrackId = "";
   @state() private loading = false;
   @state() private errorMessage = "";
+  @state() private notice = "";
+  @state() private mnemonicEdits: Record<string, string> = {};
+  @state() private busyCardKey: string | null = null;
   private loadGeneration = 0;
 
   static styles = css`
@@ -81,13 +92,22 @@ export class LockLearnStatsView extends LitElement {
     .meta { font-size: .86rem; }
     .verified { border-inline-start: 4px solid var(--primary-color); }
     .secondary { opacity: .92; }
-    .error { padding: 12px; border-radius: 9px; background: var(--secondary-background-color);
-      color: var(--error-color,var(--primary-text-color)); }
+    .notice, .error { padding: 12px; border-radius: 9px; background: var(--secondary-background-color); }
+    .error { color: var(--error-color,var(--primary-text-color)); }
     .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
     label { display: grid; gap: 5px; }
+    select, textarea, button { font: inherit; }
     select { min-height: 40px; padding: 7px; border: 1px solid var(--divider-color);
       border-radius: 8px; color: var(--primary-text-color);
       background: var(--card-background-color,var(--primary-background-color)); }
+    textarea { width: 100%; min-height: 70px; resize: vertical; padding: 8px;
+      border: 1px solid var(--divider-color); border-radius: 8px;
+      color: var(--primary-text-color); background: var(--primary-background-color); }
+    button { min-height: 40px; padding: 8px 12px; border: 1px solid var(--divider-color);
+      border-radius: 8px; color: var(--primary-text-color);
+      background: var(--secondary-background-color); cursor: pointer; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     table { width: 100%; border-collapse: collapse; font-size: .9rem; }
     th, td { padding: 7px 8px; text-align: left; border-bottom: 1px solid var(--divider-color); }
     .table-wrap { overflow-x: auto; }
@@ -142,6 +162,13 @@ export class LockLearnStatsView extends LitElement {
       this.selectedTrackId = selected;
       this.stats = stats;
       this.difficulties = difficulties;
+      const edits = { ...this.mnemonicEdits };
+      for (const item of difficulties) {
+        if (edits[item.card_key] === undefined) {
+          edits[item.card_key] = item.annotations[0]?.note ?? "";
+        }
+      }
+      this.mnemonicEdits = edits;
     } catch (error) {
       if (generation !== this.loadGeneration) return;
       this.errorMessage = error instanceof Error ? error.message : String(error);
@@ -153,6 +180,101 @@ export class LockLearnStatsView extends LitElement {
   private async selectTrack(event: Event): Promise<void> {
     this.selectedTrackId = (event.currentTarget as HTMLSelectElement).value;
     await this.load();
+  }
+
+  private editMnemonic(cardKey: string, event: Event): void {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLTextAreaElement)) return;
+    this.mnemonicEdits = { ...this.mnemonicEdits, [cardKey]: target.value };
+  }
+
+  private async saveMnemonic(item: DifficultyRecord): Promise<void> {
+    if (
+      this.hass === undefined ||
+      this.profile === undefined ||
+      !canManageDifficulties(this.profile)
+    ) return;
+    const note = (this.mnemonicEdits[item.card_key] ?? "").trim();
+    if (!note) return;
+    this.busyCardKey = item.card_key;
+    this.errorMessage = "";
+    this.notice = "";
+    try {
+      const existing = item.annotations[0];
+      if (existing === undefined) {
+        await createCardAnnotation(this.hass, this.profile.profile_id, item.card_key, note);
+      } else {
+        await updateCardAnnotation(
+          this.hass,
+          this.profile.profile_id,
+          existing.annotation_id,
+          note,
+        );
+      }
+      this.notice = this.t("stats.mnemonicSaved");
+      await this.load();
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.busyCardKey = null;
+    }
+  }
+
+  private async startTargetedSession(item: DifficultyRecord): Promise<void> {
+    if (
+      this.hass === undefined ||
+      this.profile === undefined ||
+      !canManageDifficulties(this.profile)
+    ) return;
+    this.busyCardKey = item.card_key;
+    this.errorMessage = "";
+    this.notice = "";
+    try {
+      const session = await startLeechSession(
+        this.hass,
+        this.profile.profile_id,
+        item.track_id,
+        item.targeted_session_settings.requested_cards,
+      );
+      this.dispatchEvent(
+        new CustomEvent("locklearn-open-session", {
+          detail: { session },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.busyCardKey = null;
+    }
+  }
+
+  private async reactivate(item: DifficultyRecord): Promise<void> {
+    if (
+      this.hass === undefined ||
+      this.profile === undefined ||
+      !canManageDifficulties(this.profile)
+    ) return;
+    const confirmed = globalThis.confirm?.(this.t("stats.reactivateConfirm")) ?? true;
+    if (!confirmed) return;
+    this.busyCardKey = item.card_key;
+    this.errorMessage = "";
+    this.notice = "";
+    try {
+      await reactivateLeech(
+        this.hass,
+        this.profile.profile_id,
+        item.track_id,
+        item.card_key,
+      );
+      this.notice = this.t("stats.reactivated");
+      await this.load();
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.busyCardKey = null;
+    }
   }
 
   protected render() {
@@ -177,6 +299,9 @@ export class LockLearnStatsView extends LitElement {
 
         ${this.errorMessage
           ? html`<div class="error" role="alert">${this.errorMessage}</div>`
+          : nothing}
+        ${this.notice
+          ? html`<div class="notice" role="status" aria-live="polite">${this.notice}</div>`
           : nothing}
         ${this.loading && this.stats === undefined
           ? html`<p>${this.t("stats.loading")}</p>`
@@ -289,6 +414,52 @@ export class LockLearnStatsView extends LitElement {
                         ? this.t("stats.mnemonicPresent")
                         : this.t("stats.mnemonicSuggested")}
                     </div>
+                    ${item.confusions.length === 0
+                      ? nothing
+                      : html`<div class="meta">
+                          ${this.t("stats.confusions")}: ${item.confusions
+                            .map(
+                              (confusion) =>
+                                `${confusion.expected_answer_id}→${confusion.chosen_answer_id} ×${confusion.count}`,
+                            )
+                            .join(", ")}
+                        </div>`}
+                    ${item.annotations[0]?.note
+                      ? html`<p>${item.annotations[0].note}</p>`
+                      : nothing}
+                    ${canManageDifficulties(this.profile)
+                      ? html`
+                          <label>
+                            <span>${this.t("stats.personalMnemonic")}</span>
+                            <textarea
+                              .value=${this.mnemonicEdits[item.card_key] ?? ""}
+                              @input=${(event: Event) => this.editMnemonic(item.card_key, event)}
+                            ></textarea>
+                          </label>
+                          <div class="actions">
+                            <button
+                              ?disabled=${this.busyCardKey !== null}
+                              @click=${() => void this.saveMnemonic(item)}
+                            >
+                              ${item.annotations.length > 0
+                                ? this.t("stats.updateMnemonic")
+                                : this.t("stats.createMnemonic")}
+                            </button>
+                            <button
+                              ?disabled=${this.busyCardKey !== null}
+                              @click=${() => void this.startTargetedSession(item)}
+                            >
+                              ${this.t("stats.targetedSession")}
+                            </button>
+                            <button
+                              ?disabled=${this.busyCardKey !== null}
+                              @click=${() => void this.reactivate(item)}
+                            >
+                              ${this.t("stats.reactivate")}
+                            </button>
+                          </div>
+                        `
+                      : html`<div class="meta">${this.t("stats.readOnlyDifficulty")}</div>`}
                   </li>
                 `,
               )}
