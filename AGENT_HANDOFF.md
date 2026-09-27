@@ -2,106 +2,85 @@
 
 ## Current state
 
-Branch: feat/p6-hardening.
+Branch: `feat/p6-hardening`.
 
-P5 and its real-HA exit gate remain PASS. P6.1 through P6.6 are PASS.
+P5 and its real-HA exit gate remain PASS. P6.1 through P6.7 are PASS.
 
-P6.7 — performance, scale and storage-budget validation — is implementation
-complete. Automated/reference-hardware qualification is pending. No P6.8 work
-has started.
+P6.7 — performance, scale and storage-budget validation — is fully implemented
+and qualified. No P6.8 implementation has started.
 
-## P6.7 implementation
+## P6.7 qualification
 
-The existing scripts/p5_9_performance.py remains authoritative for the V1
-session-answer, next-card and scheduler wall-clock budgets.
+Qualified on 2026-09-27 at HEAD:
 
-New scripts/p6_7_scale_validation.py adds:
-- the same P5.9 hot-path gate;
-- a 60,000-card normalized content build/activation measurement;
-- a 1,826-day state.db materialization using the real STATE_SCHEMA;
-- Standard assumptions of 8 new cards/day, 80 verified reviews/day from P3.14,
-  four 20-card sessions/day, six notification slots/day and two audit rows/day;
-- SQLite integrity/FK/page geometry, row-count, bytes/day and MiB/year output.
+`f05aab04b48baf8f8f73937cb8b3c5039e4d5b3d`
 
-Dataset storage policy is centralized at 150 MiB per official artifact, a
-500 MiB aggregate reconstructible-cache warning, and activation free space of
-at least 2x estimated generated content plus a 32 MiB safety margin. New builds
-sign a floor and runtime recomputes a package-set floor for historical manifests.
+Reference VM:
+- CPython 3.14.4;
+- Linux 7.0.0-30-generic x86_64;
+- 6 logical CPUs;
+- 15 GiB RAM.
 
-Bounded process-local metrics now cover writer queue wait, session answer,
-scheduler generation and clock drift, content build and content activation.
-They expose aggregate-only count/last/p95/max values and never become HA
-sensors. No schema migration or frontend production-source change is involved.
+Permanent P5.9 budgets:
+- session answer p95: 1.137 ms / 100 ms budget;
+- next-card p95: 62.046 ms / 150 ms budget;
+- scheduler-day p95: 4.064 ms / 250 ms budget.
 
-ADR-0052 documents these choices.
+Integrated P6.7 run:
+- session answer p95: 1.150 ms;
+- next-card p95: 65.403 ms;
+- scheduler-day p95: 3.983 ms.
 
-## Luna qualification contract
+60,000-card content scale:
+- package: 137,302,016 bytes;
+- candidate/active generation: 177,299,456 bytes;
+- build: 4.724 s;
+- activation: 1.640 s;
+- required activation free space: 388,153,344 bytes;
+- free-space gate: PASS;
+- maximum attached databases: 2.
 
-Luna must ONLY execute tests and report results. It must not edit, format,
-commit, push, merge or start P6.8.
+Five-year state projection:
+- 1,826 days;
+- state.db: 218,955,776 bytes;
+- 41.74 MiB/year;
+- 146,080 review events;
+- 14,608 progress rows;
+- integrity_check: ok;
+- foreign-key violations: 0.
 
-Run:
+Quality gates:
+- Ruff format: PASS — 285 files formatted;
+- Ruff lint: PASS;
+- mypy: PASS — 166 sources;
+- resource validation: PASS;
+- targeted pytest: 57 passed;
+- full pytest: 464 passed, one known duplicate `profile.json` ZIP warning;
+- frontend typecheck: PASS;
+- frontend tests: 49 passed / 15 files;
+- frontend build: PASS;
+- git diff check: PASS.
 
-~~~bash
-git pull --ff-only origin feat/p6-hardening
-git status --short --branch
-git rev-parse HEAD
+Frontend bundle unchanged:
 
-.venv/bin/python -m pytest -q --tb=short \
-  tests/backend/test_observability.py \
-  tests/backend/test_storage.py \
-  tests/backend/test_scheduler.py \
-  tests/backend/test_diagnostics.py \
-  tests/datasets/test_build_pipeline.py \
-  tests/datasets/test_dataset_manager.py
+`d1626186b8fe1cf50f81efb5a4f3dd05de3dd54e22ec86b20612000c9b259385`
 
-.venv/bin/python scripts/p5_9_performance.py
-.venv/bin/python scripts/p6_7_scale_validation.py
+## P6.7 architecture retained
 
-python3 -VV
-uname -a
-lscpu
-free -h
-df -h .
+- P5.9 remains authoritative for normative session-answer, next-card and
+  scheduler wall-clock budgets.
+- `scripts/p6_7_scale_validation.py` remains the scale/storage evidence harness.
+- Dataset policy remains 150 MiB per official artifact, 500 MiB aggregate-cache
+  warning and activation free space >= 2x estimated generation + 32 MiB margin.
+- Runtime metrics remain bounded, process-local, aggregate-only and never become
+  Home Assistant sensors.
+- No DB schema migration or frontend production-source change was required.
 
-.venv/bin/python -m ruff format --check .
-.venv/bin/python -m ruff check .
-.venv/bin/python -m mypy custom_components datasets tests
-.venv/bin/python datasets/tools/validate_resources.py
-.venv/bin/python -m pytest -q --tb=short
+ADR-0052 contains the design and final qualification evidence.
 
-cd frontend
-npm run typecheck
-npm test
-npm run build
-cd ..
-sha256sum custom_components/locklearn/frontend/locklearn-panel.js
+## Next work
 
-git diff --check
-git status --short --branch
-git rev-parse HEAD
-~~~
+P6.8 — Full test matrix and CI release gates.
 
-P6.6 reference frontend bundle hash:
-d1626186b8fe1cf50f81efb5a4f3dd05de3dd54e22ec86b20612000c9b259385
-
-Because P6.7 changes no frontend production source, the bundle is expected to
-remain byte-identical. Any difference must be reported rather than committed.
-
-## Report required from Luna
-
-Return:
-1. tested HEAD;
-2. targeted pytest result;
-3. complete P5.9 JSON;
-4. complete P6.7 scale JSON;
-5. Python/kernel/CPU/RAM/filesystem facts;
-6. exact five-year state.db size and MiB/year;
-7. 60k package/candidate size and build/activation time;
-8. Ruff, mypy, resources and full pytest results;
-9. frontend typecheck/test/build result;
-10. final frontend bundle hash;
-11. final git status;
-12. every warning/anomaly.
-
-P6.7 remains qualification-pending until those measurements are reviewed.
+Do not reopen P6.7 unless a regression, spec change or materially different
+reference-hardware result requires it.
