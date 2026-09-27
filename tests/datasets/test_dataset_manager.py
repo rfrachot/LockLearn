@@ -19,6 +19,8 @@ from custom_components.locklearn.datasets import (
     TrustedKey,
     TrustStore,
 )
+from custom_components.locklearn.datasets.trust import TrustError
+from custom_components.locklearn.datasets import manager as manager_module
 from custom_components.locklearn.datasets.manager import (
     DatasetDefinition,
     DatasetInstallError,
@@ -382,5 +384,59 @@ async def test_discovery_repair_hook_is_created_and_cleared(tmp_path: Path) -> N
         }
         await manager.async_refresh()
         assert created[0][0] in cleared
+    finally:
+        await storage.async_close()
+
+
+async def test_invalid_signature_reports_distinct_repair(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Trust failures are not collapsed into the generic install Repair."""
+    storage, manager, transport = await _manager(tmp_path)
+    created: list[tuple[str, str]] = []
+    cleared: list[str] = []
+
+    async def report(
+        issue_id: str,
+        translation_key: str,
+        placeholders: Mapping[str, str],
+    ) -> None:
+        assert placeholders["dataset_id"] == _DATASET_ID
+        created.append((issue_id, translation_key))
+
+    async def clear(issue_id: str) -> None:
+        cleared.append(issue_id)
+
+    manager._issue_callback = report
+    manager._issue_clear_callback = clear
+
+    artifact = _artifact(tmp_path, "1.0.0")
+    transport.artifacts["https://example.invalid/1.0.0.zip"] = artifact
+    transport.catalogs["https://example.invalid/catalog.json"] = _catalog(
+        {"1.0.0": artifact}
+    )
+    await manager.async_refresh()
+
+    def reject_signature(*args, **kwargs):
+        del args, kwargs
+        raise TrustError("invalid Ed25519 manifest signature")
+
+    monkeypatch.setattr(
+        manager_module,
+        "validate_dataset_package",
+        reject_signature,
+    )
+    try:
+        with pytest.raises(TrustError, match="invalid Ed25519"):
+            await manager.async_install(_DATASET_ID)
+
+        assert any(
+            key == "dataset_signature_invalid"
+            for _, key in created
+        )
+        assert not any(key == "dataset_install_failed" for _, key in created)
+        diagnostics = await manager.async_diagnostic_status()
+        assert diagnostics["error_types"] == ("signature_invalid",)
     finally:
         await storage.async_close()

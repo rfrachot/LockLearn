@@ -9,6 +9,10 @@ All notable changes will be documented here.
   runtime setup, avoiding blocking-call warnings on the HA event loop.
 
 ### Added
+- P6.3 Home Assistant Repairs and privacy-redacted diagnostics covering dataset
+  freshness/signature/install failures, notification-target resolution,
+  migration/integrity failures, scheduler infeasibility and backup-cache
+  anomalies without exporting private learning data or raw exception text.
 - P6.2 backup/recovery lifecycle hardening with coherent atomic state snapshots,
   fail-closed read-only integrity validation, explicit snapshot recovery,
   bounded maintenance retention, storage/backup-size visibility, reconstructible

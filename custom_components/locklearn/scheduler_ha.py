@@ -108,6 +108,14 @@ class SchedulerHomeAssistantBridge:
                 profile_id,
             )
 
+    def diagnostic_status(self) -> dict[str, int | bool]:
+        """Return aggregate scheduler bridge status without Profile/entity identifiers."""
+        return {
+            "listener_active": self._unsub is not None,
+            "configured_entity_count": len(self._routes),
+            "configured_routine_count": sum(len(items) for items in self._routes.values()),
+        }
+
     def close(self) -> None:
         """Detach every HA state-change listener."""
         if self._unsub is not None:

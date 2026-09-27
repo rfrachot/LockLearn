@@ -126,6 +126,27 @@ class StorageLifecycleManager:
             candidates.append(self.paths.ha_backup_snapshot)
         return tuple(sorted(candidates, key=lambda path: path.name))
 
+    async def async_backup_cache_anomaly_bytes(self) -> int:
+        """Return reconstructible cache bytes found unexpectedly under state storage."""
+        return await asyncio.to_thread(self._backup_cache_anomaly_bytes_sync)
+
+    def _backup_cache_anomaly_bytes_sync(self) -> int:
+        candidates: set[Path] = set()
+        try:
+            self.paths.content_root.relative_to(self.paths.state_root)
+        except ValueError:
+            pass
+        else:
+            candidates.add(self.paths.content_root)
+
+        for name in ("content.db", "packages", "assets", "content-cache", "cache"):
+            candidate = self.paths.state_root / name
+            if candidate == self.paths.state_db:
+                continue
+            candidates.add(candidate)
+
+        return sum(_path_size(path) for path in candidates)
+
     async def async_valid_recovery_snapshots(self) -> tuple[RecoverySnapshot, ...]:
         """Return only snapshots that pass read-only SQLite validation."""
         return await asyncio.to_thread(self._valid_recovery_snapshots_sync)

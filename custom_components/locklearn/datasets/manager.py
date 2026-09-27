@@ -25,7 +25,7 @@ from ..storage import ContentGenerationValidator, SQLiteStorage
 from .manifest import DatasetManifest, FileRole
 from .package import validate_dataset_package
 from .policy import OfficialRegistryPolicy
-from .trust import KeyStatus, KeyUsage, TrustedKey, TrustStore
+from .trust import KeyStatus, KeyUsage, TrustedKey, TrustError, TrustStore
 
 _OFFICIAL_ARTIFACT_DEFAULT_MAX_BYTES = 150 * 1024 * 1024
 _CATALOG_MAX_BYTES = 1024 * 1024
@@ -226,6 +226,7 @@ class DatasetManager:
         self._issue_clear_callback = issue_clear_callback
         self._available: dict[str, tuple[DatasetRelease, ...]] = {}
         self._errors: dict[str, str] = {}
+        self._error_kinds: dict[str, str] = {}
         self._lock = asyncio.Lock()
         self._validator = ContentGenerationValidator()
         self._packages_root = storage.paths.content_root / "packages"
@@ -249,6 +250,7 @@ class DatasetManager:
                 releases = _parse_release_catalog(document, definition)
             except Exception as err:
                 self._errors[definition.dataset_id] = str(err)
+                self._error_kinds[definition.dataset_id] = "discovery"
                 await self._report_issue(
                     f"dataset_discovery_{_issue_suffix(definition.dataset_id)}",
                     "dataset_discovery_failed",
@@ -257,6 +259,8 @@ class DatasetManager:
                 continue
             self._available[definition.dataset_id] = releases
             self._errors.pop(definition.dataset_id, None)
+            if self._error_kinds.get(definition.dataset_id) == "discovery":
+                self._error_kinds.pop(definition.dataset_id, None)
             await self._clear_issue(f"dataset_discovery_{_issue_suffix(definition.dataset_id)}")
         return await self.async_statuses()
 
@@ -322,6 +326,38 @@ class DatasetManager:
             else:
                 await self._clear_issue(stale_issue_id)
         return tuple(statuses)
+
+
+    async def async_diagnostic_status(self) -> dict[str, object]:
+        """Return aggregate dataset status without IDs, URLs, or raw errors."""
+        installed_rows = await self._storage.async_dataset_inventory()
+        installed = {
+            str(item["dataset_id"]): _installed_dataset_from_row(item)
+            for item in installed_rows
+        }
+        now = datetime.now(UTC)
+        update_available_count = 0
+        stale_dataset_count = 0
+        for definition in self.definitions:
+            active = installed.get(definition.dataset_id)
+            latest = _latest_release(self._available.get(definition.dataset_id, ()))
+            if (
+                active is not None
+                and latest is not None
+                and AwesomeVersion(latest.version) > AwesomeVersion(active.version)
+            ) or (active is None and latest is not None):
+                update_available_count += 1
+            if _stale_sources(active, self._freshness_targets, now):
+                stale_dataset_count += 1
+
+        return {
+            "official_dataset_count": len(self._definitions),
+            "installed_dataset_count": len(installed_rows),
+            "update_available_count": update_available_count,
+            "stale_dataset_count": stale_dataset_count,
+            "error_dataset_count": len(self._errors),
+            "error_types": tuple(sorted(set(self._error_kinds.values()))),
+        }
 
     async def async_status(self, dataset_id: str) -> DatasetStatus:
         """Return one official dataset status without performing network I/O."""
@@ -407,17 +443,34 @@ class DatasetManager:
                 )
             except Exception as err:
                 self._errors[dataset_id] = str(err)
-                await self._report_issue(
-                    f"dataset_install_{_issue_suffix(dataset_id)}",
-                    "dataset_install_failed",
-                    {"dataset_id": dataset_id},
-                )
+                if isinstance(err, TrustError):
+                    self._error_kinds[dataset_id] = "signature_invalid"
+                    await self._report_issue(
+                        f"dataset_signature_{_issue_suffix(dataset_id)}",
+                        "dataset_signature_invalid",
+                        {"dataset_id": dataset_id},
+                    )
+                    await self._clear_issue(
+                        f"dataset_install_{_issue_suffix(dataset_id)}"
+                    )
+                else:
+                    self._error_kinds[dataset_id] = "install"
+                    await self._report_issue(
+                        f"dataset_install_{_issue_suffix(dataset_id)}",
+                        "dataset_install_failed",
+                        {"dataset_id": dataset_id},
+                    )
+                    await self._clear_issue(
+                        f"dataset_signature_{_issue_suffix(dataset_id)}"
+                    )
                 raise
             finally:
                 download.unlink(missing_ok=True)
 
             self._errors.pop(dataset_id, None)
+            self._error_kinds.pop(dataset_id, None)
             await self._clear_issue(f"dataset_install_{_issue_suffix(dataset_id)}")
+            await self._clear_issue(f"dataset_signature_{_issue_suffix(dataset_id)}")
             return result
 
     async def async_install_bundled(
@@ -444,14 +497,31 @@ class DatasetManager:
                 )
             except Exception as err:
                 self._errors[bundled.dataset_id] = str(err)
-                await self._report_issue(
-                    f"dataset_install_{_issue_suffix(bundled.dataset_id)}",
-                    "dataset_install_failed",
-                    {"dataset_id": bundled.dataset_id},
-                )
+                if isinstance(err, TrustError):
+                    self._error_kinds[bundled.dataset_id] = "signature_invalid"
+                    await self._report_issue(
+                        f"dataset_signature_{_issue_suffix(bundled.dataset_id)}",
+                        "dataset_signature_invalid",
+                        {"dataset_id": bundled.dataset_id},
+                    )
+                    await self._clear_issue(
+                        f"dataset_install_{_issue_suffix(bundled.dataset_id)}"
+                    )
+                else:
+                    self._error_kinds[bundled.dataset_id] = "install"
+                    await self._report_issue(
+                        f"dataset_install_{_issue_suffix(bundled.dataset_id)}",
+                        "dataset_install_failed",
+                        {"dataset_id": bundled.dataset_id},
+                    )
+                    await self._clear_issue(
+                        f"dataset_signature_{_issue_suffix(bundled.dataset_id)}"
+                    )
                 raise
             self._errors.pop(bundled.dataset_id, None)
+            self._error_kinds.pop(bundled.dataset_id, None)
             await self._clear_issue(f"dataset_install_{_issue_suffix(bundled.dataset_id)}")
+            await self._clear_issue(f"dataset_signature_{_issue_suffix(bundled.dataset_id)}")
             return result
 
     async def _async_install_archive(

@@ -14,7 +14,7 @@ from custom_components.locklearn.const import (
     DOMAIN,
     PANEL_URL_PATH,
 )
-from custom_components.locklearn.storage import StoragePaths
+from custom_components.locklearn.storage import StateMigrationError, StoragePaths
 from custom_components.locklearn.storage.lifecycle import UninstallDataPolicy
 
 
@@ -131,3 +131,59 @@ async def test_remove_entry_applies_explicit_cache_only_policy(
 
     assert paths.state_db.is_file()
     assert not paths.content_root.exists()
+
+
+async def test_migration_failure_creates_repair_without_runtime(
+    hass: HomeAssistant,
+    monkeypatch,
+) -> None:
+    """A failed migration is surfaced distinctly from integrity failure."""
+    async def fail_create(_hass: HomeAssistant):
+        raise StateMigrationError("migration failed")
+
+    monkeypatch.setattr(
+        "custom_components.locklearn.LockLearnRuntime.async_create",
+        fail_create,
+    )
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, data={})
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id) is False
+    await hass.async_block_till_done()
+
+    registry = ir.async_get(hass)
+    migration_issues = [
+        issue
+        for issue in registry.issues.values()
+        if issue.domain == DOMAIN and issue.issue_id == "state_migration_failure"
+    ]
+    assert len(migration_issues) == 1
+    assert migration_issues[0].translation_key == "state_migration_failure"
+    assert DATA_RUNTIME not in hass.data.get(DOMAIN, {})
+
+
+async def test_backup_cache_anomaly_creates_warning_repair(
+    hass: HomeAssistant,
+) -> None:
+    """Unexpected reconstructible bytes under persistent state are reported."""
+    paths = StoragePaths.from_config_dir(hass.config.config_dir)
+    anomalous_cache = paths.state_root / "cache"
+    anomalous_cache.mkdir(parents=True, exist_ok=True)
+    (anomalous_cache / "orphan.bin").write_bytes(b"cache")
+
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = ir.async_get(hass)
+    issues = [
+        issue
+        for issue in registry.issues.values()
+        if issue.domain == DOMAIN and issue.issue_id == "backup_cache_anomaly"
+    ]
+    assert len(issues) == 1
+    assert issues[0].translation_key == "backup_cache_anomaly"
+    assert issues[0].severity is ir.IssueSeverity.WARNING
+
+    await hass.config_entries.async_unload(entry.entry_id)

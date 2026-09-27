@@ -38,6 +38,18 @@
     "state_integrity_failure": {
       "title": "Les données utilisateur LockLearn nécessitent une récupération",
       "description": "LockLearn n’a pas ouvert son writer d’état car state.db a échoué à la validation d’intégrité. {snapshot_count} snapshot(s) de récupération validé(s) sont actuellement disponible(s). Ouvrez les options de l’intégration LockLearn pour inspecter le stockage et restaurer explicitement un snapshot. LockLearn n’écrase jamais automatiquement l’unique copie des données utilisateur."
+    },
+    "state_migration_failure": {
+      "title": "Échec de migration des données LockLearn",
+      "description": "LockLearn n’a pas pu terminer une migration de la base d’état. {snapshot_count} snapshot(s) de récupération validé(s) sont disponible(s). Les données utilisateur n’ont pas été supprimées silencieusement."
+    },
+    "dataset_signature_invalid": {
+      "title": "Signature du dataset invalide",
+      "description": "LockLearn a rejeté le dataset signé {dataset_id} car sa clé de signature ou sa signature Ed25519 n’est pas fiable. La dernière génération installée valide reste active."
+    },
+    "backup_cache_anomaly": {
+      "title": "Cache reconstructible inattendu dans le stockage persistant",
+      "description": "LockLearn a trouvé {cache_bytes} octets de cache reconstructible dans le stockage persistant. Cela peut augmenter inutilement la taille des sauvegardes. Utilisez les options de stockage LockLearn pour purger/reconstruire le cache après vérification."
     }
   },
   "options": {

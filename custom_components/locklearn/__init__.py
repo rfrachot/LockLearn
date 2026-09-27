@@ -23,7 +23,7 @@ from .const import (
 from .ha_services import async_register_services, async_unregister_services
 from .panel import async_register_panel, async_register_static_path, async_unregister_panel
 from .runtime import LockLearnRuntime
-from .storage import StateIntegrityError, StoragePaths
+from .storage import StateIntegrityError, StateMigrationError, StoragePaths
 from .storage.lifecycle import StorageLifecycleManager, UninstallDataPolicy
 
 type LockLearnConfigEntry = ConfigEntry
@@ -70,7 +70,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: LockLearnConfigEntry) ->
     try:
         runtime = await LockLearnRuntime.async_create(hass)
     except StateIntegrityError:
-        manager = StorageLifecycleManager(StoragePaths.from_config_dir(hass.config.config_dir))
+        manager = StorageLifecycleManager(
+            StoragePaths.from_config_dir(hass.config.config_dir)
+        )
         snapshots = await manager.async_valid_recovery_snapshots()
         ir.async_create_issue(
             hass,
@@ -82,8 +84,45 @@ async def async_setup_entry(hass: HomeAssistant, entry: LockLearnConfigEntry) ->
             translation_key="state_integrity_failure",
             translation_placeholders={"snapshot_count": str(len(snapshots))},
         )
+        ir.async_delete_issue(hass, DOMAIN, "state_migration_failure")
         return False
+    except StateMigrationError:
+        manager = StorageLifecycleManager(
+            StoragePaths.from_config_dir(hass.config.config_dir)
+        )
+        snapshots = await manager.async_valid_recovery_snapshots()
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            "state_migration_failure",
+            is_fixable=False,
+            is_persistent=True,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key="state_migration_failure",
+            translation_placeholders={"snapshot_count": str(len(snapshots))},
+        )
+        ir.async_delete_issue(hass, DOMAIN, "state_integrity_failure")
+        return False
+
     ir.async_delete_issue(hass, DOMAIN, "state_integrity_failure")
+    ir.async_delete_issue(hass, DOMAIN, "state_migration_failure")
+
+    lifecycle = StorageLifecycleManager(runtime.storage.paths)
+    anomaly_bytes = await lifecycle.async_backup_cache_anomaly_bytes()
+    if anomaly_bytes:
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            "backup_cache_anomaly",
+            is_fixable=False,
+            is_persistent=True,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="backup_cache_anomaly",
+            translation_placeholders={"cache_bytes": str(anomaly_bytes)},
+        )
+    else:
+        ir.async_delete_issue(hass, DOMAIN, "backup_cache_anomaly")
+
     domain_data[DATA_RUNTIME] = runtime
     async_register_services(hass)
     try:

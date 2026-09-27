@@ -38,6 +38,18 @@
     "state_integrity_failure": {
       "title": "LockLearn user state needs recovery",
       "description": "LockLearn did not open its state writer because state.db failed integrity validation. {snapshot_count} validated recovery snapshot(s) are currently available. Open the LockLearn integration options to inspect storage and explicitly restore a snapshot. LockLearn will never overwrite the only user-state copy automatically."
+    },
+    "state_migration_failure": {
+      "title": "LockLearn state migration failed",
+      "description": "LockLearn could not complete a state database migration. {snapshot_count} validated recovery snapshot(s) are available. User state was not silently discarded."
+    },
+    "dataset_signature_invalid": {
+      "title": "Dataset signature is invalid",
+      "description": "LockLearn rejected the signed dataset {dataset_id} because its signing key or Ed25519 signature could not be trusted. The last valid installed generation remains active."
+    },
+    "backup_cache_anomaly": {
+      "title": "Unexpected reconstructible cache under persistent state",
+      "description": "LockLearn found {cache_bytes} bytes of reconstructible cache under persistent state storage. This may enlarge backups unexpectedly. Use the LockLearn storage options to purge/rebuild cache after inspecting the installation."
     }
   },
   "options": {
