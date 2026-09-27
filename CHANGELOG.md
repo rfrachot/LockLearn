@@ -9,6 +9,11 @@ All notable changes will be documented here.
   runtime setup, avoiding blocking-call warnings on the HA event loop.
 
 ### Added
+- P6.8 release-gate matrix with explicit negative WebSocket ACL classification,
+  deterministic-clock enforcement, machine-readable JSON Schema validation,
+  frontend source lint, dataset licence/provenance/reproducibility CI gates,
+  verified Home Assistant minimum/current-harness pins and a latest-stable HA
+  compatibility smoke when the upstream pytest harness lags a patch release.
 - P6.7 performance/scale hardening with bounded aggregate runtime timings,
   a reusable 60,000-card content build/activation gate, a real-schema 1,826-day
   state growth projection, centralized 150 MiB/500 MiB dataset budgets and a
