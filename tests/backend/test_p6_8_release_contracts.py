@@ -111,8 +111,7 @@ COMMAND_GROUPS = (
 def _command_blocks(source: str) -> dict[str, str]:
     blocks: dict[str, str] = {}
     starts = [
-        match.start()
-        for match in re.finditer(r"(?=@websocket_api\.websocket_command)", source)
+        match.start() for match in re.finditer(r"(?=@websocket_api\.websocket_command)", source)
     ]
     starts.append(len(source))
     for index, start in enumerate(starts[:-1]):
@@ -192,7 +191,7 @@ def test_ci_release_matrix_contains_every_normative_gate() -> None:
         "hacs/action@22.5.0",
         'home_assistant: "2025.2.5"',
         'home_assistant: "2026.9.3"',
-        'homeassistant==2026.9.4',
+        "homeassistant==2026.9.4",
         "scripts/p6_8_ha_smoke.py",
     )
     missing = [fragment for fragment in required_fragments if fragment not in ci]

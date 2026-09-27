@@ -33,9 +33,7 @@ def main() -> int:
         raise RuntimeError(f"Home Assistant {actual} is below supported minimum {minimum}")
 
     manifest = json.loads(
-        (ROOT / "custom_components" / "locklearn" / "manifest.json").read_text(
-            encoding="utf-8"
-        )
+        (ROOT / "custom_components" / "locklearn" / "manifest.json").read_text(encoding="utf-8")
     )
     if manifest.get("domain") != "locklearn" or manifest.get("config_flow") is not True:
         raise RuntimeError("LockLearn manifest contract is invalid")
