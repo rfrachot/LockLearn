@@ -23,6 +23,7 @@ import {
   type DashboardResponse,
   type DashboardTrack,
   type HomeAssistantLike,
+  type LearnContentBlock,
   type SessionQuestion,
   type SessionState,
   type VisibleProfile,
