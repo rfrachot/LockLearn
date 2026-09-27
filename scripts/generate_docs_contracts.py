@@ -19,22 +19,24 @@ GENERATED = ROOT / "docs" / "generated"
 def _string_constant(path: Path, name: str) -> str:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in tree.body:
-        if isinstance(node, ast.Assign):
-            if any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
-                value = ast.literal_eval(node.value)
-                if isinstance(value, str):
-                    return value
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == name for target in node.targets
+        ):
+            value = ast.literal_eval(node.value)
+            if isinstance(value, str):
+                return value
     raise ValueError(f"{name} not found in {path}")
 
 
 def _integer_constant(path: Path, name: str) -> int:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in tree.body:
-        if isinstance(node, ast.Assign):
-            if any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
-                value = ast.literal_eval(node.value)
-                if isinstance(value, int):
-                    return value
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == name for target in node.targets
+        ):
+            value = ast.literal_eval(node.value)
+            if isinstance(value, int):
+                return value
     raise ValueError(f"{name} not found in {path}")
 
 
@@ -144,7 +146,10 @@ def _database_markdown(
 
 
 def _websocket_contracts(source: str, protocol_version: int) -> dict[str, Any]:
-    starts = [match.start() for match in re.finditer(r"(?=@websocket_api\.websocket_command)", source)]
+    starts = [
+        match.start()
+        for match in re.finditer(r"(?=@websocket_api\.websocket_command)", source)
+    ]
     starts.append(len(source))
     commands: list[dict[str, Any]] = []
     for index, start in enumerate(starts[:-1]):
