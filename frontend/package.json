@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "lint": "node scripts/lint.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "dev": "vite --host 127.0.0.1",
