@@ -2,37 +2,44 @@
 
 ## Current state
 
-Branch: `feat/p5-dataset-ui`.
+Branch: `feat/p5-stats-ui`.
 
-P5.5 is **COMPLETE / REAL-HA PASS**. The 2026-09-26 real-instance gate covered
-Profile CRUD/settings, Track configuration, workload preview-before-apply,
-aggressive-quota warning, keyboard operation, clean LockLearn logs and cleanup.
-ACL role presentation, notification targets and PackVersion diff were fixture
-unavailable on that instance; automated backend coverage remains authoritative
-for those paths. Firefox WebDriver's 500 px minimum remains a harness limit for
-the exact narrow-mobile viewport.
+P5.6 remains **PASS** after the 2026-09-27 REAL HA qualification and the
+executor fix for bundled registry loading.
 
-Roadmap P5.6 — Dataset updates, Sources & Licences UI — is **PASS**.
+Roadmap P5.7 — Basic stats, difficulties and metacognitive views — is
+**IMPLEMENTED / AUTOMATED QUALIFICATION PASS / REAL-HA PENDING**.
 
-P5.6 provides:
-- a dedicated Sources & Licences route;
-- installed and available dataset versions, update state, source age/staleness,
-  reconstructible cache size and release changelog;
-- provenance and licence details sourced from the active signed content
-  generation, not frontend constants;
-- paginated per-record attribution details for sources that require individual
-  attribution;
-- visibility of installed datasets outside the official discovery registry;
-- HA-admin-only catalog refresh and verified install actions, with read-only
-  provenance/licence visibility for authenticated panel users;
-- HTTP(S)-only external links for untrusted catalog/source metadata.
+P5.7 is a frontend/product surface over the existing P3.13/P3.11 backend truth.
+It does not recompute SRS/statistics in the browser.
 
-Backend mutations still delegate to DatasetManager, preserving host allowlists,
-checksum/signature/schema/licence validation, staging, atomic activation and
-rollback. No new dataset trust path was introduced.
+Implemented surfaces:
+- dedicated Stats route with optional active-Track filter;
+- due-today and current SRS state counts;
+- latest trusted verified retention and recent verified accuracy;
+- explicit visual separation of learning exposure from verified retrieval;
+- due-queue streak;
+- self-known-vs-later-verified metacognitive calibration;
+- explicitly secondary mastery estimate with time-decay explanation;
+- persistent leeches with confusion evidence;
+- bounded recent daily activity aggregated by local date across Tracks before
+  applying the 14-day UI window;
+- owner/editor remediation actions: personal mnemonic create/edit,
+  `leeches_only` targeted Learn session and manual leech reactivation;
+- viewer read-only presentation, with backend ACL still authoritative;
+- targeted session handoff from Stats to the existing Learn view.
 
-Automated qualification on 2026-09-26:
-- authoritative gate: `99351bb0e1d996835495c788a2b99aae9091fcd0`;
+Important honesty rules:
+- `learning_exposures` never count as verified accuracy;
+- verified accuracy comes only from the backend P3.13 trusted verified retrieval
+  projection;
+- mastery is secondary/synthetic and never replaces due dates or verified
+  evidence;
+- frontend role hiding is convenience only; P3.11/P2.3 backend ACL rechecks all
+  annotation/reactivation/session mutations.
+
+Automated qualification on 2026-09-27:
+- source gate: `edff8a702fff1014c952c034000c95ba504643c3`;
 - Ruff format PASS — 259 files;
 - Ruff lint PASS;
 - mypy PASS — 149 source files;
@@ -41,41 +48,44 @@ Automated qualification on 2026-09-26:
 - HA 2025.2.5 PASS — 300 backend tests;
 - HA 2026.9.3 PASS — 300 backend tests;
 - TypeScript PASS;
-- Vitest PASS — 13 files / 37 tests;
-- Vite PASS — 31 modules, 155.07 kB / 31.41 kB gzip;
-- committed frontend bundle reproducibility PASS.
+- Vitest PASS — 14 files / 43 tests;
+- Vite PASS — 32 modules, 182.68 kB / 36.54 kB gzip;
+- bundle materialized at `daf01d285a162453a663c6d5e98441e3cb9a7947`;
+- committed-bundle reproducibility PASS at
+  `b51385f046e875c292940e0b67abd3dae5832dfd`.
+- temporary P5.7 branch-only CI removed after qualification.
 
-The generated bundle was materialized by GitHub Actions and committed before the
-final reproducibility gate. The temporary branch-only qualification workflow was
-removed afterward; no PR, merge, tag or release was created.
+The automated frontend tests specifically verify that exposure totals remain
+separate from verified retrieval totals, multi-Track daily rows are aggregated
+by local date before the recent-day window, owner/editor vs viewer remediation
+visibility, and the exact P3.11 WebSocket mutation contracts.
 
-REAL HA qualification on 2026-09-27 passed on Home Assistant 2026.7.4 after
-deploying the complete tree from this branch and restarting Core. Firefox
-verified the route and backend-fed dataset facts, admin refresh, 722-record
-individual attribution fixture with pagination, keyboard actions and HTTP(S)
-source/licence/release links. The installed and discovered versions were both
-1.0.0; refresh left the content hash and PackVersion unchanged. No Track, safe
-new release, invalid/repaired state or second non-admin token was available, so
-those scenarios are explicitly `FIXTURE UNAVAILABLE`. Firefox's requested
-390-pixel viewport was clamped to 500 px (`HARNESS LIMIT`); the available mobile
-viewport had no horizontal overflow or off-screen action.
+## Remaining gate
 
-The first log pass found a blocking synchronous read of bundled registry JSON
-during runtime creation. `runtime.py` now loads all five registries through
-`hass.async_add_executor_job`, with a lifecycle regression assertion; the
-post-fix redeployment/restart produced no LockLearn WARNING, ERROR or CRITICAL
-system-log entries. The authoritative post-fix gates passed Ruff format/lint,
-mypy (149 sources), resource registries, pytest (393 tests), TypeScript, Vitest
-(13 files / 37 tests), Vite (155.07 kB / 31.41 kB gzip) and bundle diff.
+REAL HA P5.7 has not been executed in this session because the real HA/browser
+harness is not available here.
 
-The earlier realistic-content scale qualification remains **PASS** and is
-separate from roadmap P5.6. Evidence: 20,000 LearningItems, 40,000
-CardDefinitions, next-card p95 19.81 ms, generation activation/rollback PASS.
+Qualify on the development Home Assistant instance:
+1. deploy the complete `custom_components/locklearn/` tree from
+   `feat/p5-stats-ui`;
+2. open Stats for a real/temporary Profile and verify honest empty-state metrics;
+3. create enough public-API learning evidence to verify exposure vs trusted
+   verified accuracy, state counts, daily rows and calibration;
+4. switch between Profile-level and Track-level Stats and verify scope changes
+   without stale responses;
+5. if a real leech fixture can be produced safely through normal public APIs,
+   verify its confusion/mnemonic UI, targeted session handoff into Learn and
+   explicit reactivation;
+6. if no practical leech fixture is available, mark those REAL-HA scenarios
+   `FIXTURE UNAVAILABLE`; automated P3.11/TS coverage remains authoritative;
+7. verify viewer read-only behavior only if a second HA user/token exists,
+   otherwise `FIXTURE UNAVAILABLE`;
+8. verify keyboard navigation, available mobile viewport, long stats text/table
+   containment and clean LockLearn logs;
+9. clean all temporary Profile/Track/session/progress fixtures.
 
-## Next action
-
-P5.6 is complete. P5.7 may be considered separately; it was not started by
-this qualification mission.
+After REAL HA PASS, mark P5.7 complete and proceed to P5.8 only after explicit
+the maintainer decision.
 
 Deployment safety:
 - deploy the complete `custom_components/locklearn/` tree;
