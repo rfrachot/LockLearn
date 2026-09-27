@@ -266,6 +266,17 @@ async def test_all_acl_scoped_websocket_endpoints_have_negative_access_coverage(
     for payload in session_mutations:
         await _assert_denied(non_admin, payload, "locklearn/forbidden")
 
+    import_record = await runtime.profile_transfers.store.async_store_import(
+        owner_user_id="different-owner",
+        archive_bytes=b"not-for-this-user",
+    )
+    for command in ("locklearn/profiles/import_dry_run", "locklearn/profiles/import_apply"):
+        await _assert_denied(
+            non_admin,
+            {"type": command, "upload_token": import_record.token},
+            "locklearn/invalid_request",
+        )
+
     for payload in (
         {"type": "locklearn/datasets/refresh"},
         {"type": "locklearn/datasets/install", "dataset_id": "missing"},
