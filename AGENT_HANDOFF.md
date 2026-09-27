@@ -4,8 +4,6 @@
 
 Branch: `feat/p6-hardening`.
 
-P6.5 qualification fixes are committed locally (not pushed).
-
 P5 and its real-HA exit gate remain PASS.
 
 P6.1 — database/config/content migrations and recovery — PASS.
@@ -14,93 +12,102 @@ P6.2 — backup hooks, unload/reload and uninstall/recovery UX — PASS.
 
 P6.3 — Repairs and diagnostics — PASS.
 
-P6.4 — secure export/import and data deletion — PASS at `8f1a0ab` and pushed
-before P6.5 started.
+P6.4 — secure export/import and data deletion — PASS.
 
 P6.5 — HA entity/sensor privacy contract and optional integration boundary —
-PASS after review and qualification on 2026-09-27.
+PASS at `a3cd543` and pushed before P6.6 started.
 
-## P6.5 implementation
+P6.6 — security hardening and threat-model tests — has an implementation
+candidate. Final qualification is intentionally pending.
 
-P6.5 deliberately does **not** add `sensor.py` or forward
-`Platform.SENSOR`. LockLearn 1.0 may therefore ship no optional private
-learning sensors and still satisfy the V1 spec.
+## P6.6 implementation
 
-A new executable `ha_entity_contract.py` defines the rules any future optional
-learning sensor implementation must obey:
+### XSS / rich text
 
-- Track-scoped stable unique IDs use canonical Track UUID +
-  `:<metric_key>`;
-- Profile UUID defines the logical LockLearn Device identifier;
-- HA display names/entity IDs never participate in stable identity;
-- every optional learning sensor is disabled by default;
-- exposure requires explicit double opt-in in Profile and Track settings;
-- Track opt-in names an allowlist of known metric keys; unknown metrics fail
-  closed;
-- ACL membership, HA-admin status or dashboard visibility never imply sensor
-  consent;
-- metrics are aggregate-only;
-- default extra-state attributes are empty;
-- minimum publish/debounce interval is five minutes;
-- Recorder guidance is explicit per metric;
-- only mastery, quiz accuracy and last exam score use
-  `SensorStateClass.MEASUREMENT`;
-- due/streak/consecutive/session/daily-goal snapshot counters deliberately use
-  no `state_class`;
-- no learning metric uses TOTAL/TOTAL_INCREASING.
+- third-party rich text remains a closed AST, never arbitrary HTML;
+- dataset build canonicalizes rich-text payloads before canonical hashing and
+  signing;
+- existing package/generation validation remains an independent parser;
+- frontend continues to use Lit interpolation, never `unsafeHTML`;
+- P6.6 frontend regression verifies hostile HTML-looking text remains an
+  interpolated value rather than template markup.
 
-The existing dataset `UpdateEntity` platform remains separate: it exposes
-public dataset/update/provenance metadata, not private learner state.
+### SVG
 
-`PRIVACY.md` now reflects the shipped P6.4 export boundary and the P6.5
-entity/privacy contract.
+- `image/svg+xml` is now an allowed public image MIME only because P6.6 adds
+  dedicated build-time sanitation;
+- original third-party SVG bytes are never hashed/signed/packaged directly;
+- sanitizer strips scripts, foreignObject/style/iframe/object/embed,
+  `on*`/style attributes, remote/data/javascript/file references and unsafe
+  namespaces;
+- href/xlink references are local-fragment-only;
+- DTD/entity declarations are rejected;
+- package manifest, SQLite metadata and SHA-256 bind the sanitized bytes;
+- this supersedes ADR-0018 only where it previously rejected SVG pending a
+  sanitizer.
 
-ADR-0050 records the logical-device, identity, opt-in, Recorder and state-class
-decision.
+### Pack filters / SQL
 
-No optional private SensorEntity implementation is included. No P6.6 threat
-matrix work is included.
+New `core/pack_filters.py` and
+`datasets/schemas/content-filter.schema.json` define the closed V1 filter
+grammar:
 
-## P6.5 test coverage
+- fields: `content_type`, `register`, `dataset_id`;
+- operators: `eq`, `in`;
+- conjunction only through `all`;
+- unknown keys/fields/operators/types fail closed;
+- SQL identifiers/operators are code constants;
+- package values are emitted separately as sqlite3 parameters.
 
-New `tests/backend/test_ha_entity_contract.py` verifies:
+Injection tests execute a malicious literal against SQLite and verify it cannot
+alter query structure or schema.
 
-- 1.0 forwards only `Platform.UPDATE`, not `Platform.SENSOR`;
-- every future optional sensor contract is disabled by default,
-  aggregate-only, attribute-empty and debounced >= 5 minutes;
-- only valid measurement metrics receive `MEASUREMENT`;
-- UUID-based identity rejects names/noncanonical UUIDs;
-- no content-bearing attribute/key surface is allowed;
-- Profile + Track double opt-in is required;
-- unknown opt-in metrics fail closed.
+### Existing threat regressions reused by the P6.6 gate
 
-`tests/backend/test_dataset_update_entity.py` verifies that the existing public
-dataset `UpdateEntity` exposes provenance/update metadata only and remains
-separate from private learning state. Review also fixed strict canonical UUID
-validation (including uppercase rejection), rejected non-string metric keys,
-and aligned the attribute-surface test with the allowed `session_accuracy`
-aggregate metric.
+- `tests/backend/test_acl.py`: Profile ACL authority and no HA-admin bypass;
+- `tests/backend/test_notification_interactions.py`: concurrent single-use
+  action replay/expiry and bearer redaction;
+- `tests/datasets/test_dataset_package.py`: hostile signed-dataset ZIP;
+- `tests/backend/test_profile_transfer.py`: hostile Profile archive,
+  owner-bound/one-shot private transfer lifecycle;
+- `tests/datasets/test_assets.py` and
+  `tests/datasets/test_asset_pipeline.py`: signed public asset binding,
+  traversal checks, cache tamper detection.
+
+New `tests/backend/test_security_p6_6.py` adds rich-text, SVG primitive,
+parameterized Pack-filter and private/static-root regressions.
+
+New `tests/datasets/test_svg_security.py` proves that the **signed packaged SVG
+bytes** are the sanitized derivative and that unsafe rich text fails before a
+dataset can be signed.
+
+### Documentation
+
+- `SECURITY.md` is now the consolidated V1 threat model;
+- ADR-0051 records the security-hardening decisions and reuse of prior
+  regressions.
+
+No P6.7 performance/scale/storage-budget work is included.
 
 ## Verification state
 
-The originally requested targeted command could not start because the
-referenced `tests/backend/test_dataset_update_entity.py` file was absent. The
-missing separation test was added, after which the targeted gate passed:
+Final P6.6 qualification has **not** been run by design.
 
-```text
-12 passed in 0.71s
-```
-
-Recommended targeted gate:
+Recommended targeted backend/dataset gate:
 
 ```text
 .venv/bin/python -m pytest -q --tb=short \
-  tests/backend/test_ha_entity_contract.py \
-  tests/backend/test_dataset_update_entity.py \
-  tests/backend/test_lifecycle.py
+  tests/backend/test_security_p6_6.py \
+  tests/backend/test_acl.py \
+  tests/backend/test_notification_interactions.py \
+  tests/backend/test_profile_transfer.py \
+  tests/datasets/test_svg_security.py \
+  tests/datasets/test_dataset_package.py \
+  tests/datasets/test_assets.py \
+  tests/datasets/test_asset_pipeline.py
 ```
 
-Then run:
+Then backend full gate:
 
 ```text
 .venv/bin/python -m ruff format --check .
@@ -110,20 +117,16 @@ Then run:
 .venv/bin/python -m pytest -q --tb=short
 ```
 
-P6.5 changes no frontend source and no generated frontend artifact. Do not run
-or rebuild frontend unless qualification changes frontend code.
-
-The complete backend gate passed:
+P6.6 changes a frontend security test, so qualification must also run:
 
 ```text
-275 files already formatted
-All checks passed!
-Success: no issues found in 159 source files
-LockLearn resource registries: OK
-440 passed, 1 warning in 21.77s
+cd frontend
+npm run typecheck
+npm test
+npm run build
 ```
 
-The warning is the expected duplicate ZIP member warning from the hostile
-archive test fixture. No P6.6 work was started.
+If build output changes unexpectedly despite no frontend source change, inspect
+and explain before committing generated artifacts.
 
-Do not start P6.6 during qualification.
+Do not start P6.7 during qualification.

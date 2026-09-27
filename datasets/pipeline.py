@@ -26,6 +26,11 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from custom_components.locklearn.const import CONTENT_SCHEMA_VERSION
 from custom_components.locklearn.core.assets import Asset, AssetKind, validate_asset_path
 from custom_components.locklearn.core.content import make_stable_id
+from custom_components.locklearn.core.security_content import (
+    ContentSecurityError,
+    sanitize_rich_text_payload,
+    sanitize_svg_file,
+)
 from custom_components.locklearn.datasets import (
     MANIFEST_VERSION,
     DatasetManifest,
@@ -456,6 +461,7 @@ def build_dataset(
             spec,
             normalized_map=normalized_map,
             repository_root=repository_root,
+            workspace=workspace_path,
         )
         database_path = workspace_path / "dataset.db"
         database_path.unlink(missing_ok=True)
@@ -575,6 +581,7 @@ def build_dataset(
                 )
 
             item_counts = dict(recipe.materialize(connection, context))
+            _sanitize_content_blocks_for_build(connection)
             if any(
                 not isinstance(key, str)
                 or not key
@@ -673,6 +680,37 @@ def build_dataset(
             shutil.rmtree(workspace_path, ignore_errors=True)
 
 
+def _sanitize_content_blocks_for_build(connection: sqlite3.Connection) -> None:
+    """Canonicalize rich_text through the closed AST before hashing/signing."""
+    rows = connection.execute(
+        """SELECT content_block_id, payload_json
+           FROM content_blocks
+           WHERE kind = 'rich_text'"""
+    ).fetchall()
+    for block_id, raw_payload in rows:
+        try:
+            payload = json.loads(str(raw_payload))
+            sanitized = sanitize_rich_text_payload(payload)
+        except (json.JSONDecodeError, ContentSecurityError) as err:
+            raise DatasetBuildError(
+                f"unsafe rich_text content block: {block_id}"
+            ) from err
+        connection.execute(
+            """UPDATE content_blocks
+               SET payload_json = ?
+               WHERE content_block_id = ?""",
+            (
+                json.dumps(
+                    sanitized,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+                str(block_id),
+            ),
+        )
+
+
 def canonical_content_hash(connection: sqlite3.Connection) -> str:
     """Hash a deterministic canonical export of semantic content tables."""
     digest = hashlib.sha256()
@@ -731,6 +769,7 @@ def _prepare_assets(
     *,
     normalized_map: Mapping[str, NormalizedSource],
     repository_root: Path,
+    workspace: Path,
 ) -> tuple[PreparedAsset, ...]:
     registry_sources = _source_registry(repository_root)
     registry_licenses = _license_registry(repository_root)
@@ -750,13 +789,30 @@ def _prepare_assets(
             raise DatasetBuildError(f"license is not approved for assets: {license_id}")
         if _required_bool(license_row, "attribution_required") and not item.attribution:
             raise DatasetBuildError(f"asset attribution is required by license: {license_id}")
+        source_path = item.path
+        sanitized_svg_modified = False
+        if item.kind is AssetKind.IMAGE and item.mime_type == "image/svg+xml":
+            try:
+                sanitized, sanitized_svg_modified = sanitize_svg_file(item.path)
+            except ContentSecurityError as err:
+                raise DatasetBuildError(
+                    f"unsafe SVG asset: {item.archive_path}"
+                ) from err
+            sanitized_root = workspace / "sanitized-assets"
+            sanitized_root.mkdir(parents=True, exist_ok=True)
+            sanitized_path = sanitized_root / hashlib.sha256(
+                item.archive_path.encode("utf-8")
+            ).hexdigest()
+            sanitized_path.write_bytes(sanitized)
+            source_path = sanitized_path
+
         metadata = Asset(
             asset_id=item.asset_id,
             dataset_id=spec.dataset_id,
             kind=item.kind,
             path=item.archive_path,
-            sha256=_sha256_file(item.path),
-            byte_size=item.path.stat().st_size,
+            sha256=_sha256_file(source_path),
+            byte_size=source_path.stat().st_size,
             mime_type=item.mime_type,
             license_id=license_id,
             attribution=item.attribution,
@@ -769,8 +825,10 @@ def _prepare_assets(
                 source_id=item.source_id,
                 source_record_id=item.source_record_id,
                 author=item.author,
-                modified_from_source=item.modified_from_source,
-                source_path=item.path,
+                modified_from_source=(
+                    item.modified_from_source or sanitized_svg_modified
+                ),
+                source_path=source_path,
             )
         )
     return tuple(prepared)

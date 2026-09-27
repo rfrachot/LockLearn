@@ -12,11 +12,12 @@ import type { LearnContentBlock } from "./protocol";
 function block(
   payload: Record<string, unknown>,
   languageTag = "ja",
+  kind: LearnContentBlock["kind"] = "text",
 ): LearnContentBlock {
   return {
     content_block_id: "locklearn:block:test",
     position: 0,
-    kind: "text",
+    kind,
     role: "prompt",
     reveals_answer: false,
     mask_strategy: "none",
@@ -67,6 +68,53 @@ describe("P5.8 content renderer", () => {
     expect(template.values).toContain("<script>alert(1)</script>");
   });
 
+
+
+  it("keeps malicious rich-text text in Lit values, never template markup", () => {
+    const malicious = '<img src=x onerror="alert(1)"><script>alert(2)</script>';
+    const rendered = renderContentBlock(
+      block(
+        {
+          type: "document",
+          children: [
+            {
+              type: "paragraph",
+              children: [{ type: "text", text: malicious }],
+            },
+          ],
+        },
+        "en",
+        "rich_text",
+      ),
+    );
+    expect(rendered).toBeTruthy();
+
+    const templateMarkup: string[] = [];
+    const stringValues: string[] = [];
+    const visit = (value: unknown): void => {
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        "strings" in value &&
+        "values" in value
+      ) {
+        const template = value as TemplateResult;
+        templateMarkup.push(...template.strings);
+        template.values.forEach(visit);
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+      if (typeof value === "string") stringValues.push(value);
+    };
+    visit(rendered);
+
+    expect(templateMarkup.join("")).not.toContain("<img");
+    expect(templateMarkup.join("")).not.toContain("<script");
+    expect(stringValues).toContain(malicious);
+  });
   it("ships the system CJK stack, ruby styling and visible keyboard focus", () => {
     expect(contentRendererStyles.cssText).toContain(':lang(ja)');
     expect(contentRendererStyles.cssText).toContain('"Yu Gothic"');

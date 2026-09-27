@@ -9,6 +9,9 @@ All notable changes will be documented here.
   runtime setup, avoiding blocking-call warnings on the HA event loop.
 
 ### Added
+- P6.6 security hardening with pre-signing rich-text canonicalization, build-time
+  SVG sanitization, strict parameterized Pack content filters, private/static
+  asset boundary regressions and a consolidated V1 threat model.
 - P6.5 executable Home Assistant entity/privacy contract: stable Track-UUID
   identity, Profile logical-device grouping, explicit Profile+Track double
   opt-in, aggregate-only/no-attribute defaults, five-minute debounce, Recorder
