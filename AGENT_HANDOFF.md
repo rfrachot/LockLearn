@@ -2,37 +2,34 @@
 
 ## Current state
 
-Branch: `feat/p5-i18n-a11y`.
+Branch: `feat/p5-frontend-gate`.
 
-P5.7 is **PASS** after automated qualification and the 2026-09-27 REAL HA
+P5.8 is **PASS** after automated qualification and the 2026-09-27 REAL HA
 qualification.
 
-Roadmap P5.8 — FR/EN i18n, CJK and accessibility hardening — is **PASS**.
+Roadmap P5.9 — Frontend performance and compatibility gate — is
+**IMPLEMENTED / AUTOMATED QUALIFICATION PASS / REAL-HA PENDING**.
 
-P5.8 changes are frontend-only and preserve existing backend contracts.
+P5.9 is primarily a durable quality gate rather than a new product surface.
 
 Implemented scope:
-- FR/EN catalog retained as a frontend-owned UI catalog independent from taught
-  languages;
-- locale resolution is explicit exact locale → base language → English;
-- automated FR/EN translation-key parity prevents silent partial localization;
-- Learn and Quiz now use one shared safe content renderer;
-- content language metadata is preserved with `lang`;
-- Japanese content uses a system CJK/Japanese font stack with readable minimum
-  sizing;
-- validated `ruby_segments` and allowlisted rich-text ruby nodes render as
-  native `<ruby>/<rt>`;
-- malformed ruby metadata falls back to safe plain text;
-- raw dataset strings are never interpreted as HTML/unsafeHTML;
-- shared `:focus-visible` affordances and long-text containment are applied to
-  panel, management, dataset, stats, Learn and Quiz shadow roots;
-- HA theme variables remain the styling authority; no fixed light-only theme was
-  introduced;
-- no essential hover-only interaction was introduced.
+- permanent 500 KiB gzip budget for the initial panel bundle;
+- static frontend audit rejecting `setInterval`, direct `fetch`, direct
+  `WebSocket`, `EventSource` and `XMLHttpRequest` transport regressions;
+- Playwright Chromium harness mounting the real `<locklearn-panel>` against a
+  contract-faithful Home Assistant `callWS` stub;
+- E2E smoke covering Home, Learn, Quiz, Stats and Profiles, Japanese ruby
+  rendering, quiz answer handling and visible keyboard focus;
+- normal CI now runs frontend typecheck/Vitest/no-polling/build/bundle-budget,
+  Playwright, HA minimum/latest compatibility and the P5.9 performance script;
+- repeatable §80 benchmark separating next-card selection from complete
+  finite-session planning.
 
-Automated qualification on 2026-09-27:
-- source gate: `f7f6a198f5efe1ae289a95c409d2d399c85faf90`;
-- Ruff format PASS — 259 files;
+Authoritative automated gate:
+`653f24a88f58e05e2f2805389d5e923aa1e745be`.
+
+Results:
+- Ruff format PASS — 260 files;
 - Ruff lint PASS;
 - mypy PASS — 149 source files;
 - resource registries PASS;
@@ -41,54 +38,63 @@ Automated qualification on 2026-09-27:
 - HA 2026.9.3 PASS — 300 backend tests;
 - TypeScript PASS;
 - Vitest PASS — 15 files / 48 tests;
+- Playwright Chromium PASS — 2/2;
+- no-polling/direct-network audit PASS;
 - Vite PASS — 33 modules, 185.58 kB / 37.56 kB gzip;
-- generated bundle materialized at
-  `7039fe466af5207ebed7a339746424181bf82f6e`;
-- committed-bundle reproducibility PASS at
-  `d39ff77be7dee511fce43fff00296f7074f81b92`;
-- temporary P5.8 branch-only CI removed after qualification.
+- explicit gzip measurement: 185,575 bytes raw / 37,247 bytes gzip;
+- bundle target: 512,000 bytes gzip;
+- committed bundle and frontend lockfile reproducibility PASS.
 
-The automated renderer tests cover:
-- exact/base/English locale fallback;
-- full FR/EN key parity;
-- valid and malformed ruby metadata;
-- plain-text handling of HTML-like dataset strings;
-- Japanese system-font stack and ruby styling;
-- visible keyboard focus styling.
+§80 performance gate on the authoritative CI runner:
+- `session/answer` p95: **1.12 ms** / budget **100 ms**;
+- next-card selection p95: **139.47 ms** / budget **150 ms** over 20,000
+  candidates and 40 samples;
+- scheduler day generation p95: **6.702 ms** / budget **250 ms**;
+- complete 20-card session planning p95: **377.864 ms** over 20,000 candidates,
+  10 samples; informational only because §80 defines no whole-session budget.
 
-## REAL HA qualification — PASS (2026-09-27)
+Important benchmark boundary:
+- do not call the 20-card session-plan metric “next-card”;
+- next-card is intentionally measured with `requested_cards=1`;
+- the earlier 514 ms failure was a benchmark-definition error, not a production
+  regression;
+- do not raise or weaken the normative §80 budgets without an explicit project
+  decision.
 
-The complete tree at HEAD `5830fb0ae303837c7d7ad49387357029626e258a` was
-deployed to Home Assistant 2026.7.4 through Advanced SSH & Web Terminal. The
-add-on was discovered through the Supervisor WebSocket API in read-only mode;
-the current SSH username was `root`, and no add-on option or credential was
-changed. Config Entry state was `loaded`, frontend protocol `3` matched, and
-the local/remote bundle SHA-256 was
-`c2749626ab152109402fe6fe207e876a31e82ec53299906235abf38a339a0be4`.
+The temporary branch-only P5.9 workflow has been removed. All durable gates are
+in `.github/workflows/ci.yml`.
 
-Firefox verified the core routes in French, English and `en-GB` without raw
-translation keys. A real temporary Japanese Starter Track rendered kana `あ`
-with `lang="ja"`, the system Japanese/CJK stack and calculated size 59.5px;
-the surrounding UI remained French. No ruby fixture was present:
-`FIXTURE UNAVAILABLE`; automated tests cover `<ruby>/<rt>` and safe text
-escaping. Visible controls had accessible names, tab traversal exposed a 3px
-focus outline, and no essential hover-only action was observed.
+## Remaining REAL HA gate
 
-Firefox clamped the requested 390×844 viewport to 500×758 CSS:
-`HARNESS LIMIT`. At 500px, Home, Learn, Quiz, Stats, Tracks and Sources &
-Licences had no horizontal overflow. Light theme was checked. The instance
-and headless harness exposed no usable `default_dark_theme` resource, so dark
-theme visual qualification is explicitly `HARNESS LIMIT`. Linux Firefox is
-the only Han platform qualified; Windows, Android and iOS are
-`FIXTURE UNAVAILABLE`.
+P5.9 still needs final qualification on the development Home Assistant instance.
 
-Temporary Profile, Track and session state were removed through public
-WebSocket APIs. The personal Profile has no QA Track, the final LockLearn log
-query has no entries, no SSH askpass/password/known-host helper remains, and
-no deployment stage remains under `/config/custom_components`.
+Qualify:
+1. fetch `feat/p5-frontend-gate` and deploy the complete
+   `custom_components/locklearn/` tree;
+2. confirm Config Entry loaded, frontend protocol compatible and deployed panel
+   byte-identical to the branch bundle;
+3. full-reload the panel and verify core routes load and remain responsive;
+4. inspect browser network/runtime activity for several minutes and verify
+   LockLearn creates no permanent polling loop or separate mobile/network
+   connection; ordinary HA WebSocket traffic is expected;
+5. exercise Home, Learn, Quiz, Stats and management navigation; verify no
+   regressions from Playwright/package changes;
+6. measure/record an ordinary initial panel load and a few route switches if the
+   browser harness exposes stable timing, but do not invent a new normative
+   frontend timing budget;
+7. verify browser memory/network activity does not grow obviously under a short
+   idle period; report harness limits honestly;
+8. inspect LockLearn logs after the smoke;
+9. clean temporary QA fixtures and SSH_ASKPASS helper.
 
-No product bug was reproduced, so no correction or post-fix gate was needed.
-P5.9 must not start without the maintainer's explicit decision.
+The §101 minimum/latest HA compatibility gate is already automated and does not
+need a real HA 2025.2 installation during this smoke unless one is actually
+available.
+
+After REAL HA PASS:
+- mark P5.9 PASS;
+- mark the P5 exit gate complete if no new product failure is found;
+- **do not start P6.1 without explicit the maintainer decision**.
 
 Deployment safety:
 - deploy the complete `custom_components/locklearn/` tree;
