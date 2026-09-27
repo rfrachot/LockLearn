@@ -14,6 +14,7 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.locklearn.const import DATA_RUNTIME, DOMAIN
+from custom_components.locklearn.observability import INTERNAL_METRICS
 from custom_components.locklearn.core.scheduler import SchedulerService
 from custom_components.locklearn.storage import (
     NotificationTargetRecord,
@@ -1742,3 +1743,37 @@ async def test_preview_websocket_is_profile_acl_read_only(
     assert invalid["error"]["code"] == "locklearn/invalid_request"
 
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_scheduler_generation_records_internal_timing(
+    tmp_path: Path,
+) -> None:
+    """The production slot generator emits a bounded aggregate timing."""
+    clock = FixedClock(datetime(2026, 9, 24, 5, 0, tzinfo=UTC))
+    storage = await _storage(tmp_path, clock)
+    try:
+        await _profile(
+            storage,
+            now=clock.now(),
+            settings={"daily_push_budget": 2},
+        )
+        service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=clock,
+        )
+        INTERNAL_METRICS.clear()
+        await service.async_preview(
+            profile_id="profile-scheduler",
+            local_date=date(2026, 9, 24),
+        )
+        metric = INTERNAL_METRICS.snapshot()[
+            "scheduler.slot_generation_ms"
+        ]
+        assert metric["count"] == 1
+        assert metric["p95_ms"] is not None
+    finally:
+        await storage.async_close()

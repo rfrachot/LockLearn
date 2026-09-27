@@ -50,6 +50,10 @@
     "backup_cache_anomaly": {
       "title": "Unexpected reconstructible cache under persistent state",
       "description": "LockLearn found {cache_bytes} bytes of reconstructible cache under persistent state storage. This may enlarge backups unexpectedly. Use the LockLearn storage options to purge/rebuild cache after inspecting the installation."
+    },
+    "dataset_cache_budget_warning": {
+      "title": "Dataset cache is above the recommended budget",
+      "description": "LockLearn is using {cache_bytes} bytes of reconstructible dataset cache, above the configured warning budget of {budget_bytes} bytes. Installed content remains usable; review installed datasets if disk pressure matters."
     }
   },
   "options": {

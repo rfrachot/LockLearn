@@ -166,6 +166,7 @@ class LockLearnRuntime:
                 # and preserve the empty/last-known-good generation.
                 with suppress(Exception):
                     await datasets.async_install_bundled(bundled)
+            await datasets.async_statuses()
             review_policy = ReviewPolicyV1()
             acl = ProfileACLService(storage.repositories.profiles)
             selection = SelectionConstraintService(storage.repositories.tracks)

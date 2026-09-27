@@ -21,6 +21,9 @@ from custom_components.locklearn.datasets import (
     TrustStore,
     validate_dataset_package,
 )
+from custom_components.locklearn.datasets.storage_budget import (
+    activation_required_free_disk,
+)
 from datasets.pipeline import (
     BuildContext,
     DatasetBuildError,
@@ -81,6 +84,7 @@ def _spec(
     *,
     version: str = "1.0.0",
     built_at: datetime = _BUILT_AT,
+    required_free_disk: int = 1024,
 ) -> DatasetBuildSpec:
     return DatasetBuildSpec(
         dataset_id="locklearn:dataset:pipeline-test",
@@ -90,7 +94,7 @@ def _spec(
         build_tool_version="1.0.0",
         signing_key_id="test-pipeline-2026",
         sources=(_source(path, built_at),),
-        required_free_disk=1024,
+        required_free_disk=required_free_disk,
     )
 
 
@@ -296,3 +300,41 @@ def test_multifile_snapshot_and_normalization_ignore_config_file_order(tmp_path:
     assert first.raw_sha256 == second.raw_sha256
     assert first.normalized_sha256 == second.normalized_sha256
     assert first.normalized_path.read_bytes() == second.normalized_path.read_bytes()
+
+
+def test_manifest_free_disk_floor_tracks_generated_database_size(
+    tmp_path: Path,
+) -> None:
+    """New manifests cannot under-declare the V1 activation space floor."""
+    raw = _editorial(tmp_path / "editorial.jsonl")
+    result = build_dataset(
+        _spec(raw, required_free_disk=0),
+        EmptyRecipe(),
+        private_key=_PRIVATE_KEY,
+        output_directory=tmp_path / "dist-floor",
+        repository_root=ROOT,
+        workspace=tmp_path / "workspace-floor",
+    )
+    database_file = next(
+        item for item in result.manifest.files if item.path == "dataset.db"
+    )
+    assert result.manifest.required_free_disk == activation_required_free_disk(
+        database_file.size
+    )
+
+
+def test_manifest_preserves_stricter_explicit_free_disk_requirement(
+    tmp_path: Path,
+) -> None:
+    """Dataset-specific policy may exceed the central V1 activation floor."""
+    raw = _editorial(tmp_path / "editorial.jsonl")
+    explicit = 96 * 1024 * 1024
+    result = build_dataset(
+        _spec(raw, required_free_disk=explicit),
+        EmptyRecipe(),
+        private_key=_PRIVATE_KEY,
+        output_directory=tmp_path / "dist-explicit",
+        repository_root=ROOT,
+        workspace=tmp_path / "workspace-explicit",
+    )
+    assert result.manifest.required_free_disk == explicit

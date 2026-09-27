@@ -50,6 +50,10 @@
     "backup_cache_anomaly": {
       "title": "Cache reconstructible inattendu dans le stockage persistant",
       "description": "LockLearn a trouvé {cache_bytes} octets de cache reconstructible dans le stockage persistant. Cela peut augmenter inutilement la taille des sauvegardes. Utilisez les options de stockage LockLearn pour purger/reconstruire le cache après vérification."
+    },
+    "dataset_cache_budget_warning": {
+      "title": "Le cache des datasets dépasse le budget recommandé",
+      "description": "LockLearn utilise {cache_bytes} octets de cache de datasets reconstructible, au-dessus du seuil d’avertissement configuré de {budget_bytes} octets. Le contenu installé reste utilisable ; vérifiez les datasets installés si l’espace disque devient contraignant."
     }
   },
   "options": {

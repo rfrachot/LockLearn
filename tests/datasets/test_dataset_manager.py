@@ -435,3 +435,115 @@ async def test_invalid_signature_reports_distinct_repair(
         assert diagnostics["error_types"] == ("signature_invalid",)
     finally:
         await storage.async_close()
+
+
+async def test_runtime_free_disk_floor_fails_closed_before_activation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Runtime recomputes an activation floor for historical manifests."""
+    storage, manager, transport = await _manager(tmp_path)
+    try:
+        artifact = _artifact(tmp_path, "1.0.0")
+        transport.artifacts[
+            "https://example.invalid/1.0.0.zip"
+        ] = artifact
+        transport.catalogs[
+            "https://example.invalid/catalog.json"
+        ] = _catalog({"1.0.0": artifact})
+        await manager.async_refresh()
+        active_before = (
+            storage.content_generations.active_metadata.generation_id
+        )
+
+        class DiskUsage:
+            total = 1024
+            used = 1024
+            free = 0
+
+        monkeypatch.setattr(
+            manager_module.shutil,
+            "disk_usage",
+            lambda _path: DiskUsage(),
+        )
+        with pytest.raises(
+            DatasetInstallError,
+            match="insufficient free disk",
+        ):
+            await manager.async_install(_DATASET_ID)
+
+        assert (
+            storage.content_generations.active_metadata.generation_id
+            == active_before
+        )
+        assert await storage.async_dataset_inventory() == []
+    finally:
+        await storage.async_close()
+
+
+async def test_aggregate_dataset_cache_budget_warning_is_created_and_cleared(
+    tmp_path: Path,
+) -> None:
+    """The cache budget warns without blocking already-installed content."""
+    storage = SQLiteStorage(
+        StoragePaths(
+            tmp_path / "state" / "state.db",
+            tmp_path / "content" / "current.db",
+        )
+    )
+    await storage.async_open()
+    created: list[tuple[str, str, Mapping[str, str]]] = []
+    cleared: list[str] = []
+
+    async def report(
+        issue_id: str,
+        translation_key: str,
+        placeholders: Mapping[str, str],
+    ) -> None:
+        created.append(
+            (issue_id, translation_key, placeholders)
+        )
+
+    async def clear(issue_id: str) -> None:
+        cleared.append(issue_id)
+
+    manager = DatasetManager(
+        storage=storage,
+        transport=FakeTransport(),
+        definitions=(
+            DatasetDefinition(
+                dataset_id=_DATASET_ID,
+                name="Manager fixture",
+                catalog_url="https://example.invalid/catalog.json",
+                artifact_hosts=frozenset({"example.invalid"}),
+            ),
+        ),
+        trust_store=_trust_store(),
+        policy=OfficialRegistryPolicy.from_repository(ROOT),
+        issue_callback=report,
+        issue_clear_callback=clear,
+        cache_warning_bytes=32,
+    )
+    try:
+        manager._packages_root.mkdir(parents=True, exist_ok=True)
+        cached = manager._packages_root / "synthetic.db"
+        cached.write_bytes(b"x" * 64)
+
+        await manager.async_statuses()
+        assert any(
+            issue_id == "dataset_cache_budget"
+            and key == "dataset_cache_budget_warning"
+            and placeholders["cache_bytes"] == "64"
+            and placeholders["budget_bytes"] == "32"
+            for issue_id, key, placeholders in created
+        )
+        diagnostics = await manager.async_diagnostic_status()
+        assert diagnostics["cache_budget_exceeded"] is True
+
+        cached.unlink()
+        await manager.async_statuses()
+        assert "dataset_cache_budget" in cleared
+        diagnostics = await manager.async_diagnostic_status()
+        assert diagnostics["cache_budget_exceeded"] is False
+    finally:
+        await storage.async_close()
