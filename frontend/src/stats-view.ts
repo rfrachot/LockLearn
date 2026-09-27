@@ -19,7 +19,32 @@ export function formatPercent(value: number | null): string {
 }
 
 export function recentDaily(rows: StatsDailyRecord[], limit = 14): StatsDailyRecord[] {
-  return rows.slice(-Math.max(0, limit)).reverse();
+  if (limit <= 0) return [];
+  const byDate = new Map<string, StatsDailyRecord>();
+  for (const row of rows) {
+    const existing = byDate.get(row.local_date);
+    if (existing === undefined) {
+      byDate.set(row.local_date, { ...row });
+      continue;
+    }
+    existing.learning_exposures += row.learning_exposures;
+    existing.verified_retrievals += row.verified_retrievals;
+    existing.self_known += row.self_known;
+    existing.verified_correct += row.verified_correct;
+    existing.verified_wrong += row.verified_wrong;
+    existing.quiz_total += row.quiz_total;
+    existing.free_text_total += row.free_text_total;
+    existing.hints_used += row.hints_used;
+    existing.new_cards += row.new_cards;
+    existing.reviewed_cards += row.reviewed_cards;
+    existing.relearning_cards += row.relearning_cards;
+    existing.leech_cards += row.leech_cards;
+    existing.active_seconds += row.active_seconds;
+  }
+  return [...byDate.values()]
+    .sort((left, right) => left.local_date.localeCompare(right.local_date))
+    .slice(-limit)
+    .reverse();
 }
 
 export class LockLearnStatsView extends LitElement {
@@ -92,7 +117,9 @@ export class LockLearnStatsView extends LitElement {
     this.loading = true;
     this.errorMessage = "";
     try {
-      const tracks = await listTracks(this.hass, this.profile.profile_id);
+      const tracks = (await listTracks(this.hass, this.profile.profile_id)).filter(
+        (track) => track.status === "active",
+      );
       const selected =
         this.selectedTrackId && tracks.some((track) => track.track_id === this.selectedTrackId)
           ? this.selectedTrackId
