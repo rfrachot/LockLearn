@@ -1,5 +1,24 @@
 # AGENT_HANDOFF.md
 
+## P6.4 qualification — 2026-09-27
+
+P6.4 review/correction is complete on `feat/p6-hardening`; P6.5 was not
+started. The review added owner-bound import claims to prevent concurrent
+duplicate applies, complete profile-state purge coverage, content lifecycle
+status mapping, installation-binding stripping, strict settings/JSON checks,
+private-root safety, hostile ZIP regressions and authenticated HTTP route
+coverage. Existing unrelated handoff history below is preserved.
+
+Verification on this tree:
+- targeted backend: `54 passed`;
+- backend full gate: `433 passed`, Ruff format/check PASS, mypy PASS, resource
+  validation PASS;
+- frontend: typecheck PASS, Vitest `15 files / 48 tests` PASS, Vite build PASS;
+- generated bundle: `custom_components/locklearn/frontend/locklearn-panel.js`,
+  rebuilt from current frontend sources; bundle budget and no-polling checks
+  PASS;
+- no push or remote PR action performed.
+
 ## Current state
 
 Branch: `feat/p6-hardening`.

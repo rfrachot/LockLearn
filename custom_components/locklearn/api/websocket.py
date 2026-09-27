@@ -411,9 +411,7 @@ async def ws_profiles_update(
     {
         vol.Required("type"): "locklearn/profiles/delete",
         vol.Required("profile_id"): str,
-        vol.Optional("action", default="archive"): vol.In(
-            ("archive", "delete_permanently")
-        ),
+        vol.Optional("action", default="archive"): vol.In(("archive", "delete_permanently")),
         vol.Optional("confirmation"): str,
     }
 )

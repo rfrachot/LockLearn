@@ -8,17 +8,24 @@ import sqlite3
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
+from aiohttp import web
+from homeassistant.components.http import KEY_HASS, KEY_HASS_USER
 
+from custom_components.locklearn import profile_transfer_http
+from custom_components.locklearn.const import DATA_RUNTIME, DOMAIN
 from custom_components.locklearn.core.profiles import ProfileService, ProfileValidationError
 from custom_components.locklearn.profile_transfer import (
     ProfileTransferError,
     ProfileTransferService,
     ProfileTransferStore,
+    _import_profile_rows,
+    _read_archive,
 )
 from custom_components.locklearn.storage import SQLiteStorage, StoragePaths
-
 
 _NOW = "2026-09-27T12:00:00+00:00"
 
@@ -45,12 +52,35 @@ async def _seed_private_profile(storage: SQLiteStorage) -> None:
             """INSERT INTO profiles(
                    profile_id, name, preset, timezone, status, settings_json,
                    created_at_utc, updated_at_utc
-               ) VALUES (?, ?, 'standard', 'Europe/Paris', 'active', '{}', ?, ?)""",
-            ("source-profile", "Private learner", _NOW, _NOW),
+               ) VALUES (?, ?, 'standard', 'Europe/Paris', 'active', ?, ?, ?)""",
+            (
+                "source-profile",
+                "Private learner",
+                '{"_locklearn_personal_profile":true,"scheduler":{"active_windows":[{"start":"08:00","end":"20:00"}],"receptive_when":"{{ is_state(\'binary_sensor.source\', \'on\') }}","routine_triggers":{"entity_ids":["automation.source"]},"target_ids":["target-1"]}}',
+                _NOW,
+                _NOW,
+            ),
         )
         connection.execute(
             """INSERT INTO profile_members(profile_id, ha_user_id, role, created_at_utc)
                VALUES ('source-profile', 'source-owner', 'owner', ?)""",
+            (_NOW,),
+        )
+        connection.execute(
+            """INSERT INTO notification_targets(
+                   target_id, profile_id, device_registry_id, platform, friendly_name,
+                   created_at_utc, updated_at_utc
+               ) VALUES ('target-1', 'source-profile', 'device-1', 'mobile_app', 'Phone', ?, ?)""",
+            (_NOW, _NOW),
+        )
+        connection.execute(
+            """INSERT INTO scheduler_config(
+                   profile_id, version, timezone, active_days_json, active_windows_json,
+                   minimum_gap_seconds, maximum_notifications_per_hour, quiet_hours_json,
+                   updated_at_utc
+               ) VALUES ('source-profile', 1, 'Europe/Paris', '[0,1,2,3,4,5,6]',
+                        '[{"start":"08:00","end":"20:00"}]', 3600, 1,
+                        '{"start":"22:00","end":"08:00"}', ?)""",
             (_NOW,),
         )
         connection.execute(
@@ -59,7 +89,7 @@ async def _seed_private_profile(storage: SQLiteStorage) -> None:
                    status, priority, settings_json, created_at_utc, updated_at_utc
                ) VALUES (
                    'source-track', 'source-profile', 'Private track', 'ja', 'fr',
-                   'active', 1, '{}', ?, ?
+                   'active', 1, '{"card_selection_mode":"explicit","scheduler":{"learning_count":1,"quiz_count":2,"target_ids":["target-1"]}}', ?, ?
                )""",
             (_NOW, _NOW),
         )
@@ -171,6 +201,13 @@ async def _seed_private_profile(storage: SQLiteStorage) -> None:
                )""",
             (_NOW, _NOW),
         )
+        connection.execute(
+            """INSERT INTO receptivity_samples(
+                   slot_id, profile_id, target_id, delivered_at_utc, timezone_name,
+                   weekday, local_hour, updated_at_utc
+               ) VALUES ('slot-1', 'source-profile', 'target-1', ?, 'Europe/Paris', 6, 14, ?)""",
+            (_NOW, _NOW),
+        )
         connection.commit()
 
     await storage._async_writer(seed)
@@ -212,6 +249,12 @@ async def test_export_import_round_trip_remaps_identity_and_preserves_tombstones
         assert dry_run.review_count == 1
         assert dry_run.session_count == 1
         assert dry_run.missing_card_count == 1
+        assert (
+            await storage._async_reader(
+                lambda connection: connection.execute("SELECT COUNT(*) FROM profiles").fetchone()[0]
+            )
+            == 1
+        )
 
         result = await service.async_apply_import(
             upload_token=uploaded.token,
@@ -223,7 +266,7 @@ async def test_export_import_round_trip_remaps_identity_and_preserves_tombstones
 
         def inspect(connection: sqlite3.Connection) -> dict[str, object]:
             profile = connection.execute(
-                "SELECT name, status FROM profiles WHERE profile_id = ?",
+                "SELECT name, status, settings_json FROM profiles WHERE profile_id = ?",
                 (imported_profile_id,),
             ).fetchone()
             member = connection.execute(
@@ -237,6 +280,10 @@ async def test_export_import_round_trip_remaps_identity_and_preserves_tombstones
                 (imported_profile_id,),
             ).fetchone()
             assert track is not None
+            track_settings = connection.execute(
+                "SELECT settings_json FROM tracks WHERE track_id = ?",
+                (str(track[0]),),
+            ).fetchone()
             progress = connection.execute(
                 """SELECT content_status FROM progress
                    WHERE profile_id = ?""",
@@ -263,6 +310,7 @@ async def test_export_import_round_trip_remaps_identity_and_preserves_tombstones
                 "profile": profile,
                 "member": member,
                 "track": track,
+                "track_settings": track_settings,
                 "progress": progress,
                 "rule_count": rule_count,
                 "weight_count": weight_count,
@@ -271,15 +319,26 @@ async def test_export_import_round_trip_remaps_identity_and_preserves_tombstones
             }
 
         values = await storage._async_reader(inspect)
-        assert values["profile"] == ("Imported learner", "archived")
+        track_values = cast(tuple[object, ...], values["track"])
+        session_values = cast(tuple[object, ...], values["session"])
+        review_values = cast(tuple[str, str], values["review"])
+        profile_values = cast(tuple[str, str, str], values["profile"])
+        imported_settings = json.loads(profile_values[2])
+        track_settings = json.loads(cast(tuple[str], values["track_settings"])[0])
+        assert profile_values[0:2] == ("Imported learner", "archived")
+        assert "_locklearn_personal_profile" not in imported_settings
+        assert "routine_triggers" not in imported_settings["scheduler"]
+        assert "receptive_when" not in imported_settings["scheduler"]
+        assert "target_ids" not in imported_settings["scheduler"]
+        assert "target_ids" not in track_settings["scheduler"]
         assert values["member"] == ("import-owner", "owner")
-        assert values["track"][1] == "archived"
+        assert track_values[1] == "archived"
         assert values["progress"] == ("removed",)
         assert values["rule_count"] == 1
         assert values["weight_count"] == 1
-        assert values["session"][1] == "paused"
-        assert json.loads(values["review"][0]) == {"state": "learning"}
-        assert json.loads(values["review"][1]) == {"state": "review"}
+        assert session_values[1] == "paused"
+        assert json.loads(review_values[0]) == {"state": "learning"}
+        assert json.loads(review_values[1]) == {"state": "review"}
     finally:
         await store.async_close()
         await storage.async_close()
@@ -311,6 +370,160 @@ async def test_import_rejects_hostile_archive_and_owner_mismatch(tmp_path: Path)
     finally:
         await store.async_close()
         await storage.async_close()
+
+
+async def test_import_preserves_superseded_card_lifecycle_status(tmp_path: Path) -> None:
+    storage = await _storage(tmp_path)
+    store = ProfileTransferStore(tmp_path / "private-transfer")
+    await store.async_initialize()
+    service = ProfileTransferService(storage, store)
+    try:
+        await _seed_private_profile(storage)
+        transfer = await service.async_create_export(
+            profile_id="source-profile",
+            owner_user_id="source-owner",
+            include_reviews=False,
+            include_sessions=False,
+        )
+        consumed = await store.async_consume_export(transfer.token, "source-owner")
+        assert consumed is not None
+        archive_path = tmp_path / "superseded.zip"
+        archive_path.write_bytes(consumed[1])
+        document = _read_archive(archive_path)
+        result = await storage._async_writer(
+            lambda connection: _import_profile_rows(
+                connection,
+                document,
+                owner_user_id="import-owner",
+                existing_cards={"missing-card": "superseded"},
+                pack_generations={},
+                name_override=None,
+            )
+        )
+
+        assert (
+            await storage._async_reader(
+                lambda connection: connection.execute(
+                    "SELECT content_status FROM progress WHERE profile_id = ?",
+                    (str(result["profile_id"]),),
+                ).fetchone()[0]
+            )
+            == "superseded"
+        )
+    finally:
+        await store.async_close()
+        await storage.async_close()
+
+
+@pytest.mark.parametrize(
+    ("member_name", "expected"),
+    [
+        ("/profile.json", "unsafe ZIP member path"),
+        ("..\\profile.json", "unsafe ZIP member name"),
+        ("../profile.json", "unsafe ZIP member path"),
+        ("unexpected.json", "unexpected profile archive member"),
+    ],
+)
+def test_hostile_archive_member_names_are_rejected(
+    tmp_path: Path,
+    member_name: str,
+    expected: str,
+) -> None:
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        archive.writestr(member_name, b"{}")
+    path = tmp_path / "hostile.zip"
+    path.write_bytes(output.getvalue())
+    with pytest.raises(ProfileTransferError, match=expected):
+        _read_archive(path)
+
+
+@pytest.mark.parametrize("kind", ("duplicate", "symlink", "dos_directory", "bzip2"))
+def test_hostile_archive_members_are_rejected(tmp_path: Path, kind: str) -> None:
+    output = io.BytesIO()
+    compression = zipfile.ZIP_BZIP2 if kind == "bzip2" else zipfile.ZIP_STORED
+    with zipfile.ZipFile(output, "w", compression=compression) as archive:
+        if kind == "duplicate":
+            archive.writestr("profile.json", b"{}")
+            archive.writestr("profile.json", b"{}")
+        else:
+            info = zipfile.ZipInfo("profile.json")
+            info.compress_type = compression
+            if kind == "symlink":
+                info.create_system = 3
+                info.external_attr = (0o120777 << 16) | 0xA000
+            elif kind == "dos_directory":
+                info.create_system = 0
+                info.external_attr = 0x10
+            archive.writestr(info, b"{}")
+    path = tmp_path / f"hostile-{kind}.zip"
+    path.write_bytes(output.getvalue())
+    with pytest.raises(ProfileTransferError):
+        _read_archive(path)
+
+
+async def test_import_capability_claim_is_owner_bound_and_one_shot(tmp_path: Path) -> None:
+    store = ProfileTransferStore(tmp_path / "private-transfer")
+    await store.async_initialize()
+    try:
+        uploaded = await store.async_store_import(
+            owner_user_id="owner-a",
+            archive_bytes=b"not-a-zip",
+        )
+        assert await store.async_claim_import(uploaded.token, "owner-b") is None
+        claimed = await store.async_claim_import(uploaded.token, "owner-a")
+        assert claimed == uploaded
+        assert await store.async_resolve_import(uploaded.token, "owner-a") is None
+        await store.async_delete_import(uploaded.token, "owner-a")
+        assert await store.async_claim_import(uploaded.token, "owner-a") is None
+    finally:
+        await store.async_close()
+
+
+async def test_http_export_route_requires_auth_owner_and_consumes_once(
+    tmp_path: Path, monkeypatch
+) -> None:
+    store = ProfileTransferStore(tmp_path / "private-transfer")
+    await store.async_initialize()
+    monkeypatch.setattr(profile_transfer_http, "LockLearnRuntime", SimpleNamespace)
+    try:
+        transfer = await store.async_create_export(
+            owner_user_id="owner-a",
+            profile_id="profile-a",
+            archive_bytes=b"private-archive",
+            filename="locklearn-profile.zip",
+        )
+        runtime = SimpleNamespace(profile_transfers=SimpleNamespace(store=store))
+        hass = SimpleNamespace(data={DOMAIN: {DATA_RUNTIME: runtime}})
+
+        def request_for(user_id: str | None) -> web.Request:
+            return cast(
+                web.Request,
+                SimpleNamespace(
+                    app={KEY_HASS: hass},
+                    get=lambda key: (
+                        None
+                        if user_id is None or key != KEY_HASS_USER
+                        else SimpleNamespace(id=user_id)
+                    ),
+                ),
+            )
+
+        view = profile_transfer_http.ProfileExportDownloadView()
+        assert view.requires_auth is True
+        with pytest.raises(web.HTTPUnauthorized):
+            profile_transfer_http._authenticated_user_id(request_for(None))
+        with pytest.raises(web.HTTPNotFound):
+            await view.get(request_for("owner-b"), transfer.token)
+
+        response = await view.get(request_for("owner-a"), transfer.token)
+        assert response.status == 200
+        assert response.body == b"private-archive"
+        assert response.headers["Cache-Control"] == "no-store, max-age=0"
+        with pytest.raises(web.HTTPNotFound):
+            await view.get(request_for("owner-a"), transfer.token)
+    finally:
+        await store.async_close()
 
 
 async def test_archive_quiesces_delivery_state_and_permanent_delete_requires_confirmation(
@@ -369,12 +582,15 @@ async def test_archive_quiesces_delivery_state_and_permanent_delete_requires_con
                 "profiles",
                 "profile_members",
                 "tracks",
+                "notification_targets",
+                "scheduler_config",
                 "progress",
                 "review_events",
                 "user_annotations",
                 "sessions",
                 "stats_daily",
                 "scheduled_slots",
+                "receptivity_samples",
                 "notification_interactions",
                 "audit_events",
             )
@@ -388,9 +604,7 @@ async def test_archive_quiesces_delivery_state_and_permanent_delete_requires_con
                     sql = "SELECT COUNT(*) FROM tracks WHERE profile_id = ?"
                 else:
                     sql = f"SELECT COUNT(*) FROM {table} WHERE profile_id = ?"
-                result[table] = int(
-                    connection.execute(sql, ("source-profile",)).fetchone()[0]
-                )
+                result[table] = int(connection.execute(sql, ("source-profile",)).fetchone()[0])
             return result
 
         assert all(count == 0 for count in (await storage._async_reader(remaining)).values())

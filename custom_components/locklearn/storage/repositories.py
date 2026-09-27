@@ -419,6 +419,7 @@ class ProfilesRepository:
                     return False
                 for table in (
                     "notification_interactions",
+                    "receptivity_samples",
                     "scheduled_slots",
                     "stats_daily",
                     "exam_attempts",

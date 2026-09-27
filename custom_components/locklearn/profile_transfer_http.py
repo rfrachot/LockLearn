@@ -10,7 +10,7 @@ from homeassistant.components.http import KEY_HASS, KEY_HASS_USER, HomeAssistant
 from homeassistant.core import HomeAssistant
 
 from .const import DATA_RUNTIME, DOMAIN
-from .profile_transfer import ProfileTransferError, _MAX_ARCHIVE_BYTES
+from .profile_transfer import _MAX_ARCHIVE_BYTES, ProfileTransferError
 from .runtime import LockLearnRuntime
 
 

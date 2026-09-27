@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import hashlib
 import json
+import math
 import os
 import secrets
 import shutil
@@ -21,6 +22,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .const import CONTENT_SCHEMA_VERSION, DB_SCHEMA_VERSION, INTEGRATION_VERSION
+from .core.profiles import ProfileValidationError, _validate_profile_settings
 from .storage import SQLiteStorage
 
 PROFILE_EXPORT_SCHEMA_VERSION = 1
@@ -75,6 +77,7 @@ class ProfileTransferStore:
         self.root = root
         self._exports: dict[str, PrivateTransfer] = {}
         self._imports: dict[str, PrivateTransfer] = {}
+        self._claimed_imports: set[str] = set()
         self._lock = asyncio.Lock()
         self._cleanup_task: asyncio.Task[None] | None = None
 
@@ -82,7 +85,16 @@ class ProfileTransferStore:
     def private_runtime_root(cls, config_dir: str) -> ProfileTransferStore:
         """Place private transfers outside HA config/backup storage."""
         namespace = hashlib.sha256(config_dir.encode("utf-8")).hexdigest()[:16]
-        return cls(Path(tempfile.gettempdir()) / "locklearn-private" / namespace)
+        temp_root = Path(tempfile.gettempdir()).resolve()
+        config_root = Path(config_dir).resolve()
+        root = temp_root / "locklearn-private" / namespace
+        try:
+            root.resolve().relative_to(config_root)
+        except ValueError:
+            return cls(root)
+        raise ProfileTransferError(
+            "private transfer storage must be outside the HA config directory"
+        )
 
     async def async_initialize(self) -> None:
         await asyncio.to_thread(self._initialize_sync)
@@ -102,6 +114,7 @@ class ProfileTransferStore:
         async with self._lock:
             self._exports.clear()
             self._imports.clear()
+            self._claimed_imports.clear()
         await asyncio.to_thread(shutil.rmtree, self.root, True)
 
     async def _async_cleanup_loop(self) -> None:
@@ -111,6 +124,12 @@ class ProfileTransferStore:
                 await self._async_cleanup_locked()
 
     def _initialize_sync(self) -> None:
+        try:
+            mode = self.root.lstat()
+        except FileNotFoundError:
+            mode = None
+        if mode is not None and (stat.S_ISLNK(mode.st_mode) or not stat.S_ISDIR(mode.st_mode)):
+            raise ProfileTransferError("private transfer root is not a real directory")
         self.root.mkdir(parents=True, exist_ok=True)
         os.chmod(self.root, 0o700)
         for candidate in self.root.iterdir():
@@ -195,8 +214,30 @@ class ProfileTransferStore:
         async with self._lock:
             await self._async_cleanup_locked()
             record = self._imports.get(token)
-            if record is None or record.owner_user_id != owner_user_id:
+            if (
+                record is None
+                or record.owner_user_id != owner_user_id
+                or token in self._claimed_imports
+            ):
                 return None
+            return record
+
+    async def async_claim_import(
+        self,
+        token: str,
+        owner_user_id: str,
+    ) -> PrivateTransfer | None:
+        """Claim one import upload so concurrent apply operations cannot duplicate it."""
+        async with self._lock:
+            await self._async_cleanup_locked()
+            record = self._imports.get(token)
+            if (
+                record is None
+                or record.owner_user_id != owner_user_id
+                or token in self._claimed_imports
+            ):
+                return None
+            self._claimed_imports.add(token)
             return record
 
     async def async_delete_import(self, token: str, owner_user_id: str) -> None:
@@ -205,14 +246,13 @@ class ProfileTransferStore:
             if record is None or record.owner_user_id != owner_user_id:
                 return
             self._imports.pop(token, None)
+            self._claimed_imports.discard(token)
             await asyncio.to_thread(record.path.unlink, missing_ok=True)
 
     async def async_purge_profile(self, profile_id: str) -> None:
         async with self._lock:
             doomed = [
-                token
-                for token, record in self._exports.items()
-                if record.profile_id == profile_id
+                token for token, record in self._exports.items() if record.profile_id == profile_id
             ]
             for token in doomed:
                 record = self._exports.pop(token)
@@ -225,6 +265,7 @@ class ProfileTransferStore:
             for token, record in tuple(registry.items()):
                 if record.expires_at <= now or not record.path.is_file():
                     registry.pop(token, None)
+                    self._claimed_imports.discard(token)
                     expired.append(record)
         for record in expired:
             await asyncio.to_thread(record.path.unlink, missing_ok=True)
@@ -379,60 +420,67 @@ class ProfileTransferService:
         owner_user_id: str,
         name_override: str | None = None,
     ) -> dict[str, object]:
-        record = await self.store.async_resolve_import(upload_token, owner_user_id)
+        record = await self.store.async_claim_import(upload_token, owner_user_id)
         if record is None:
             raise ProfileTransferError("profile import upload is unavailable or expired")
-        document = await asyncio.to_thread(_read_archive, record.path)
-        dry_run = await self._async_dry_run_document(document)
+        try:
+            document = await asyncio.to_thread(_read_archive, record.path)
+            dry_run = await self._async_dry_run_document(document)
 
-        tracks = _require_list(document, "tracks")
-        progress = _require_list(document, "progress")
-        all_card_ids = {
-            str(row["card_key"])
-            for row in progress
-            if isinstance(row, dict) and isinstance(row.get("card_key"), str)
-        }
-        pack_ids = {
-            str(row["pack_version_id"])
-            for row in tracks
-            if isinstance(row, dict) and isinstance(row.get("pack_version_id"), str)
-        }
-
-        def current_content(connection: sqlite3.Connection) -> tuple[set[str], dict[str, str]]:
-            cards = {
-                str(row[0])
-                for row in connection.execute(
-                    "SELECT card_key FROM content.card_definitions"
-                ).fetchall()
-                if str(row[0]) in all_card_ids
+            tracks = _require_list(document, "tracks")
+            progress = _require_list(document, "progress")
+            all_card_ids = {
+                str(row["card_key"])
+                for row in progress
+                if isinstance(row, dict) and isinstance(row.get("card_key"), str)
             }
-            generation = connection.execute(
-                "SELECT generation_id FROM content.generation_metadata WHERE singleton = 1"
-            ).fetchone()
-            generation_id = "" if generation is None else str(generation[0])
-            packs = {
-                str(row[0]): generation_id
-                for row in connection.execute(
-                    "SELECT pack_version_id FROM content.pack_versions"
-                ).fetchall()
-                if str(row[0]) in pack_ids
+            pack_ids = {
+                str(row["pack_version_id"])
+                for row in tracks
+                if isinstance(row, dict) and isinstance(row.get("pack_version_id"), str)
             }
-            return cards, packs
 
-        existing_cards, pack_generations = await self.storage._async_reader(current_content)
-        result = await self.storage._async_writer(
-            lambda connection: _import_profile_rows(
-                connection,
-                document,
-                owner_user_id=owner_user_id,
-                existing_cards=existing_cards,
-                pack_generations=pack_generations,
-                name_override=name_override,
+            def current_content(
+                connection: sqlite3.Connection,
+            ) -> tuple[dict[str, str], dict[str, str]]:
+                cards = {
+                    str(row[0]): _content_status(str(row[1]))
+                    for row in connection.execute(
+                        """SELECT card_key, lifecycle_status
+                           FROM content.card_definitions"""
+                    ).fetchall()
+                    if str(row[0]) in all_card_ids
+                }
+                generation = connection.execute(
+                    "SELECT generation_id FROM content.generation_metadata WHERE singleton = 1"
+                ).fetchone()
+                generation_id = "" if generation is None else str(generation[0])
+                packs = {
+                    str(row[0]): generation_id
+                    for row in connection.execute(
+                        "SELECT pack_version_id FROM content.pack_versions"
+                    ).fetchall()
+                    if str(row[0]) in pack_ids
+                }
+                return cards, packs
+
+            existing_cards, pack_generations = await self.storage._async_reader(current_content)
+            result = await self.storage._async_writer(
+                lambda connection: _import_profile_rows(
+                    connection,
+                    document,
+                    owner_user_id=owner_user_id,
+                    existing_cards=existing_cards,
+                    pack_generations=pack_generations,
+                    name_override=name_override,
+                )
             )
-        )
-        await self.store.async_delete_import(upload_token, owner_user_id)
-        result["dry_run"] = dry_run.as_dict()
-        return result
+            result["dry_run"] = dry_run.as_dict()
+            return result
+        finally:
+            # Apply is deliberately one-shot, including malformed archives and
+            # cancelled/failed operations, so an ambiguous DB outcome cannot be retried.
+            await self.store.async_delete_import(upload_token, owner_user_id)
 
 
 def _write_private_file(path: Path, data: bytes) -> None:
@@ -644,7 +692,9 @@ def _build_archive(payload: dict[str, Any]) -> bytes:
 
 
 def _safe_filename(value: str) -> str:
-    cleaned = "".join(character if character.isalnum() or character in "-_" else "-" for character in value)
+    cleaned = "".join(
+        character if character.isalnum() or character in "-_" else "-" for character in value
+    )
     cleaned = cleaned.strip("-")[:64]
     return cleaned or "profile"
 
@@ -671,18 +721,16 @@ def _inspect_member(info: zipfile.ZipInfo) -> str:
         raise ProfileTransferError("encrypted ZIP members are unsupported")
     if info.compress_type not in {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}:
         raise ProfileTransferError("unsupported ZIP compression")
-    if info.create_system == 3:
-        file_type = stat.S_IFMT(info.external_attr >> 16)
-        if file_type not in {0, stat.S_IFREG}:
-            raise ProfileTransferError("links and special files are forbidden in imports")
+    file_type = stat.S_IFMT(info.external_attr >> 16)
+    if file_type not in {0, stat.S_IFREG}:
+        raise ProfileTransferError("links and special files are forbidden in imports")
+    if info.create_system == 0 and info.external_attr & 0x10:
+        raise ProfileTransferError("directories are forbidden in profile archives")
     if info.file_size > _MAX_MEMBER_BYTES:
         raise ProfileTransferError("profile archive member exceeds the size limit")
     if info.file_size and not info.compress_size:
         raise ProfileTransferError("invalid zero compressed size")
-    if (
-        info.compress_size
-        and info.file_size / info.compress_size > _MAX_EXPANSION_RATIO
-    ):
+    if info.compress_size and info.file_size / info.compress_size > _MAX_EXPANSION_RATIO:
         raise ProfileTransferError("profile archive exceeds the expansion-ratio limit")
     return name
 
@@ -704,9 +752,7 @@ def _read_archive(path: Path) -> dict[str, Any]:
                     raise ProfileTransferError("duplicate profile archive member")
                 folded = name.casefold()
                 if folded in casefolded:
-                    raise ProfileTransferError(
-                        "case-insensitive profile archive member collision"
-                    )
+                    raise ProfileTransferError("case-insensitive profile archive member collision")
                 casefolded.add(folded)
                 members[name] = info
                 total += info.file_size
@@ -719,7 +765,7 @@ def _read_archive(path: Path) -> dict[str, Any]:
                 )
 
             raw_manifest = archive.read(members["manifest.json"])
-            manifest = json.loads(raw_manifest)
+            manifest = _load_json(raw_manifest, "manifest.json")
             manifest = _require_object(manifest, "manifest")
             if manifest.get("schema_version") != PROFILE_EXPORT_SCHEMA_VERSION:
                 raise ProfileTransferError("unsupported profile export schema version")
@@ -740,7 +786,7 @@ def _read_archive(path: Path) -> dict[str, Any]:
                     raise ProfileTransferError("profile archive member size mismatch")
                 if declared_member.get("sha256") != hashlib.sha256(data).hexdigest():
                     raise ProfileTransferError("profile archive member checksum mismatch")
-                document[name[:-5]] = json.loads(data)
+                document[name[:-5]] = _load_json(data, name)
     except (zipfile.BadZipFile, json.JSONDecodeError, KeyError, OSError) as err:
         if isinstance(err, ProfileTransferError):
             raise
@@ -754,6 +800,76 @@ def _require_object(value: object, field: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ProfileTransferError(f"{field} must be an object")
     return value
+
+
+def _load_json(data: bytes, field: str) -> object:
+    """Decode strict JSON; Python's permissive NaN/Infinity extensions are rejected."""
+    try:
+        return json.loads(
+            data,
+            parse_constant=lambda value: (_ for _ in ()).throw(
+                ProfileTransferError(f"{field} contains a non-finite JSON number: {value}")
+            ),
+        )
+    except ProfileTransferError:
+        raise
+    except json.JSONDecodeError as err:
+        raise ProfileTransferError(f"{field} is not valid JSON") from err
+
+
+_INSTALLATION_BINDING_KEYS = frozenset(
+    {
+        "device_registry_id",
+        "entity_binding",
+        "entity_bindings",
+        "entity_id",
+        "entity_ids",
+        "notify_service",
+        "receptive_when",
+        "routine_trigger",
+        "routine_triggers",
+        "target_id",
+        "target_ids",
+    }
+)
+
+
+def _strip_installation_bindings(value: object) -> object:
+    """Remove HA-installation capabilities from imported configuration JSON."""
+    if isinstance(value, dict):
+        return {
+            str(key): _strip_installation_bindings(item)
+            for key, item in value.items()
+            if str(key) not in _INSTALLATION_BINDING_KEYS
+        }
+    if isinstance(value, list):
+        return [_strip_installation_bindings(item) for item in value]
+    return value
+
+
+def _content_status(value: str) -> str:
+    return value if value in {"active", "removed", "superseded"} else "removed"
+
+
+def _validate_track_settings(settings: object) -> dict[str, Any]:
+    if not isinstance(settings, dict):
+        raise ProfileTransferError("track.settings_json must be an object")
+    scheduler = settings.get("scheduler")
+    if scheduler is not None:
+        if not isinstance(scheduler, dict):
+            raise ProfileTransferError("track.settings_json.scheduler must be an object")
+        unknown = set(scheduler) - {"learning_count", "quiz_count"}
+        if unknown:
+            raise ProfileTransferError(
+                f"track.settings_json.scheduler contains unsupported keys: {sorted(unknown)!r}"
+            )
+        for field in ("learning_count", "quiz_count"):
+            value = scheduler.get(field, 0)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ProfileTransferError(
+                    f"track.settings_json.scheduler.{field} must be an integer >= 0"
+                )
+    return settings
 
 
 def _require_list(document: dict[str, Any], field: str) -> list[dict[str, Any]]:
@@ -784,7 +900,34 @@ def _validate_document(document: dict[str, Any]) -> None:
     settings = profile.get("settings_json")
     if not isinstance(settings, dict):
         raise ProfileTransferError("profile.settings_json must be an object")
-    _require_list(document, "tracks")
+    sanitized_settings = _strip_installation_bindings(settings)
+    if not isinstance(sanitized_settings, dict):
+        raise ProfileTransferError("profile.settings_json must be an object")
+    try:
+        _validate_profile_settings(sanitized_settings)
+    except ProfileValidationError as err:
+        raise ProfileTransferError(f"profile.settings_json is unsupported: {err}") from err
+    tracks = _require_list(document, "tracks")
+    for index, track in enumerate(tracks):
+        settings = track.get("settings_json")
+        _validate_track_settings(_strip_installation_bindings(settings))
+        weights = track.get("weights", [])
+        if not isinstance(weights, list) or any(not isinstance(item, dict) for item in weights):
+            raise ProfileTransferError(f"tracks[{index}].weights must be an array of objects")
+        parsed_weights: list[float] = []
+        for weight in weights:
+            content_type = weight.get("content_type")
+            value = weight.get("weight")
+            if not isinstance(content_type, str) or not content_type.strip():
+                raise ProfileTransferError(f"tracks[{index}].weights.content_type is invalid")
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ProfileTransferError(f"tracks[{index}].weights.weight is invalid")
+            parsed = float(value)
+            if not math.isfinite(parsed) or parsed < 0:
+                raise ProfileTransferError(f"tracks[{index}].weights.weight is invalid")
+            parsed_weights.append(parsed)
+        if parsed_weights and not any(value > 0 for value in parsed_weights):
+            raise ProfileTransferError(f"tracks[{index}].weights must contain a positive weight")
     _require_list(document, "progress")
     _require_list(document, "annotations")
     _require_list(document, "stats")
@@ -811,10 +954,7 @@ def _insert_row(
     quoted = ",".join(columns)
     values = [
         json.dumps(row[column], ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-        if (
-            column.endswith("_json")
-            or column in {"pre_state_snapshot", "post_state_snapshot"}
-        )
+        if (column.endswith("_json") or column in {"pre_state_snapshot", "post_state_snapshot"})
         and not isinstance(row[column], str)
         else row[column]
         for column in columns
@@ -858,7 +998,7 @@ def _import_profile_rows(
     document: dict[str, Any],
     *,
     owner_user_id: str,
-    existing_cards: set[str],
+    existing_cards: dict[str, str],
     pack_generations: dict[str, str],
     name_override: str | None,
 ) -> dict[str, object]:
@@ -901,13 +1041,10 @@ def _import_profile_rows(
     profile["updated_at_utc"] = now
     profile_settings = profile.get("settings_json")
     if isinstance(profile_settings, dict):
-        profile_settings = dict(profile_settings)
-        scheduler_settings = profile_settings.get("scheduler")
-        if isinstance(scheduler_settings, dict):
-            scheduler_settings = dict(scheduler_settings)
-            scheduler_settings.pop("routine_triggers", None)
-            scheduler_settings.pop("receptive_when", None)
-            profile_settings["scheduler"] = scheduler_settings
+        profile_settings = _strip_installation_bindings(profile_settings)
+        if not isinstance(profile_settings, dict):
+            raise ProfileTransferError("profile.settings_json must be an object")
+        profile_settings.pop("_locklearn_personal_profile", None)
         if "allow_unattended_actions" in profile_settings:
             profile_settings["allow_unattended_actions"] = False
         profile["settings_json"] = profile_settings
@@ -944,21 +1081,16 @@ def _import_profile_rows(
             track["status"] = "archived"
             settings = track.get("settings_json")
             if isinstance(settings, dict):
-                settings = dict(settings)
-                scheduler = settings.get("scheduler")
-                if isinstance(scheduler, dict):
-                    scheduler = dict(scheduler)
-                    scheduler.pop("target_ids", None)
-                    settings["scheduler"] = scheduler
+                settings = _strip_installation_bindings(settings)
+                if not isinstance(settings, dict):
+                    raise ProfileTransferError("track.settings_json must be an object")
                 track["settings_json"] = settings
             _insert_row(connection, "tracks", track, _TRACK_COLUMNS)
             imported_track_ids.add(new_track_id)
 
             rule_columns = {
                 str(row[1])
-                for row in connection.execute(
-                    "PRAGMA table_info(track_card_rules)"
-                ).fetchall()
+                for row in connection.execute("PRAGMA table_info(track_card_rules)").fetchall()
             }
             for raw_rule in raw_rules:
                 rule = dict(raw_rule)
@@ -972,9 +1104,7 @@ def _import_profile_rows(
 
             weight_columns = {
                 str(row[1])
-                for row in connection.execute(
-                    "PRAGMA table_info(track_content_weights)"
-                ).fetchall()
+                for row in connection.execute("PRAGMA table_info(track_content_weights)").fetchall()
             }
             for raw_weight in raw_weights:
                 weight = dict(raw_weight)
@@ -1000,8 +1130,7 @@ def _import_profile_rows(
                 )
 
         progress_columns = {
-            str(row[1])
-            for row in connection.execute("PRAGMA table_info(progress)").fetchall()
+            str(row[1]) for row in connection.execute("PRAGMA table_info(progress)").fetchall()
         }
         for raw in progress:
             row = dict(raw)
@@ -1010,9 +1139,7 @@ def _import_profile_rows(
                 continue
             row["profile_id"] = new_profile_id
             row["track_id"] = track_map[source_track]
-            row["content_status"] = (
-                "active" if str(row.get("card_key", "")) in existing_cards else "removed"
-            )
+            row["content_status"] = existing_cards.get(str(row.get("card_key", "")), "removed")
             _insert_row(connection, "progress", row, frozenset(progress_columns))
 
         annotation_columns = {
@@ -1031,8 +1158,7 @@ def _import_profile_rows(
             )
 
         stats_columns = {
-            str(row[1])
-            for row in connection.execute("PRAGMA table_info(stats_daily)").fetchall()
+            str(row[1]) for row in connection.execute("PRAGMA table_info(stats_daily)").fetchall()
         }
         for raw in stats:
             row = dict(raw)
@@ -1044,27 +1170,27 @@ def _import_profile_rows(
             _insert_row(connection, "stats_daily", row, frozenset(stats_columns))
 
         session_columns = {
-            str(row[1])
-            for row in connection.execute("PRAGMA table_info(sessions)").fetchall()
+            str(row[1]) for row in connection.execute("PRAGMA table_info(sessions)").fetchall()
         }
         for raw in sessions:
             if not isinstance(raw, dict):
                 continue
             source_session = str(raw.get("id", ""))
             row = dict(raw)
+            if isinstance(row.get("settings_json"), dict):
+                row["settings_json"] = _strip_installation_bindings(row["settings_json"])
             row["id"] = session_map[source_session]
             row["profile_id"] = new_profile_id
-            source_track = row.get("track_id")
+            session_track_ref = row.get("track_id")
             row["track_id"] = (
-                track_map.get(str(source_track)) if source_track is not None else None
+                track_map.get(str(session_track_ref)) if session_track_ref is not None else None
             )
             if row.get("status") == "active":
                 row["status"] = "paused"
             _insert_row(connection, "sessions", row, frozenset(session_columns))
 
         item_columns = {
-            str(row[1])
-            for row in connection.execute("PRAGMA table_info(session_items)").fetchall()
+            str(row[1]) for row in connection.execute("PRAGMA table_info(session_items)").fetchall()
         }
         for raw in items:
             if not isinstance(raw, dict):
@@ -1092,8 +1218,7 @@ def _import_profile_rows(
             _insert_row(connection, "session_answers", row, frozenset(answer_columns))
 
         review_columns = {
-            str(row[1])
-            for row in connection.execute("PRAGMA table_info(review_events)").fetchall()
+            str(row[1]) for row in connection.execute("PRAGMA table_info(review_events)").fetchall()
         }
         for raw in reviews:
             row = dict(raw)
@@ -1103,9 +1228,9 @@ def _import_profile_rows(
             if source_track not in track_map:
                 continue
             row["track_id"] = track_map[source_track]
-            source_session = row.get("session_id")
+            review_session_ref = row.get("session_id")
             row["session_id"] = (
-                session_map.get(str(source_session)) if source_session is not None else None
+                session_map.get(str(review_session_ref)) if review_session_ref is not None else None
             )
             _insert_row(connection, "review_events", row, frozenset(review_columns))
 
