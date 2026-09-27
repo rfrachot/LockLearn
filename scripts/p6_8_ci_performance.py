@@ -29,9 +29,7 @@ async def _run() -> dict[str, Any]:
         metric: round(median(float(run[metric]) for run in attempts), 3)
         for metric, _budget in GATED_METRICS
     }
-    reference_budget_pass = all(
-        float(medians[metric]) < budget for metric, budget in GATED_METRICS
-    )
+    reference_budget_pass = all(float(medians[metric]) < budget for metric, budget in GATED_METRICS)
     return {
         "policy": {
             "attempts": ATTEMPTS,
