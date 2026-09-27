@@ -9,6 +9,12 @@ All notable changes will be documented here.
   runtime setup, avoiding blocking-call warnings on the HA event loop.
 
 ### Added
+- P6.7 performance/scale hardening with bounded aggregate runtime timings,
+  a reusable 60,000-card content build/activation gate, a real-schema 1,826-day
+  state growth projection, centralized 150 MiB/500 MiB dataset budgets and a
+  conservative 2x-generation-plus-margin activation free-space policy. Dataset
+  cache over-budget state is a self-clearing warning and no internal metric is
+  automatically exposed as a Home Assistant sensor.
 - P6.6 security hardening with pre-signing rich-text canonicalization, build-time
   SVG sanitization, strict parameterized Pack content filters, private/static
   asset boundary regressions and a consolidated V1 threat model; runtime now
