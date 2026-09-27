@@ -17,6 +17,8 @@ Core invariants:
 - rich text is a closed AST that is validated/canonicalized before dataset
   signing and rendered through Lit interpolation;
 - SVG is sanitized before hashing/signing/packaging;
+- runtime package validation rejects any signed SVG whose bytes are not the
+  sanitized build derivative;
 - archive traversal, links, duplicate/case-fold collisions and archive bombs
   are rejected;
 - official dataset signatures are verified before activation;
@@ -125,7 +127,9 @@ metadata, signing or packaging, the SVG is parsed as XML and sanitized:
 - size is bounded.
 
 The signed/package hash describes the sanitized bytes. Runtime never treats the
-original third-party SVG as authoritative.
+original third-party SVG as authoritative: package validation reopens SVG
+payloads from the signed archive, bounds the read, and rejects bytes whose
+sanitized canonical form differs.
 
 ## Archive and import security
 

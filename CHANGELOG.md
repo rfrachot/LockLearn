@@ -11,7 +11,9 @@ All notable changes will be documented here.
 ### Added
 - P6.6 security hardening with pre-signing rich-text canonicalization, build-time
   SVG sanitization, strict parameterized Pack content filters, private/static
-  asset boundary regressions and a consolidated V1 threat model.
+  asset boundary regressions and a consolidated V1 threat model; runtime now
+  rejects raw signed SVGs, and Profile ZIP member reads enforce actual
+  decompressed-size bounds.
 - P6.5 executable Home Assistant entity/privacy contract: stable Track-UUID
   identity, Profile logical-device grouping, explicit Profile+Track double
   opt-in, aggregate-only/no-attribute defaults, five-minute debounce, Recorder

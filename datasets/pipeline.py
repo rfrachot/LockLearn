@@ -692,9 +692,7 @@ def _sanitize_content_blocks_for_build(connection: sqlite3.Connection) -> None:
             payload = json.loads(str(raw_payload))
             sanitized = sanitize_rich_text_payload(payload)
         except (json.JSONDecodeError, ContentSecurityError) as err:
-            raise DatasetBuildError(
-                f"unsafe rich_text content block: {block_id}"
-            ) from err
+            raise DatasetBuildError(f"unsafe rich_text content block: {block_id}") from err
         connection.execute(
             """UPDATE content_blocks
                SET payload_json = ?
@@ -795,14 +793,12 @@ def _prepare_assets(
             try:
                 sanitized, sanitized_svg_modified = sanitize_svg_file(item.path)
             except ContentSecurityError as err:
-                raise DatasetBuildError(
-                    f"unsafe SVG asset: {item.archive_path}"
-                ) from err
+                raise DatasetBuildError(f"unsafe SVG asset: {item.archive_path}") from err
             sanitized_root = workspace / "sanitized-assets"
             sanitized_root.mkdir(parents=True, exist_ok=True)
-            sanitized_path = sanitized_root / hashlib.sha256(
-                item.archive_path.encode("utf-8")
-            ).hexdigest()
+            sanitized_path = (
+                sanitized_root / hashlib.sha256(item.archive_path.encode("utf-8")).hexdigest()
+            )
             sanitized_path.write_bytes(sanitized)
             source_path = sanitized_path
 
@@ -825,9 +821,7 @@ def _prepare_assets(
                 source_id=item.source_id,
                 source_record_id=item.source_record_id,
                 author=item.author,
-                modified_from_source=(
-                    item.modified_from_source or sanitized_svg_modified
-                ),
+                modified_from_source=(item.modified_from_source or sanitized_svg_modified),
                 source_path=source_path,
             )
         )

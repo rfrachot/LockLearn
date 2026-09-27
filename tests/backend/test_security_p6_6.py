@@ -116,6 +116,14 @@ def test_svg_sanitizer_removes_executable_and_external_features() -> None:
     assert b"style=" not in lowered
     assert b'href="#local"' in lowered
 
+    mixed_case = sanitize_svg_bytes(b"<svg><SCRIPT>alert(1)</SCRIPT><STYLE>*{}</STYLE></svg>")
+    assert b"<script" not in mixed_case.lower()
+    assert b"<style" not in mixed_case.lower()
+
+    deep = b"<svg>" + (b"<g>" * 257) + (b"</g>" * 257) + b"</svg>"
+    with pytest.raises(ContentSecurityError, match="depth"):
+        sanitize_svg_bytes(deep)
+
     with pytest.raises(ContentSecurityError, match="DTD"):
         sanitize_svg_bytes(
             b'<!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'
@@ -140,9 +148,7 @@ def test_pack_filter_sql_is_allowlisted_and_values_are_bound() -> None:
     )
     assert malicious not in compiled.where_sql
     assert compiled.where_sql == (
-        "item.lifecycle_status = 'active' "
-        "AND item.content_type = ? "
-        "AND item.register IN (?,?)"
+        "item.lifecycle_status = 'active' AND item.content_type = ? AND item.register IN (?,?)"
     )
     assert compiled.parameters == (malicious, "common", "formal")
 
@@ -155,17 +161,13 @@ def test_pack_filter_sql_is_allowlisted_and_values_are_bound() -> None:
                    lifecycle_status TEXT
                )"""
         )
-        connection.execute(
-            "INSERT INTO learning_items VALUES ('vocabulary', 'common', 'active')"
-        )
+        connection.execute("INSERT INTO learning_items VALUES ('vocabulary', 'common', 'active')")
         rows = connection.execute(
             f"SELECT content_type FROM learning_items AS item WHERE {compiled.where_sql}",
             compiled.parameters,
         ).fetchall()
         assert rows == []
-        assert connection.execute(
-            "SELECT COUNT(*) FROM learning_items"
-        ).fetchone() == (1,)
+        assert connection.execute("SELECT COUNT(*) FROM learning_items").fetchone() == (1,)
     finally:
         connection.close()
 
@@ -181,6 +183,18 @@ def test_pack_filter_sql_is_allowlisted_and_values_are_bound() -> None:
     ),
 )
 def test_pack_filter_rejects_unknown_schema_surface(document: object) -> None:
+    with pytest.raises(PackFilterError):
+        compile_pack_content_filter(document)
+
+
+@pytest.mark.parametrize(
+    "document",
+    (
+        {"all": ({"field": "content_type", "op": "eq", "value": "x"},)},
+        {"all": [{"field": "content_type", "op": "in", "value": ("x",)}]},
+    ),
+)
+def test_pack_filter_rejects_non_json_array_types(document: object) -> None:
     with pytest.raises(PackFilterError):
         compile_pack_content_filter(document)
 

@@ -2,8 +2,7 @@
 
 ## Status
 
-Accepted for the P6.6 implementation candidate on 2026-09-27. Final
-qualification remains pending.
+Accepted and qualified for P6.6 on 2026-09-27.
 
 ## Context
 
@@ -43,7 +42,10 @@ elements/event handlers/style/external references/foreign namespaces and
 rejects DTD/entity payloads.
 
 The signed asset is therefore the sanitized derivative. Runtime cache/hash
-validation continues unchanged.
+validation continues unchanged, and signed-package validation independently
+rejects an SVG whose bytes are not that sanitized derivative. Both build and
+runtime reads are bounded before XML processing; the sanitizer also bounds XML
+depth and node count.
 
 ### Pack filters and SQL
 
@@ -66,8 +68,10 @@ security gate explicitly reuses existing tests for:
 - public asset integrity and private/static separation.
 
 New P6.6 tests target only missing boundaries: rich-text build/XSS, SVG
-sanitization/signature binding, Pack-filter SQL injection and private-static
-root separation.
+sanitization/signature binding (including a raw SVG signed outside the expected
+build derivative), Pack-filter SQL injection/type closure and private-static
+root separation. Profile archive member reads now enforce actual decompressed
+size ceilings and reject decompression errors.
 
 ## Consequences
 
@@ -77,3 +81,12 @@ root separation.
   than creating ad-hoc SQL.
 - SECURITY.md becomes the current V1 threat-model reference.
 - P6.7 performance/scale work is intentionally out of scope.
+
+## Qualification evidence
+
+- targeted security/ACL/notification/transfer/asset gate: 98 passed, 1
+  expected duplicate-member warning;
+- backend full gate: Ruff format/check, mypy, resource validation and 455
+  pytest tests passed, with the same expected warning;
+- frontend typecheck, 49 tests and Vite build passed;
+- the tracked frontend bundle remained byte-identical.

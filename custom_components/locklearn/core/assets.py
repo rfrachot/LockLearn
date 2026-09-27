@@ -10,9 +10,7 @@ from pathlib import PurePosixPath
 from .content import validate_license_id, validate_stable_id
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-_ALLOWED_IMAGE_MIME_TYPES = frozenset(
-    {"image/jpeg", "image/png", "image/webp", "image/svg+xml"}
-)
+_ALLOWED_IMAGE_MIME_TYPES = frozenset({"image/jpeg", "image/png", "image/webp", "image/svg+xml"})
 _ALLOWED_AUDIO_MIME_TYPES = frozenset(
     {"audio/mp4", "audio/mpeg", "audio/ogg", "audio/wav", "audio/webm"}
 )

@@ -6,11 +6,14 @@ import re
 import xml.etree.ElementTree as ET
 from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 _MAX_RICH_TEXT_DEPTH = 16
 _MAX_RICH_TEXT_NODES = 512
 _MAX_RICH_TEXT_TEXT = 16_384
 MAX_SVG_BYTES = 4 * 1024 * 1024
+_MAX_SVG_DEPTH = 256
+_MAX_SVG_NODES = 100_000
 
 _SVG_NS = "http://www.w3.org/2000/svg"
 _XLINK_NS = "http://www.w3.org/1999/xlink"
@@ -23,6 +26,9 @@ _DANGEROUS_SVG_ELEMENTS = frozenset(
         "object",
         "embed",
     }
+)
+_DANGEROUS_SVG_ELEMENTS_CASEFOLDED = frozenset(
+    element.casefold() for element in _DANGEROUS_SVG_ELEMENTS
 )
 _EXTERNAL_SCHEME_RE = re.compile(
     r"^(?:https?:|data:|javascript:|file:|//)",
@@ -124,14 +130,11 @@ def _sanitize_rich_node(
             raise ContentSecurityError("rich_text paragraph nodes are top-level only")
         children = node.get("children")
         if not isinstance(children, list) or not children:
-            raise ContentSecurityError(
-                f"rich_text {node_type}.children must be a non-empty array"
-            )
+            raise ContentSecurityError(f"rich_text {node_type}.children must be a non-empty array")
         return {
             "type": node_type,
             "children": [
-                _sanitize_rich_node(child, depth=depth + 1, budget=budget)
-                for child in children
+                _sanitize_rich_node(child, depth=depth + 1, budget=budget) for child in children
             ],
         }
 
@@ -156,23 +159,16 @@ def sanitize_rich_text_payload(payload: object) -> dict[str, object]:
         raise ContentSecurityError("rich_text root type must be document")
     children = document.get("children")
     if not isinstance(children, list) or not children:
-        raise ContentSecurityError(
-            "rich_text document.children must be a non-empty array"
-        )
+        raise ContentSecurityError("rich_text document.children must be a non-empty array")
 
     for child in children:
         if not isinstance(child, Mapping) or child.get("type") != "paragraph":
-            raise ContentSecurityError(
-                "rich_text document children must be paragraphs"
-            )
+            raise ContentSecurityError("rich_text document children must be paragraphs")
 
     budget = _NodeBudget()
     return {
         "type": "document",
-        "children": [
-            _sanitize_rich_node(child, depth=1, budget=budget)
-            for child in children
-        ],
+        "children": [_sanitize_rich_node(child, depth=1, budget=budget) for child in children],
     }
 
 
@@ -190,7 +186,7 @@ def _namespace(name: str) -> str | None:
 
 def _svg_attribute_is_safe(name: str, value: str) -> bool:
     local = _local_name(name)
-    if local.lower().startswith("on") or local == "style":
+    if local.casefold().startswith("on") or local.casefold() == "style":
         return False
 
     normalized = value.strip()
@@ -200,10 +196,7 @@ def _svg_attribute_is_safe(name: str, value: str) -> bool:
     if _EXTERNAL_SCHEME_RE.match(normalized):
         return False
 
-    if "url(" in normalized.lower() and not _LOCAL_URL_RE.fullmatch(normalized):
-        return False
-
-    return True
+    return not ("url(" in normalized.lower() and not _LOCAL_URL_RE.fullmatch(normalized))
 
 
 def sanitize_svg_bytes(payload: bytes) -> bytes:
@@ -212,7 +205,7 @@ def sanitize_svg_bytes(payload: bytes) -> bytes:
         raise ContentSecurityError("SVG payload is empty or exceeds the size limit")
 
     lowered = payload.lower()
-    if b"<!doctype" in lowered or b"<!entity" in lowered:
+    if b"<!doctype" in lowered or b"<!entity" in lowered or b"<?xml-stylesheet" in lowered:
         raise ContentSecurityError("DTD/entity declarations are forbidden in SVG")
 
     try:
@@ -223,17 +216,26 @@ def sanitize_svg_bytes(payload: bytes) -> bytes:
     if _local_name(root.tag) != "svg" or _namespace(root.tag) not in {None, _SVG_NS}:
         raise ContentSecurityError("SVG root element/namespace is invalid")
 
-    def clean(parent: ET.Element) -> None:
+    stack: list[tuple[ET.Element, int]] = [(root, 1)]
+    node_count = 0
+    while stack:
+        parent, depth = stack.pop()
+        node_count += 1
+        if depth > _MAX_SVG_DEPTH:
+            raise ContentSecurityError("SVG exceeds the nesting-depth limit")
+        if node_count > _MAX_SVG_NODES:
+            raise ContentSecurityError("SVG exceeds the node-count limit")
+
         for child in tuple(parent):
             child_namespace = _namespace(child.tag)
             child_name = _local_name(child.tag)
             if (
                 child_namespace not in {None, _SVG_NS}
-                or child_name in _DANGEROUS_SVG_ELEMENTS
+                or child_name.casefold() in _DANGEROUS_SVG_ELEMENTS_CASEFOLDED
             ):
                 parent.remove(child)
                 continue
-            clean(child)
+            stack.append((child, depth + 1))
 
         for attribute, value in tuple(parent.attrib.items()):
             attribute_namespace = _namespace(attribute)
@@ -243,10 +245,9 @@ def sanitize_svg_bytes(payload: bytes) -> bytes:
             if not _svg_attribute_is_safe(attribute, value):
                 del parent.attrib[attribute]
 
-    clean(root)
     ET.register_namespace("", _SVG_NS)
     ET.register_namespace("xlink", _XLINK_NS)
-    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    return cast(bytes, ET.tostring(root, encoding="utf-8", xml_declaration=True))
 
 
 def sanitize_svg_file(path: Path) -> tuple[bytes, bool]:

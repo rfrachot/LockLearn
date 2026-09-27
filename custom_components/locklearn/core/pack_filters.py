@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 _MAX_FILTER_TERMS = 64
@@ -53,12 +53,7 @@ def _compile_term(value: object) -> tuple[str, tuple[object, ...]]:
     if operator == "eq":
         return f"{column} = ?", (_non_empty_string(raw_value, "value"),)
 
-    if (
-        not isinstance(raw_value, Sequence)
-        or isinstance(raw_value, (str, bytes, bytearray))
-        or not raw_value
-        or len(raw_value) > _MAX_IN_VALUES
-    ):
+    if not isinstance(raw_value, list) or not raw_value or len(raw_value) > _MAX_IN_VALUES:
         raise PackFilterError(
             f"in filter value must be a non-empty array of at most {_MAX_IN_VALUES} strings"
         )
@@ -82,11 +77,7 @@ def compile_pack_content_filter(value: object) -> CompiledPackFilter:
     if set(document) != {"all"}:
         raise PackFilterError("content_filters keys must be exactly ['all']")
     terms = document["all"]
-    if (
-        not isinstance(terms, Sequence)
-        or isinstance(terms, (str, bytes, bytearray))
-        or len(terms) > _MAX_FILTER_TERMS
-    ):
+    if not isinstance(terms, list) or len(terms) > _MAX_FILTER_TERMS:
         raise PackFilterError(
             f"content_filters.all must be an array of at most {_MAX_FILTER_TERMS} terms"
         )

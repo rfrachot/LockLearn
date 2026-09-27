@@ -17,8 +17,8 @@ P6.4 — secure export/import and data deletion — PASS.
 P6.5 — HA entity/sensor privacy contract and optional integration boundary —
 PASS at `a3cd543` and pushed before P6.6 started.
 
-P6.6 — security hardening and threat-model tests — has an implementation
-candidate. Final qualification is intentionally pending.
+P6.6 — security hardening and threat-model tests — PASS after deep review and
+qualification on 2026-09-27.
 
 ## P6.6 implementation
 
@@ -42,7 +42,10 @@ candidate. Final qualification is intentionally pending.
   namespaces;
 - href/xlink references are local-fragment-only;
 - DTD/entity declarations are rejected;
+- XML depth/node budgets prevent parser-tree abuse;
 - package manifest, SQLite metadata and SHA-256 bind the sanitized bytes;
+- runtime package validation rejects raw SVG bytes even when re-signed by a
+  trusted key;
 - this supersedes ADR-0018 only where it previously rejected SVG pending a
   sanitizer.
 
@@ -58,6 +61,7 @@ grammar:
 - unknown keys/fields/operators/types fail closed;
 - SQL identifiers/operators are code constants;
 - package values are emitted separately as sqlite3 parameters.
+- compiler array inputs are restricted to JSON list types, matching the schema.
 
 Injection tests execute a malicious literal against SQLite and verify it cannot
 alter query structure or schema.
@@ -78,8 +82,13 @@ New `tests/backend/test_security_p6_6.py` adds rich-text, SVG primitive,
 parameterized Pack-filter and private/static-root regressions.
 
 New `tests/datasets/test_svg_security.py` proves that the **signed packaged SVG
-bytes** are the sanitized derivative and that unsafe rich text fails before a
-dataset can be signed.
+bytes** are the sanitized derivative, that runtime rejects a raw re-signed SVG,
+and that unsafe rich text fails before a dataset can be signed.
+
+Deep review fixes also make Profile archive JSON/member reads enforce actual
+decompressed-byte ceilings and convert malformed-compression errors into the
+normal transfer error boundary. Dataset package payload and SQLite streaming
+enforce actual member/total bounds before trusting bytes.
 
 ### Documentation
 
@@ -91,7 +100,7 @@ No P6.7 performance/scale/storage-budget work is included.
 
 ## Verification state
 
-Final P6.6 qualification has **not** been run by design.
+Final P6.6 qualification is complete.
 
 Recommended targeted backend/dataset gate:
 
@@ -130,3 +139,22 @@ If build output changes unexpectedly despite no frontend source change, inspect
 and explain before committing generated artifacts.
 
 Do not start P6.7 during qualification.
+
+## Qualification result
+
+- targeted gate: `98 passed, 1 warning` (expected duplicate ZIP member warning);
+- Ruff format/check: PASS (`280 files already formatted`, lint clean);
+- mypy: PASS (`163 source files`);
+- resource validation: PASS;
+- full pytest: `455 passed, 1 warning` (same expected warning);
+- frontend typecheck: PASS;
+- frontend tests: `49 passed` across 15 files;
+- frontend build: PASS; tracked bundle hash stayed
+  `d1626186b8fe1cf50f81efb5a4f3dd05de3dd54e22ec86b20612000c9b259385` and no
+  bundle diff was generated;
+- no frontend production source changed and no P6.7 work started.
+
+Current branch remains `feat/p6-hardening`; the qualification fixes are in the
+local commit recorded below.
+
+Commit: `f1d4568 fix(security): close P6.6 review gaps`.

@@ -15,6 +15,7 @@ import stat
 import tempfile
 import uuid
 import zipfile
+import zlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
@@ -736,9 +737,9 @@ def _inspect_member(info: zipfile.ZipInfo) -> str:
 
 
 def _read_archive(path: Path) -> dict[str, Any]:
-    if path.stat().st_size > _MAX_ARCHIVE_BYTES:
-        raise ProfileTransferError("profile import archive exceeds the size limit")
     try:
+        if path.stat().st_size > _MAX_ARCHIVE_BYTES:
+            raise ProfileTransferError("profile import archive exceeds the size limit")
         with zipfile.ZipFile(path) as archive:
             infos = archive.infolist()
             if len(infos) > len(_ALLOWED_MEMBERS):
@@ -764,7 +765,12 @@ def _read_archive(path: Path) -> dict[str, Any]:
                     f"profile archive is missing required members: {sorted(missing)!r}"
                 )
 
-            raw_manifest = archive.read(members["manifest.json"])
+            raw_manifest = _read_archive_member(
+                archive,
+                members["manifest.json"],
+                maximum=_MAX_MEMBER_BYTES,
+                label="manifest.json",
+            )
             manifest = _load_json(raw_manifest, "manifest.json")
             manifest = _require_object(manifest, "manifest")
             if manifest.get("schema_version") != PROFILE_EXPORT_SCHEMA_VERSION:
@@ -777,7 +783,12 @@ def _read_archive(path: Path) -> dict[str, Any]:
             document: dict[str, Any] = {"manifest": manifest}
             for name in sorted(actual_payload_names):
                 info = members[name]
-                data = archive.read(info)
+                data = _read_archive_member(
+                    archive,
+                    info,
+                    maximum=_MAX_MEMBER_BYTES,
+                    label=name,
+                )
                 declared_member = _require_object(
                     declared.get(name),
                     f"manifest.members.{name}",
@@ -794,6 +805,24 @@ def _read_archive(path: Path) -> dict[str, Any]:
 
     _validate_document(document)
     return document
+
+
+def _read_archive_member(
+    archive: zipfile.ZipFile,
+    info: zipfile.ZipInfo,
+    *,
+    maximum: int,
+    label: str,
+) -> bytes:
+    """Read a ZIP member with an actual decompressed-byte ceiling."""
+    try:
+        with archive.open(info) as source:
+            data = source.read(maximum + 1)
+    except (RuntimeError, EOFError, zlib.error, OSError) as err:
+        raise ProfileTransferError(f"cannot read profile archive member: {label}") from err
+    if len(data) > maximum or len(data) != info.file_size:
+        raise ProfileTransferError(f"profile archive member size mismatch: {label}")
+    return data
 
 
 def _require_object(value: object, field: str) -> dict[str, Any]:
