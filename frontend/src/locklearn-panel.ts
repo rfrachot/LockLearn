@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 
+import { interactiveAccessibilityStyles } from "./content-renderer";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
 import "./learn-view";
 import "./quiz-view";
@@ -62,6 +63,7 @@ export class LockLearnPanel extends LitElement {
   private initialLoadStarted = false;
 
   static styles = css`
+    ${interactiveAccessibilityStyles}
     :host {
       display: block;
       min-height: 100%;
