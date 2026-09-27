@@ -32,6 +32,7 @@ export class LockLearnLearnView extends LitElement {
   @property({ attribute: false }) hass?: HomeAssistantLike;
   @property({ attribute: false }) profile?: VisibleProfile;
   @property({ attribute: false }) dashboard?: DashboardResponse;
+  @property({ attribute: false }) externalSession?: SessionState;
 
   @state() private trackId = "";
   @state() private session?: SessionState;
@@ -259,6 +260,16 @@ export class LockLearnLearnView extends LitElement {
         this.session = undefined;
         this.resetQuestionUi();
       }
+    }
+    if (
+      changed.has("externalSession") &&
+      this.externalSession !== undefined &&
+      this.profile !== undefined &&
+      this.externalSession.profile_id === this.profile.profile_id
+    ) {
+      this.trackId = this.externalSession.track_id ?? this.trackId;
+      this.applySession(this.externalSession);
+      this.notice = this.t("learn.targetedSession");
     }
   }
 
