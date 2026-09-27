@@ -105,7 +105,7 @@
 - **P5.6** — Dataset updates, Sources & Licences UI (complete; real-HA PASS with documented fixture/harness limits)
 - **P5.7** — Basic stats, difficulties and metacognitive views (complete; automated qualification PASS; REAL HA PASS with documented fixture/harness limits)
 - **P5.8** — FR/EN i18n, CJK and accessibility hardening (complete; REAL HA PASS; documented viewport/theme/platform limits)
-- **P5.9** — Frontend performance and compatibility gate
+- **P5.9** — Frontend performance and compatibility gate (implemented; automated qualification PASS; real-HA pending)
 
 ### P6
 
