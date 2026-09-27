@@ -35,11 +35,7 @@ class InternalMetrics:
     """Collect fixed-name timing metrics without identifiers or payload data."""
 
     def __init__(self, *, sample_limit: int = DEFAULT_METRIC_SAMPLE_LIMIT) -> None:
-        if (
-            isinstance(sample_limit, bool)
-            or not isinstance(sample_limit, int)
-            or sample_limit <= 0
-        ):
+        if isinstance(sample_limit, bool) or not isinstance(sample_limit, int) or sample_limit <= 0:
             raise ValueError("sample_limit must be a positive integer")
         self._sample_limit = sample_limit
         self._series: dict[str, _MetricSeries] = {}
@@ -86,10 +82,7 @@ class InternalMetrics:
             self._series.clear()
 
 
-def _nearest_rank_percentile(
-    values: tuple[float, ...],
-    percentile: float,
-) -> float | None:
+def _nearest_rank_percentile(values: tuple[float, ...], percentile: float) -> float | None:
     if not values:
         return None
     ordered = sorted(values)

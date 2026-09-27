@@ -11,6 +11,7 @@ import shutil
 import sqlite3
 import sys
 import tempfile
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import perf_counter
@@ -43,21 +44,15 @@ STATE_DAYS = 1_826
 STANDARD_NEW_CARDS_PER_DAY = 8
 STANDARD_REVIEW_CAPACITY_PER_DAY = 80
 STANDARD_SESSION_CARDS = 20
-STANDARD_SESSIONS_PER_DAY = (
-    STANDARD_REVIEW_CAPACITY_PER_DAY // STANDARD_SESSION_CARDS
-)
+STANDARD_SESSIONS_PER_DAY = STANDARD_REVIEW_CAPACITY_PER_DAY // STANDARD_SESSION_CARDS
 STANDARD_NOTIFICATION_SLOTS_PER_DAY = 6
 AUDIT_EVENTS_PER_DAY = 2
 
 
 def _hardware() -> dict[str, Any]:
     memory_bytes: int | None = None
-    try:
-        memory_bytes = int(os.sysconf("SC_PAGE_SIZE")) * int(
-            os.sysconf("SC_PHYS_PAGES")
-        )
-    except (AttributeError, OSError, TypeError, ValueError):
-        pass
+    with suppress(AttributeError, OSError, TypeError, ValueError):
+        memory_bytes = int(os.sysconf("SC_PAGE_SIZE")) * int(os.sysconf("SC_PHYS_PAGES"))
     return {
         "platform": platform.platform(),
         "machine": platform.machine(),
@@ -446,10 +441,7 @@ def _project_five_year_state(path: Path, *, days: int) -> dict[str, Any]:
         "page_count": page_count,
         "page_size": page_size,
         "bytes_per_day": round(bytes_per_day, 2),
-        "mib_per_year": round(
-            bytes_per_day * 365 / (1024 * 1024),
-            3,
-        ),
+        "mib_per_year": round(bytes_per_day * 365 / (1024 * 1024), 3),
         "row_counts": row_counts,
         "elapsed_s": round(perf_counter() - started, 3),
         "derived_counts": {
@@ -462,10 +454,7 @@ def _project_five_year_state(path: Path, *, days: int) -> dict[str, Any]:
 
 
 async def _content_scale(root: Path, *, card_count: int) -> dict[str, Any]:
-    item_ids = tuple(
-        f"locklearn:item:p6-7-{index:05d}"
-        for index in range(card_count)
-    )
+    item_ids = tuple(f"locklearn:item:p6-7-{index:05d}" for index in range(card_count))
     package = create_package(
         root / "p6-7-scale-package.db",
         "p6-7-scale",
@@ -526,9 +515,7 @@ async def _content_scale(root: Path, *, card_count: int) -> dict[str, Any]:
 async def _run(card_count: int, state_days: int) -> dict[str, Any]:
     INTERNAL_METRICS.clear()
     hot_paths = await run_hot_path_gate()
-    with tempfile.TemporaryDirectory(
-        prefix="locklearn-p6-7-"
-    ) as temporary:
+    with tempfile.TemporaryDirectory(prefix="locklearn-p6-7-") as temporary:
         root = Path(temporary)
         state_projection = _project_five_year_state(
             root / "projection" / "state.db",
@@ -558,9 +545,7 @@ async def _run(card_count: int, state_days: int) -> dict[str, Any]:
             "activation_safety_margin_bytes": (
                 ACTIVATION_SAFETY_MARGIN_DEFAULT_BYTES
             ),
-            "activation_policy": (
-                "free >= 2x generated content + configured safety margin"
-            ),
+            "activation_policy": "free >= 2x generated content + configured safety margin",
         },
         "hot_paths": hot_paths,
         "content_scale": content_scale,

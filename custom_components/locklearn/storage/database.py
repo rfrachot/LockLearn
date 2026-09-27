@@ -17,8 +17,8 @@ from time import perf_counter
 from typing import Any, TypeVar
 
 from ..const import DB_SCHEMA_VERSION
-from ..observability import INTERNAL_METRICS
 from ..core.clock import Clock, SystemClock
+from ..observability import INTERNAL_METRICS
 from .content import (
     ContentBuildResult,
     ContentGenerationBuilder,

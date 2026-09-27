@@ -21,9 +21,7 @@ from custom_components.locklearn.datasets import (
     TrustStore,
     validate_dataset_package,
 )
-from custom_components.locklearn.datasets.storage_budget import (
-    activation_required_free_disk,
-)
+from custom_components.locklearn.datasets.storage_budget import activation_required_free_disk
 from datasets.pipeline import (
     BuildContext,
     DatasetBuildError,

@@ -224,5 +224,7 @@ async def test_storage_records_p6_7_internal_timings(
         "content.build_ms",
         "content.activation_ms",
     ):
-        assert metrics[name]["count"] >= 1
+        count = metrics[name]["count"]
+        assert isinstance(count, int)
+        assert count >= 1
         assert metrics[name]["p95_ms"] is not None

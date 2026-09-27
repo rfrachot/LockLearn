@@ -616,9 +616,7 @@ class DatasetManager:
                 dataset_id,
                 extracted,
             )
-            estimated_generated_bytes = sum(
-                path.stat().st_size for path in packages_for_estimate
-            )
+            estimated_generated_bytes = sum(path.stat().st_size for path in packages_for_estimate)
             required_free_disk = max(
                 validated.manifest.required_free_disk,
                 activation_required_free_disk(
@@ -627,9 +625,7 @@ class DatasetManager:
                 ),
             )
             if shutil.disk_usage(self._storage.paths.content_root).free < required_free_disk:
-                raise DatasetInstallError(
-                    "insufficient free disk for dataset installation"
-                )
+                raise DatasetInstallError("insufficient free disk for dataset installation")
             await asyncio.to_thread(
                 _store_assets_atomically,
                 archive,
@@ -858,7 +854,7 @@ def load_runtime_dataset_definitions(
                 artifact_max_bytes=_required_int(
                     row,
                     "artifact_max_bytes",
-                    default=_OFFICIAL_ARTIFACT_DEFAULT_MAX_BYTES,
+                    default=OFFICIAL_DATASET_ARTIFACT_DEFAULT_MAX_BYTES,
                 ),
             )
         )
