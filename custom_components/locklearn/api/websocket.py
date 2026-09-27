@@ -552,6 +552,19 @@ async def ws_profiles_import_apply(
     if runtime is None:
         return
     owner_user_id = connection.user.id
+    if (
+        await runtime.profile_transfers.store.async_resolve_import(
+            msg["upload_token"],
+            owner_user_id,
+        )
+        is None
+    ):
+        connection.send_error(
+            msg["id"],
+            ERR_INVALID_REQUEST,
+            "profile import upload is unavailable or expired",
+        )
+        return
 
     async def worker(context: OperationContext) -> None:
         await context.async_update("validating", 0.1)

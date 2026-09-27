@@ -149,6 +149,7 @@ def test_every_protected_websocket_command_has_the_expected_guard() -> None:
     for command in CAPABILITY_COMMANDS:
         block = blocks[command]
         assert "connection.user.id" in block and "owner_user_id" in block, command
+    assert "async_resolve_import(" in blocks["locklearn/profiles/import_apply"]
 
 
 def test_critical_domain_logic_has_no_direct_wall_clock_dependency() -> None:
