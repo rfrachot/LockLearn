@@ -1,7 +1,7 @@
 export const UI_LANGUAGES = ["en", "fr"] as const;
 export type UiLanguage = (typeof UI_LANGUAGES)[number];
 
-const CATALOG = {
+export const CATALOG = {
   en: {
     "app.title": "LockLearn",
     "state.loading": "Loading LockLearn…",
