@@ -1,45 +1,110 @@
-# Migrations
+# LockLearn migrations
 
-LockLearn has distinct migration families. They must never be conflated.
+`SPEC_V1.md` §72, §73 and §115 are normative. This document describes the current implementation.
+
+LockLearn has four distinct versioned boundaries. They must not be collapsed into one migration mechanism:
+
+1. Home Assistant Config Entry schema.
+2. Persistent user state in `state.db`.
+3. Reconstructible `content.db` generations and dataset package schema.
+4. Stable content-ID mappings carried by dataset data.
 
 ## Home Assistant Config Entry
 
-Config Entry version is declared in `const.py`. HA migration updates integration
-configuration only; it is not a database migration.
+The Config Entry major version is `1`.
 
-## state.db
+`LockLearnConfigFlow.VERSION` and the integration migration boundary share the `CONFIG_ENTRY_VERSION` constant. `async_migrate_entry()` accepts the current version and rejects unknown older or future major versions. There is deliberately no fake historical migration: version `1` is the first and only Config Entry schema so far.
 
-`state.db` is private mutable user state. Released schema changes use sequential
-migrations with a coherent pre-migration backup, candidate validation and explicit
-recovery behavior.
+When the Config Entry data shape changes:
 
-Current schema version is declared by `DB_SCHEMA_VERSION`.
+1. decide whether the change requires a major or minor Config Entry version according to Home Assistant's migration contract;
+2. bump the Config Flow version only with the actual data-shape change;
+3. implement the explicit old -> new transformation with `hass.config_entries.async_update_entry()`;
+4. add tests for every supported source version;
+5. never use a Config Entry migration to mutate `state.db` or content data.
 
-Important historical migrations include the Profile/Track foundation, leech state,
-scheduler/receptivity changes and later lifecycle/recovery metadata. Tests cover
-old-supported schema -> current and failure recovery.
+## `state.db`
 
-## content generation/catalog schema
+`state.db` is persistent user state and is not reconstructible from datasets.
 
-Generated `content.db` is reconstructible. Schema evolution is handled by building
-a new immutable generation and atomically activating it after validation. Runtime
-does not mutate the active generation in place.
+Current schema version: `5`.
 
-Current content schema is `CONTENT_SCHEMA_VERSION`; supported historical package
-versions are explicitly declared in `SUPPORTED_CONTENT_SCHEMA_VERSIONS`.
+Historical path:
 
-## Dataset package/content schema
+| Source | Target | Purpose |
+|---|---|---|
+| 1 | 2 | Bridge the released P0/0.0.2 minimal state shape into the full application state schema. |
+| 2 | 3 | Add the `leech` progress state. |
+| 3 | 4 | Add scheduler deferral and receptivity state. |
+| 4 | 5 | Add send-time notification-selection metadata. |
 
-Signed packages declare schema compatibility in their manifest. Package validation
-occurs before content generation build. Unsupported or invalid package schema never
-replaces last-known-good active content.
+Migrations are registered as exact sequential steps. Opening a database at `N` runs `N -> N+1 -> ... -> current`; missing steps fail explicitly. A future schema version is never downgraded.
 
-## Recovery
+Before the first migration step, LockLearn:
 
-Migration/build/activation failure must preserve a usable prior copy where one
-exists and surface Repairs/diagnostics. Never downgrade by deleting or manually
-rewriting user state.
+1. checkpoints the WAL;
+2. creates a coherent snapshot with `sqlite3.Connection.backup()`;
+3. validates the snapshot;
+4. atomically publishes it as `state.db.pre-migration-vN.bak`.
 
-The technical sources of truth are migration code/tests and
-`custom_components/locklearn/storage/schema.py`. Generated schema contracts live
-under `docs/generated/`.
+The previous recovery snapshot is not destroyed until the replacement snapshot has been created and validated.
+
+Each in-place step runs inside `BEGIN IMMEDIATE`, updates `schema_version` in the same transaction and validates SQLite integrity/foreign keys before commit. The v1 -> v2 bridge is special: it builds a candidate database out of place, copies the released v1 rows, then atomically replaces `state.db`.
+
+If a later step fails, completed earlier steps may remain committed, but the failing step is rolled back and the original pre-migration snapshot remains available. A later startup can continue deterministically from the last committed schema version. Repairs/recovery UX for surfacing and restoring that snapshot belongs to P6.2/P6.3, not to the migration engine itself.
+
+A database claiming the current version is validated, not silently repaired by running `CREATE ... IF NOT EXISTS`. Released schema changes therefore require a version bump and an explicit migration.
+
+## Content generations and dataset packages
+
+Content is reconstructible and follows a different rule.
+
+LockLearn does **not** migrate downloaded dataset SQLite packages in place. Supported package schema versions are validated as immutable inputs. The runtime builds a fresh `content.next.db`, validates it, drains old readers and atomically activates the new generation. The previous generation is retained by the content-generation lifecycle for rollback.
+
+Current content schema version: `2`.
+
+Supported package/content schema versions are defined by `SUPPORTED_CONTENT_SCHEMA_VERSIONS`. Support for an older package schema means “read and merge it into a new current generation”, not “rewrite the package”.
+
+Raw upstream corpora are never parsed as part of this runtime migration path.
+
+## Stable content IDs
+
+`stable_id_migrations` belongs to dataset/content semantics. It maps released LearningItem/Facet/CardDefinition/card-key identities when a content update legitimately changes stable IDs. It is validated while building a new content generation.
+
+It is not a `state.db` schema migration and must never be used as one.
+
+## Recovery rules
+
+- Never copy an active WAL-backed `state.db` with a raw filesystem copy.
+- Never overwrite the only recovery copy before a replacement snapshot validates.
+- Never downgrade a future state schema or Config Entry version.
+- Never mutate a released state schema without increasing `DB_SCHEMA_VERSION`.
+- Never migrate an official dataset package in place.
+- Keep state-schema recovery and content-generation rollback independent.
+
+## Adding a new `state.db` migration
+
+For `N -> N+1`:
+
+1. update `STATE_SCHEMA` to the target shape;
+2. increment `DB_SCHEMA_VERSION`;
+3. add exactly one migration function and register it at key `N`;
+4. keep the schema/version mutation in one transaction whenever the migration is in place;
+5. preserve all existing user rows or document an explicit, reviewed transformation;
+6. update the required table/index contract when structural objects change;
+7. add a historical `N -> current` fixture with sentinel data;
+8. add failure/rollback coverage if the step has non-trivial mutation;
+9. update this document and any affected ADR;
+10. run the DB migration tests plus the full project gates before release.
+
+Do not renumber or rewrite a schema version that has already shipped.
+
+## Generated schema references
+
+The current exact DDL/index/relationship contracts are generated from runtime
+sources and committed under:
+
+- `docs/generated/STATE_DB.md`
+- `docs/generated/CONTENT_DB.md`
+
+Run `python scripts/generate_docs_contracts.py --check` to detect drift.
