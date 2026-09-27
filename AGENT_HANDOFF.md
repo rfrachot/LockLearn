@@ -4,133 +4,72 @@
 
 Branch: `feat/p6-hardening`.
 
-P5 and its real-HA exit gate remain PASS. P6.1 through P6.7 are PASS.
+P5 and its real-HA exit gate remain PASS. P6.1 through P6.8 are PASS.
 
-P6.8 — full test matrix and CI release gates — is implementation complete and
-qualification-pending. No P6.9 implementation has started.
+P6.9 — documentation set and generated contracts — is implementation-complete
+except for the canonical README screenshot and final qualification. P6.10 has
+not started.
 
-## P6.8 implementation
+## P6.9 implementation
 
-### Permanent access-contract gates
+Human reference docs now exist for the SPEC §102–127 set, including:
 
-`tests/backend/test_p6_8_release_contracts.py` classifies all 56 registered
-WebSocket commands into exactly one access boundary:
+- README/user entry point;
+- architecture and data model;
+- database and migration policy;
+- pack/dataset/source/licensing contracts;
+- permissions/privacy/security;
+- SRS, scheduler and notifications;
+- frontend and WebSocket API;
+- development, testing, release and troubleshooting;
+- roadmap.
 
-- authenticated/global;
-- owner-bound import capability;
-- Profile ACL;
-- Track -> Profile ACL;
-- Session -> Profile ACL;
-- Home Assistant administrator;
-- owner-bound long operation.
+Existing detailed documents were preserved where stronger than the new overview
+(e.g. MIGRATIONS.md history).
 
-The test fails if a future command is unclassified or if a protected command
-loses its expected backend guard.
+Generated contracts:
 
-`tests/backend/test_p6_8_acl_matrix.py` performs real negative WebSocket calls
-for outsider, viewer and non-admin users across protected Profile/Track/Session,
-dataset-admin, import-capability and operation endpoints.
+- `scripts/generate_docs_contracts.py`;
+- `docs/generated/STATE_DB.md`;
+- `docs/generated/CONTENT_DB.md`;
+- `docs/generated/WEBSOCKET_CONTRACTS.md`;
+- `docs/generated/websocket-contracts.json`.
 
-The same release-contract suite scans critical `core/` domain logic and
-rejects direct wall-clock calls outside `core/clock.py`.
+The generator reads runtime DDL/WebSocket sources and has a `--check` mode wired
+into CI. `tests/backend/test_p6_9_documentation_contracts.py` gates the required
+documentation set/sections. ADR-0053 defines the documentation source-of-truth
+layers.
 
-### Dataset and frontend release gates
+Official source documentation is now derived from the machine registries and
+covers provider, format, adapter, licence/attribution, imported/excluded fields,
+known risks and refresh policy.
 
-New `datasets/tools/validate_schemas.py` validates every committed JSON Schema
-and each mapped committed registry/config instance.
-
-Dataset CI explicitly gates resource/licence policy, provenance/signature/
-archive contracts, bundled starter/assets/SVG and canonical-content
-reproducibility.
-
-Frontend CI now has an explicit source lint in addition to typecheck, Vitest,
-no-polling/direct-network audit, build, gzip budget, committed-bundle diff and
-Playwright E2E.
-
-### Home Assistant compatibility
-
-The historical matrix previously named HA versions but did not explicitly
-install/verify the matrix HA package. P6.8 fixes this.
-
-Full backend integration suites:
-- minimum supported: HA 2025.2.5 + matching harness 0.13.215;
-- current upstream harness: HA 2026.9.3 + harness 0.13.366.
-
-HA 2026.9.4 was published on 2026-09-27 after harness 0.13.366, which explicitly
-pins HA 2026.9.3. Until a matching harness is published, CI additionally runs
-`scripts/p6_8_ha_smoke.py` against real HA 2026.9.4. Do not falsely label
-2026.9.3 as latest stable.
-
-HACS and hassfest remain mandatory CI jobs.
-
-### Hosted-runner performance policy
-
-The 100/150/250 ms wall-clock budgets remain normative and unchanged. They were
-qualified on the documented P6.7 reference VM. GitHub-hosted runners execute
-three P5.9 measurements and report median p95 telemetry plus
-`reference_budget_pass`, but hosted runner speed is not a normative release
-platform. `scripts/p6_8_ci_performance.py` therefore fails only if execution
-itself fails; it does not redefine the reference-hardware gate.
-
-## Qualification — Luna executes only
-
-Luna must not edit, format, commit, push, merge or start P6.9.
-
-Run from the qualification worktree after pulling `feat/p6-hardening`:
+README screenshots must represent real rendered UI. A Playwright capture test
+exists at `frontend/e2e/tests/docs-screenshot.spec.ts`, invoked with:
 
 ~~~bash
-git pull --ff-only origin feat/p6-hardening
-git status --short --branch
-git rev-parse HEAD
-
-.venv/bin/python -m ruff format --check .
-.venv/bin/python -m ruff check .
-.venv/bin/python -m mypy custom_components datasets tests
-
-.venv/bin/python datasets/tools/validate_resources.py
-.venv/bin/python datasets/tools/validate_schemas.py
-
-.venv/bin/python -m pytest -q --tb=short \
-  tests/backend/test_p6_8_release_contracts.py \
-  tests/backend/test_p6_8_acl_matrix.py
-
-.venv/bin/python -m pytest -q --tb=short \
-  tests/backend/test_state_foundation.py \
-  tests/backend/test_lifecycle.py \
-  tests/backend/test_storage_lifecycle.py
-
-.venv/bin/python -m pytest -q --tb=short
-
-.venv/bin/python scripts/p5_9_performance.py
-.venv/bin/python scripts/p6_7_scale_validation.py
-
 cd frontend
-npm run lint
-npm run typecheck
-npm test
-npm run check:no-polling
-npm run build
-npm run check:bundle
-npm run test:e2e
-cd ..
-
-sha256sum custom_components/locklearn/frontend/locklearn-panel.js
-git diff --check
-git status --short --branch
-git rev-parse HEAD
+npm run docs:screenshot
 ~~~
 
-The local VM does not replace GitHub-hosted HACS/hassfest or the compatibility
-matrix. After local gates are green, the branch must be exercised through the
-CI workflow so these jobs are evidenced:
+Expected output:
 
-- backend-quality;
-- dataset-contracts;
-- HA minimum 2025.2.5;
-- HA current-harness 2026.9.3;
-- HA latest-stable 2026.9.4 smoke;
-- frontend;
-- frontend-e2e;
-- home-assistant-validation (hassfest + HACS).
+`docs/assets/locklearn-home.png`
 
-P6.8 remains pending until both local and GitHub-hosted gates are reviewed.
+Do not mark P6.9 PASS until that generated screenshot is committed and referenced
+by README, then all local/CI documentation gates are green.
+
+## Next qualification work
+
+1. generate the canonical screenshot from the deterministic E2E harness;
+2. commit the exact PNG without editing/re-styling it;
+3. replace the README pending screenshot note with the committed image;
+4. run Ruff/lint/mypy, generated-doc check, P6.9 tests, full pytest, frontend
+   lint/typecheck/Vitest/E2E/build and git diff check;
+5. run CI and verify every existing P6.8 job remains green plus the new generated
+   documentation/P6.9 gates.
+
+Known non-blocking warnings remain the duplicate `profile.json` test fixture and
+GitHub's future ubuntu-latest migration notice.
+
+Do not start P6.10 until P6.9 is PASS.
