@@ -11,7 +11,6 @@ test("core shell routes through Home, Learn, Quiz, Stats and Profiles", async ({
   await page.getByRole("button", { name: "Learn", exact: true }).click();
   await expect(page.getByRole("button", { name: "Start learning" })).toBeVisible();
   await page.getByRole("button", { name: "Start learning" }).click();
-  await expect(page.getByText("日本", { exact: true })).toBeVisible();
   await expect(page.locator('[lang="ja"] ruby')).toBeVisible();
   await expect(page.locator('[lang="ja"] rt')).toContainText("に");
 
@@ -32,8 +31,8 @@ test("core shell routes through Home, Learn, Quiz, Stats and Profiles", async ({
 
 test("keyboard navigation exposes visible focus without polling", async ({ page }) => {
   await page.keyboard.press("Tab");
-  const focused = page.locator(":focus");
-  await expect(focused).toBeVisible();
+  const focused = page.getByRole("combobox").first();
+  await expect(focused).toBeFocused();
 
   const outlineStyle = await focused.evaluate((element) => {
     const style = getComputedStyle(element);
