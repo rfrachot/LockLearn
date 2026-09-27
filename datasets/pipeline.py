@@ -41,7 +41,9 @@ from custom_components.locklearn.datasets import (
     SourceReference,
     serialize_manifest,
 )
-from custom_components.locklearn.datasets.storage_budget import activation_required_free_disk
+from custom_components.locklearn.datasets.storage_budget import (
+    activation_required_free_disk,
+)
 from custom_components.locklearn.storage import (
     ContentGenerationValidator,
     initialize_content_database,

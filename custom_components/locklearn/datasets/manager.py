@@ -591,20 +591,6 @@ class DatasetManager:
                 dataset_id=dataset_id,
                 version=version,
             )
-            database_bytes = next(
-                item.size for item in validated.manifest.files if item.role is FileRole.DATABASE
-            )
-            active_content_bytes = self._storage.content_generations.active_path.stat().st_size
-            estimated_generated_bytes = active_content_bytes + database_bytes
-            required_free_disk = max(
-                validated.manifest.required_free_disk,
-                activation_required_free_disk(
-                    estimated_generated_bytes,
-                    margin_bytes=self._activation_margin_bytes,
-                ),
-            )
-            if shutil.disk_usage(self._storage.paths.content_root).free < required_free_disk:
-                raise DatasetInstallError("insufficient free disk for dataset installation")
             await asyncio.to_thread(_extract_dataset_database, archive, extracted)
             package = await asyncio.to_thread(self._validator.validate_package, extracted)
             _validate_package_matches_manifest(package, validated.manifest)
@@ -624,6 +610,26 @@ class DatasetManager:
                         "an installed dataset version cannot change canonical content"
                     )
                 raise DatasetInstallError("dataset version is already installed")
+            packages_for_estimate = await asyncio.to_thread(
+                self._complete_package_set,
+                installed_rows,
+                dataset_id,
+                extracted,
+            )
+            estimated_generated_bytes = sum(
+                path.stat().st_size for path in packages_for_estimate
+            )
+            required_free_disk = max(
+                validated.manifest.required_free_disk,
+                activation_required_free_disk(
+                    estimated_generated_bytes,
+                    margin_bytes=self._activation_margin_bytes,
+                ),
+            )
+            if shutil.disk_usage(self._storage.paths.content_root).free < required_free_disk:
+                raise DatasetInstallError(
+                    "insufficient free disk for dataset installation"
+                )
             await asyncio.to_thread(
                 _store_assets_atomically,
                 archive,
@@ -633,11 +639,11 @@ class DatasetManager:
                 version,
             )
             await asyncio.to_thread(_store_package_atomically, extracted, package_path)
-            packages = await asyncio.to_thread(
-                self._complete_package_set,
-                installed_rows,
-                dataset_id,
-                package_path,
+            packages = tuple(
+                sorted(
+                    package_path if path == extracted else path
+                    for path in packages_for_estimate
+                )
             )
             generation_id = f"dataset-update-{uuid.uuid4().hex}"
             await self._storage.async_build_content_generation(

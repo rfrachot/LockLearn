@@ -22,6 +22,10 @@ def activation_required_free_disk(
         or generated_content_bytes < 0
     ):
         raise ValueError("generated_content_bytes must be an integer >= 0")
-    if isinstance(margin_bytes, bool) or not isinstance(margin_bytes, int) or margin_bytes < 0:
+    if (
+        isinstance(margin_bytes, bool)
+        or not isinstance(margin_bytes, int)
+        or margin_bytes < 0
+    ):
         raise ValueError("margin_bytes must be an integer >= 0")
     return generated_content_bytes * 2 + margin_bytes
