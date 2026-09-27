@@ -43,6 +43,9 @@ STATE_DAYS = 1_826
 STANDARD_NEW_CARDS_PER_DAY = 8
 STANDARD_REVIEW_CAPACITY_PER_DAY = 80
 STANDARD_SESSION_CARDS = 20
+STANDARD_SESSIONS_PER_DAY = (
+    STANDARD_REVIEW_CAPACITY_PER_DAY // STANDARD_SESSION_CARDS
+)
 STANDARD_NOTIFICATION_SLOTS_PER_DAY = 6
 AUDIT_EVENTS_PER_DAY = 2
 
@@ -146,72 +149,82 @@ def _project_five_year_state(path: Path, *, days: int) -> dict[str, Any]:
             current = start + timedelta(days=day_index)
             local_date = current.date().isoformat()
             timestamp = current.replace(hour=12).isoformat()
-            session_id = f"p6-7-session-{day_index}"
-            connection.execute(
-                """INSERT INTO sessions(
-                       id, profile_id, track_id, type, strategy, status, version,
-                       current_position, started_at_utc, last_activity_at_utc,
-                       completed_at_utc, question_count, settings_json
-                   ) VALUES (
-                       ?, ?, ?, 'learn', 'default', 'completed', 21, 20,
-                       ?, ?, ?, 20, '{}'
-                   )""",
-                (
-                    session_id,
-                    profile_id,
-                    track_id,
-                    timestamp,
-                    timestamp,
-                    timestamp,
-                ),
-            )
-
-            item_rows: list[tuple[Any, ...]] = []
-            answer_rows: list[tuple[Any, ...]] = []
-            for item_index in range(STANDARD_SESSION_CARDS):
-                global_card = (
-                    day_index * STANDARD_SESSION_CARDS + item_index
-                ) % progress_count
-                card_key = f"p6-7-card-{global_card}"
-                question_id = f"p6-7-q-{day_index}-{item_index}"
-                item_rows.append(
+            day_session_ids: list[str] = []
+            for session_index in range(STANDARD_SESSIONS_PER_DAY):
+                session_id = f"p6-7-session-{day_index}-{session_index}"
+                day_session_ids.append(session_id)
+                connection.execute(
+                    """INSERT INTO sessions(
+                           id, profile_id, track_id, type, strategy, status,
+                           version, current_position, started_at_utc,
+                           last_activity_at_utc, completed_at_utc,
+                           question_count, settings_json
+                       ) VALUES (
+                           ?, ?, ?, 'learn', 'default', 'completed', 21, 20,
+                           ?, ?, ?, 20, '{}'
+                       )""",
                     (
                         session_id,
-                        item_index,
-                        question_id,
-                        card_key,
-                        f"p6-7-item-{global_card}",
-                        f"p6-7-prompt-{global_card}",
-                        f"p6-7-answer-{global_card}",
-                        "answered",
-                        '{"selection":{"reason":"review_due"}}',
-                    )
-                )
-                answer_rows.append(
-                    (
-                        session_id,
-                        question_id,
-                        '{"kind":"benchmark","choice":1}',
-                        item_index + 2,
+                        profile_id,
+                        track_id,
                         timestamp,
-                    )
+                        timestamp,
+                        timestamp,
+                    ),
                 )
-            connection.executemany(
-                """INSERT INTO session_items(
-                       session_id, position, question_id, card_key,
-                       learning_item_id, prompt_facet_id, answer_facet_id,
-                       status, payload_json
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                item_rows,
-            )
-            connection.executemany(
-                """INSERT INTO session_answers(
-                       session_id, question_id, answer_json, resulting_version,
-                       created_at_utc
-                   ) VALUES (?, ?, ?, ?, ?)""",
-                answer_rows,
-            )
-            session_item_count += STANDARD_SESSION_CARDS
+
+                item_rows: list[tuple[Any, ...]] = []
+                answer_rows: list[tuple[Any, ...]] = []
+                for item_index in range(STANDARD_SESSION_CARDS):
+                    review_index = (
+                        session_index * STANDARD_SESSION_CARDS + item_index
+                    )
+                    global_card = (
+                        day_index * STANDARD_REVIEW_CAPACITY_PER_DAY
+                        + review_index
+                    ) % progress_count
+                    card_key = f"p6-7-card-{global_card}"
+                    question_id = (
+                        f"p6-7-q-{day_index}-{session_index}-{item_index}"
+                    )
+                    item_rows.append(
+                        (
+                            session_id,
+                            item_index,
+                            question_id,
+                            card_key,
+                            f"p6-7-item-{global_card}",
+                            f"p6-7-prompt-{global_card}",
+                            f"p6-7-answer-{global_card}",
+                            "answered",
+                            '{"selection":{"reason":"review_due"}}',
+                        )
+                    )
+                    answer_rows.append(
+                        (
+                            session_id,
+                            question_id,
+                            '{"kind":"benchmark","choice":1}',
+                            item_index + 2,
+                            timestamp,
+                        )
+                    )
+                connection.executemany(
+                    """INSERT INTO session_items(
+                           session_id, position, question_id, card_key,
+                           learning_item_id, prompt_facet_id, answer_facet_id,
+                           status, payload_json
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    item_rows,
+                )
+                connection.executemany(
+                    """INSERT INTO session_answers(
+                           session_id, question_id, answer_json,
+                           resulting_version, created_at_utc
+                       ) VALUES (?, ?, ?, ?, ?)""",
+                    answer_rows,
+                )
+                session_item_count += STANDARD_SESSION_CARDS
 
             event_rows: list[tuple[Any, ...]] = []
             for review_index in range(STANDARD_REVIEW_CAPACITY_PER_DAY):
@@ -254,7 +267,9 @@ def _project_five_year_state(path: Path, *, days: int) -> dict[str, Any]:
                         "p6-7-generation",
                         snapshot,
                         snapshot,
-                        session_id,
+                        day_session_ids[
+                            review_index // STANDARD_SESSION_CARDS
+                        ],
                         timestamp,
                         local_date,
                         "Europe/Paris",
@@ -415,7 +430,8 @@ def _project_five_year_state(path: Path, *, days: int) -> dict[str, Any]:
             "days": days,
             "standard_new_cards_per_day": STANDARD_NEW_CARDS_PER_DAY,
             "standard_review_capacity_per_day": STANDARD_REVIEW_CAPACITY_PER_DAY,
-            "standard_session_cards_per_day": STANDARD_SESSION_CARDS,
+            "standard_session_cards": STANDARD_SESSION_CARDS,
+            "standard_sessions_per_day": STANDARD_SESSIONS_PER_DAY,
             "standard_notification_slots_per_day": (
                 STANDARD_NOTIFICATION_SLOTS_PER_DAY
             ),
