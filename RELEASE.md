@@ -11,9 +11,8 @@ published.
   version and is mirrored by `INTEGRATION_VERSION` in
   `custom_components/locklearn/const.py`; CI requires them to match.
 - The current untagged V1 release candidate is `1.0.0`.
-- `frontend/package.json` is private npm toolchain metadata and is not the LockLearn
-  product version. The shipped frontend identity comes from the integration version
-  plus the committed bundle hash.
+- `frontend/package.json` is private npm toolchain metadata and is not the LockLearn product version.
+  The shipped frontend identity comes from the integration version plus the committed bundle hash.
 - Dataset/package versions are independent of the LockLearn software version.
 - Published software tags use `vMAJOR.MINOR.PATCH`.
 
@@ -81,7 +80,7 @@ published predecessor.
 Never test an upgrade by deleting, recreating, downgrading or manually rewriting the
 user database.
 
-## Preflight before tagging
+## Before tagging
 
 From a clean candidate commit:
 
@@ -121,7 +120,7 @@ The GitHub Actions candidate must also pass:
 - hassfest and HACS validation;
 - the documented P6.7 normative performance qualification.
 
-## Final 1.0 publication sequence
+## Release
 
 Only after P6.11 acceptance is PASS:
 
