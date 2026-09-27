@@ -187,9 +187,7 @@ async def _selection_p95(*, requested_cards: int, samples_count: int) -> float:
         )
         elapsed = (perf_counter() - started) * 1000
         if len(selected) != requested_cards:
-            raise RuntimeError(
-                f"expected {requested_cards} selected cards, got {len(selected)}"
-            )
+            raise RuntimeError(f"expected {requested_cards} selected cards, got {len(selected)}")
         samples.append(elapsed)
     return _p95(samples)
 
