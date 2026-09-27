@@ -731,3 +731,30 @@ async def test_dataset_update_replaces_active_provenance_snapshot(
         assert connection.execute(
             "SELECT snapshot_id FROM source_snapshots ORDER BY snapshot_id"
         ).fetchall() == [("locklearn:snapshot:prov-v2",)]
+
+
+async def test_legacy_content_package_is_rebuilt_without_in_place_migration(
+    content_storage: SQLiteStorage,
+    tmp_path: Path,
+) -> None:
+    """Supported old content schemas are immutable input to a new current generation."""
+    package = create_package(tmp_path / "legacy-schema-v1.db", "legacy-schema-v1")
+    with sqlite3.connect(package) as connection:
+        connection.execute(
+            "UPDATE schema_version SET version = 1 WHERE singleton = 1"
+        )
+        connection.commit()
+    package_before = package.read_bytes()
+
+    candidate = content_storage.paths.content_staging_dir / "legacy-schema-v1.next.db"
+    await content_storage.async_build_content_generation(
+        (package,),
+        candidate,
+        generation_id="legacy-schema-v1-generation",
+    )
+
+    assert package.read_bytes() == package_before
+    with inspect_generation(candidate) as connection:
+        assert connection.execute(
+            "SELECT version FROM schema_version WHERE singleton = 1"
+        ).fetchone() == (CONTENT_SCHEMA_VERSION,)

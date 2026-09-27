@@ -6,6 +6,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 
 from .const import (
+    CONFIG_ENTRY_VERSION,
     CONF_CREATE_PERSONAL_PROFILE,
     CONF_UI_LANGUAGE,
     DEFAULT_UI_LANGUAGE,
@@ -17,7 +18,7 @@ from .const import (
 class LockLearnConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle the LockLearn config flow."""
 
-    VERSION = 1
+    VERSION = CONFIG_ENTRY_VERSION
 
     @override
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:

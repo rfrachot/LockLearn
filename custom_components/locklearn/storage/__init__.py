@@ -12,7 +12,12 @@ from .content import (
     GenerationMetadata,
     initialize_content_database,
 )
-from .database import SQLiteStorage, StoragePaths
+from .database import (
+    SQLiteStorage,
+    StateMigrationError,
+    StoragePaths,
+    UnsupportedStateSchemaError,
+)
 from .repositories import (
     CardReference,
     ContentReferenceError,
@@ -46,9 +51,11 @@ __all__ = [
     "ProfileRecord",
     "ReviewEventRecord",
     "SQLiteStorage",
+    "StateMigrationError",
     "StateRepositories",
     "StoragePaths",
     "TrackCardRuleRecord",
     "TrackRecord",
+    "UnsupportedStateSchemaError",
     "initialize_content_database",
 ]

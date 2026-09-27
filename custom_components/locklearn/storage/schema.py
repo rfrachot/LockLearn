@@ -399,6 +399,59 @@ CREATE TABLE IF NOT EXISTS audit_events (
 """
 
 
+STATE_REQUIRED_TABLES = frozenset(
+    {
+        "schema_version",
+        "profiles",
+        "profile_members",
+        "tracks",
+        "track_pack_versions",
+        "track_card_rules",
+        "track_content_weights",
+        "notification_targets",
+        "progress",
+        "review_events",
+        "user_annotations",
+        "sessions",
+        "session_items",
+        "session_answers",
+        "exam_attempts",
+        "scheduler_config",
+        "scheduled_slots",
+        "notification_interactions",
+        "receptivity_samples",
+        "stats_daily",
+        "settings",
+        "audit_events",
+    }
+)
+
+STATE_REQUIRED_INDEXES = frozenset(
+    {
+        "profiles_status_name",
+        "profile_members_user_role",
+        "tracks_profile_status",
+        "track_pack_versions_pack",
+        "track_card_rules_card",
+        "notification_targets_profile_enabled",
+        "progress_due",
+        "progress_content_identity",
+        "review_events_card_created",
+        "review_events_profile_created",
+        "review_events_track_created",
+        "user_annotations_profile_item",
+        "sessions_profile_status_activity",
+        "session_items_card",
+        "exam_attempts_profile_started",
+        "scheduled_slots_profile_scheduled_status",
+        "notification_interactions_target_status_expires",
+        "notification_interactions_profile_created",
+        "receptivity_samples_profile_hour",
+        "stats_daily_profile_date",
+    }
+)
+
+
 # Package databases and generated catalogs intentionally share these normalized
 # tables. Packages leave generation_metadata empty; a generated catalog has
 # exactly one row. This keeps the runtime merge a bounded SQL copy, not an ETL.

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -9,7 +11,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .api.websocket import async_register_commands
-from .const import DATA_RUNTIME, DATA_STATIC_REGISTERED, DOMAIN
+from .const import CONFIG_ENTRY_VERSION, DATA_RUNTIME, DATA_STATIC_REGISTERED, DOMAIN
 from .ha_services import async_register_services, async_unregister_services
 from .panel import async_register_panel, async_register_static_path, async_unregister_panel
 from .runtime import LockLearnRuntime
@@ -18,6 +20,26 @@ type LockLearnConfigEntry = ConfigEntry
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 _PLATFORMS = (Platform.UPDATE,)
+_LOGGER = logging.getLogger(__name__)
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: LockLearnConfigEntry) -> bool:
+    """Validate or migrate the LockLearn Config Entry schema."""
+    if entry.version == CONFIG_ENTRY_VERSION:
+        return True
+    if entry.version > CONFIG_ENTRY_VERSION:
+        _LOGGER.error(
+            "LockLearn Config Entry version %s is newer than supported version %s",
+            entry.version,
+            CONFIG_ENTRY_VERSION,
+        )
+        return False
+    _LOGGER.error(
+        "No LockLearn Config Entry migration path from version %s to %s",
+        entry.version,
+        CONFIG_ENTRY_VERSION,
+    )
+    return False
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:

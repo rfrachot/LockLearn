@@ -23,7 +23,7 @@ from .content import (
     GenerationMetadata,
 )
 from .repositories import ReviewEventRecord, ReviewEventsRepository, StateRepositories
-from .schema import STATE_SCHEMA
+from .schema import STATE_REQUIRED_INDEXES, STATE_REQUIRED_TABLES, STATE_SCHEMA
 
 T = TypeVar("T")
 
@@ -34,6 +34,18 @@ class SessionNotFoundError(LookupError):
 
 class StaleSessionError(RuntimeError):
     """Raised when a session CAS loses a race."""
+
+
+class StateMigrationError(RuntimeError):
+    """Raised when a state schema migration cannot complete safely."""
+
+    def __init__(self, message: str, *, backup_path: Path | None = None) -> None:
+        super().__init__(message)
+        self.backup_path = backup_path
+
+
+class UnsupportedStateSchemaError(StateMigrationError):
+    """Raised when a state database version cannot be opened by this build."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +86,70 @@ def _configure_state_connection(connection: sqlite3.Connection) -> None:
     connection.execute("PRAGMA foreign_keys = ON")
 
 
+def _read_state_schema_version(connection: sqlite3.Connection, path: Path) -> int:
+    table = connection.execute(
+        """SELECT 1 FROM sqlite_master
+           WHERE type = 'table' AND name = 'schema_version'"""
+    ).fetchone()
+    if table is None:
+        raise UnsupportedStateSchemaError(
+            f"State database has no schema_version table: {path}"
+        )
+    rows = connection.execute("SELECT version FROM schema_version").fetchall()
+    if len(rows) != 1:
+        raise UnsupportedStateSchemaError(
+            f"State database must contain exactly one schema version row: {path}"
+        )
+    try:
+        version = int(rows[0][0])
+    except (TypeError, ValueError) as err:
+        raise UnsupportedStateSchemaError(
+            f"State database has an invalid schema version: {path}"
+        ) from err
+    if version < 1:
+        raise UnsupportedStateSchemaError(
+            f"State database has unsupported schema version {version}: {path}"
+        )
+    return version
+
+
+def _validate_state_connection(
+    connection: sqlite3.Connection,
+    path: Path,
+    *,
+    expected_version: int,
+    require_current_schema: bool,
+) -> None:
+    actual_version = _read_state_schema_version(connection, path)
+    if actual_version != expected_version:
+        raise StateMigrationError(
+            f"State database schema version is {actual_version}, expected {expected_version}: {path}"
+        )
+    integrity = connection.execute("PRAGMA integrity_check").fetchall()
+    if integrity != [("ok",)]:
+        raise StateMigrationError(f"State database failed integrity_check: {path}")
+    if connection.execute("PRAGMA foreign_key_check").fetchall():
+        raise StateMigrationError(f"State database failed foreign_key_check: {path}")
+    if not require_current_schema:
+        return
+
+    objects = connection.execute(
+        "SELECT type, name FROM sqlite_master WHERE type IN ('table', 'index')"
+    ).fetchall()
+    tables = {str(name) for object_type, name in objects if object_type == "table"}
+    indexes = {str(name) for object_type, name in objects if object_type == "index"}
+    missing_tables = STATE_REQUIRED_TABLES - tables
+    missing_indexes = STATE_REQUIRED_INDEXES - indexes
+    if missing_tables:
+        raise StateMigrationError(
+            f"State database is missing required tables: {sorted(missing_tables)!r}"
+        )
+    if missing_indexes:
+        raise StateMigrationError(
+            f"State database is missing required indexes: {sorted(missing_indexes)!r}"
+        )
+
+
 def _initialize_state_database(path: Path, schema: str, version: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
@@ -83,41 +159,57 @@ def _initialize_state_database(path: Path, schema: str, version: int) -> None:
             connection.executescript(schema)
             connection.execute("INSERT INTO schema_version(version) VALUES (?)", (version,))
             connection.commit()
+            _validate_state_connection(
+                connection,
+                path,
+                expected_version=version,
+                require_current_schema=True,
+            )
         finally:
             connection.close()
         return
 
+    backup: Path | None = None
     connection = sqlite3.connect(path)
     try:
         _configure_state_connection(connection)
-        table = connection.execute(
-            """SELECT 1 FROM sqlite_master
-               WHERE type = 'table' AND name = 'schema_version'"""
-        ).fetchone()
-        if table is None:
-            raise RuntimeError(f"State database has no schema_version table: {path}")
-        row = connection.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
-        if row is None:
-            raise RuntimeError(f"State database has no schema version row: {path}")
-        current = int(row[0])
+        current = _read_state_schema_version(connection, path)
         if current > version:
-            raise RuntimeError(f"Unsupported future schema version {current} for {path}")
+            raise UnsupportedStateSchemaError(
+                f"Unsupported future schema version {current} for {path}"
+            )
         if current == version:
-            connection.executescript(schema)
-            connection.commit()
+            _validate_state_connection(
+                connection,
+                path,
+                expected_version=version,
+                require_current_schema=True,
+            )
             return
-        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        backup = path.with_name(f"{path.name}.pre-migration-v{current}.bak")
-        backup.unlink(missing_ok=True)
-        target = sqlite3.connect(backup)
-        try:
-            connection.backup(target)
-        finally:
-            target.close()
+        backup = _create_state_migration_backup(connection, path, current)
     finally:
         connection.close()
 
-    _migrate_state_database(path, schema, current, version)
+    try:
+        _migrate_state_database(path, schema, current, version)
+    except Exception as err:
+        raise StateMigrationError(
+            f"State migration v{current} -> v{version} failed; "
+            f"recovery snapshot preserved at {backup}",
+            backup_path=backup,
+        ) from err
+
+    connection = sqlite3.connect(path)
+    try:
+        _configure_state_connection(connection)
+        _validate_state_connection(
+            connection,
+            path,
+            expected_version=version,
+            require_current_schema=True,
+        )
+    finally:
+        connection.close()
 
 
 def _unlink_sqlite_files(path: Path) -> None:
@@ -125,75 +217,148 @@ def _unlink_sqlite_files(path: Path) -> None:
         candidate.unlink(missing_ok=True)
 
 
-def _migrate_state_database(path: Path, schema: str, current: int, target: int) -> None:
-    if current == 1 and target >= 2:
-        candidate = path.with_name(f".{path.name}.v2-migration")
+def _unlink_sqlite_sidecars(path: Path) -> None:
+    for candidate in (Path(f"{path}-wal"), Path(f"{path}-shm")):
+        candidate.unlink(missing_ok=True)
+
+
+def _create_state_migration_backup(
+    connection: sqlite3.Connection,
+    path: Path,
+    current_version: int,
+) -> Path:
+    connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    backup = path.with_name(f"{path.name}.pre-migration-v{current_version}.bak")
+    candidate = backup.with_name(f".{backup.name}.{uuid.uuid4().hex}.tmp")
+    _unlink_sqlite_files(candidate)
+
+    target = sqlite3.connect(candidate)
+    try:
+        connection.backup(target)
+        _validate_state_connection(
+            target,
+            candidate,
+            expected_version=current_version,
+            require_current_schema=False,
+        )
+    finally:
+        target.close()
+
+    try:
+        _unlink_sqlite_sidecars(backup)
+        os.replace(candidate, backup)
+    finally:
         _unlink_sqlite_files(candidate)
-        connection = sqlite3.connect(candidate)
-        try:
-            _configure_state_connection(connection)
-            connection.executescript(schema)
-            connection.execute("ATTACH DATABASE ? AS legacy", (str(path),))
-            connection.execute("BEGIN IMMEDIATE")
-            connection.execute("INSERT INTO schema_version(version) VALUES (2)")
-            connection.execute(
-                """INSERT INTO sessions(
-                       id, profile_id, track_id, status, version, current_position,
-                       started_at_utc, last_activity_at_utc
-                   )
-                   SELECT id, profile_id, track_id, status, version, current_position,
-                          started_at_utc, last_activity_at_utc
-                   FROM legacy.sessions"""
-            )
-            connection.execute(
-                """INSERT INTO session_answers(
-                       id, session_id, question_id, answer_json, resulting_version, created_at_utc
-                   )
-                   SELECT id, session_id, question_id, answer_json, resulting_version, created_at_utc
-                   FROM legacy.session_answers"""
-            )
-            connection.execute(
-                """INSERT INTO progress(
-                       profile_id, track_id, card_key, state, next_due_at_utc
-                   )
-                   SELECT profile_id, track_id, card_key, state, next_due_at_utc
-                   FROM legacy.progress"""
-            )
-            connection.execute(
-                """INSERT INTO audit_events(
-                       id, event_type, actor_user_id, profile_id, payload_json, created_at_utc
-                   )
-                   SELECT id, event_type, actor_user_id, profile_id, payload_json, created_at_utc
-                   FROM legacy.audit_events"""
-            )
-            connection.commit()
-            connection.execute("DETACH DATABASE legacy")
-            if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
-                raise RuntimeError("Migrated state database failed integrity_check")
-            if connection.execute("PRAGMA foreign_key_check").fetchall():
-                raise RuntimeError("Migrated state database failed foreign_key_check")
-            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        except Exception:
-            if connection.in_transaction:
-                connection.rollback()
-            raise
-        finally:
-            connection.close()
+    return backup
 
-        os.replace(candidate, path)
-        _unlink_sqlite_files(candidate)
-        current = 2
 
-    if current == target:
-        return
+type StateMigrationOperation = Callable[[sqlite3.Connection], None]
+type StateMigration = Callable[[Path, str], None]
 
-    if current == 2 and target >= 3:
-        connection = sqlite3.connect(path)
-        try:
-            _configure_state_connection(connection)
-            connection.execute("BEGIN IMMEDIATE")
-            connection.execute(
-                """CREATE TABLE progress_v3 (
+
+def _run_transactional_state_migration(
+    path: Path,
+    source_version: int,
+    target_version: int,
+    operation: StateMigrationOperation,
+) -> None:
+    connection = sqlite3.connect(path)
+    try:
+        _configure_state_connection(connection)
+        actual = _read_state_schema_version(connection, path)
+        if actual != source_version:
+            raise StateMigrationError(
+                f"State migration expected v{source_version}, found v{actual}: {path}"
+            )
+        connection.execute("BEGIN IMMEDIATE")
+        operation(connection)
+        connection.execute(
+            "UPDATE schema_version SET version = ?",
+            (target_version,),
+        )
+        _validate_state_connection(
+            connection,
+            path,
+            expected_version=target_version,
+            require_current_schema=False,
+        )
+        connection.commit()
+        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except Exception:
+        if connection.in_transaction:
+            connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+def _migrate_state_v1_to_v2(path: Path, schema: str) -> None:
+    candidate = path.with_name(f".{path.name}.v2-migration")
+    _unlink_sqlite_files(candidate)
+    connection = sqlite3.connect(candidate)
+    try:
+        _configure_state_connection(connection)
+        connection.executescript(schema)
+        connection.execute("ATTACH DATABASE ? AS legacy", (str(path),))
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute("INSERT INTO schema_version(version) VALUES (2)")
+        connection.execute(
+            """INSERT INTO sessions(
+                   id, profile_id, track_id, status, version, current_position,
+                   started_at_utc, last_activity_at_utc
+               )
+               SELECT id, profile_id, track_id, status, version, current_position,
+                      started_at_utc, last_activity_at_utc
+               FROM legacy.sessions"""
+        )
+        connection.execute(
+            """INSERT INTO session_answers(
+                   id, session_id, question_id, answer_json, resulting_version, created_at_utc
+               )
+               SELECT id, session_id, question_id, answer_json, resulting_version, created_at_utc
+               FROM legacy.session_answers"""
+        )
+        connection.execute(
+            """INSERT INTO progress(
+                   profile_id, track_id, card_key, state, next_due_at_utc
+               )
+               SELECT profile_id, track_id, card_key, state, next_due_at_utc
+               FROM legacy.progress"""
+        )
+        connection.execute(
+            """INSERT INTO audit_events(
+                   id, event_type, actor_user_id, profile_id, payload_json, created_at_utc
+               )
+               SELECT id, event_type, actor_user_id, profile_id, payload_json, created_at_utc
+               FROM legacy.audit_events"""
+        )
+        _validate_state_connection(
+            connection,
+            candidate,
+            expected_version=2,
+            require_current_schema=False,
+        )
+        connection.commit()
+        connection.execute("DETACH DATABASE legacy")
+        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except Exception:
+        if connection.in_transaction:
+            connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+    _unlink_sqlite_sidecars(path)
+    os.replace(candidate, path)
+    _unlink_sqlite_files(candidate)
+
+
+def _migrate_state_v2_to_v3(path: Path, schema: str) -> None:
+    del schema
+
+    def migrate(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """CREATE TABLE progress_v3 (
                 profile_id TEXT NOT NULL,
                 track_id TEXT NOT NULL,
                 card_key TEXT NOT NULL,
@@ -208,7 +373,8 @@ def _migrate_state_database(path: Path, schema: str, current: int, target: int) 
                 seen_count INTEGER NOT NULL DEFAULT 0 CHECK (seen_count >= 0),
                 verified_correct_count INTEGER NOT NULL DEFAULT 0
                     CHECK (verified_correct_count >= 0),
-                verified_wrong_count INTEGER NOT NULL DEFAULT 0 CHECK (verified_wrong_count >= 0),
+                verified_wrong_count INTEGER NOT NULL DEFAULT 0
+                    CHECK (verified_wrong_count >= 0),
                 self_known_count INTEGER NOT NULL DEFAULT 0 CHECK (self_known_count >= 0),
                 self_review_count INTEGER NOT NULL DEFAULT 0 CHECK (self_review_count >= 0),
                 first_seen_at_utc TEXT,
@@ -244,9 +410,9 @@ def _migrate_state_database(path: Path, schema: str, current: int, target: int) 
                     )
                 )
             )"""
-            )
-            connection.execute(
-                """INSERT INTO progress_v3
+        )
+        connection.execute(
+            """INSERT INTO progress_v3
                SELECT profile_id, track_id, card_key, learning_item_id,
                       prompt_facet_id, answer_facet_id, state, mastery, box,
                       seen_count, verified_correct_count, verified_wrong_count,
@@ -258,124 +424,124 @@ def _migrate_state_database(path: Path, schema: str, current: int, target: int) 
                       content_status, policy_version, dataset_generation,
                       normalization_version, updated_at_utc
                FROM progress"""
-            )
-            connection.execute("DROP TABLE progress")
-            connection.execute("ALTER TABLE progress_v3 RENAME TO progress")
-            connection.execute(
-                """CREATE INDEX progress_due
+        )
+        connection.execute("DROP TABLE progress")
+        connection.execute("ALTER TABLE progress_v3 RENAME TO progress")
+        connection.execute(
+            """CREATE INDEX progress_due
                ON progress(profile_id, track_id, state, next_due_at_utc)"""
-            )
-            connection.execute(
-                """CREATE INDEX progress_content_identity
+        )
+        connection.execute(
+            """CREATE INDEX progress_content_identity
                ON progress(card_key, learning_item_id, prompt_facet_id, answer_facet_id)"""
-            )
-            connection.execute("UPDATE schema_version SET version = 3")
-            connection.commit()
-            if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
-                raise RuntimeError("Migrated state database failed integrity_check")
-            if connection.execute("PRAGMA foreign_key_check").fetchall():
-                raise RuntimeError("Migrated state database failed foreign_key_check")
-            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        except Exception:
-            if connection.in_transaction:
-                connection.rollback()
-            raise
-        finally:
-            connection.close()
-        current = 3
+        )
 
-    if current == 3 and target >= 4:
+    _run_transactional_state_migration(path, 2, 3, migrate)
+
+
+def _migrate_state_v3_to_v4(path: Path, schema: str) -> None:
+    del schema
+
+    def migrate(connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(scheduled_slots)").fetchall()
+        }
+        if "deferred_until_utc" not in columns:
+            connection.execute(
+                "ALTER TABLE scheduled_slots ADD COLUMN deferred_until_utc TEXT"
+            )
+        if "defer_reason" not in columns:
+            connection.execute("ALTER TABLE scheduled_slots ADD COLUMN defer_reason TEXT")
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS receptivity_samples (
+                slot_id TEXT PRIMARY KEY
+                    REFERENCES scheduled_slots(slot_id) ON DELETE CASCADE,
+                profile_id TEXT NOT NULL,
+                target_id TEXT,
+                delivered_at_utc TEXT NOT NULL,
+                timezone_name TEXT NOT NULL,
+                weekday INTEGER NOT NULL CHECK (weekday >= 0 AND weekday <= 6),
+                local_hour INTEGER NOT NULL CHECK (local_hour >= 0 AND local_hour <= 23),
+                delivered INTEGER NOT NULL DEFAULT 1 CHECK (delivered IN (0, 1)),
+                cleared INTEGER NOT NULL DEFAULT 0 CHECK (cleared IN (0, 1)),
+                answered INTEGER NOT NULL DEFAULT 0 CHECK (answered IN (0, 1)),
+                delivery_to_action_ms INTEGER CHECK (
+                    delivery_to_action_ms IS NULL OR delivery_to_action_ms >= 0
+                ),
+                updated_at_utc TEXT NOT NULL
+            )"""
+        )
+        connection.execute(
+            """CREATE INDEX IF NOT EXISTS receptivity_samples_profile_hour
+               ON receptivity_samples(
+                   profile_id, weekday, local_hour, delivered_at_utc DESC
+               )"""
+        )
+
+    _run_transactional_state_migration(path, 3, 4, migrate)
+
+
+def _migrate_state_v4_to_v5(path: Path, schema: str) -> None:
+    del schema
+
+    def migrate(connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(scheduled_slots)").fetchall()
+        }
+        additions = (
+            ("card_key", "TEXT"),
+            ("learning_item_id", "TEXT"),
+            ("prompt_facet_id", "TEXT"),
+            ("answer_facet_id", "TEXT"),
+            ("selection_reason", "TEXT"),
+            ("expired_reason", "TEXT"),
+        )
+        for column_name, column_type in additions:
+            if column_name not in columns:
+                connection.execute(
+                    f"ALTER TABLE scheduled_slots ADD COLUMN {column_name} {column_type}"
+                )
+
+    _run_transactional_state_migration(path, 4, 5, migrate)
+
+
+_STATE_MIGRATIONS: dict[int, StateMigration] = {
+    1: _migrate_state_v1_to_v2,
+    2: _migrate_state_v2_to_v3,
+    3: _migrate_state_v3_to_v4,
+    4: _migrate_state_v4_to_v5,
+}
+
+
+def _migrate_state_database(path: Path, schema: str, current: int, target: int) -> None:
+    if current > target:
+        raise StateMigrationError(
+            f"Cannot migrate state database backwards from v{current} to v{target}"
+        )
+
+    while current < target:
+        migration = _STATE_MIGRATIONS.get(current)
+        if migration is None:
+            raise StateMigrationError(
+                f"No sequential state migration registered from v{current} to v{current + 1}"
+            )
+        expected = current + 1
+        migration(path, schema)
+
         connection = sqlite3.connect(path)
         try:
             _configure_state_connection(connection)
-            connection.execute("BEGIN IMMEDIATE")
-            columns = {
-                str(row[1])
-                for row in connection.execute("PRAGMA table_info(scheduled_slots)").fetchall()
-            }
-            if "deferred_until_utc" not in columns:
-                connection.execute("ALTER TABLE scheduled_slots ADD COLUMN deferred_until_utc TEXT")
-            if "defer_reason" not in columns:
-                connection.execute("ALTER TABLE scheduled_slots ADD COLUMN defer_reason TEXT")
-            connection.execute(
-                """CREATE TABLE IF NOT EXISTS receptivity_samples (
-                    slot_id TEXT PRIMARY KEY
-                        REFERENCES scheduled_slots(slot_id) ON DELETE CASCADE,
-                    profile_id TEXT NOT NULL,
-                    target_id TEXT,
-                    delivered_at_utc TEXT NOT NULL,
-                    timezone_name TEXT NOT NULL,
-                    weekday INTEGER NOT NULL CHECK (weekday >= 0 AND weekday <= 6),
-                    local_hour INTEGER NOT NULL CHECK (local_hour >= 0 AND local_hour <= 23),
-                    delivered INTEGER NOT NULL DEFAULT 1 CHECK (delivered IN (0, 1)),
-                    cleared INTEGER NOT NULL DEFAULT 0 CHECK (cleared IN (0, 1)),
-                    answered INTEGER NOT NULL DEFAULT 0 CHECK (answered IN (0, 1)),
-                    delivery_to_action_ms INTEGER CHECK (
-                        delivery_to_action_ms IS NULL OR delivery_to_action_ms >= 0
-                    ),
-                    updated_at_utc TEXT NOT NULL
-                )"""
+            _validate_state_connection(
+                connection,
+                path,
+                expected_version=expected,
+                require_current_schema=expected == target,
             )
-            connection.execute(
-                """CREATE INDEX IF NOT EXISTS receptivity_samples_profile_hour
-                   ON receptivity_samples(
-                       profile_id, weekday, local_hour, delivered_at_utc DESC
-                   )"""
-            )
-            connection.execute("UPDATE schema_version SET version = 4")
-            connection.commit()
-            if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
-                raise RuntimeError("Migrated state database failed integrity_check")
-            if connection.execute("PRAGMA foreign_key_check").fetchall():
-                raise RuntimeError("Migrated state database failed foreign_key_check")
-            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        except Exception:
-            if connection.in_transaction:
-                connection.rollback()
-            raise
         finally:
             connection.close()
-        current = 4
-
-    if current == 4 and target >= 5:
-        connection = sqlite3.connect(path)
-        try:
-            _configure_state_connection(connection)
-            connection.execute("BEGIN IMMEDIATE")
-            columns = {
-                str(row[1])
-                for row in connection.execute("PRAGMA table_info(scheduled_slots)").fetchall()
-            }
-            additions = (
-                ("card_key", "TEXT"),
-                ("learning_item_id", "TEXT"),
-                ("prompt_facet_id", "TEXT"),
-                ("answer_facet_id", "TEXT"),
-                ("selection_reason", "TEXT"),
-                ("expired_reason", "TEXT"),
-            )
-            for column_name, column_type in additions:
-                if column_name not in columns:
-                    connection.execute(
-                        f"ALTER TABLE scheduled_slots ADD COLUMN {column_name} {column_type}"
-                    )
-            connection.execute("UPDATE schema_version SET version = 5")
-            connection.commit()
-            if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
-                raise RuntimeError("Migrated state database failed integrity_check")
-            if connection.execute("PRAGMA foreign_key_check").fetchall():
-                raise RuntimeError("Migrated state database failed foreign_key_check")
-            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        except Exception:
-            if connection.in_transaction:
-                connection.rollback()
-            raise
-        finally:
-            connection.close()
-        current = 5
-
-    if current != target:
-        raise RuntimeError(f"No state migration path from {current} to {target}")
+        current = expected
 
 
 class SQLiteStorage:
