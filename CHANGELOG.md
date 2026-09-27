@@ -9,6 +9,11 @@ All notable changes will be documented here.
   runtime setup, avoiding blocking-call warnings on the HA event loop.
 
 ### Added
+- P5.7 Stats & difficulties UI backed by the existing private P3.13/P3.11 read
+  models, with due/SRS state, trusted verified accuracy and retention,
+  metacognitive calibration, leeches, confusions, recent daily activity and an
+  explicitly secondary time-decaying mastery estimate. Exposure counts remain
+  separate from verified retrieval evidence.
 - P5.6 Sources & Licences product UI with installed/available dataset status,
   source freshness and disk-cache visibility, changelog links, persisted
   provenance/attribution details, licence facts and HA-admin-only refresh/install
