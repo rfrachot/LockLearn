@@ -2,159 +2,106 @@
 
 ## Current state
 
-Branch: `feat/p6-hardening`.
+Branch: feat/p6-hardening.
 
-P5 and its real-HA exit gate remain PASS.
+P5 and its real-HA exit gate remain PASS. P6.1 through P6.6 are PASS.
 
-P6.1 — database/config/content migrations and recovery — PASS.
+P6.7 — performance, scale and storage-budget validation — is implementation
+complete. Automated/reference-hardware qualification is pending. No P6.8 work
+has started.
 
-P6.2 — backup hooks, unload/reload and uninstall/recovery UX — PASS.
+## P6.7 implementation
 
-P6.3 — Repairs and diagnostics — PASS.
+The existing scripts/p5_9_performance.py remains authoritative for the V1
+session-answer, next-card and scheduler wall-clock budgets.
 
-P6.4 — secure export/import and data deletion — PASS.
+New scripts/p6_7_scale_validation.py adds:
+- the same P5.9 hot-path gate;
+- a 60,000-card normalized content build/activation measurement;
+- a 1,826-day state.db materialization using the real STATE_SCHEMA;
+- Standard assumptions of 8 new cards/day, 80 verified reviews/day from P3.14,
+  four 20-card sessions/day, six notification slots/day and two audit rows/day;
+- SQLite integrity/FK/page geometry, row-count, bytes/day and MiB/year output.
 
-P6.5 — HA entity/sensor privacy contract and optional integration boundary —
-PASS at `a3cd543` and pushed before P6.6 started.
+Dataset storage policy is centralized at 150 MiB per official artifact, a
+500 MiB aggregate reconstructible-cache warning, and activation free space of
+at least 2x estimated generated content plus a 32 MiB safety margin. New builds
+sign a floor and runtime recomputes a package-set floor for historical manifests.
 
-P6.6 — security hardening and threat-model tests — PASS after deep review and
-qualification on 2026-09-27.
+Bounded process-local metrics now cover writer queue wait, session answer,
+scheduler generation and clock drift, content build and content activation.
+They expose aggregate-only count/last/p95/max values and never become HA
+sensors. No schema migration or frontend production-source change is involved.
 
-## P6.6 implementation
+ADR-0052 documents these choices.
 
-### XSS / rich text
+## Luna qualification contract
 
-- third-party rich text remains a closed AST, never arbitrary HTML;
-- dataset build canonicalizes rich-text payloads before canonical hashing and
-  signing;
-- existing package/generation validation remains an independent parser;
-- frontend continues to use Lit interpolation, never `unsafeHTML`;
-- P6.6 frontend regression verifies hostile HTML-looking text remains an
-  interpolated value rather than template markup.
+Luna must ONLY execute tests and report results. It must not edit, format,
+commit, push, merge or start P6.8.
 
-### SVG
+Run:
 
-- `image/svg+xml` is now an allowed public image MIME only because P6.6 adds
-  dedicated build-time sanitation;
-- original third-party SVG bytes are never hashed/signed/packaged directly;
-- sanitizer strips scripts, foreignObject/style/iframe/object/embed,
-  `on*`/style attributes, remote/data/javascript/file references and unsafe
-  namespaces;
-- href/xlink references are local-fragment-only;
-- DTD/entity declarations are rejected;
-- XML depth/node budgets prevent parser-tree abuse;
-- package manifest, SQLite metadata and SHA-256 bind the sanitized bytes;
-- runtime package validation rejects raw SVG bytes even when re-signed by a
-  trusted key;
-- this supersedes ADR-0018 only where it previously rejected SVG pending a
-  sanitizer.
+~~~bash
+git pull --ff-only origin feat/p6-hardening
+git status --short --branch
+git rev-parse HEAD
 
-### Pack filters / SQL
-
-New `core/pack_filters.py` and
-`datasets/schemas/content-filter.schema.json` define the closed V1 filter
-grammar:
-
-- fields: `content_type`, `register`, `dataset_id`;
-- operators: `eq`, `in`;
-- conjunction only through `all`;
-- unknown keys/fields/operators/types fail closed;
-- SQL identifiers/operators are code constants;
-- package values are emitted separately as sqlite3 parameters.
-- compiler array inputs are restricted to JSON list types, matching the schema.
-
-Injection tests execute a malicious literal against SQLite and verify it cannot
-alter query structure or schema.
-
-### Existing threat regressions reused by the P6.6 gate
-
-- `tests/backend/test_acl.py`: Profile ACL authority and no HA-admin bypass;
-- `tests/backend/test_notification_interactions.py`: concurrent single-use
-  action replay/expiry and bearer redaction;
-- `tests/datasets/test_dataset_package.py`: hostile signed-dataset ZIP;
-- `tests/backend/test_profile_transfer.py`: hostile Profile archive,
-  owner-bound/one-shot private transfer lifecycle;
-- `tests/datasets/test_assets.py` and
-  `tests/datasets/test_asset_pipeline.py`: signed public asset binding,
-  traversal checks, cache tamper detection.
-
-New `tests/backend/test_security_p6_6.py` adds rich-text, SVG primitive,
-parameterized Pack-filter and private/static-root regressions.
-
-New `tests/datasets/test_svg_security.py` proves that the **signed packaged SVG
-bytes** are the sanitized derivative, that runtime rejects a raw re-signed SVG,
-and that unsafe rich text fails before a dataset can be signed.
-
-Deep review fixes also make Profile archive JSON/member reads enforce actual
-decompressed-byte ceilings and convert malformed-compression errors into the
-normal transfer error boundary. Dataset package payload and SQLite streaming
-enforce actual member/total bounds before trusting bytes.
-
-### Documentation
-
-- `SECURITY.md` is now the consolidated V1 threat model;
-- ADR-0051 records the security-hardening decisions and reuse of prior
-  regressions.
-
-No P6.7 performance/scale/storage-budget work is included.
-
-## Verification state
-
-Final P6.6 qualification is complete.
-
-Recommended targeted backend/dataset gate:
-
-```text
 .venv/bin/python -m pytest -q --tb=short \
-  tests/backend/test_security_p6_6.py \
-  tests/backend/test_acl.py \
-  tests/backend/test_notification_interactions.py \
-  tests/backend/test_profile_transfer.py \
-  tests/datasets/test_svg_security.py \
-  tests/datasets/test_dataset_package.py \
-  tests/datasets/test_assets.py \
-  tests/datasets/test_asset_pipeline.py
-```
+  tests/backend/test_observability.py \
+  tests/backend/test_storage.py \
+  tests/backend/test_scheduler.py \
+  tests/backend/test_diagnostics.py \
+  tests/datasets/test_build_pipeline.py \
+  tests/datasets/test_dataset_manager.py
 
-Then backend full gate:
+.venv/bin/python scripts/p5_9_performance.py
+.venv/bin/python scripts/p6_7_scale_validation.py
 
-```text
+python3 -VV
+uname -a
+lscpu
+free -h
+df -h .
+
 .venv/bin/python -m ruff format --check .
 .venv/bin/python -m ruff check .
 .venv/bin/python -m mypy custom_components datasets tests
 .venv/bin/python datasets/tools/validate_resources.py
 .venv/bin/python -m pytest -q --tb=short
-```
 
-P6.6 changes a frontend security test, so qualification must also run:
-
-```text
 cd frontend
 npm run typecheck
 npm test
 npm run build
-```
+cd ..
+sha256sum custom_components/locklearn/frontend/locklearn-panel.js
 
-If build output changes unexpectedly despite no frontend source change, inspect
-and explain before committing generated artifacts.
+git diff --check
+git status --short --branch
+git rev-parse HEAD
+~~~
 
-Do not start P6.7 during qualification.
+P6.6 reference frontend bundle hash:
+d1626186b8fe1cf50f81efb5a4f3dd05de3dd54e22ec86b20612000c9b259385
 
-## Qualification result
+Because P6.7 changes no frontend production source, the bundle is expected to
+remain byte-identical. Any difference must be reported rather than committed.
 
-- targeted gate: `98 passed, 1 warning` (expected duplicate ZIP member warning);
-- Ruff format/check: PASS (`280 files already formatted`, lint clean);
-- mypy: PASS (`163 source files`);
-- resource validation: PASS;
-- full pytest: `455 passed, 1 warning` (same expected warning);
-- frontend typecheck: PASS;
-- frontend tests: `49 passed` across 15 files;
-- frontend build: PASS; tracked bundle hash stayed
-  `d1626186b8fe1cf50f81efb5a4f3dd05de3dd54e22ec86b20612000c9b259385` and no
-  bundle diff was generated;
-- no frontend production source changed and no P6.7 work started.
+## Report required from Luna
 
-Current branch remains `feat/p6-hardening`; the qualification fixes are in the
-local commit recorded below.
+Return:
+1. tested HEAD;
+2. targeted pytest result;
+3. complete P5.9 JSON;
+4. complete P6.7 scale JSON;
+5. Python/kernel/CPU/RAM/filesystem facts;
+6. exact five-year state.db size and MiB/year;
+7. 60k package/candidate size and build/activation time;
+8. Ruff, mypy, resources and full pytest results;
+9. frontend typecheck/test/build result;
+10. final frontend bundle hash;
+11. final git status;
+12. every warning/anomaly.
 
-Commit: `f1d4568 fix(security): close P6.6 review gaps`.
+P6.7 remains qualification-pending until those measurements are reviewed.
