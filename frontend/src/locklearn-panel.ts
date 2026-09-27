@@ -6,6 +6,7 @@ import "./learn-view";
 import "./quiz-view";
 import "./management-view";
 import "./dataset-view";
+import "./stats-view";
 import type { ManagementRoute } from "./management-view";
 import { isRouteVisible, visibleNavigation } from "./navigation";
 import { defaultProfileId, groupProfiles } from "./profile-switcher";
@@ -547,7 +548,14 @@ export class LockLearnPanel extends LitElement {
                       )}
                       .dashboard=${this.dashboard}
                     ></locklearn-quiz-view>`
-                  : this.activeRoute === "sources"
+                  : this.activeRoute === "stats"
+                    ? html`<locklearn-stats-view
+                        .hass=${this.hass}
+                        .profile=${this.profiles.find(
+                          (profile) => profile.profile_id === this.selectedProfileId,
+                        )}
+                      ></locklearn-stats-view>`
+                    : this.activeRoute === "sources"
                     ? html`<locklearn-dataset-view
                         .hass=${this.hass}
                         .admin=${this.bootstrapState?.is_admin ?? false}
