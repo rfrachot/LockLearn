@@ -67,6 +67,7 @@ export class LockLearnStatsView extends LitElement {
   @state() private selectedTrackId = "";
   @state() private loading = false;
   @state() private errorMessage = "";
+  private loadGeneration = 0;
 
   static styles = css`
     :host, section, article, div, select { box-sizing: border-box; min-width: 0; max-width: 100%; }
@@ -98,11 +99,6 @@ export class LockLearnStatsView extends LitElement {
     }
   `;
 
-  connectedCallback(): void {
-    super.connectedCallback();
-    void this.load();
-  }
-
   protected updated(changed: Map<PropertyKey, unknown>): void {
     if (changed.has("hass") || changed.has("profile")) void this.load();
   }
@@ -124,10 +120,13 @@ export class LockLearnStatsView extends LitElement {
       this.tracks = [];
       return;
     }
+    const generation = ++this.loadGeneration;
+    const hass = this.hass;
+    const profileId = this.profile.profile_id;
     this.loading = true;
     this.errorMessage = "";
     try {
-      const tracks = (await listTracks(this.hass, this.profile.profile_id)).filter(
+      const tracks = (await listTracks(hass, profileId)).filter(
         (track) => track.status === "active",
       );
       const selected =
@@ -135,17 +134,19 @@ export class LockLearnStatsView extends LitElement {
           ? this.selectedTrackId
           : "";
       const [stats, difficulties] = await Promise.all([
-        getStats(this.hass, this.profile.profile_id, selected || null),
-        listDifficulties(this.hass, this.profile.profile_id, selected || null),
+        getStats(hass, profileId, selected || null),
+        listDifficulties(hass, profileId, selected || null),
       ]);
+      if (generation !== this.loadGeneration) return;
       this.tracks = tracks;
       this.selectedTrackId = selected;
       this.stats = stats;
       this.difficulties = difficulties;
     } catch (error) {
+      if (generation !== this.loadGeneration) return;
       this.errorMessage = error instanceof Error ? error.message : String(error);
     } finally {
-      this.loading = false;
+      if (generation === this.loadGeneration) this.loading = false;
     }
   }
 
