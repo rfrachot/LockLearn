@@ -1580,16 +1580,20 @@ class SchedulerService:
                 previous = datetime.fromisoformat(raw).astimezone(UTC)
 
         effective = observed if previous is None else max(observed, previous)
+        drift_ms = 0.0
         if previous is None:
             kind = "initial"
         elif observed < previous:
             kind = "clock_backward"
+            drift_ms = (previous - observed).total_seconds() * 1000
         elif reason == "startup":
             kind = "restart"
         elif reason == "timer" and observed - previous > timedelta(minutes=5):
             kind = "clock_forward"
+            drift_ms = (observed - previous).total_seconds() * 1000
         else:
             kind = "advance"
+        INTERNAL_METRICS.record("scheduler.drift_ms", drift_ms)
 
         expired_slots = await self._scheduler.async_expire_before(
             before_utc=effective.isoformat(),

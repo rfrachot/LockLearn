@@ -404,12 +404,17 @@ async def test_backward_clock_jump_uses_persisted_high_watermark(tmp_path: Path)
             storage.repositories.settings,
             clock=clock,
         )
+        INTERNAL_METRICS.clear()
         first = await service.async_reconcile(reason="startup")
         assert first.kind == "initial"
 
         clock.set(datetime(2026, 9, 24, 9, 0, tzinfo=UTC))
         jumped = await service.async_reconcile(reason="timer")
         assert jumped.kind == "clock_backward"
+        assert (
+            INTERNAL_METRICS.snapshot()["scheduler.drift_ms"]["last_ms"]
+            == 3_600_000.0
+        )
         assert jumped.effective_now_utc == datetime(2026, 9, 24, 10, 0, tzinfo=UTC)
 
         preview = await service.async_preview(

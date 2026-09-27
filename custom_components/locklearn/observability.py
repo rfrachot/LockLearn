@@ -16,6 +16,7 @@ INTERNAL_METRIC_NAMES: Final = frozenset(
         "storage.writer_queue_wait_ms",
         "session.answer_ms",
         "scheduler.slot_generation_ms",
+        "scheduler.drift_ms",
         "content.build_ms",
         "content.activation_ms",
     }
