@@ -9,6 +9,9 @@ All notable changes will be documented here.
   runtime setup, avoiding blocking-call warnings on the HA event loop.
 
 ### Added
+- P6.4 private versioned Profile export/import with authenticated one-shot
+  transfers, hostile-archive validation and dry-run mapping, plus archive versus
+  strongly confirmed permanent deletion and progress tombstone reconciliation.
 - P6.3 Home Assistant Repairs and privacy-redacted diagnostics covering dataset
   freshness/signature/install failures, notification-target resolution,
   migration/integrity failures, scheduler infeasibility and backup-cache

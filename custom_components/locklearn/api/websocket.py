@@ -26,6 +26,7 @@ from ..core.difficulties import DifficultyServiceError
 from ..core.grading import FreeTextGradingResult
 from ..core.integrity import IntegrityServiceError
 from ..core.learning_sessions import LearningSessionError
+from ..core.operations import OperationContext
 from ..core.planning import LearningPlan, LearningPlanValidationError
 from ..core.presentation import PresentationError
 from ..core.profiles import ProfileValidationError
@@ -37,6 +38,7 @@ from ..core.sessions import SessionQuestion, SessionValidationError
 from ..core.stats import StatsServiceError
 from ..core.tracks import TrackValidationError
 from ..datasets.manager import DatasetManagerError, DatasetStatus
+from ..profile_transfer import ProfileTransferError
 from ..runtime import LockLearnRuntime
 from ..storage.database import SessionNotFoundError, StaleSessionError
 from ..storage.repositories import CardReference, ContentReferenceError, StateRepositoryError
@@ -409,12 +411,17 @@ async def ws_profiles_update(
     {
         vol.Required("type"): "locklearn/profiles/delete",
         vol.Required("profile_id"): str,
+        vol.Optional("action", default="archive"): vol.In(
+            ("archive", "delete_permanently")
+        ),
+        vol.Optional("confirmation"): str,
     }
 )
 @websocket_api.async_response
 async def ws_profiles_delete(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
+    """Archive by default; permanent deletion requires owner ACL + strong confirmation."""
     runtime = _require_runtime(hass, connection, msg["id"])
     if runtime is None:
         return
@@ -427,11 +434,146 @@ async def ws_profiles_delete(
         ProfilePermission.DELETE,
     ):
         return
-    if not await runtime.profiles.async_delete_profile(profile_id):
+
+    action = msg["action"]
+    try:
+        if action == "archive":
+            changed = await runtime.profiles.async_archive_profile(profile_id)
+        else:
+            changed = await runtime.profiles.async_delete_profile(
+                profile_id,
+                confirmation=msg.get("confirmation", ""),
+            )
+    except ProfileValidationError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+
+    if not changed:
         connection.send_error(msg["id"], ERR_NOT_FOUND, "Profile not found")
         return
     await runtime.scheduler_ha.async_refresh()
-    connection.send_result(msg["id"])
+    connection.send_result(
+        msg["id"],
+        {"profile_id": profile_id, "action": action},
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/profiles/export",
+        vol.Required("profile_id"): str,
+        vol.Optional("include_reviews", default=True): bool,
+        vol.Optional("include_sessions", default=False): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_profiles_export(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Start an owner-only private Profile export operation."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.MANAGE_ACL,
+    ):
+        return
+    owner_user_id = connection.user.id
+
+    async def worker(context: OperationContext) -> None:
+        await context.async_update("collecting", 0.1)
+        context.raise_if_cancelled()
+        transfer = await runtime.profile_transfers.async_create_export(
+            profile_id=profile_id,
+            owner_user_id=owner_user_id,
+            include_reviews=msg["include_reviews"],
+            include_sessions=msg["include_sessions"],
+        )
+        context.raise_if_cancelled()
+        await context.async_set_result(
+            {
+                "download_url": f"/api/locklearn/profile-export/{transfer.token}",
+                "expires_at_utc": transfer.expires_at.isoformat(),
+                "filename": transfer.filename,
+                "one_time": True,
+            }
+        )
+
+    operation_id = runtime.operations.start(
+        "profile_export",
+        worker,
+        cancellable=True,
+        owner_user_id=owner_user_id,
+    )
+    connection.send_result(msg["id"], {"operation_id": operation_id})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/profiles/import_dry_run",
+        vol.Required("upload_token"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_profiles_import_dry_run(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Validate a private uploaded archive and return its mapping plan."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    try:
+        dry_run = await runtime.profile_transfers.async_dry_run_import(
+            upload_token=msg["upload_token"],
+            owner_user_id=connection.user.id,
+        )
+    except ProfileTransferError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], dry_run.as_dict())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/profiles/import_apply",
+        vol.Required("upload_token"): str,
+        vol.Optional("name_override"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_profiles_import_apply(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Start an import operation that creates a new archived Profile."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    owner_user_id = connection.user.id
+
+    async def worker(context: OperationContext) -> None:
+        await context.async_update("validating", 0.1)
+        context.raise_if_cancelled()
+        result = await runtime.profile_transfers.async_apply_import(
+            upload_token=msg["upload_token"],
+            owner_user_id=owner_user_id,
+            name_override=msg.get("name_override"),
+        )
+        context.raise_if_cancelled()
+        await runtime.scheduler_ha.async_refresh()
+        await context.async_set_result(result)
+
+    operation_id = runtime.operations.start(
+        "profile_import",
+        worker,
+        cancellable=True,
+        owner_user_id=owner_user_id,
+    )
+    connection.send_result(msg["id"], {"operation_id": operation_id})
 
 
 @websocket_api.websocket_command(
@@ -2399,6 +2541,9 @@ COMMANDS = (
     ws_profiles_create,
     ws_profiles_update,
     ws_profiles_delete,
+    ws_profiles_export,
+    ws_profiles_import_dry_run,
+    ws_profiles_import_apply,
     ws_profiles_share,
     ws_profiles_members,
     ws_profiles_share_targets,

@@ -361,6 +361,49 @@ class ProfilesRepository:
 
         return await self._storage._async_writer(write)
 
+    async def async_archive(self, profile_id: str, *, updated_at_utc: str) -> bool:
+        """Archive a Profile and quiesce its active scheduler/notification state."""
+
+        def write(connection: sqlite3.Connection) -> bool:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                cursor = connection.execute(
+                    """UPDATE profiles
+                       SET status = 'archived', updated_at_utc = ?
+                       WHERE profile_id = ?""",
+                    (updated_at_utc, profile_id),
+                )
+                if cursor.rowcount != 1:
+                    connection.rollback()
+                    return False
+                connection.execute(
+                    """UPDATE sessions
+                       SET status = 'paused', last_activity_at_utc = ?
+                       WHERE profile_id = ? AND status = 'active'""",
+                    (updated_at_utc, profile_id),
+                )
+                connection.execute(
+                    """UPDATE scheduled_slots
+                       SET status = 'cancelled', updated_at_utc = ?
+                       WHERE profile_id = ?
+                         AND status IN ('scheduled', 'deferred')""",
+                    (updated_at_utc, profile_id),
+                )
+                connection.execute(
+                    """UPDATE notification_interactions
+                       SET status = 'cleared'
+                       WHERE profile_id = ? AND status = 'pending'""",
+                    (profile_id,),
+                )
+                connection.commit()
+                return True
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        return await self._storage._async_writer(write)
+
     async def async_delete(self, profile_id: str) -> bool:
         """Delete one profile and profile-scoped private state."""
 

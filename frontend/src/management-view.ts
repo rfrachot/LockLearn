@@ -283,7 +283,8 @@ export class LockLearnManagementView extends LitElement {
         </label>
         <div class="actions">
           <button class="primary" type="submit">${this.t("manage.save")}</button>
-          <button type="button" @click=${() => this.removeProfile()}>${this.t("manage.deleteProfile")}</button>
+          <button type="button" @click=${() => this.archiveProfile()}>${this.t("manage.archiveProfile")}</button>
+          <button type="button" @click=${() => this.deleteProfilePermanently()}>${this.t("manage.deletePermanently")}</button>
         </div>
       </form>
     `;
@@ -356,11 +357,29 @@ export class LockLearnManagementView extends LitElement {
     );
   }
 
-  private async removeProfile(): Promise<void> {
+  private async archiveProfile(): Promise<void> {
     if (this.hass === undefined || this.profile === undefined) return;
-    if (!globalThis.confirm?.(this.t("manage.confirmDeleteProfile"))) return;
+    if (!globalThis.confirm?.(this.t("manage.confirmArchiveProfile"))) return;
     await this.mutate(
-      () => deleteProfile(this.hass!, this.profile!.profile_id),
+      () => deleteProfile(this.hass!, this.profile!.profile_id, "archive"),
+      this.t("manage.archivedNotice"),
+    );
+  }
+
+  private async deleteProfilePermanently(): Promise<void> {
+    if (this.hass === undefined || this.profile === undefined) return;
+    const expected = `DELETE ${this.profile.profile_id}`;
+    const confirmation = globalThis.prompt?.(
+      `${this.t("manage.confirmDeletePermanently")} ${expected}`,
+    );
+    if (confirmation !== expected) return;
+    await this.mutate(
+      () => deleteProfile(
+        this.hass!,
+        this.profile!.profile_id,
+        "delete_permanently",
+        confirmation,
+      ),
       this.t("manage.deleted"),
     );
   }

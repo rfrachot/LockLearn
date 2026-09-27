@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from copy import deepcopy
 from enum import StrEnum
 from typing import Any
@@ -129,10 +129,12 @@ class ProfileService:
         *,
         clock: Clock | None = None,
         id_factory: Callable[[], str] | None = None,
+        permanent_delete_cleanup: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         self._repository = repository
         self._clock = clock or SystemClock()
         self._id_factory = id_factory or (lambda: str(uuid4()))
+        self._permanent_delete_cleanup = permanent_delete_cleanup
         self._personal_profile_lock = asyncio.Lock()
 
     async def async_create_profile(
@@ -253,9 +255,32 @@ class ProfileService:
             raise RuntimeError("updated profile could not be reloaded")
         return result
 
-    async def async_delete_profile(self, profile_id: str) -> bool:
-        """Delete one Profile and its private user state."""
-        return await self._repository.async_delete(profile_id)
+    async def async_archive_profile(self, profile_id: str) -> bool:
+        """Archive one Profile while preserving history and statistics."""
+        return await self._repository.async_archive(
+            profile_id,
+            updated_at_utc=self._clock.now().isoformat(),
+        )
+
+    async def async_delete_profile(
+        self,
+        profile_id: str,
+        *,
+        confirmation: str,
+    ) -> bool:
+        """Permanently delete one Profile after strong backend confirmation."""
+        current = await self._repository.async_get(profile_id)
+        if current is None:
+            return False
+        expected = f"DELETE {profile_id}"
+        if confirmation != expected:
+            raise ProfileValidationError(
+                f"permanent deletion requires exact confirmation: {expected}"
+            )
+        deleted = await self._repository.async_delete(profile_id)
+        if deleted and self._permanent_delete_cleanup is not None:
+            await self._permanent_delete_cleanup(profile_id)
+        return deleted
 
     async def async_ensure_personal_profile(
         self,

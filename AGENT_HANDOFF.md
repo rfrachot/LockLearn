@@ -8,86 +8,99 @@ P5 and its real-HA exit gate remain PASS.
 
 P6.1 — database/config/content migrations and recovery — PASS.
 
-P6.2 — backup hooks, unload/reload and uninstall/recovery UX — PASS at
-`2e2cbfd` and pushed before P6.3 started.
+P6.2 — backup hooks, unload/reload and uninstall/recovery UX — PASS.
 
-P6.3 — Repairs and diagnostics — PASS, qualified locally at final commit.
+P6.3 — Repairs and diagnostics — PASS at `aadab0b` and pushed before P6.4
+started.
 
-## P6.3 implementation
+P6.4 — secure export/import and data deletion — has an implementation
+candidate. Final qualification is intentionally pending.
 
-Minimum V1 Repair catalogue is now covered:
+## P6.4 implementation
 
-- dataset obsolete: existing `dataset_sources_stale`;
-- notification target unresolved: existing
-  `notification_target_unavailable` for missing, disabled, mismatched or
-  unroutable targets;
-- scheduler infeasible: existing
-  `scheduler_configuration_infeasible`;
-- DB integrity failure: P6.2 `state_integrity_failure`;
-- migration failure: new `state_migration_failure`;
-- invalid dataset signing key/signature: new
-  `dataset_signature_invalid`;
-- reconstructible cache unexpectedly present under persistent state:
-  `backup_cache_anomaly`.
+### Private export/import
 
-Dataset trust failures are separated from generic installation failures:
-`TrustError` creates the signature-specific Repair; other install failures
-remain `dataset_install_failed`. Success clears both variants.
+- new `profile_transfer.py` implements Profile export schema v1;
+- private transfers live under the OS temporary directory, outside HA config,
+  LockLearn static paths and normal backup roots;
+- temp directory/file modes are 0700/0600;
+- runtime startup wipes abandoned transfer files, runs TTL cleanup, and unload
+  removes the private transfer root;
+- export tokens are random, authenticated-user-bound, five-minute, one-shot
+  capabilities;
+- export download is an authenticated HA HTTP route with `no-store`;
+- import upload is authenticated, size-bounded and user-bound for fifteen
+  minutes;
+- export/apply use the existing cancellable OperationRegistry;
+- import dry-run validates without mutating state;
+- archive manifest contains exact member size + SHA-256.
 
-A new Home Assistant `diagnostics.py` config-entry diagnostic surface emits
-only:
+Hostile import validation rejects traversal/absolute/backslash/NUL paths,
+directories, links/special files, encryption, unsupported compression,
+unexpected members, duplicates/casefold collisions, oversized members/archive,
+excessive expansion, membership mismatch, size/hash mismatch and unsupported
+Profile preset/timezone/settings.
 
-- LockLearn/HA/config/schema versions;
-- aggregate SQLite health/migration status;
-- aggregate Profile/dataset/pack counts;
-- aggregate dataset state/error categories;
-- aggregate scheduler listener/routine counts;
-- storage byte counts and backup policy;
-- active Repair categories/counts.
+Import always remaps Profile/Track/Session IDs, creates the importing HA user as
+the sole owner, strips source ACL/notification targets/scheduler target IDs, and
+creates the Profile and Tracks archived. Missing PackVersions remain unbound;
+missing cards remain progress tombstones.
 
-It intentionally excludes identifiers, Profile names, target names, learned
-content, card keys, answers, annotations, notification contents, private stats,
-URLs, Repair placeholders and raw exception messages.
+### Profile deletion
 
-`async_redacted_diagnostic_status()` is separate from older internal/session
-diagnostics so support output cannot accidentally inherit detailed session
-fields.
+- existing `profiles/delete` defaults to safe archive for older clients;
+- archive pauses active sessions, cancels future slots and clears pending
+  notification interactions while preserving history/statistics;
+- permanent delete requires owner ACL plus exact `DELETE <profile_id>`;
+- deletion cascade removes Profile-scoped user state;
+- ProfileService performs the private-export cleanup callback after permanent
+  deletion, so the cleanup invariant is not WebSocket-specific;
+- frontend now separates Archive Profile from Delete permanently and requires
+  the exact confirmation phrase.
 
-ADR-0048 records the Repairs/diagnostics privacy boundary.
+### Content tombstones
 
-No P6.4 export/import/data-deletion implementation and no P6.5 sensor/entity
-work is included.
+Content generation activation/rollback now reconciles
+`progress.content_status` against the active card lifecycle. Removed/absent
+content becomes `removed`, superseded remains `superseded`, and restored
+stable identities become `active`. Rows/history are preserved.
 
-## P6.3 test coverage added/updated
+ADR-0049 records the transfer/deletion/tombstone design.
 
-- diagnostics privacy regression seeds private Profile/content/answer/target
-  sentinel values and asserts none appear in serialized diagnostics;
-- migration startup failure creates the dedicated migration Repair without a
-  runtime;
-- unexpected cache bytes under persistent state create the backup-cache warning;
-- invalid Ed25519 trust/signature failures create the signature Repair rather
-  than the generic install Repair;
-- dataset diagnostics expose only aggregate error categories.
-- missing notification targets create the target-unavailable Repair.
+No P6.5 entity/sensor implementation and no P6.6 general threat-test expansion
+is included.
+
+## P6.4 test coverage added/updated
+
+- export/import round-trip with new identity mapping;
+- one-shot owner-bound private export capability;
+- dry-run counts/missing-content mapping;
+- missing-card tombstone preservation;
+- Track rules/weights and review/session history round-trip;
+- hostile ZIP traversal rejection and import owner mismatch;
+- archive quiescence;
+- permanent deletion strong confirmation and personal-data cascade;
+- WebSocket permanent-delete contract;
+- content generation removed -> rollback-active progress tombstone
+  reconciliation.
 
 ## Verification state
 
-Final P6.3 qualification completed successfully.
+The final P6.4 gate has **not** been run by design.
 
-Recommended targeted gate:
+Recommended targeted backend gate:
 
 ```text
 .venv/bin/python -m pytest -q --tb=short \
-  tests/backend/test_diagnostics.py \
+  tests/backend/test_profile_transfer.py \
+  tests/backend/test_profiles.py \
+  tests/backend/test_websocket_crud.py \
+  tests/backend/test_content_generations.py \
   tests/backend/test_lifecycle.py \
-  tests/backend/test_storage.py \
-  tests/backend/test_storage_lifecycle.py \
-  tests/backend/test_scheduler.py \
-  tests/backend/test_notification_delivery.py \
-  tests/datasets/test_dataset_manager.py
+  tests/backend/test_operations.py
 ```
 
-Then run:
+Then backend full gate:
 
 ```text
 .venv/bin/python -m ruff format --check .
@@ -97,15 +110,16 @@ Then run:
 .venv/bin/python -m pytest -q --tb=short
 ```
 
-No frontend source is changed by P6.3. Frontend tests/build are unnecessary
-unless qualification changes frontend code.
+P6.4 changes frontend source. Qualification must also run:
 
-Qualification result:
+```text
+cd frontend
+npm run typecheck
+npm test
+npm run build
+```
 
-- targeted P6.3 tests: 59 passed;
-- full gate: Ruff format/check, mypy, resource validation and 418 backend tests
-  passed;
-- no frontend changes;
-- local commits only, no push.
+If the build updates the committed HA frontend bundle, include that generated
+artifact in the qualification commit after verifying its expected hash/path.
 
-Next concrete action: begin P6.4 only after an explicit mission request.
+Do not start P6.5 during qualification.

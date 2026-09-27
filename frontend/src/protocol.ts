@@ -432,10 +432,14 @@ export async function updateProfile(
 export async function deleteProfile(
   hass: HomeAssistantLike,
   profileId: string,
+  action: "archive" | "delete_permanently",
+  confirmation?: string,
 ): Promise<void> {
   await hass.callWS({
     type: "locklearn/profiles/delete",
     profile_id: profileId,
+    action,
+    ...(confirmation === undefined ? {} : { confirmation }),
   });
 }
 

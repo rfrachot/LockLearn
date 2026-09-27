@@ -208,9 +208,17 @@ async def test_bootstrap_profile_crud_privacy_share_and_pagination(
     assert invalid_cursor["success"] is False
     assert invalid_cursor["error"]["code"] == "locklearn/invalid_request"
 
-    await owner.send_json_auto_id({"type": "locklearn/profiles/delete", "profile_id": personal_id})
+    await owner.send_json_auto_id(
+        {
+            "type": "locklearn/profiles/delete",
+            "profile_id": personal_id,
+            "action": "delete_permanently",
+            "confirmation": f"DELETE {personal_id}",
+        }
+    )
     deleted = await owner.receive_json()
     assert deleted["success"] is True
+    assert deleted["result"]["action"] == "delete_permanently"
 
     await owner.send_json_auto_id({"type": "locklearn/profiles/list"})
     remaining = await owner.receive_json()

@@ -1955,13 +1955,79 @@ class SQLiteStorage:
                 raise asyncio.CancelledError
             return result
 
+    async def _async_reconcile_progress_content_status(self) -> None:
+        """Project active content lifecycle into persistent progress tombstones."""
+        content_path = self.content_generations.active_path
+        now = self._clock.now().isoformat()
+
+        def reconcile(connection: sqlite3.Connection) -> None:
+            attached = False
+            try:
+                connection.execute(
+                    "ATTACH DATABASE ? AS reconcile_content",
+                    (_read_only_uri(content_path),),
+                )
+                attached = True
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    """UPDATE progress
+                       SET content_status = COALESCE(
+                               (
+                                   SELECT CASE card.lifecycle_status
+                                       WHEN 'active' THEN 'active'
+                                       WHEN 'superseded' THEN 'superseded'
+                                       ELSE 'removed'
+                                   END
+                                   FROM reconcile_content.card_definitions AS card
+                                   WHERE card.card_key = progress.card_key
+                               ),
+                               'removed'
+                           ),
+                           updated_at_utc = CASE
+                               WHEN content_status != COALESCE(
+                                   (
+                                       SELECT CASE card.lifecycle_status
+                                           WHEN 'active' THEN 'active'
+                                           WHEN 'superseded' THEN 'superseded'
+                                           ELSE 'removed'
+                                       END
+                                       FROM reconcile_content.card_definitions AS card
+                                       WHERE card.card_key = progress.card_key
+                                   ),
+                                   'removed'
+                               )
+                               THEN ?
+                               ELSE updated_at_utc
+                           END""",
+                    (now,),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+            finally:
+                if attached:
+                    connection.execute("DETACH DATABASE reconcile_content")
+
+        await self._async_writer(reconcile)
+
     async def async_activate_content_generation(self, candidate: Path) -> GenerationMetadata:
-        """Activate a validated candidate after every old reader has drained."""
-        return await self.content_generations.async_activate(candidate)
+        """Activate a validated candidate and reconcile persistent content tombstones."""
+        metadata = await self.content_generations.async_activate(candidate)
+        try:
+            await self._async_reconcile_progress_content_status()
+        except Exception:
+            await self.content_generations.async_rollback()
+            await self._async_reconcile_progress_content_status()
+            raise
+        return metadata
 
     async def async_rollback_content_generation(self) -> GenerationMetadata:
-        """Reactivate the retained previous generation."""
-        return await self.content_generations.async_rollback()
+        """Reactivate the retained previous generation and reconcile tombstones."""
+        metadata = await self.content_generations.async_rollback()
+        await self._async_reconcile_progress_content_status()
+        return metadata
 
     async def async_backup_to(self, destination: Path) -> None:
         """Create and atomically publish a coherent state snapshot."""

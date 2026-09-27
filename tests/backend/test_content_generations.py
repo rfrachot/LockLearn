@@ -756,3 +756,59 @@ async def test_legacy_content_package_is_rebuilt_without_in_place_migration(
         assert connection.execute(
             "SELECT version FROM schema_version WHERE singleton = 1"
         ).fetchone() == (CONTENT_SCHEMA_VERSION,)
+
+
+async def test_progress_content_status_tracks_generation_tombstones_and_rollback(
+    content_storage: SQLiteStorage,
+    tmp_path: Path,
+) -> None:
+    """Persistent progress survives content removal and reactivates on rollback."""
+    package_v1 = create_package(tmp_path / "progress-v1.db", "progress-v1")
+    candidate_v1 = await build_candidate(content_storage, package_v1, "progress-generation-one")
+    await content_storage.async_activate_content_generation(candidate_v1)
+
+    _card_id, card_key = card_identity(ITEM_A)
+    prompt_id, answer_id = facet_ids(ITEM_A)
+
+    def seed_progress(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """INSERT INTO progress(
+                   profile_id, track_id, card_key, learning_item_id,
+                   prompt_facet_id, answer_facet_id, state, mastery,
+                   content_status, updated_at_utc
+               ) VALUES (
+                   'profile-tombstone', 'track-tombstone', ?, ?,
+                   ?, ?, 'review', 0.5, 'active', 'before-switch'
+               )""",
+            (card_key, ITEM_A, prompt_id, answer_id),
+        )
+        connection.commit()
+
+    await content_storage._async_writer(seed_progress)
+
+    package_v2 = create_package(
+        tmp_path / "progress-v2.db",
+        "progress-v2",
+        active_item_ids=(),
+    )
+    candidate_v2 = await build_candidate(
+        content_storage,
+        package_v2,
+        "progress-generation-two",
+    )
+    await content_storage.async_activate_content_generation(candidate_v2)
+
+    def progress_status(connection: sqlite3.Connection) -> tuple[str, str]:
+        row = connection.execute(
+            """SELECT content_status, card_key
+               FROM progress
+               WHERE profile_id = 'profile-tombstone'
+                 AND track_id = 'track-tombstone'"""
+        ).fetchone()
+        assert row is not None
+        return str(row[0]), str(row[1])
+
+    assert await content_storage._async_reader(progress_status) == ("removed", card_key)
+
+    await content_storage.async_rollback_content_generation()
+    assert await content_storage._async_reader(progress_status) == ("active", card_key)

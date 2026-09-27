@@ -51,6 +51,7 @@ from .notifications.delivery import NotificationDeliveryService
 from .notifications.ha_bridge import NotificationHomeAssistantBridge
 from .notifications.interactions import NotificationInteractionService
 from .notifications.warnings import NotificationWarningService
+from .profile_transfer import ProfileTransferService, ProfileTransferStore
 from .scheduler_ha import SchedulerHomeAssistantBridge
 from .storage import SQLiteStorage, StoragePaths
 
@@ -90,12 +91,14 @@ class LockLearnRuntime:
     scheduler: SchedulerService
     scheduler_ha: SchedulerHomeAssistantBridge
     datasets: DatasetManager
+    profile_transfers: ProfileTransferService
 
     @classmethod
     async def async_create(cls, hass: HomeAssistant) -> LockLearnRuntime:
         """Create and open a runtime from HA's persistent config directory."""
         storage = SQLiteStorage(StoragePaths.from_config_dir(hass.config.config_dir))
         await storage.async_open()
+        transfer_store = ProfileTransferStore.private_runtime_root(hass.config.config_dir)
 
         async def report_issue(
             issue_id: str,
@@ -129,6 +132,7 @@ class LockLearnRuntime:
             return result_as_boolean(rendered)
 
         try:
+            await transfer_store.async_initialize()
             (
                 dataset_definitions,
                 trust_store,
@@ -268,7 +272,10 @@ class LockLearnRuntime:
                 learning_sessions=learning_sessions,
                 presentation=presentation,
                 operations=OperationRegistry(),
-                profiles=ProfileService(storage.repositories.profiles),
+                profiles=ProfileService(
+                    storage.repositories.profiles,
+                    permanent_delete_cleanup=transfer_store.async_purge_profile,
+                ),
                 acl=acl,
                 tracks=TrackService(storage.repositories.tracks),
                 planning=LearningPlanService(
@@ -328,12 +335,14 @@ class LockLearnRuntime:
                 scheduler=scheduler,
                 scheduler_ha=scheduler_ha,
                 datasets=datasets,
+                profile_transfers=ProfileTransferService(storage, transfer_store),
             )
             await runtime.scheduler.async_reconcile(reason="startup")
             await runtime.scheduler_ha.async_start()
             await runtime.notification_ha.async_start()
             return runtime
         except Exception:
+            await transfer_store.async_close()
             await storage.async_close()
             raise
 
@@ -343,4 +352,5 @@ class LockLearnRuntime:
         self.scheduler_ha.close()
         self.sessions.close()
         await self.operations.async_close()
+        await self.profile_transfers.store.async_close()
         await self.storage.async_close()

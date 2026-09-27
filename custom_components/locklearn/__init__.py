@@ -22,6 +22,7 @@ from .const import (
 )
 from .ha_services import async_register_services, async_unregister_services
 from .panel import async_register_panel, async_register_static_path, async_unregister_panel
+from .profile_transfer_http import register_profile_transfer_views
 from .runtime import LockLearnRuntime
 from .storage import StateIntegrityError, StateMigrationError, StoragePaths
 from .storage.lifecycle import StorageLifecycleManager, UninstallDataPolicy
@@ -58,6 +59,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     if not domain_data.get(DATA_STATIC_REGISTERED):
         await async_register_static_path(hass)
         async_register_commands(hass)
+        register_profile_transfer_views(hass)
         domain_data[DATA_STATIC_REGISTERED] = True
     return True
 
