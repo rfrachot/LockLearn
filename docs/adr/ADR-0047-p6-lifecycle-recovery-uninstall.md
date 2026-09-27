@@ -2,8 +2,7 @@
 
 ## Status
 
-Accepted for the P6.2 implementation candidate on 2026-09-27. Final
-qualification remains pending.
+Accepted and qualified for P6.2 on 2026-09-27.
 
 ## Context
 

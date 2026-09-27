@@ -13,8 +13,8 @@ from homeassistant.helpers.typing import ConfigType
 
 from .api.websocket import async_register_commands
 from .const import (
-    CONFIG_ENTRY_VERSION,
     CONF_UNINSTALL_DATA_POLICY,
+    CONFIG_ENTRY_VERSION,
     DATA_RUNTIME,
     DATA_STATIC_REGISTERED,
     DEFAULT_UNINSTALL_DATA_POLICY,
@@ -70,9 +70,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: LockLearnConfigEntry) ->
     try:
         runtime = await LockLearnRuntime.async_create(hass)
     except StateIntegrityError:
-        manager = StorageLifecycleManager(
-            StoragePaths.from_config_dir(hass.config.config_dir)
-        )
+        manager = StorageLifecycleManager(StoragePaths.from_config_dir(hass.config.config_dir))
         snapshots = await manager.async_valid_recovery_snapshots()
         ir.async_create_issue(
             hass,
@@ -133,7 +131,5 @@ async def async_remove_entry(
             raw_policy,
         )
         policy = UninstallDataPolicy.KEEP_USER_DATA
-    manager = StorageLifecycleManager(
-        StoragePaths.from_config_dir(hass.config.config_dir)
-    )
+    manager = StorageLifecycleManager(StoragePaths.from_config_dir(hass.config.config_dir))
     await manager.async_apply_uninstall_policy(policy)

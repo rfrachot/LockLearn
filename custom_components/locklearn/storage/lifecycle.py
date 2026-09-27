@@ -75,8 +75,7 @@ def _path_size(path: Path) -> int:
 
 def _sqlite_live_size(path: Path) -> int:
     return sum(
-        _path_size(candidate)
-        for candidate in (path, Path(f"{path}-wal"), Path(f"{path}-shm"))
+        _path_size(candidate) for candidate in (path, Path(f"{path}-wal"), Path(f"{path}-shm"))
     )
 
 
@@ -121,9 +120,7 @@ class StorageLifecycleManager:
 
     def _candidate_snapshot_paths(self) -> tuple[Path, ...]:
         candidates = list(
-            self.paths.state_root.glob(
-                f"{self.paths.state_db.name}.pre-migration-v*.bak"
-            )
+            self.paths.state_root.glob(f"{self.paths.state_db.name}.pre-migration-v*.bak")
         )
         if self.paths.ha_backup_snapshot.is_file():
             candidates.append(self.paths.ha_backup_snapshot)
@@ -172,16 +169,18 @@ class StorageLifecycleManager:
             f".{self.paths.state_db.name}.restore-{uuid.uuid4().hex}.tmp"
         )
         _unlink_sqlite_files(candidate)
-        source = sqlite3.connect(_read_only_uri(snapshot.path), uri=True)
-        target = sqlite3.connect(candidate)
         try:
-            source.backup(target)
-        finally:
-            target.close()
-            source.close()
-        try:
+            source = sqlite3.connect(_read_only_uri(snapshot.path), uri=True)
+            try:
+                target = sqlite3.connect(candidate)
+                try:
+                    source.backup(target)
+                finally:
+                    target.close()
+            finally:
+                source.close()
             validate_state_database_file(candidate)
-        except Exception:
+        except BaseException:
             _unlink_sqlite_files(candidate)
             raise
 
@@ -193,16 +192,24 @@ class StorageLifecycleManager:
             Path(f"{self.paths.state_db}-shm"),
         )
         if any(path.exists() for path in live_files):
-            quarantine = self.paths.state_snapshots_dir / (
-                f"pre-recovery-{uuid.uuid4().hex}"
-            )
-            quarantine.mkdir(parents=True, exist_ok=False)
-            for live in live_files:
-                if not live.exists():
-                    continue
-                preserved = quarantine / live.name
-                os.replace(live, preserved)
-                moved.append((live, preserved))
+            try:
+                quarantine = self.paths.state_snapshots_dir / (f"pre-recovery-{uuid.uuid4().hex}")
+                quarantine.mkdir(parents=True, exist_ok=False)
+                for live in live_files:
+                    if not live.exists():
+                        continue
+                    preserved = quarantine / live.name
+                    os.replace(live, preserved)
+                    moved.append((live, preserved))
+            except BaseException:
+                for live, preserved in reversed(moved):
+                    if preserved.exists() and not live.exists():
+                        os.replace(preserved, live)
+                if quarantine is not None:
+                    with contextlib.suppress(OSError):
+                        quarantine.rmdir()
+                _unlink_sqlite_files(candidate)
+                raise
 
         try:
             os.replace(candidate, self.paths.state_db)

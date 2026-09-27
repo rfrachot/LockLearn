@@ -12,9 +12,9 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.locklearn import async_migrate_entry
 from custom_components.locklearn.config_flow import LockLearnConfigFlow
 from custom_components.locklearn.const import (
-    CONFIG_ENTRY_VERSION,
     CONF_PURGE_CONTENT_CACHE,
     CONF_UNINSTALL_DATA_POLICY,
+    CONFIG_ENTRY_VERSION,
     DEFAULT_UNINSTALL_DATA_POLICY,
     DOMAIN,
 )
@@ -35,9 +35,7 @@ async def test_user_flow_creates_single_entry(hass: HomeAssistant) -> None:
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"] == {"create_personal_profile": True, "ui_language": "fr"}
-    assert result["options"] == {
-        CONF_UNINSTALL_DATA_POLICY: DEFAULT_UNINSTALL_DATA_POLICY
-    }
+    assert result["options"] == {CONF_UNINSTALL_DATA_POLICY: DEFAULT_UNINSTALL_DATA_POLICY}
 
     second = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}

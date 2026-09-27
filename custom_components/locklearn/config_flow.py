@@ -46,13 +46,8 @@ def _format_bytes(value: int) -> str:
 class LockLearnOptionsFlow(OptionsFlow):
     """Manage backup visibility, recovery, and uninstall retention policy."""
 
-    @override
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        manager = StorageLifecycleManager(
-            StoragePaths.from_config_dir(self.hass.config.config_dir)
-        )
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        manager = StorageLifecycleManager(StoragePaths.from_config_dir(self.hass.config.config_dir))
         snapshots = await manager.async_valid_recovery_snapshots()
         snapshot_names = tuple(snapshot.name for snapshot in snapshots)
 
@@ -80,11 +75,12 @@ class LockLearnOptionsFlow(OptionsFlow):
                         # A loaded runtime must always be recreated after the offline
                         # action. A previously failed runtime is retried after explicit
                         # recovery so a successful restore can clear its Repair.
-                        if was_loaded or restore_snapshot or purge_content_cache:
-                            if not await self.hass.config_entries.async_setup(
-                                self.config_entry.entry_id
-                            ):
-                                errors.setdefault("base", "storage_reload_failed")
+                        if (
+                            was_loaded or restore_snapshot or purge_content_cache
+                        ) and not await self.hass.config_entries.async_setup(
+                            self.config_entry.entry_id
+                        ):
+                            errors.setdefault("base", "storage_reload_failed")
             if not errors:
                 return self.async_create_entry(
                     title="",
@@ -109,9 +105,7 @@ class LockLearnOptionsFlow(OptionsFlow):
             vol.Optional(CONF_PURGE_CONTENT_CACHE, default=False): bool,
         }
         if snapshot_names:
-            schema[
-                vol.Optional(CONF_RESTORE_SNAPSHOT, default="")
-            ] = vol.In(("", *snapshot_names))
+            schema[vol.Optional(CONF_RESTORE_SNAPSHOT, default="")] = vol.In(("", *snapshot_names))
 
         return self.async_show_form(
             step_id="init",

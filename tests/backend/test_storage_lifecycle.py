@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
 
@@ -10,6 +11,7 @@ import pytest
 from custom_components.locklearn.const import DB_SCHEMA_VERSION
 from custom_components.locklearn.storage import SQLiteStorage, StateIntegrityError, StoragePaths
 from custom_components.locklearn.storage import database as storage_database
+from custom_components.locklearn.storage import lifecycle as storage_lifecycle
 from custom_components.locklearn.storage.database import validate_state_database_file
 from custom_components.locklearn.storage.lifecycle import (
     StorageLifecycleManager,
@@ -90,15 +92,58 @@ async def test_recovery_snapshot_restore_preserves_failed_live_copy(
 
     connection = sqlite3.connect(paths.state_db)
     try:
-        assert connection.execute(
-            "SELECT id FROM sessions WHERE id = 'recover-me'"
-        ).fetchone() == ("recover-me",)
+        assert connection.execute("SELECT id FROM sessions WHERE id = 'recover-me'").fetchone() == (
+            "recover-me",
+        )
     finally:
         connection.close()
 
     quarantines = list(paths.state_snapshots_dir.glob("pre-recovery-*"))
     assert len(quarantines) == 1
     assert (quarantines[0] / "state.db").read_bytes() == b"corrupted-live-copy"
+
+
+async def test_recovery_quarantine_failure_restores_partially_moved_live_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed quarantine move cannot strand or delete the old live copy."""
+    paths = StoragePaths(
+        tmp_path / "state" / "state.db",
+        tmp_path / "content" / "current.db",
+    )
+    storage = SQLiteStorage(paths)
+    await storage.async_open()
+    await storage.async_prepare_ha_backup()
+    await storage.async_finish_ha_backup()
+    await storage.async_close()
+
+    paths.state_db.write_bytes(b"corrupted-live-copy")
+    state_wal = Path(f"{paths.state_db}-wal")
+    state_shm = Path(f"{paths.state_db}-shm")
+    state_wal.write_bytes(b"wal")
+    state_shm.write_bytes(b"shm")
+    original_replace = storage_lifecycle.os.replace
+
+    def fail_wal_move(source: str | os.PathLike[str], destination: str | os.PathLike[str]) -> None:
+        destination_path = Path(destination)
+        if destination_path.name == state_wal.name and destination_path.parent.name.startswith(
+            "pre-recovery-"
+        ):
+            raise OSError("injected quarantine failure")
+        original_replace(source, destination)
+
+    monkeypatch.setattr(storage_lifecycle.os, "replace", fail_wal_move)
+    manager = StorageLifecycleManager(paths)
+
+    with pytest.raises(OSError, match="injected quarantine failure"):
+        await manager.async_restore_snapshot(paths.ha_backup_snapshot.name)
+
+    assert paths.state_db.read_bytes() == b"corrupted-live-copy"
+    assert state_wal.read_bytes() == b"wal"
+    assert state_shm.read_bytes() == b"shm"
+    assert not list(paths.state_root.glob(".state.db.restore-*.tmp"))
+    assert not list(paths.state_snapshots_dir.glob("pre-recovery-*"))
 
 
 @pytest.mark.parametrize(
@@ -158,9 +203,7 @@ async def test_storage_usage_surfaces_state_cache_assets_and_backup_policy(
     assert usage.content_cache_bytes >= 12
     assert usage.asset_bytes == 5
     assert usage.recovery_snapshot_bytes >= 4
-    assert usage.backup_policy == (
-        "state_coherent_content_included_at_ha_2025_2_floor"
-    )
+    assert usage.backup_policy == ("state_coherent_content_included_at_ha_2025_2_floor")
 
 
 async def test_failed_backup_prepare_releases_write_gate(

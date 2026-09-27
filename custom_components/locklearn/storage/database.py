@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import sqlite3
@@ -191,9 +192,7 @@ def validate_state_database_file(path: Path) -> int:
             )
             return version
         except sqlite3.DatabaseError as err:
-            raise StateIntegrityError(
-                f"State database failed SQLite validation: {path}"
-            ) from err
+            raise StateIntegrityError(f"State database failed SQLite validation: {path}") from err
     finally:
         connection.close()
 
@@ -222,9 +221,7 @@ def _initialize_state_database(path: Path, schema: str, version: int) -> None:
     # only live copy untouched for recovery.
     current = validate_state_database_file(path)
     if current > version:
-        raise UnsupportedStateSchemaError(
-            f"Unsupported future schema version {current} for {path}"
-        )
+        raise UnsupportedStateSchemaError(f"Unsupported future schema version {current} for {path}")
     if current == version:
         return
 
@@ -291,10 +288,8 @@ def _create_state_migration_backup(
         reverse=True,
     )
     for stale in snapshots[_MAX_MIGRATION_SNAPSHOTS:]:
-        try:
+        with contextlib.suppress(OSError):
             stale.unlink()
-        except OSError:
-            pass
     return backup
 
 
@@ -305,9 +300,7 @@ def _create_atomic_state_snapshot(
     """Publish a validated current-state snapshot without exposing a partial file."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    candidate = destination.with_name(
-        f".{destination.name}.{uuid.uuid4().hex}.tmp"
-    )
+    candidate = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.tmp")
     _unlink_sqlite_files(candidate)
 
     target = sqlite3.connect(candidate)

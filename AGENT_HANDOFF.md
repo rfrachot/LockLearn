@@ -9,8 +9,8 @@ P5 and its real-HA exit gate remain PASS.
 P6.1 — database/config/content migrations and recovery — is qualified PASS at
 `38656cc`.
 
-P6.2 — backup hooks, unload/reload and uninstall/recovery UX — has an
-implementation candidate. Final qualification is intentionally pending.
+P6.2 — backup hooks, unload/reload and uninstall/recovery UX — is qualified
+PASS locally after the candidate hardening commit.
 
 ## P6.2 implementation
 
@@ -55,11 +55,24 @@ the source for the HA 2025.2 backup-exclusion limitation.
 - explicit cache purge runs offline before setup/rebuild;
 - integrity failure creates a persistent Repair without a runtime;
 - HA remove hook applies the selected cache-only policy.
+- partial quarantine failure restores every already-moved live SQLite file and
+  removes the temporary recovery candidate.
 
 ## Verification state
 
-The final P6.2 gate has **not** been run by design. The implementation was
-prepared without the full test matrix so Luna can perform final qualification.
+The final P6.2 gate is PASS in the repository `.venv`:
+
+- targeted lifecycle/state matrix: 36 passed;
+- `.venv/bin/python -m ruff format --check .`: 264 files already formatted;
+- `.venv/bin/python -m ruff check .`: All checks passed;
+- `.venv/bin/python -m mypy custom_components datasets tests`: no issues in 151 files;
+- `.venv/bin/python datasets/tools/validate_resources.py`: OK;
+- full `.venv/bin/python -m pytest -q --tb=short`: 413 passed in 20.71s.
+
+The initial system-Python targeted command could not start because the system
+environment lacks `pytest_homeassistant_custom_component`; the same commands
+were rerun successfully with the repository `.venv`, which contains the
+verified Home Assistant test environment.
 
 Recommended targeted gate:
 
@@ -82,5 +95,4 @@ python3 datasets/tools/validate_resources.py
 python3 -m pytest -q --tb=short
 ```
 
-No frontend source file is changed by P6.2. Frontend build/tests are not
-required unless qualification changes frontend code.
+No frontend source file is changed by P6.2. Frontend build/tests were not run.
