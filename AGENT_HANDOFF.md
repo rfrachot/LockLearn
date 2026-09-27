@@ -8,7 +8,7 @@ P5.6 remains **PASS** after the 2026-09-27 REAL HA qualification and the
 executor fix for bundled registry loading.
 
 Roadmap P5.7 — Basic stats, difficulties and metacognitive views — is
-**IMPLEMENTED / AUTOMATED QUALIFICATION PASS / REAL-HA PENDING**.
+**PASS / AUTOMATED QUALIFICATION PASS / REAL HA PASS**.
 
 P5.7 is a frontend/product surface over the existing P3.13/P3.11 backend truth.
 It does not recompute SRS/statistics in the browser.
@@ -60,32 +60,26 @@ separate from verified retrieval totals, multi-Track daily rows are aggregated
 by local date before the recent-day window, owner/editor vs viewer remediation
 visibility, and the exact P3.11 WebSocket mutation contracts.
 
-## Remaining gate
+## REAL HA qualification (2026-09-27)
 
-REAL HA P5.7 has not been executed in this session because the real HA/browser
-harness is not available here.
+The complete tree from `eed01692e7ee6de96e99367e7c88c6a23ddc1994` was deployed
+to Home Assistant 2026.7.4. The Config Entry loaded after Core restart,
+frontend protocol 3 matched, and the deployed bundle was byte-identical to the
+local bundle. Empty-state honesty, Stats rendering, keyboard traversal, Track
+filtering, rapid Track switching, daily aggregation and clean LockLearn logs
+passed.
 
-Qualify on the development Home Assistant instance:
-1. deploy the complete `custom_components/locklearn/` tree from
-   `feat/p5-stats-ui`;
-2. open Stats for a real/temporary Profile and verify honest empty-state metrics;
-3. create enough public-API learning evidence to verify exposure vs trusted
-   verified accuracy, state counts, daily rows and calibration;
-4. switch between Profile-level and Track-level Stats and verify scope changes
-   without stale responses;
-5. if a real leech fixture can be produced safely through normal public APIs,
-   verify its confusion/mnemonic UI, targeted session handoff into Learn and
-   explicit reactivation;
-6. if no practical leech fixture is available, mark those REAL-HA scenarios
-   `FIXTURE UNAVAILABLE`; automated P3.11/TS coverage remains authoritative;
-7. verify viewer read-only behavior only if a second HA user/token exists,
-   otherwise `FIXTURE UNAVAILABLE`;
-8. verify keyboard navigation, available mobile viewport, long stats text/table
-   containment and clean LockLearn logs;
-9. clean all temporary Profile/Track/session/progress fixtures.
+The temporary Profile `QA P5.7 20260927-025928` and Tracks A/B were created,
+used and deleted through public WebSocket APIs. The fixture demonstrated three
+exposures versus two trusted verified retrievals, `1/2` accuracy, correct/IDK,
+calibration and separate Track values. No leech/confusion fixture was made: the
+normal leech threshold was not reasonably reachable during this run. Leech
+presentation/remediation, targeted-session handoff, reactivation, confusions
+and viewer ACL are `FIXTURE UNAVAILABLE` (no second HA token); automated P3.11
+and ACL coverage remains authoritative. Firefox's requested 390 px viewport was
+limited to 500 px; no blocking overflow was observed there (`HARNESS LIMIT`).
 
-After REAL HA PASS, mark P5.7 complete and proceed to P5.8 only after explicit
-the maintainer decision.
+P5.7 is closed PASS. Do not start P5.8 without an explicit the maintainer decision.
 
 Deployment safety:
 - deploy the complete `custom_components/locklearn/` tree;

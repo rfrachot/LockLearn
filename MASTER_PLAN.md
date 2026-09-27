@@ -103,7 +103,7 @@
 - **P5.4** — Quiz/free-text/cloze UI (complete)
 - **P5.5** — Profiles/tracks/packs/settings management UI (complete; real-HA qualified)
 - **P5.6** — Dataset updates, Sources & Licences UI (complete; real-HA PASS with documented fixture/harness limits)
-- **P5.7** — Basic stats, difficulties and metacognitive views (implemented; automated qualification PASS; real-HA pending)
+- **P5.7** — Basic stats, difficulties and metacognitive views (complete; automated qualification PASS; REAL HA PASS with documented fixture/harness limits)
 - **P5.8** — FR/EN i18n, CJK and accessibility hardening
 - **P5.9** — Frontend performance and compatibility gate
 
