@@ -270,6 +270,12 @@ export class LockLearnLearnView extends LitElement {
       this.trackId = this.externalSession.track_id ?? this.trackId;
       this.applySession(this.externalSession);
       this.notice = this.t("learn.targetedSession");
+      this.dispatchEvent(
+        new CustomEvent("locklearn-session-handoff-consumed", {
+          bubbles: true,
+          composed: true,
+        }),
+      );
     }
   }
 
