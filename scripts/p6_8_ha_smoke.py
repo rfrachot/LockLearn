@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import importlib
-from importlib.metadata import version
 import json
 import os
+from importlib.metadata import version
 from pathlib import Path
 
 from awesomeversion import AwesomeVersion

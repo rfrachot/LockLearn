@@ -80,6 +80,8 @@ async def test_all_acl_scoped_websocket_endpoints_have_negative_access_coverage(
             "type": "locklearn/session/start",
             "profile_id": profile_id,
             "track_id": track_id,
+            "session_type": "bounded",
+            "strategy": "default",
             "settings": {"requested_cards": 1},
         }
     )

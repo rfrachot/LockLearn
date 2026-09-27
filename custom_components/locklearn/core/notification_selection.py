@@ -7,24 +7,13 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
+from .clock import Clock, SystemClock
+
 DEFAULT_NEW_TEASER_BUDGET = 2
 
 
 class NotificationSelectionError(ValueError):
     """Raised when a notification slot cannot be selected safely."""
-
-
-class NotificationClock(Protocol):
-    """Clock contract used by send-time notification selection."""
-
-    def now(self) -> datetime: ...
-
-
-class _SystemClock:
-    """Default aware UTC clock without importing another LockLearn module."""
-
-    def now(self) -> datetime:
-        return datetime.now(ZoneInfo("UTC"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,7 +166,7 @@ class NotificationSelectionService:
         scheduler: NotificationSchedulerRepository,
         constraints: NotificationConstraintEvaluator,
         *,
-        clock: NotificationClock | None = None,
+        clock: Clock | None = None,
         teaser_budget: int = DEFAULT_NEW_TEASER_BUDGET,
     ) -> None:
         if teaser_budget < 0:
@@ -187,7 +176,7 @@ class NotificationSelectionService:
         self._reviews = reviews
         self._scheduler = scheduler
         self._constraints = constraints
-        self._clock = clock or _SystemClock()
+        self._clock = clock or SystemClock()
         self._teaser_budget = teaser_budget
 
     async def async_select_for_slot(self, slot_id: str) -> NotificationSelection | None:
