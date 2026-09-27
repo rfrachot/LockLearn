@@ -8,7 +8,7 @@ P5.8 is **PASS** after automated qualification and the 2026-09-27 REAL HA
 qualification.
 
 Roadmap P5.9 — Frontend performance and compatibility gate — is
-**IMPLEMENTED / AUTOMATED QUALIFICATION PASS / REAL-HA PENDING**.
+**PASS / AUTOMATED QUALIFICATION PASS / REAL HA PASS**.
 
 P5.9 is primarily a durable quality gate rather than a new product surface.
 
@@ -64,37 +64,41 @@ Important benchmark boundary:
 The temporary branch-only P5.9 workflow has been removed. All durable gates are
 in `.github/workflows/ci.yml`.
 
-## Remaining REAL HA gate
+## P5.9 REAL HA qualification — PASS (2026-09-27)
 
-P5.9 still needs final qualification on the development Home Assistant instance.
+Branch: `feat/p5-frontend-gate`; HEAD:
+`e00b4746e6052e93d6ce809a26ce988cf32cc2da`.
 
-Qualify:
-1. fetch `feat/p5-frontend-gate` and deploy the complete
-   `custom_components/locklearn/` tree;
-2. confirm Config Entry loaded, frontend protocol compatible and deployed panel
-   byte-identical to the branch bundle;
-3. full-reload the panel and verify core routes load and remain responsive;
-4. inspect browser network/runtime activity for several minutes and verify
-   LockLearn creates no permanent polling loop or separate mobile/network
-   connection; ordinary HA WebSocket traffic is expected;
-5. exercise Home, Learn, Quiz, Stats and management navigation; verify no
-   regressions from Playwright/package changes;
-6. measure/record an ordinary initial panel load and a few route switches if the
-   browser harness exposes stable timing, but do not invent a new normative
-   frontend timing budget;
-7. verify browser memory/network activity does not grow obviously under a short
-   idle period; report harness limits honestly;
-8. inspect LockLearn logs after the smoke;
-9. clean temporary QA fixtures and SSH_ASKPASS helper.
+Home Assistant `2026.7.4` was qualified after deploying the complete
+`custom_components/locklearn/` tree through the read-only-discovered Advanced
+SSH & Web Terminal add-on. The Config Entry was `loaded`, frontend protocol
+`3` matched, and local/remote bundle SHA-256 was
+`c2749626ab152109402fe6fe207e876a31e82ec53299906235abf38a339a0be4`.
+
+The deployed bundle and real authenticated HA WebSocket transport passed three
+full reloads (72/75/76 ms in the harness), all nine routes (Home, Learn, Quiz,
+Stats, Profiles, Tracks, Packs, Sources & Licences, Settings), and the
+Home → Learn → Quiz → Stats → Profiles → Home cycle. No page error, console
+error or failed request occurred. Thirty interaction-triggered LockLearn calls
+were followed by zero `locklearn/*` calls during 180 seconds idle. The panel
+created no separate network connection; one temporary harness WebSocket
+carried the normal HA transport. Precise CPU/battery and memory-growth
+measurement is a harness limit, not a product failure.
+
+The final LockLearn log query contained no WARNING, ERROR or CRITICAL entries.
+No temporary QA data, browser instrumentation or SSH helper remains, and no
+backup/staging directory was left under `/config/custom_components`.
+
+The local performance rerun passed: `session/answer` p95 2.186 ms,
+next-card selection p95 96.841 ms over 20,000 candidates, scheduler day
+generation p95 4.065 ms, and informational 20-card planning p95 228.894 ms.
+The normative budgets remain unchanged. P5 and the P5 exit gate are now PASS.
 
 The §101 minimum/latest HA compatibility gate is already automated and does not
 need a real HA 2025.2 installation during this smoke unless one is actually
 available.
 
-After REAL HA PASS:
-- mark P5.9 PASS;
-- mark the P5 exit gate complete if no new product failure is found;
-- **do not start P6.1 without explicit the maintainer decision**.
+Next action: **do not start P6.1 without explicit the maintainer decision**.
 
 Deployment safety:
 - deploy the complete `custom_components/locklearn/` tree;
