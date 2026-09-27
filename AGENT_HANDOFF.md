@@ -7,8 +7,7 @@ Branch: `feat/p5-i18n-a11y`.
 P5.7 is **PASS** after automated qualification and the 2026-09-27 REAL HA
 qualification.
 
-Roadmap P5.8 — FR/EN i18n, CJK and accessibility hardening — is
-**IMPLEMENTED / AUTOMATED QUALIFICATION PASS / REAL-HA PENDING**.
+Roadmap P5.8 — FR/EN i18n, CJK and accessibility hardening — is **PASS**.
 
 P5.8 changes are frontend-only and preserve existing backend contracts.
 
@@ -57,40 +56,39 @@ The automated renderer tests cover:
 - Japanese system-font stack and ruby styling;
 - visible keyboard focus styling.
 
-## Remaining gate
+## REAL HA qualification — PASS (2026-09-27)
 
-REAL HA P5.8 has not been executed in this session because the real HA/browser
-harness is not available here.
+The complete tree at HEAD `5830fb0ae303837c7d7ad49387357029626e258a` was
+deployed to Home Assistant 2026.7.4 through Advanced SSH & Web Terminal. The
+add-on was discovered through the Supervisor WebSocket API in read-only mode;
+the current SSH username was `root`, and no add-on option or credential was
+changed. Config Entry state was `loaded`, frontend protocol `3` matched, and
+the local/remote bundle SHA-256 was
+`c2749626ab152109402fe6fe207e876a31e82ec53299906235abf38a339a0be4`.
 
-Qualify on the development Home Assistant instance:
-1. deploy the complete `custom_components/locklearn/` tree from
-   `feat/p5-i18n-a11y`;
-2. smoke the core routes in both French and English HA locales and verify the
-   panel follows locale changes/fallback without mixed-language missing keys;
-3. run Learn and Quiz against Japanese starter content and inspect actual DOM
-   `lang="ja"`, readable Han/kana rendering and the effective system CJK font
-   path available in the browser;
-4. if a real content fixture carrying `ruby_segments` exists, verify visible
-   `<ruby>/<rt>`; otherwise mark the manual ruby scenario
-   `FIXTURE UNAVAILABLE` and retain automated evidence;
-5. keyboard-smoke navigation, form controls, Learn/Quiz actions, Stats,
-   Sources/Licences and management routes with visible focus and no
-   hover-required action;
-6. test long labels/content/URLs and the available narrow viewport for blocking
-   overflow; if Firefox still clamps requested 390 px to 500 px, record
-   `HARNESS LIMIT`;
-7. smoke both HA light and dark themes and verify readable contrast/layout
-   without hard-coded theme breakage;
-8. inspect LockLearn system logs after route/session activity;
-9. clean all temporary fixtures and SSH_ASKPASS helper.
+Firefox verified the core routes in French, English and `en-GB` without raw
+translation keys. A real temporary Japanese Starter Track rendered kana `あ`
+with `lang="ja"`, the system Japanese/CJK stack and calculated size 59.5px;
+the surrounding UI remained French. No ruby fixture was present:
+`FIXTURE UNAVAILABLE`; automated tests cover `<ruby>/<rt>` and safe text
+escaping. Visible controls had accessible names, tab traversal exposed a 3px
+focus outline, and no essential hover-only action was observed.
 
-The spec also asks for Han rendering on Windows, Linux, Android and iOS. Record
-each platform actually exercised during REAL HA qualification. Do not claim a
-platform PASS if the harness/device is unavailable; use `FIXTURE UNAVAILABLE`
-or `HARNESS LIMIT` and preserve automated CJK evidence.
+Firefox clamped the requested 390×844 viewport to 500×758 CSS:
+`HARNESS LIMIT`. At 500px, Home, Learn, Quiz, Stats, Tracks and Sources &
+Licences had no horizontal overflow. Light theme was checked. The instance
+and headless harness exposed no usable `default_dark_theme` resource, so dark
+theme visual qualification is explicitly `HARNESS LIMIT`. Linux Firefox is
+the only Han platform qualified; Windows, Android and iOS are
+`FIXTURE UNAVAILABLE`.
 
-After REAL HA PASS, mark P5.8 complete and proceed to P5.9 only after explicit
-the maintainer decision.
+Temporary Profile, Track and session state were removed through public
+WebSocket APIs. The personal Profile has no QA Track, the final LockLearn log
+query has no entries, no SSH askpass/password/known-host helper remains, and
+no deployment stage remains under `/config/custom_components`.
+
+No product bug was reproduced, so no correction or post-fix gate was needed.
+P5.9 must not start without the maintainer's explicit decision.
 
 Deployment safety:
 - deploy the complete `custom_components/locklearn/` tree;
