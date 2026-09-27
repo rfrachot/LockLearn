@@ -42,15 +42,24 @@ class NotificationDeliveryService:
         return f"notification_target_unavailable_{target_id}"
 
     async def _report_unavailable(self, target: dict[str, object]) -> None:
+        await self._report_unavailable_target(
+            str(target["target_id"]),
+            str(target.get("friendly_name") or target["target_id"]),
+        )
+
+    async def _report_unavailable_target(
+        self,
+        target_id: str,
+        friendly_name: str | None = None,
+    ) -> None:
         if self._issue_callback is None:
             return
-        target_id = str(target["target_id"])
         await self._issue_callback(
             self._issue_id(target_id),
             "notification_target_unavailable",
             {
                 "target_id": target_id,
-                "friendly_name": str(target.get("friendly_name") or target_id),
+                "friendly_name": friendly_name or target_id,
             },
         )
 
@@ -58,10 +67,13 @@ class NotificationDeliveryService:
         """Deliver once; target identity remains the persisted LockLearn target_id."""
         target = await self._targets.async_get(rendered.target_id)
         if target is None:
+            await self._report_unavailable_target(rendered.target_id)
             raise NotificationDeliveryError("notification target does not exist")
         if str(target["profile_id"]) != rendered.profile_id:
+            await self._report_unavailable(target)
             raise NotificationDeliveryError("notification target belongs to another profile")
         if not bool(target["enabled"]):
+            await self._report_unavailable(target)
             raise NotificationDeliveryError("notification target is disabled")
 
         require_platform_data = rendered.mode is not NotificationRenderMode.DIRECT_EXPOSURE

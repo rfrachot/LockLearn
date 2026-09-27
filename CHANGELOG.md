@@ -12,7 +12,9 @@ All notable changes will be documented here.
 - P6.3 Home Assistant Repairs and privacy-redacted diagnostics covering dataset
   freshness/signature/install failures, notification-target resolution,
   migration/integrity failures, scheduler infeasibility and backup-cache
-  anomalies without exporting private learning data or raw exception text.
+  anomalies without exporting private learning data or raw exception text;
+  missing, disabled and unroutable notification targets now all raise the
+  target-unavailable Repair.
 - P6.2 backup/recovery lifecycle hardening with coherent atomic state snapshots,
   fail-closed read-only integrity validation, explicit snapshot recovery,
   bounded maintenance retention, storage/backup-size visibility, reconstructible

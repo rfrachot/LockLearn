@@ -138,6 +138,7 @@ async def test_migration_failure_creates_repair_without_runtime(
     monkeypatch,
 ) -> None:
     """A failed migration is surfaced distinctly from integrity failure."""
+
     async def fail_create(_hass: HomeAssistant):
         raise StateMigrationError("migration failed")
 

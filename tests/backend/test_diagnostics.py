@@ -70,9 +70,7 @@ async def test_diagnostics_are_aggregate_only_and_redact_private_values(
     assert diagnostics["versions"]["home_assistant"]
     assert diagnostics["database"]["profile_count"] >= 1
     assert diagnostics["datasets"]["installed_dataset_count"] >= 1
-    assert diagnostics["errors"]["active_repair_types"][
-        "notification_target_unresolved"
-    ] == 1
+    assert diagnostics["errors"]["active_repair_types"]["notification_target_unresolved"] == 1
 
     for private_value in (
         "PRIVATE_PROFILE_SENTINEL",

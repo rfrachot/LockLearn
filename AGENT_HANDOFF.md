@@ -11,8 +11,7 @@ P6.1 — database/config/content migrations and recovery — PASS.
 P6.2 — backup hooks, unload/reload and uninstall/recovery UX — PASS at
 `2e2cbfd` and pushed before P6.3 started.
 
-P6.3 — Repairs and diagnostics — has an implementation candidate. Final
-qualification is intentionally pending.
+P6.3 — Repairs and diagnostics — PASS, qualified locally at final commit.
 
 ## P6.3 implementation
 
@@ -20,7 +19,8 @@ Minimum V1 Repair catalogue is now covered:
 
 - dataset obsolete: existing `dataset_sources_stale`;
 - notification target unresolved: existing
-  `notification_target_unavailable`;
+  `notification_target_unavailable` for missing, disabled, mismatched or
+  unroutable targets;
 - scheduler infeasible: existing
   `scheduler_configuration_infeasible`;
 - DB integrity failure: P6.2 `state_integrity_failure`;
@@ -68,10 +68,11 @@ work is included.
 - invalid Ed25519 trust/signature failures create the signature Repair rather
   than the generic install Repair;
 - dataset diagnostics expose only aggregate error categories.
+- missing notification targets create the target-unavailable Repair.
 
 ## Verification state
 
-The final P6.3 gate has **not** been run by design.
+Final P6.3 qualification completed successfully.
 
 Recommended targeted gate:
 
@@ -98,3 +99,13 @@ Then run:
 
 No frontend source is changed by P6.3. Frontend tests/build are unnecessary
 unless qualification changes frontend code.
+
+Qualification result:
+
+- targeted P6.3 tests: 59 passed;
+- full gate: Ruff format/check, mypy, resource validation and 418 backend tests
+  passed;
+- no frontend changes;
+- local commits only, no push.
+
+Next concrete action: begin P6.4 only after an explicit mission request.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import Counter
+from collections.abc import Mapping
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -65,9 +66,7 @@ async def _unloaded_database_status(paths: StoragePaths) -> dict[str, object]:
         "state_schema_version": observed_state_schema,
         "content_schema_version": None,
         "migration_status": (
-            "current"
-            if observed_state_schema == DB_SCHEMA_VERSION
-            else "unavailable"
+            "current" if observed_state_schema == DB_SCHEMA_VERSION else "unavailable"
         ),
         "integrity_status": "unavailable",
         "foreign_key_violation_count": None,
@@ -89,6 +88,8 @@ async def async_get_config_entry_diagnostics(
     runtime = domain_data.get(DATA_RUNTIME)
     paths = StoragePaths.from_config_dir(hass.config.config_dir)
     lifecycle = StorageLifecycleManager(paths)
+    datasets: dict[str, object]
+    scheduler: Mapping[str, object]
 
     if isinstance(runtime, LockLearnRuntime):
         database = await runtime.storage.async_redacted_diagnostic_status()
@@ -96,14 +97,13 @@ async def async_get_config_entry_diagnostics(
         scheduler = runtime.scheduler_ha.diagnostic_status()
     else:
         database = await _unloaded_database_status(paths)
-        datasets = {
-            "official_dataset_count": 0,
-            "installed_dataset_count": None,
-            "update_available_count": None,
-            "stale_dataset_count": None,
-            "error_dataset_count": None,
-            "error_types": (),
-        }
+        datasets = dict[str, object]()
+        datasets["official_dataset_count"] = 0
+        datasets["installed_dataset_count"] = None
+        datasets["update_available_count"] = None
+        datasets["stale_dataset_count"] = None
+        datasets["error_dataset_count"] = None
+        datasets["error_types"] = ()
         scheduler = {
             "listener_active": False,
             "configured_entity_count": None,

@@ -19,7 +19,6 @@ from custom_components.locklearn.datasets import (
     TrustedKey,
     TrustStore,
 )
-from custom_components.locklearn.datasets.trust import TrustError
 from custom_components.locklearn.datasets import manager as manager_module
 from custom_components.locklearn.datasets.manager import (
     DatasetDefinition,
@@ -27,6 +26,7 @@ from custom_components.locklearn.datasets.manager import (
     DatasetManager,
     DatasetRemovalError,
 )
+from custom_components.locklearn.datasets.trust import TrustError
 from custom_components.locklearn.storage import SQLiteStorage, StoragePaths
 from datasets.pipeline import (
     BuildContext,
@@ -413,9 +413,7 @@ async def test_invalid_signature_reports_distinct_repair(
 
     artifact = _artifact(tmp_path, "1.0.0")
     transport.artifacts["https://example.invalid/1.0.0.zip"] = artifact
-    transport.catalogs["https://example.invalid/catalog.json"] = _catalog(
-        {"1.0.0": artifact}
-    )
+    transport.catalogs["https://example.invalid/catalog.json"] = _catalog({"1.0.0": artifact})
     await manager.async_refresh()
 
     def reject_signature(*args, **kwargs):
@@ -431,10 +429,7 @@ async def test_invalid_signature_reports_distinct_repair(
         with pytest.raises(TrustError, match="invalid Ed25519"):
             await manager.async_install(_DATASET_ID)
 
-        assert any(
-            key == "dataset_signature_invalid"
-            for _, key in created
-        )
+        assert any(key == "dataset_signature_invalid" for _, key in created)
         assert not any(key == "dataset_install_failed" for _, key in created)
         diagnostics = await manager.async_diagnostic_status()
         assert diagnostics["error_types"] == ("signature_invalid",)

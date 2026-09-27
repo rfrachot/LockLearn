@@ -327,13 +327,11 @@ class DatasetManager:
                 await self._clear_issue(stale_issue_id)
         return tuple(statuses)
 
-
     async def async_diagnostic_status(self) -> dict[str, object]:
         """Return aggregate dataset status without IDs, URLs, or raw errors."""
         installed_rows = await self._storage.async_dataset_inventory()
         installed = {
-            str(item["dataset_id"]): _installed_dataset_from_row(item)
-            for item in installed_rows
+            str(item["dataset_id"]): _installed_dataset_from_row(item) for item in installed_rows
         }
         now = datetime.now(UTC)
         update_available_count = 0
@@ -450,9 +448,7 @@ class DatasetManager:
                         "dataset_signature_invalid",
                         {"dataset_id": dataset_id},
                     )
-                    await self._clear_issue(
-                        f"dataset_install_{_issue_suffix(dataset_id)}"
-                    )
+                    await self._clear_issue(f"dataset_install_{_issue_suffix(dataset_id)}")
                 else:
                     self._error_kinds[dataset_id] = "install"
                     await self._report_issue(
@@ -460,9 +456,7 @@ class DatasetManager:
                         "dataset_install_failed",
                         {"dataset_id": dataset_id},
                     )
-                    await self._clear_issue(
-                        f"dataset_signature_{_issue_suffix(dataset_id)}"
-                    )
+                    await self._clear_issue(f"dataset_signature_{_issue_suffix(dataset_id)}")
                 raise
             finally:
                 download.unlink(missing_ok=True)
@@ -504,9 +498,7 @@ class DatasetManager:
                         "dataset_signature_invalid",
                         {"dataset_id": bundled.dataset_id},
                     )
-                    await self._clear_issue(
-                        f"dataset_install_{_issue_suffix(bundled.dataset_id)}"
-                    )
+                    await self._clear_issue(f"dataset_install_{_issue_suffix(bundled.dataset_id)}")
                 else:
                     self._error_kinds[bundled.dataset_id] = "install"
                     await self._report_issue(

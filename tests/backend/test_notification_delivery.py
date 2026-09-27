@@ -255,3 +255,55 @@ async def test_unavailable_target_reports_repair_and_does_not_deliver(
         assert target["last_resolved_notify_service"] is None
     finally:
         await storage.async_close()
+
+
+async def test_missing_target_reports_repair(
+    hass: HomeAssistant,
+    tmp_path: Path,
+) -> None:
+    """A deleted persisted target is a repairable delivery failure."""
+    storage = await _storage(tmp_path)
+    issues: list[tuple[str, str, dict[str, str]]] = []
+
+    async def issue(
+        issue_id: str,
+        key: str,
+        placeholders: Any,
+    ) -> None:
+        issues.append((issue_id, key, dict(placeholders)))
+
+    try:
+        rendered = NotificationRenderer().render_learning_prompt(
+            profile_id="profile-1",
+            profile_name="Adrien",
+            target_id="target-deleted",
+            tag="locklearn:deleted",
+            prompt="休",
+            answer="repos",
+            token="unused",
+            capabilities=TargetCapabilities(
+                device_registry_id="missing-device",
+                platform="android",
+            ),
+        )
+        delivery = NotificationDeliveryService(
+            hass,
+            storage.repositories.notification_targets,
+            issue_callback=issue,
+        )
+
+        with pytest.raises(NotificationDeliveryError, match="does not exist"):
+            await delivery.async_send(rendered)
+
+        assert issues == [
+            (
+                "notification_target_unavailable_target-deleted",
+                "notification_target_unavailable",
+                {
+                    "target_id": "target-deleted",
+                    "friendly_name": "target-deleted",
+                },
+            )
+        ]
+    finally:
+        await storage.async_close()

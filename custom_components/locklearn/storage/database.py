@@ -868,37 +868,28 @@ class SQLiteStorage:
             ).fetchone()
             integrity = connection.execute("PRAGMA integrity_check").fetchall()
             return {
-                "state_schema_version": (
-                    None if state_schema is None else int(state_schema[0])
-                ),
+                "state_schema_version": (None if state_schema is None else int(state_schema[0])),
                 "content_schema_version": (
                     None if content_schema is None else int(content_schema[0])
                 ),
                 "migration_status": (
                     "current"
-                    if state_schema is not None
-                    and int(state_schema[0]) == DB_SCHEMA_VERSION
+                    if state_schema is not None and int(state_schema[0]) == DB_SCHEMA_VERSION
                     else "unknown"
                 ),
                 "integrity_status": "ok" if integrity == [("ok",)] else "error",
                 "foreign_key_violation_count": len(
                     connection.execute("PRAGMA foreign_key_check").fetchall()
                 ),
-                "journal_mode": str(
-                    connection.execute("PRAGMA journal_mode").fetchone()[0]
-                ),
+                "journal_mode": str(connection.execute("PRAGMA journal_mode").fetchone()[0]),
                 "profile_count": int(
                     connection.execute("SELECT COUNT(*) FROM profiles").fetchone()[0]
                 ),
                 "dataset_count": int(
-                    connection.execute(
-                        "SELECT COUNT(*) FROM content.datasets"
-                    ).fetchone()[0]
+                    connection.execute("SELECT COUNT(*) FROM content.datasets").fetchone()[0]
                 ),
                 "pack_count": int(
-                    connection.execute(
-                        "SELECT COUNT(*) FROM content.packs"
-                    ).fetchone()[0]
+                    connection.execute("SELECT COUNT(*) FROM content.packs").fetchone()[0]
                 ),
             }
 
