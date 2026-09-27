@@ -505,7 +505,9 @@ async def _run(card_count: int, state_days: int) -> dict[str, Any]:
             "official_dataset_artifact_default_max_bytes": (
                 storage_budget.OFFICIAL_DATASET_ARTIFACT_DEFAULT_MAX_BYTES
             ),
-            "dataset_cache_warning_default_bytes": storage_budget.DATASET_CACHE_WARNING_DEFAULT_BYTES,
+            "dataset_cache_warning_default_bytes": (
+                storage_budget.DATASET_CACHE_WARNING_DEFAULT_BYTES
+            ),
             "activation_safety_margin_bytes": storage_budget.ACTIVATION_SAFETY_MARGIN_DEFAULT_BYTES,
             "activation_policy": "free >= 2x generated content + configured safety margin",
         },
