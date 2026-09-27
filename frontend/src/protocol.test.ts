@@ -23,12 +23,15 @@ import {
   refreshDatasets,
   setTrackPlan,
   listVisibleProfiles,
+  reactivateLeech,
   reportQuestion,
   reportFreeTextShouldBeAccepted,
   setCardUserState,
   startLearnSession,
+  startLeechSession,
   startQuizSession,
   submitQuizAnswer,
+  updateCardAnnotation,
   evaluateQuizAnswer,
   ProtocolMismatchError,
   type HomeAssistantLike,
@@ -536,6 +539,78 @@ describe("frontend protocol", () => {
         type: "locklearn/difficulties/list",
         profile_id: "p1",
         track_id: "t1",
+      },
+    ]);
+  });
+
+  it("uses P5.7 remediation contracts without frontend authority", async () => {
+    const messages: Record<string, unknown>[] = [];
+    const hass: HomeAssistantLike = {
+      callWS: async <T>(message: Record<string, unknown>): Promise<T> => {
+        messages.push(message);
+        if (message.type === "locklearn/session/start") {
+          return {
+            id: "leech-session",
+            profile_id: "p1",
+            track_id: "t1",
+            type: "learn",
+            strategy: "default",
+            status: "active",
+            version: 1,
+            current_position: 0,
+            started_at_utc: "2026-09-27T00:00:00+00:00",
+            last_activity_at_utc: "2026-09-27T00:00:00+00:00",
+            completed_at_utc: null,
+            question_count: 0,
+            settings: { requested_cards: 20, leeches_only: true },
+            items: [],
+            answers: [],
+            current_question: null,
+          } as T;
+        }
+        return {
+          annotation_id: "a1",
+          profile_id: "p1",
+          learning_item_id: null,
+          card_key: "card",
+          note: "mnemonic",
+          created_at_utc: "2026-09-27T00:00:00+00:00",
+          updated_at_utc: "2026-09-27T00:00:00+00:00",
+        } as T;
+      },
+    };
+
+    await createCardAnnotation(hass, "p1", "card", " mnemonic ");
+    await updateCardAnnotation(hass, "p1", "a1", " revised ");
+    await reactivateLeech(hass, "p1", "t1", "card");
+    expect((await startLeechSession(hass, "p1", "t1", 20)).id).toBe("leech-session");
+
+    expect(messages).toEqual([
+      {
+        type: "locklearn/annotations/create",
+        profile_id: "p1",
+        card_key: "card",
+        note: "mnemonic",
+      },
+      {
+        type: "locklearn/annotations/update",
+        profile_id: "p1",
+        annotation_id: "a1",
+        note: "revised",
+      },
+      {
+        type: "locklearn/leeches/reactivate",
+        profile_id: "p1",
+        track_id: "t1",
+        card_key: "card",
+      },
+      {
+        type: "locklearn/session/start",
+        profile_id: "p1",
+        track_id: "t1",
+        session_type: "learn",
+        strategy: "default",
+        settings: { requested_cards: 20, leeches_only: true },
       },
     ]);
   });
