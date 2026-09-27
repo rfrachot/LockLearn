@@ -11,8 +11,8 @@ test("core shell routes through Home, Learn, Quiz, Stats and Profiles", async ({
   await page.getByRole("button", { name: "Learn", exact: true }).click();
   await expect(page.getByRole("button", { name: "Start learning" })).toBeVisible();
   await page.getByRole("button", { name: "Start learning" }).click();
-  await expect(page.locator('[lang="ja"] ruby')).toBeVisible();
-  await expect(page.locator('[lang="ja"] rt')).toContainText("に");
+  await expect(page.locator('[lang="ja"] ruby').first()).toBeVisible();
+  await expect(page.locator('[lang="ja"] rt').first()).toContainText("に");
 
   await page.getByRole("button", { name: "Quiz", exact: true }).click();
   await expect(page.getByRole("button", { name: "Start quiz" })).toBeVisible();
