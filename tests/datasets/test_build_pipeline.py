@@ -300,9 +300,7 @@ def test_multifile_snapshot_and_normalization_ignore_config_file_order(tmp_path:
     assert first.normalized_path.read_bytes() == second.normalized_path.read_bytes()
 
 
-def test_manifest_free_disk_floor_tracks_generated_database_size(
-    tmp_path: Path,
-) -> None:
+def test_manifest_free_disk_floor_tracks_generated_database_size(tmp_path: Path) -> None:
     """New manifests cannot under-declare the V1 activation space floor."""
     raw = _editorial(tmp_path / "editorial.jsonl")
     result = build_dataset(
@@ -313,17 +311,11 @@ def test_manifest_free_disk_floor_tracks_generated_database_size(
         repository_root=ROOT,
         workspace=tmp_path / "workspace-floor",
     )
-    database_file = next(
-        item for item in result.manifest.files if item.path == "dataset.db"
-    )
-    assert result.manifest.required_free_disk == activation_required_free_disk(
-        database_file.size
-    )
+    database_file = next(item for item in result.manifest.files if item.path == "dataset.db")
+    assert result.manifest.required_free_disk == activation_required_free_disk(database_file.size)
 
 
-def test_manifest_preserves_stricter_explicit_free_disk_requirement(
-    tmp_path: Path,
-) -> None:
+def test_manifest_preserves_stricter_explicit_free_disk_requirement(tmp_path: Path) -> None:
     """Dataset-specific policy may exceed the central V1 activation floor."""
     raw = _editorial(tmp_path / "editorial.jsonl")
     explicit = 96 * 1024 * 1024

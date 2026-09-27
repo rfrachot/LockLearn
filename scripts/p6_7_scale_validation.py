@@ -171,17 +171,13 @@ def _project_five_year_state(path: Path, *, days: int) -> dict[str, Any]:
                 item_rows: list[tuple[Any, ...]] = []
                 answer_rows: list[tuple[Any, ...]] = []
                 for item_index in range(STANDARD_SESSION_CARDS):
-                    review_index = (
-                        session_index * STANDARD_SESSION_CARDS + item_index
-                    )
+                    review_index = session_index * STANDARD_SESSION_CARDS + item_index
                     global_card = (
                         day_index * STANDARD_REVIEW_CAPACITY_PER_DAY
                         + review_index
                     ) % progress_count
                     card_key = f"p6-7-card-{global_card}"
-                    question_id = (
-                        f"p6-7-q-{day_index}-{session_index}-{item_index}"
-                    )
+                    question_id = f"p6-7-q-{day_index}-{session_index}-{item_index}"
                     item_rows.append(
                         (
                             session_id,
@@ -262,9 +258,7 @@ def _project_five_year_state(path: Path, *, days: int) -> dict[str, Any]:
                         "p6-7-generation",
                         snapshot,
                         snapshot,
-                        day_session_ids[
-                            review_index // STANDARD_SESSION_CARDS
-                        ],
+                        day_session_ids[review_index // STANDARD_SESSION_CARDS],
                         timestamp,
                         local_date,
                         "Europe/Paris",
@@ -386,10 +380,7 @@ def _project_five_year_state(path: Path, *, days: int) -> dict[str, Any]:
                        event_type, actor_user_id, profile_id, payload_json,
                        created_at_utc
                    ) VALUES ('benchmark_action', NULL, ?, '{}', ?)""",
-                (
-                    (profile_id, timestamp)
-                    for _ in range(AUDIT_EVENTS_PER_DAY)
-                ),
+                ((profile_id, timestamp) for _ in range(AUDIT_EVENTS_PER_DAY)),
             )
 
         connection.commit()
@@ -427,13 +418,9 @@ def _project_five_year_state(path: Path, *, days: int) -> dict[str, Any]:
             "standard_review_capacity_per_day": STANDARD_REVIEW_CAPACITY_PER_DAY,
             "standard_session_cards": STANDARD_SESSION_CARDS,
             "standard_sessions_per_day": STANDARD_SESSIONS_PER_DAY,
-            "standard_notification_slots_per_day": (
-                STANDARD_NOTIFICATION_SLOTS_PER_DAY
-            ),
+            "standard_notification_slots_per_day": STANDARD_NOTIFICATION_SLOTS_PER_DAY,
             "audit_events_per_day": AUDIT_EVENTS_PER_DAY,
-            "review_capacity_source": (
-                "P3.14 standard quality-bench assumption"
-            ),
+            "review_capacity_source": "P3.14 standard quality-bench assumption",
         },
         "integrity_check": integrity,
         "foreign_key_violation_count": len(foreign_keys),
@@ -488,19 +475,11 @@ async def _content_scale(root: Path, *, card_count: int) -> dict[str, Any]:
             "card_count": card_count,
             "package_bytes": package_bytes,
             "candidate_bytes": candidate_bytes,
-            "active_content_bytes": (
-                storage.content_generations.active_path.stat().st_size
-            ),
+            "active_content_bytes": storage.content_generations.active_path.stat().st_size,
             "build_s": round(build_s, 3),
             "activation_s": round(activation_s, 3),
-            "build_ms_per_10k_cards": round(
-                build_s * 1000 / scale,
-                3,
-            ),
-            "activation_ms_per_10k_cards": round(
-                activation_s * 1000 / scale,
-                3,
-            ),
+            "build_ms_per_10k_cards": round(build_s * 1000 / scale, 3),
+            "activation_ms_per_10k_cards": round(activation_s * 1000 / scale, 3),
             "active_item_count": result.active_item_count,
             "active_card_count": result.active_card_count,
             "max_database_count": result.max_database_count,
@@ -521,10 +500,7 @@ async def _run(card_count: int, state_days: int) -> dict[str, Any]:
             root / "projection" / "state.db",
             days=state_days,
         )
-        content_scale = await _content_scale(
-            root / "content-scale",
-            card_count=card_count,
-        )
+        content_scale = await _content_scale(root / "content-scale", card_count=card_count)
         filesystem = shutil.disk_usage(root)
     return {
         "hardware": _hardware(),
@@ -539,12 +515,8 @@ async def _run(card_count: int, state_days: int) -> dict[str, Any]:
             "official_dataset_artifact_default_max_bytes": (
                 OFFICIAL_DATASET_ARTIFACT_DEFAULT_MAX_BYTES
             ),
-            "dataset_cache_warning_default_bytes": (
-                DATASET_CACHE_WARNING_DEFAULT_BYTES
-            ),
-            "activation_safety_margin_bytes": (
-                ACTIVATION_SAFETY_MARGIN_DEFAULT_BYTES
-            ),
+            "dataset_cache_warning_default_bytes": DATASET_CACHE_WARNING_DEFAULT_BYTES,
+            "activation_safety_margin_bytes": ACTIVATION_SAFETY_MARGIN_DEFAULT_BYTES,
             "activation_policy": "free >= 2x generated content + configured safety margin",
         },
         "hot_paths": hot_paths,
@@ -573,16 +545,8 @@ def _passes(result: dict[str, Any]) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--card-count",
-        type=int,
-        default=REFERENCE_CARD_COUNT,
-    )
-    parser.add_argument(
-        "--state-days",
-        type=int,
-        default=STATE_DAYS,
-    )
+    parser.add_argument("--card-count", type=int, default=REFERENCE_CARD_COUNT)
+    parser.add_argument("--state-days", type=int, default=STATE_DAYS)
     args = parser.parse_args()
     if args.card_count <= 0 or args.state_days <= 0:
         parser.error("--card-count and --state-days must be positive")

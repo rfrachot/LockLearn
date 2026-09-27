@@ -411,10 +411,7 @@ async def test_backward_clock_jump_uses_persisted_high_watermark(tmp_path: Path)
         clock.set(datetime(2026, 9, 24, 9, 0, tzinfo=UTC))
         jumped = await service.async_reconcile(reason="timer")
         assert jumped.kind == "clock_backward"
-        assert (
-            INTERNAL_METRICS.snapshot()["scheduler.drift_ms"]["last_ms"]
-            == 3_600_000.0
-        )
+        assert INTERNAL_METRICS.snapshot()["scheduler.drift_ms"]["last_ms"] == 3_600_000.0
         assert jumped.effective_now_utc == datetime(2026, 9, 24, 10, 0, tzinfo=UTC)
 
         preview = await service.async_preview(
@@ -1755,11 +1752,7 @@ async def test_scheduler_generation_records_internal_timing(tmp_path: Path) -> N
     clock = FixedClock(datetime(2026, 9, 24, 5, 0, tzinfo=UTC))
     storage = await _storage(tmp_path, clock)
     try:
-        await _profile(
-            storage,
-            now=clock.now(),
-            settings={"daily_push_budget": 2},
-        )
+        await _profile(storage, now=clock.now(), settings={"daily_push_budget": 2})
         service = SchedulerService(
             storage.repositories.profiles,
             storage.repositories.tracks,

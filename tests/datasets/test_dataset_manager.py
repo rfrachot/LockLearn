@@ -446,9 +446,7 @@ async def test_runtime_free_disk_floor_fails_closed_before_activation(
     try:
         artifact = _artifact(tmp_path, "1.0.0")
         transport.artifacts["https://example.invalid/1.0.0.zip"] = artifact
-        transport.catalogs["https://example.invalid/catalog.json"] = _catalog(
-            {"1.0.0": artifact}
-        )
+        transport.catalogs["https://example.invalid/catalog.json"] = _catalog({"1.0.0": artifact})
         await manager.async_refresh()
         active_before = storage.content_generations.active_metadata.generation_id
 
@@ -457,11 +455,7 @@ async def test_runtime_free_disk_floor_fails_closed_before_activation(
             used = 1024
             free = 0
 
-        monkeypatch.setattr(
-            manager_module.shutil,
-            "disk_usage",
-            lambda _path: DiskUsage(),
-        )
+        monkeypatch.setattr(manager_module.shutil, "disk_usage", lambda _path: DiskUsage())
         with pytest.raises(DatasetInstallError, match="insufficient free disk"):
             await manager.async_install(_DATASET_ID)
 
@@ -485,11 +479,7 @@ async def test_aggregate_dataset_cache_budget_warning_is_created_and_cleared(
     created: list[tuple[str, str, Mapping[str, str]]] = []
     cleared: list[str] = []
 
-    async def report(
-        issue_id: str,
-        translation_key: str,
-        placeholders: Mapping[str, str],
-    ) -> None:
+    async def report(issue_id: str, translation_key: str, placeholders: Mapping[str, str]) -> None:
         created.append((issue_id, translation_key, placeholders))
 
     async def clear(issue_id: str) -> None:

@@ -231,17 +231,9 @@ class DatasetManager:
         self._freshness_targets = dict(freshness_targets or {})
         self._issue_callback = issue_callback
         self._issue_clear_callback = issue_clear_callback
-        if (
-            isinstance(cache_warning_bytes, bool)
-            or not isinstance(cache_warning_bytes, int)
-            or cache_warning_bytes <= 0
-        ):
+        if isinstance(cache_warning_bytes, bool) or not isinstance(cache_warning_bytes, int) or cache_warning_bytes <= 0:
             raise DatasetManagerError("cache_warning_bytes must be a positive integer")
-        if (
-            isinstance(activation_margin_bytes, bool)
-            or not isinstance(activation_margin_bytes, int)
-            or activation_margin_bytes < 0
-        ):
+        if isinstance(activation_margin_bytes, bool) or not isinstance(activation_margin_bytes, int) or activation_margin_bytes < 0:
             raise DatasetManagerError("activation_margin_bytes must be an integer >= 0")
         self._cache_warning_bytes = cache_warning_bytes
         self._activation_margin_bytes = activation_margin_bytes
