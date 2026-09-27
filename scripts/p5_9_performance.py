@@ -77,7 +77,6 @@ async def _session_answer_p95(root: Path) -> float:
         await storage.async_close()
 
 
-
 class _BenchmarkClock:
     def now(self) -> datetime:
         return datetime(2026, 9, 27, 12, 0, tzinfo=UTC)
