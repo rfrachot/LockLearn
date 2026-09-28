@@ -39,6 +39,11 @@ jobs:
         run: |
           python scripts/p6_10_release_smoke.py
           python -m pytest -q --tb=short tests/backend/test_p6_10_release_readiness.py
+      - name: P6.11 V1 acceptance
+        run: >-
+          python -m pytest -q --tb=short
+          tests/backend/test_p6_11_acceptance_contracts.py
+          tests/backend/test_p6_11_v1_acceptance.py
       - name: P6.8 release contracts
         run: >-
           python -m pytest -q --tb=short

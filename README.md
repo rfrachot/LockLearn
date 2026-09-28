@@ -7,9 +7,8 @@ integration. It combines active study sessions, deterministic spaced repetition,
 actionable Companion notifications, multi-user learner Profiles and signed
 versioned datasets without requiring a LockLearn cloud account.
 
-**Status:** 1.0.0 release-candidate hardening. P6.1 through P6.9 are qualified;
-P6.10 release packaging is implemented pending independent qualification, and
-P6.11 final acceptance remains.
+**Status:** 1.0.0 release-candidate hardening. P6.1 through P6.10 are qualified;
+P6.11 final acceptance is implemented and pending independent qualification.
 
 SPEC_V1.md is the normative product and architecture source of truth.
 

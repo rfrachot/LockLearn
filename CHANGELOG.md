@@ -9,6 +9,9 @@ All notable changes will be documented here.
   runtime setup, avoiding blocking-call warnings on the HA event loop.
 
 ### Added
+- P6.11 final V1 acceptance gate with a fresh-install Japanese Starter public-API
+  smoke, explicit §129 capability/§133 invariant/§135 scenario evidence map and
+  permanent resilience/non-blocker contracts before the 1.0 release.
 - P6.10 release readiness with the untagged 1.0.0 runtime candidate, isolated
   HACS-payload import/resource smoke, a real v0.0.2 state-schema upgrade
   contract, explicit SemVer/HACS compatibility policy and release-payload gates
