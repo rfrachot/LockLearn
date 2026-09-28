@@ -47,12 +47,12 @@ Verified P0 development environment (2026-09-21):
 
 ## AI workflow
 
-the maintainer is the only human developer and alternates mainly between Claude Code and
-Codex. Both may modify, test and commit locally. Push/PR/merge/tag/release only
+The maintainer is the only human developer and alternates mainly between Claude Code
+and Codex. Both may modify, test and commit locally. Push/PR/merge/tag/release only
 on explicit request.
 
-The uploaded `the maintainer's AI configuration` v1.0.0 was deployed into this repository and then
-adapted to LockLearn's mixed Python + TypeScript stack.
+The maintainer's uploaded AI configuration v1.0.0 was deployed into this repository
+and then adapted to LockLearn's mixed Python + TypeScript stack.
 
 ## Commands
 

@@ -150,8 +150,8 @@ cache located under the config directory.
 
 ## Gate D — iPadOS Companion (P0.4/P0.5)
 
-Target: Apple iPad12,1, name `iPad de Camille`, device-registry `sw_version`
-27.0. The semantic Companion app version entity was unavailable.
+Target: Apple iPad12,1, device name pseudonymized here as `iPad de Camille`,
+device-registry `sw_version` 27.0. The semantic Companion app version entity was unavailable.
 
 | Sub-test | Status | Evidence |
 |---|---|---|
