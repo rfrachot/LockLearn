@@ -16,6 +16,7 @@ from custom_components.locklearn.storage import (
     StoragePaths,
     TrackRecord,
 )
+from custom_components.locklearn.storage.schema import STATE_SCHEMA
 from tests.backend.content_db_helpers import ITEM_A, card_identity, create_package, facet_ids
 
 _OLD_STATE_SCHEMA = """
@@ -110,6 +111,7 @@ async def test_state_v2_contains_full_foundation_and_required_hot_indexes(tmp_pa
                 "scheduler_config",
                 "scheduled_slots",
                 "notification_interactions",
+                "receptivity_samples",
                 "stats_daily",
                 "settings",
             } <= tables
@@ -126,6 +128,7 @@ async def test_state_v2_contains_full_foundation_and_required_hot_indexes(tmp_pa
                 "review_events_profile_created",
                 "scheduled_slots_profile_scheduled_status",
                 "notification_interactions_target_status_expires",
+                "receptivity_samples_profile_hour",
                 "sessions_profile_status_activity",
             } <= indexes
             assert connection.execute("PRAGMA foreign_key_list(progress)").fetchall() == []
@@ -182,7 +185,9 @@ async def test_v1_state_migrates_out_of_place_with_backup_and_preserves_rows(
     try:
         migrated = sqlite3.connect(state_path)
         try:
-            assert migrated.execute("SELECT version FROM schema_version").fetchone() == (2,)
+            assert migrated.execute("SELECT version FROM schema_version").fetchone() == (
+                DB_SCHEMA_VERSION,
+            )
             assert migrated.execute("SELECT id, type, strategy FROM sessions").fetchone() == (
                 "legacy-session",
                 "learn",
@@ -338,5 +343,210 @@ async def test_cross_domain_integrity_audit_detects_raw_invalid_state(tmp_path: 
                 "reason": "missing_card_identity",
             },
         )
+    finally:
+        await storage.async_close()
+
+
+async def test_v2_state_migrates_to_v3_and_accepts_leech_state(tmp_path: Path) -> None:
+    state_path = tmp_path / "state" / "state.db"
+    state_path.parent.mkdir(parents=True)
+    v2_schema = STATE_SCHEMA.replace(
+        "state IN ('new', 'learning', 'review', 'relearning', 'leech')",
+        "state IN ('new', 'learning', 'review', 'relearning')",
+    )
+    connection = sqlite3.connect(state_path)
+    try:
+        connection.executescript(v2_schema)
+        connection.execute("INSERT INTO schema_version(version) VALUES (2)")
+        connection.execute(
+            """INSERT INTO progress(
+                   profile_id, track_id, card_key, state, updated_at_utc
+               ) VALUES ('profile-v2', 'track-v2', 'card-v2', 'review', ?)""",
+            ("2026-09-23T20:00:00+00:00",),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    storage = SQLiteStorage(StoragePaths(state_path, tmp_path / "content" / "current.db"))
+    await storage.async_open()
+    try:
+        migrated = sqlite3.connect(state_path)
+        try:
+            assert migrated.execute("SELECT version FROM schema_version").fetchone() == (
+                DB_SCHEMA_VERSION,
+            )
+            assert migrated.execute(
+                "SELECT state FROM progress WHERE card_key = 'card-v2'"
+            ).fetchone() == ("review",)
+            migrated.execute(
+                """UPDATE progress SET state = 'leech'
+                   WHERE profile_id = 'profile-v2'
+                     AND track_id = 'track-v2'
+                     AND card_key = 'card-v2'"""
+            )
+            migrated.commit()
+            assert migrated.execute(
+                "SELECT state FROM progress WHERE card_key = 'card-v2'"
+            ).fetchone() == ("leech",)
+        finally:
+            migrated.close()
+        assert state_path.with_name("state.db.pre-migration-v2.bak").is_file()
+    finally:
+        await storage.async_close()
+
+
+async def test_v3_state_migrates_to_v4_with_receptivity_state(tmp_path: Path) -> None:
+    state_path = tmp_path / "state-v3" / "state.db"
+    state_path.parent.mkdir(parents=True)
+    v3_schema = STATE_SCHEMA.replace(
+        """    deferred_until_utc TEXT,
+    defer_reason TEXT,
+    card_key TEXT,
+    learning_item_id TEXT,
+    prompt_facet_id TEXT,
+    answer_facet_id TEXT,
+    selection_reason TEXT,
+    expired_reason TEXT,
+""",
+        "",
+        1,
+    )
+    receptivity_start = v3_schema.index("CREATE TABLE IF NOT EXISTS receptivity_samples (")
+    receptivity_end = v3_schema.index(
+        "CREATE TABLE IF NOT EXISTS stats_daily (",
+        receptivity_start,
+    )
+    v3_schema = v3_schema[:receptivity_start] + v3_schema[receptivity_end:]
+
+    connection = sqlite3.connect(state_path)
+    try:
+        connection.executescript(v3_schema)
+        connection.execute("INSERT INTO schema_version(version) VALUES (3)")
+        connection.execute(
+            """INSERT INTO profiles(
+                   profile_id, name, preset, timezone, status, settings_json,
+                   created_at_utc, updated_at_utc
+               ) VALUES (
+                   'profile-v3', 'Legacy', 'standard', 'Europe/Paris', 'active',
+                   '{}', '2026-09-24T05:00:00+00:00', '2026-09-24T05:00:00+00:00'
+               )"""
+        )
+        connection.execute(
+            """INSERT INTO scheduled_slots(
+                   slot_id, profile_id, slot_type, scheduled_for_utc, status,
+                   scheduler_config_version, seed, created_at_utc, updated_at_utc
+               ) VALUES (
+                   'slot-v3', 'profile-v3', 'notification',
+                   '2026-09-24T08:00:00+00:00', 'scheduled', 1, 'seed',
+                   '2026-09-24T05:00:00+00:00', '2026-09-24T05:00:00+00:00'
+               )"""
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    storage = SQLiteStorage(StoragePaths(state_path, tmp_path / "content-v4" / "current.db"))
+    await storage.async_open()
+    try:
+        migrated = sqlite3.connect(state_path)
+        try:
+            assert migrated.execute("SELECT version FROM schema_version").fetchone() == (
+                DB_SCHEMA_VERSION,
+            )
+            columns = {
+                str(row[1])
+                for row in migrated.execute("PRAGMA table_info(scheduled_slots)").fetchall()
+            }
+            assert {"deferred_until_utc", "defer_reason"} <= columns
+            assert migrated.execute(
+                "SELECT slot_id FROM scheduled_slots WHERE slot_id = 'slot-v3'"
+            ).fetchone() == ("slot-v3",)
+            assert migrated.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'receptivity_samples'"
+            ).fetchone() == (1,)
+        finally:
+            migrated.close()
+        assert state_path.with_name("state.db.pre-migration-v3.bak").is_file()
+    finally:
+        await storage.async_close()
+
+
+async def test_v4_state_migrates_to_v5_with_notification_selection_state(
+    tmp_path: Path,
+) -> None:
+    state_path = tmp_path / "state-v4" / "state.db"
+    state_path.parent.mkdir(parents=True)
+    v4_schema = STATE_SCHEMA.replace(
+        """    deferred_until_utc TEXT,
+    defer_reason TEXT,
+    card_key TEXT,
+    learning_item_id TEXT,
+    prompt_facet_id TEXT,
+    answer_facet_id TEXT,
+    selection_reason TEXT,
+    expired_reason TEXT,
+""",
+        """    deferred_until_utc TEXT,
+    defer_reason TEXT,
+""",
+        1,
+    )
+
+    connection = sqlite3.connect(state_path)
+    try:
+        connection.executescript(v4_schema)
+        connection.execute("INSERT INTO schema_version(version) VALUES (4)")
+        connection.execute(
+            """INSERT INTO profiles(
+                   profile_id, name, preset, timezone, status, settings_json,
+                   created_at_utc, updated_at_utc
+               ) VALUES (
+                   'profile-v4', 'Legacy', 'standard', 'Europe/Paris', 'active',
+                   '{}', '2026-09-24T05:00:00+00:00', '2026-09-24T05:00:00+00:00'
+               )"""
+        )
+        connection.execute(
+            """INSERT INTO scheduled_slots(
+                   slot_id, profile_id, slot_type, scheduled_for_utc,
+                   deferred_until_utc, defer_reason, status,
+                   scheduler_config_version, seed, created_at_utc, updated_at_utc
+               ) VALUES (
+                   'slot-v4', 'profile-v4', 'learning',
+                   '2026-09-24T08:00:00+00:00', NULL, NULL, 'scheduled',
+                   1, 'seed', '2026-09-24T05:00:00+00:00',
+                   '2026-09-24T05:00:00+00:00'
+               )"""
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    storage = SQLiteStorage(StoragePaths(state_path, tmp_path / "content-v5" / "current.db"))
+    await storage.async_open()
+    try:
+        migrated = sqlite3.connect(state_path)
+        try:
+            assert migrated.execute("SELECT version FROM schema_version").fetchone() == (
+                DB_SCHEMA_VERSION,
+            )
+            columns = {
+                str(row[1])
+                for row in migrated.execute("PRAGMA table_info(scheduled_slots)").fetchall()
+            }
+            assert {
+                "card_key",
+                "learning_item_id",
+                "prompt_facet_id",
+                "answer_facet_id",
+                "selection_reason",
+                "expired_reason",
+            } <= columns
+            assert migrated.execute(
+                "SELECT slot_id FROM scheduled_slots WHERE slot_id = 'slot-v4'"
+            ).fetchone() == ("slot-v4",)
+        finally:
+            migrated.close()
+        assert state_path.with_name("state.db.pre-migration-v4.bak").is_file()
     finally:
         await storage.async_close()

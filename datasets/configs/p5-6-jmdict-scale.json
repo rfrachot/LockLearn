@@ -1,0 +1,28 @@
+{
+  "dataset_id": "locklearn:dataset:jmdict-scale",
+  "dataset_version": "2026.09",
+  "built_at": "2026-09-26T21:00:00Z",
+  "minimum_locklearn_version": "0.0.2",
+  "build_tool_version": "1.0.0",
+  "signing_key_id": "locklearn-qualification-2026-09",
+  "recipe": "datasets.recipes.jmdict_scale:JMdictScaleRecipe",
+  "added_count": 20000,
+  "changed_count": 0,
+  "removed_count": 0,
+  "required_free_disk": 104857600,
+  "sources": [
+    {
+      "source_id": "edrdg:jmdict",
+      "upstream_version": "JMdict_e-2021-05-05",
+      "upstream_date": "2021-05-05",
+      "retrieved_at": "2026-09-26T21:00:00Z",
+      "files": [
+        {
+          "source_url": "https://www.edrdg.org/pub/Nihongo/JMdict_e.gz",
+          "fetch_url": "https://www.edrdg.org/pub/Nihongo/JMdict_e.gz",
+          "filename": "JMdict_e.gz"
+        }
+      ]
+    }
+  ]
+}

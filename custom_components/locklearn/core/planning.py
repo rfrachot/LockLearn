@@ -141,17 +141,50 @@ class LearningPlanService:
         )
         return await self.async_forecast(track_id=track_id)
 
-    async def async_forecast(self, *, track_id: str) -> LoadForecast:
-        """Estimate future review load from V1 base intervals and configured quotas."""
+    async def async_preview_plan(
+        self,
+        *,
+        track_id: str,
+        plan: LearningPlan,
+    ) -> LoadForecast:
+        """Forecast a proposed plan without mutating Track state."""
         track = await self._tracks.async_get(track_id)
         if track is None:
             raise LearningPlanValidationError("track does not exist")
         profile = await self._profiles.async_get(str(track["profile_id"]))
         if profile is None:
             raise LearningPlanValidationError("track profile does not exist")
+        self._validate_target_date(plan, str(profile["timezone"]))
+        return await self._async_forecast_with_plan(
+            track_id=track_id,
+            profile=profile,
+            plan=plan,
+        )
 
+    async def async_forecast(self, *, track_id: str) -> LoadForecast:
+        """Estimate future review load from the persisted V1 plan."""
+        track = await self._tracks.async_get(track_id)
+        if track is None:
+            raise LearningPlanValidationError("track does not exist")
+        profile = await self._profiles.async_get(str(track["profile_id"]))
+        if profile is None:
+            raise LearningPlanValidationError("track profile does not exist")
         plan = self._plan_from_track(track)
         self._validate_target_date(plan, str(profile["timezone"]))
+        return await self._async_forecast_with_plan(
+            track_id=track_id,
+            profile=profile,
+            plan=plan,
+        )
+
+    async def _async_forecast_with_plan(
+        self,
+        *,
+        track_id: str,
+        profile: dict[str, Any],
+        plan: LearningPlan,
+    ) -> LoadForecast:
+        """Calculate one deterministic forecast from explicit plan inputs."""
         now = self._clock.now()
         snapshot = await self._tracks.async_planning_snapshot(
             track_id=track_id,
