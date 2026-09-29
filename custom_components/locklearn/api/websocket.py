@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import voluptuous as vol
@@ -889,12 +889,18 @@ async def ws_targets_discover(
     }
     candidates: list[dict[str, Any]] = []
     registry = dr.async_get(hass)
-    for device in registry.devices:
-        resolved = await _mobile_app_candidate(hass, device.id)
+    # Home Assistant 2025.2 exposes registry.devices as a mapping-like object
+    # whose iteration yields IDs, while newer releases type it as a collection
+    # of DeviceEntry objects. Normalize both supported shapes at this boundary.
+    for raw_device in cast(Any, registry.devices):
+        device_registry_id = (
+            raw_device if isinstance(raw_device, str) else raw_device.id
+        )
+        resolved = await _mobile_app_candidate(hass, device_registry_id)
         if resolved is None:
             continue
         candidate, _service = resolved
-        candidate["configured_target_id"] = configured_by_device.get(device.id)
+        candidate["configured_target_id"] = configured_by_device.get(device_registry_id)
         candidates.append(candidate)
     candidates.sort(
         key=lambda item: (
