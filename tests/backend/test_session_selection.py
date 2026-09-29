@@ -131,6 +131,31 @@ class _Constraints:
         return SelectionDecision(eligible=True, reasons=())
 
 
+class _RejectConstraints(_Constraints):
+    def __init__(self, rejected_card_keys: set[str]) -> None:
+        self.rejected_card_keys = rejected_card_keys
+
+    async def async_evaluate(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        card_key: str,
+        learning_item_id: str,
+        state: str,
+    ) -> SelectionDecision:
+        await super().async_evaluate(
+            profile_id=profile_id,
+            track_id=track_id,
+            card_key=card_key,
+            learning_item_id=learning_item_id,
+            state=state,
+        )
+        if card_key in self.rejected_card_keys:
+            return SelectionDecision(eligible=False, reasons=("blocked_for_test",))
+        return SelectionDecision(eligible=True, reasons=())
+
+
 class _CountingConstraints(_Constraints):
     def __init__(self) -> None:
         self.calls = 0
@@ -176,10 +201,11 @@ def _candidate(
     user_state: str = "active",
     suspend_until_utc: str | None = None,
     last_result: str | None = None,
+    learning_item_id: str | None = None,
 ) -> dict[str, Any]:
     return {
         "card_key": f"card-{index}",
-        "learning_item_id": f"item-{index}",
+        "learning_item_id": learning_item_id or f"item-{index}",
         "prompt_facet_id": f"prompt-{index}",
         "answer_facet_id": f"answer-{index}",
         "content_type": content_type,
@@ -462,6 +488,71 @@ async def test_early_learning_never_bypasses_failed_or_relearning_cooldown() -> 
     )
 
     assert selected == ()
+
+
+@pytest.mark.asyncio
+async def test_availability_excludes_backend_rejected_cards_like_session_start() -> None:
+    due = "2026-09-23T10:00:00+00:00"
+    candidates = (_candidate(1, state="review", content_type="vocabulary", due=due),)
+    service = SessionSelectionService(
+        _Tracks(candidates),
+        _Profiles(),
+        _Reviews(),
+        _RejectConstraints({"card-1"}),
+        clock=_FixedClock(datetime(2026, 9, 23, 12, 0, tzinfo=UTC)),
+    )
+
+    availability = await service.async_availability(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="quiz",
+    )
+    selected = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="quiz",
+        settings={},
+    )
+
+    assert availability["available_now"] == 0
+    assert selected == ()
+
+
+@pytest.mark.asyncio
+async def test_availability_applies_same_learning_item_dedupe_as_session_start() -> None:
+    due = "2026-09-23T10:00:00+00:00"
+    candidates = (
+        _candidate(
+            1,
+            state="review",
+            content_type="vocabulary",
+            due=due,
+            learning_item_id="shared-item",
+        ),
+        _candidate(
+            2,
+            state="review",
+            content_type="grammar",
+            due=due,
+            learning_item_id="shared-item",
+        ),
+    )
+    service = _service(candidates)
+
+    availability = await service.async_availability(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="quiz",
+    )
+    selected = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="quiz",
+        settings={},
+    )
+
+    assert availability["available_now"] == 1
+    assert len(selected) == 1
 
 
 @pytest.mark.asyncio

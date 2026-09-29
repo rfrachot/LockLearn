@@ -177,49 +177,26 @@ class SessionSelectionService:
         leeches_only = bool(settings.get("leeches_only", False))
         allow_early_learning = bool(settings.get("allow_early_learning", False))
         weights = await self._tracks.async_get_content_weights(track_id)
-        raw_candidates = await self._tracks.async_session_candidates(
+        now = self._clock.now()
+        candidate_pool = await self._async_candidate_pool(
             profile_id=profile_id,
             track_id=track_id,
+            track=track,
+            weights=weights,
+            now=now,
+            allowed_types=allowed_types,
+            leeches_only=leeches_only,
         )
-        constraints_required = True
-        probe = getattr(self._tracks, "async_has_selection_constraints", None)
-        pack_version_id = track.get("pack_version_id")
-        if callable(probe) and isinstance(pack_version_id, str) and pack_version_id:
-            constraints_required = bool(await probe(pack_version_id))
-        now = self._clock.now()
-        candidates: list[_Candidate] = []
-        for row in raw_candidates:
-            candidate = _Candidate.from_row(row)
-            if not self._user_state_available(candidate, now=now):
-                continue
-            if leeches_only and candidate.state != "leech":
-                continue
-            if allowed_types is not None and candidate.content_type not in allowed_types:
-                continue
-            if self._weight(candidate.content_type, weights) <= 0:
-                continue
-            if not self._state_available(
+        candidates = [
+            candidate
+            for candidate in candidate_pool
+            if self._state_available(
                 candidate,
                 now=now,
                 session_type=session_type,
                 allow_early_learning=allow_early_learning,
-            ):
-                continue
-            if not constraints_required:
-                candidates.append(candidate)
-                continue
-            try:
-                decision = await self._constraints.async_evaluate(
-                    profile_id=profile_id,
-                    track_id=track_id,
-                    card_key=candidate.card_key,
-                    learning_item_id=candidate.learning_item_id,
-                    state=candidate.state,
-                )
-            except SelectionConstraintError as err:
-                raise SessionSelectionError(str(err)) from err
-            if decision.eligible:
-                candidates.append(candidate)
+            )
+        ]
 
         if not candidates:
             return ()
@@ -274,7 +251,7 @@ class SessionSelectionService:
         track_id: str,
         session_type: str,
     ) -> dict[str, Any]:
-        """Describe current/future session availability without mutating state."""
+        """Describe availability using the same eligibility and sequence rules as start."""
         track = await self._tracks.async_get(track_id)
         if track is None or str(track["profile_id"]) != profile_id:
             raise SessionSelectionError("track does not belong to profile")
@@ -283,53 +260,28 @@ class SessionSelectionService:
             raise SessionSelectionError("profile does not exist")
 
         weights = await self._tracks.async_get_content_weights(track_id)
-        raw_candidates = await self._tracks.async_session_candidates(
-            profile_id=profile_id,
-            track_id=track_id,
-        )
         now = self._clock.now()
         normalized_type = session_type.strip().lower()
-        available_due = 0
-        eligible_new = 0
-        forceable_learning = 0
-        introduced = 0
-        new_cards = 0
+        requested_cards = self._requested_cards({}, profile)
+        candidate_pool = await self._async_candidate_pool(
+            profile_id=profile_id,
+            track_id=track_id,
+            track=track,
+            weights=weights,
+            now=now,
+        )
+
+        introduced = sum(candidate.state != "new" for candidate in candidate_pool)
+        new_cards = sum(candidate.state == "new" for candidate in candidate_pool)
         next_due: datetime | None = None
-
-        for row in raw_candidates:
-            candidate = _Candidate.from_row(row)
-            if not self._user_state_available(candidate, now=now):
-                continue
-            if self._weight(candidate.content_type, weights) <= 0:
-                continue
-            if candidate.state == "new":
-                new_cards += 1
-                if normalized_type in _NEW_SESSION_TYPES:
-                    eligible_new += 1
-                continue
-
-            introduced += 1
-            if self._state_available(
-                candidate,
-                now=now,
-                session_type=session_type,
-                allow_early_learning=False,
-            ):
-                available_due += 1
-                continue
-            if candidate.next_due_at_utc is None:
+        for candidate in candidate_pool:
+            if candidate.state == "new" or candidate.next_due_at_utc is None:
                 continue
             due = datetime.fromisoformat(candidate.next_due_at_utc)
             if due.tzinfo is None:
                 raise SessionSelectionError("candidate due timestamp must be timezone-aware")
-            if next_due is None or due < next_due:
+            if due > now and (next_due is None or due < next_due):
                 next_due = due
-            if (
-                normalized_type in _NEW_SESSION_TYPES
-                and candidate.state == "learning"
-                and candidate.last_result != "wrong"
-            ):
-                forceable_learning += 1
 
         remaining_new_quota = await self._remaining_new_quota(
             profile=profile,
@@ -338,21 +290,57 @@ class SessionSelectionService:
             track_id=track_id,
             session_type=session_type,
         )
-        available_new = min(eligible_new, remaining_new_quota)
-        forceable_new = (
-            max(0, eligible_new - available_new) if normalized_type in _NEW_SESSION_TYPES else 0
+
+        normal_candidates = [
+            candidate
+            for candidate in candidate_pool
+            if self._state_available(
+                candidate,
+                now=now,
+                session_type=session_type,
+                allow_early_learning=False,
+            )
+        ]
+        normal_selected = self._build_sequence(
+            normal_candidates,
+            requested_cards=requested_cards,
+            new_quota=remaining_new_quota,
+            weights=weights,
         )
+
+        forced_candidates = [
+            candidate
+            for candidate in candidate_pool
+            if self._state_available(
+                candidate,
+                now=now,
+                session_type=session_type,
+                allow_early_learning=True,
+            )
+        ]
+        forced_new_quota = remaining_new_quota
+        if normalized_type in _NEW_SESSION_TYPES:
+            forced_new_quota = max(forced_new_quota, requested_cards)
+        forced_selected = self._build_sequence(
+            forced_candidates,
+            requested_cards=requested_cards,
+            new_quota=forced_new_quota,
+            weights=weights,
+        )
+
+        normal_new = sum(candidate.state == "new" for candidate in normal_selected)
+        forced_new = sum(candidate.state == "new" for candidate in forced_selected)
 
         return {
             "profile_id": profile_id,
             "track_id": track_id,
             "session_type": session_type,
-            "available_now": available_due + available_new,
+            "available_now": len(normal_selected),
             "introduced_cards": introduced,
             "new_cards": new_cards,
             "remaining_new_quota": remaining_new_quota,
-            "forceable_new": forceable_new,
-            "forceable_early": forceable_learning + forceable_new,
+            "forceable_new": max(0, forced_new - normal_new),
+            "forceable_early": max(0, len(forced_selected) - len(normal_selected)),
             "next_due_at_utc": None if next_due is None else next_due.isoformat(),
         }
 
@@ -391,6 +379,55 @@ class SessionSelectionService:
             actions=("finish", "recognition_only", "continue") if detected else (),
             reason="verified_accuracy_drop" if detected else "verified_accuracy_ok",
         )
+
+    async def _async_candidate_pool(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        track: dict[str, Any],
+        weights: dict[str, float],
+        now: datetime,
+        allowed_types: frozenset[str] | None = None,
+        leeches_only: bool = False,
+    ) -> list[_Candidate]:
+        """Build the shared per-card eligibility pool for start and availability."""
+        raw_candidates = await self._tracks.async_session_candidates(
+            profile_id=profile_id,
+            track_id=track_id,
+        )
+        constraints_required = True
+        probe = getattr(self._tracks, "async_has_selection_constraints", None)
+        pack_version_id = track.get("pack_version_id")
+        if callable(probe) and isinstance(pack_version_id, str) and pack_version_id:
+            constraints_required = bool(await probe(pack_version_id))
+
+        candidates: list[_Candidate] = []
+        for row in raw_candidates:
+            candidate = _Candidate.from_row(row)
+            if not self._user_state_available(candidate, now=now):
+                continue
+            if leeches_only and candidate.state != "leech":
+                continue
+            if allowed_types is not None and candidate.content_type not in allowed_types:
+                continue
+            if self._weight(candidate.content_type, weights) <= 0:
+                continue
+            if constraints_required:
+                try:
+                    decision = await self._constraints.async_evaluate(
+                        profile_id=profile_id,
+                        track_id=track_id,
+                        card_key=candidate.card_key,
+                        learning_item_id=candidate.learning_item_id,
+                        state=candidate.state,
+                    )
+                except SelectionConstraintError as err:
+                    raise SessionSelectionError(str(err)) from err
+                if not decision.eligible:
+                    continue
+            candidates.append(candidate)
+        return candidates
 
     async def _remaining_new_quota(
         self,
