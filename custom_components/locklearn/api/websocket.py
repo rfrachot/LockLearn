@@ -889,7 +889,7 @@ async def ws_targets_discover(
     }
     candidates: list[dict[str, Any]] = []
     registry = dr.async_get(hass)
-    for device in registry.devices.values():
+    for device in registry.devices:
         resolved = await _mobile_app_candidate(hass, device.id)
         if resolved is None:
             continue
