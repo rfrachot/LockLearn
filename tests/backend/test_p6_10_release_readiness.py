@@ -25,7 +25,7 @@ FRONTEND_PACKAGE_PATH = ROOT / "frontend" / "package.json"
 RELEASE_SMOKE_PATH = ROOT / "scripts" / "p6_10_release_smoke.py"
 
 PREVIOUS_SUPPORTED_RELEASE = "0.0.2"
-V1_RELEASE_CANDIDATE = "1.0.0-beta.2"
+V1_RELEASE_CANDIDATE = "1.0.0-beta.3"
 SEMVER_RE = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
     r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
