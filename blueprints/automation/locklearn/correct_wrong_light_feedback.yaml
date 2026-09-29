@@ -1,0 +1,64 @@
+blueprint:
+  name: LockLearn - Correct / wrong light feedback
+  description: >-
+    Flash a selected light green after a verified LockLearn quiz success and red
+    after a verified quiz failure. Optionally restrict the automation to one
+    LockLearn Profile ID. The blueprint reads only stable privacy-safe event
+    metadata and never learning content.
+  domain: automation
+  author: LockLearn
+  source_url: https://github.com/rfrachot/LockLearn/blob/main/blueprints/automation/locklearn/correct_wrong_light_feedback.yaml
+  input:
+    profile_id:
+      name: LockLearn Profile ID
+      description: Leave empty to react to every Profile visible to this Home Assistant automation.
+      default: ""
+      selector:
+        text:
+    light_target:
+      name: Feedback light
+      selector:
+        target:
+          entity:
+            domain: light
+
+variables:
+  locklearn_profile_id: !input profile_id
+
+triggers:
+  - trigger: event
+    event_type: locklearn_quiz_correct
+    id: correct
+  - trigger: event
+    event_type: locklearn_quiz_wrong
+    id: wrong
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ locklearn_profile_id == ""
+         or trigger.event.data.profile_id == locklearn_profile_id }}
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: correct
+        sequence:
+          - action: light.turn_on
+            target: !input light_target
+            data:
+              rgb_color: [0, 255, 0]
+              flash: short
+      - conditions:
+          - condition: trigger
+            id: wrong
+        sequence:
+          - action: light.turn_on
+            target: !input light_target
+            data:
+              rgb_color: [255, 0, 0]
+              flash: short
+
+mode: queued
+max: 10

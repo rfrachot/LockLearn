@@ -5,7 +5,7 @@
       "source_id": "edrdg:jmdict",
       "fetch_mode": "direct",
       "discovery_url": "https://www.edrdg.org/jmdict/j_jmdict.html",
-      "download_url": "https://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz",
+      "download_url": "https://www.edrdg.org/pub/Nihongo/JMdict_e.gz",
       "maximum_bytes": 250000000,
       "notes": "Raw download is CI/workspace-only and must never be committed."
     },

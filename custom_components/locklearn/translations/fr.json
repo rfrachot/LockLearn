@@ -26,6 +26,52 @@
     "dataset_sources_stale": {
       "title": "Sources de dataset obsolètes",
       "description": "Les sources {sources} utilisées par {dataset_id} dépassent leur objectif de fraîcheur. Le dataset installé reste utilisable, mais une mise à jour est recommandée."
+    },
+    "scheduler_configuration_infeasible": {
+      "title": "Capacité du scheduler insuffisante",
+      "description": "Le profil {profile_id} demande {requested} créneaux de notification par jour, mais seulement {capacity} sont actuellement allouables. Ajustez la demande des parcours, les budgets des appareils ou les fenêtres du scheduler."
+    },
+    "notification_target_unavailable": {
+      "title": "Cible de notification indisponible",
+      "description": "LockLearn ne peut actuellement ni résoudre ni envoyer vers {friendly_name} ({target_id}). La notification n’est pas enregistrée comme envoyée."
+    },
+    "state_integrity_failure": {
+      "title": "Les données utilisateur LockLearn nécessitent une récupération",
+      "description": "LockLearn n’a pas ouvert son writer d’état car state.db a échoué à la validation d’intégrité. {snapshot_count} snapshot(s) de récupération validé(s) sont actuellement disponible(s). Ouvrez les options de l’intégration LockLearn pour inspecter le stockage et restaurer explicitement un snapshot. LockLearn n’écrase jamais automatiquement l’unique copie des données utilisateur."
+    },
+    "state_migration_failure": {
+      "title": "Échec de migration des données LockLearn",
+      "description": "LockLearn n’a pas pu terminer une migration de la base d’état. {snapshot_count} snapshot(s) de récupération validé(s) sont disponible(s). Les données utilisateur n’ont pas été supprimées silencieusement."
+    },
+    "dataset_signature_invalid": {
+      "title": "Signature du dataset invalide",
+      "description": "LockLearn a rejeté le dataset signé {dataset_id} car sa clé de signature ou sa signature Ed25519 n’est pas fiable. La dernière génération installée valide reste active."
+    },
+    "backup_cache_anomaly": {
+      "title": "Cache reconstructible inattendu dans le stockage persistant",
+      "description": "LockLearn a trouvé {cache_bytes} octets de cache reconstructible dans le stockage persistant. Cela peut augmenter inutilement la taille des sauvegardes. Utilisez les options de stockage LockLearn pour purger/reconstruire le cache après vérification."
+    },
+    "dataset_cache_budget_warning": {
+      "title": "Le cache des datasets dépasse le budget recommandé",
+      "description": "LockLearn utilise {cache_bytes} octets de cache de datasets reconstructible, au-dessus du seuil d’avertissement configuré de {budget_bytes} octets. Le contenu installé reste utilisable ; vérifiez les datasets installés si l’espace disque devient contraignant."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Stockage, sauvegarde et récupération",
+        "description": "État persistant : {state_size}. Cache de contenu reconstructible : {content_cache_size}, dont ressources : {asset_size}. Snapshots de récupération : {recovery_size} ({snapshot_count} disponible(s)). Avec le plancher de compatibilité Home Assistant 2025.2, le cache reconstructible est inclus dans les sauvegardes HA ; LockLearn effectue un checkpoint puis un snapshot cohérent de l’état avant l’archive. Choisissez ce que LockLearn pourra supprimer si l’entrée de configuration est ensuite retirée. La restauration d’un snapshot est explicite et met d’abord les fichiers actuels en quarantaine bornée.",
+        "data": {
+          "uninstall_data_policy": "Politique de données lors de la suppression de LockLearn",
+          "restore_snapshot": "Restaurer maintenant un snapshot de récupération validé",
+          "purge_content_cache": "Purger maintenant le cache de contenu reconstructible puis le reconstruire"
+        }
+      }
+    },
+    "error": {
+      "storage_unload_failed": "LockLearn n’a pas pu être déchargé proprement. Aucune action sur le stockage n’a été effectuée.",
+      "storage_action_failed": "L’action demandée sur le stockage a échoué. Les données existantes ont été conservées ou restaurées.",
+      "storage_reload_failed": "L’action sur le stockage est terminée, mais LockLearn n’a pas pu se recharger. Consultez la réparation avant de continuer."
     }
   }
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import sqlite3
@@ -12,20 +13,23 @@ from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Any, TypeVar
 
 from ..const import DB_SCHEMA_VERSION
 from ..core.clock import Clock, SystemClock
+from ..observability import INTERNAL_METRICS
 from .content import (
     ContentBuildResult,
     ContentGenerationBuilder,
     ContentGenerationManager,
     GenerationMetadata,
 )
-from .repositories import StateRepositories
-from .schema import STATE_SCHEMA
+from .repositories import ReviewEventRecord, ReviewEventsRepository, StateRepositories
+from .schema import STATE_REQUIRED_INDEXES, STATE_REQUIRED_TABLES, STATE_SCHEMA
 
 T = TypeVar("T")
+_MAX_MIGRATION_SNAPSHOTS = 3
 
 
 class SessionNotFoundError(LookupError):
@@ -36,12 +40,43 @@ class StaleSessionError(RuntimeError):
     """Raised when a session CAS loses a race."""
 
 
+class StateMigrationError(RuntimeError):
+    """Raised when a state schema migration cannot complete safely."""
+
+    def __init__(self, message: str, *, backup_path: Path | None = None) -> None:
+        super().__init__(message)
+        self.backup_path = backup_path
+
+
+class UnsupportedStateSchemaError(StateMigrationError):
+    """Raised when a state database version cannot be opened by this build."""
+
+
+class StateIntegrityError(StateMigrationError):
+    """Raised when persistent user state fails SQLite integrity validation."""
+
+
 @dataclass(frozen=True, slots=True)
 class StoragePaths:
     """Physically separate persistent-state and reconstructible-content paths."""
 
     state_db: Path
     content_db: Path
+
+    @property
+    def state_root(self) -> Path:
+        """Return the root containing persistent state and recovery snapshots."""
+        return self.state_db.parent
+
+    @property
+    def state_snapshots_dir(self) -> Path:
+        """Return the bounded maintenance-snapshot directory."""
+        return self.state_root / "snapshots"
+
+    @property
+    def ha_backup_snapshot(self) -> Path:
+        """Return the latest coherent snapshot prepared for a Home Assistant backup."""
+        return self.state_snapshots_dir / "ha-backup-latest.db"
 
     @property
     def content_root(self) -> Path:
@@ -74,6 +109,96 @@ def _configure_state_connection(connection: sqlite3.Connection) -> None:
     connection.execute("PRAGMA foreign_keys = ON")
 
 
+def _read_state_schema_version(connection: sqlite3.Connection, path: Path) -> int:
+    table = connection.execute(
+        """SELECT 1 FROM sqlite_master
+           WHERE type = 'table' AND name = 'schema_version'"""
+    ).fetchone()
+    if table is None:
+        raise UnsupportedStateSchemaError(f"State database has no schema_version table: {path}")
+    rows = connection.execute("SELECT version FROM schema_version").fetchall()
+    if len(rows) != 1:
+        raise UnsupportedStateSchemaError(
+            f"State database must contain exactly one schema version row: {path}"
+        )
+    try:
+        version = int(rows[0][0])
+    except (TypeError, ValueError) as err:
+        raise UnsupportedStateSchemaError(
+            f"State database has an invalid schema version: {path}"
+        ) from err
+    if version < 1:
+        raise UnsupportedStateSchemaError(
+            f"State database has unsupported schema version {version}: {path}"
+        )
+    return version
+
+
+def _validate_state_connection(
+    connection: sqlite3.Connection,
+    path: Path,
+    *,
+    expected_version: int,
+    require_current_schema: bool,
+) -> None:
+    actual_version = _read_state_schema_version(connection, path)
+    if actual_version != expected_version:
+        raise StateMigrationError(
+            f"State database schema version is {actual_version}, expected {expected_version}: {path}"
+        )
+    integrity = connection.execute("PRAGMA integrity_check").fetchall()
+    if integrity != [("ok",)]:
+        raise StateIntegrityError(f"State database failed integrity_check: {path}")
+    if connection.execute("PRAGMA foreign_key_check").fetchall():
+        raise StateIntegrityError(f"State database failed foreign_key_check: {path}")
+    if not require_current_schema:
+        return
+
+    objects = connection.execute(
+        "SELECT type, name FROM sqlite_master WHERE type IN ('table', 'index')"
+    ).fetchall()
+    tables = {str(name) for object_type, name in objects if object_type == "table"}
+    indexes = {str(name) for object_type, name in objects if object_type == "index"}
+    missing_tables = STATE_REQUIRED_TABLES - tables
+    missing_indexes = STATE_REQUIRED_INDEXES - indexes
+    if missing_tables:
+        raise StateMigrationError(
+            f"State database is missing required tables: {sorted(missing_tables)!r}"
+        )
+    if missing_indexes:
+        raise StateMigrationError(
+            f"State database is missing required indexes: {sorted(missing_indexes)!r}"
+        )
+
+
+def validate_state_database_file(path: Path) -> int:
+    """Validate one state DB read-only and return its supported schema version."""
+    if not path.is_file():
+        raise StateIntegrityError(f"State database does not exist: {path}")
+    try:
+        connection = sqlite3.connect(_read_only_uri(path), uri=True)
+    except sqlite3.DatabaseError as err:
+        raise StateIntegrityError(f"State database could not be opened read-only: {path}") from err
+    try:
+        try:
+            version = _read_state_schema_version(connection, path)
+            if version > DB_SCHEMA_VERSION:
+                raise UnsupportedStateSchemaError(
+                    f"Unsupported future schema version {version} for {path}"
+                )
+            _validate_state_connection(
+                connection,
+                path,
+                expected_version=version,
+                require_current_schema=version == DB_SCHEMA_VERSION,
+            )
+            return version
+        except sqlite3.DatabaseError as err:
+            raise StateIntegrityError(f"State database failed SQLite validation: {path}") from err
+    finally:
+        connection.close()
+
+
 def _initialize_state_database(path: Path, schema: str, version: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
@@ -83,41 +208,42 @@ def _initialize_state_database(path: Path, schema: str, version: int) -> None:
             connection.executescript(schema)
             connection.execute("INSERT INTO schema_version(version) VALUES (?)", (version,))
             connection.commit()
+            _validate_state_connection(
+                connection,
+                path,
+                expected_version=version,
+                require_current_schema=True,
+            )
         finally:
             connection.close()
+        return
+
+    # Existing user state is inspected read-only before any writer connection or
+    # journal-mode mutation is allowed. Integrity failure therefore leaves the
+    # only live copy untouched for recovery.
+    current = validate_state_database_file(path)
+    if current > version:
+        raise UnsupportedStateSchemaError(f"Unsupported future schema version {current} for {path}")
+    if current == version:
         return
 
     connection = sqlite3.connect(path)
     try:
         _configure_state_connection(connection)
-        table = connection.execute(
-            """SELECT 1 FROM sqlite_master
-               WHERE type = 'table' AND name = 'schema_version'"""
-        ).fetchone()
-        if table is None:
-            raise RuntimeError(f"State database has no schema_version table: {path}")
-        row = connection.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
-        if row is None:
-            raise RuntimeError(f"State database has no schema version row: {path}")
-        current = int(row[0])
-        if current > version:
-            raise RuntimeError(f"Unsupported future schema version {current} for {path}")
-        if current == version:
-            connection.executescript(schema)
-            connection.commit()
-            return
-        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        backup = path.with_name(f"{path.name}.pre-migration-v{current}.bak")
-        backup.unlink(missing_ok=True)
-        target = sqlite3.connect(backup)
-        try:
-            connection.backup(target)
-        finally:
-            target.close()
+        backup = _create_state_migration_backup(connection, path, current)
     finally:
         connection.close()
 
-    _migrate_state_database(path, schema, current, version)
+    try:
+        _migrate_state_database(path, schema, current, version)
+    except Exception as err:
+        raise StateMigrationError(
+            f"State migration v{current} -> v{version} failed; "
+            f"recovery snapshot preserved at {backup}",
+            backup_path=backup,
+        ) from err
+
+    validate_state_database_file(path)
 
 
 def _unlink_sqlite_files(path: Path) -> None:
@@ -125,10 +251,121 @@ def _unlink_sqlite_files(path: Path) -> None:
         candidate.unlink(missing_ok=True)
 
 
-def _migrate_state_database(path: Path, schema: str, current: int, target: int) -> None:
-    if (current, target) != (1, 2):
-        raise RuntimeError(f"No state migration path from {current} to {target}")
+def _unlink_sqlite_sidecars(path: Path) -> None:
+    for candidate in (Path(f"{path}-wal"), Path(f"{path}-shm")):
+        candidate.unlink(missing_ok=True)
 
+
+def _create_state_migration_backup(
+    connection: sqlite3.Connection,
+    path: Path,
+    current_version: int,
+) -> Path:
+    connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    backup = path.with_name(f"{path.name}.pre-migration-v{current_version}.bak")
+    candidate = backup.with_name(f".{backup.name}.{uuid.uuid4().hex}.tmp")
+    _unlink_sqlite_files(candidate)
+
+    target = sqlite3.connect(candidate)
+    try:
+        connection.backup(target)
+        _validate_state_connection(
+            target,
+            candidate,
+            expected_version=current_version,
+            require_current_schema=False,
+        )
+    finally:
+        target.close()
+
+    try:
+        _unlink_sqlite_sidecars(backup)
+        os.replace(candidate, backup)
+    finally:
+        _unlink_sqlite_files(candidate)
+
+    snapshots = sorted(
+        path.parent.glob(f"{path.name}.pre-migration-v*.bak"),
+        key=lambda item: item.stat().st_mtime_ns,
+        reverse=True,
+    )
+    for stale in snapshots[_MAX_MIGRATION_SNAPSHOTS:]:
+        with contextlib.suppress(OSError):
+            stale.unlink()
+    return backup
+
+
+def _create_atomic_state_snapshot(
+    connection: sqlite3.Connection,
+    destination: Path,
+) -> Path:
+    """Publish a validated current-state snapshot without exposing a partial file."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    candidate = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.tmp")
+    _unlink_sqlite_files(candidate)
+
+    target = sqlite3.connect(candidate)
+    try:
+        connection.backup(target)
+        _validate_state_connection(
+            target,
+            candidate,
+            expected_version=DB_SCHEMA_VERSION,
+            require_current_schema=True,
+        )
+    finally:
+        target.close()
+
+    try:
+        _unlink_sqlite_sidecars(destination)
+        os.replace(candidate, destination)
+    finally:
+        _unlink_sqlite_files(candidate)
+    return destination
+
+
+type StateMigrationOperation = Callable[[sqlite3.Connection], None]
+type StateMigration = Callable[[Path, str], None]
+
+
+def _run_transactional_state_migration(
+    path: Path,
+    source_version: int,
+    target_version: int,
+    operation: StateMigrationOperation,
+) -> None:
+    connection = sqlite3.connect(path)
+    try:
+        _configure_state_connection(connection)
+        actual = _read_state_schema_version(connection, path)
+        if actual != source_version:
+            raise StateMigrationError(
+                f"State migration expected v{source_version}, found v{actual}: {path}"
+            )
+        connection.execute("BEGIN IMMEDIATE")
+        operation(connection)
+        connection.execute(
+            "UPDATE schema_version SET version = ?",
+            (target_version,),
+        )
+        _validate_state_connection(
+            connection,
+            path,
+            expected_version=target_version,
+            require_current_schema=False,
+        )
+        connection.commit()
+        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except Exception:
+        if connection.in_transaction:
+            connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+def _migrate_state_v1_to_v2(path: Path, schema: str) -> None:
     candidate = path.with_name(f".{path.name}.v2-migration")
     _unlink_sqlite_files(candidate)
     connection = sqlite3.connect(candidate)
@@ -168,12 +405,14 @@ def _migrate_state_database(path: Path, schema: str, current: int, target: int) 
                SELECT id, event_type, actor_user_id, profile_id, payload_json, created_at_utc
                FROM legacy.audit_events"""
         )
+        _validate_state_connection(
+            connection,
+            candidate,
+            expected_version=2,
+            require_current_schema=False,
+        )
         connection.commit()
         connection.execute("DETACH DATABASE legacy")
-        if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
-            raise RuntimeError("Migrated state database failed integrity_check")
-        if connection.execute("PRAGMA foreign_key_check").fetchall():
-            raise RuntimeError("Migrated state database failed foreign_key_check")
         connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     except Exception:
         if connection.in_transaction:
@@ -182,8 +421,198 @@ def _migrate_state_database(path: Path, schema: str, current: int, target: int) 
     finally:
         connection.close()
 
+    _unlink_sqlite_sidecars(path)
     os.replace(candidate, path)
     _unlink_sqlite_files(candidate)
+
+
+def _migrate_state_v2_to_v3(path: Path, schema: str) -> None:
+    del schema
+
+    def migrate(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """CREATE TABLE progress_v3 (
+                profile_id TEXT NOT NULL,
+                track_id TEXT NOT NULL,
+                card_key TEXT NOT NULL,
+                learning_item_id TEXT,
+                prompt_facet_id TEXT,
+                answer_facet_id TEXT,
+                state TEXT NOT NULL CHECK (
+                    state IN ('new', 'learning', 'review', 'relearning', 'leech')
+                ),
+                mastery REAL NOT NULL DEFAULT 0 CHECK (mastery >= 0 AND mastery <= 1),
+                box INTEGER NOT NULL DEFAULT 0 CHECK (box >= 0),
+                seen_count INTEGER NOT NULL DEFAULT 0 CHECK (seen_count >= 0),
+                verified_correct_count INTEGER NOT NULL DEFAULT 0
+                    CHECK (verified_correct_count >= 0),
+                verified_wrong_count INTEGER NOT NULL DEFAULT 0
+                    CHECK (verified_wrong_count >= 0),
+                self_known_count INTEGER NOT NULL DEFAULT 0 CHECK (self_known_count >= 0),
+                self_review_count INTEGER NOT NULL DEFAULT 0 CHECK (self_review_count >= 0),
+                first_seen_at_utc TEXT,
+                last_seen_at_utc TEXT,
+                last_result TEXT,
+                next_due_at_utc TEXT,
+                streak_correct INTEGER NOT NULL DEFAULT 0 CHECK (streak_correct >= 0),
+                leech_score REAL NOT NULL DEFAULT 0 CHECK (leech_score >= 0),
+                difficulty_factor REAL NOT NULL DEFAULT 1 CHECK (difficulty_factor > 0),
+                last_verified_at_utc TEXT,
+                verified_success_since_box INTEGER NOT NULL DEFAULT 0
+                    CHECK (verified_success_since_box >= 0),
+                user_state TEXT NOT NULL DEFAULT 'active'
+                    CHECK (user_state IN ('active', 'known_already', 'suspended', 'buried')),
+                suspend_until_utc TEXT,
+                example_rotation_index INTEGER NOT NULL DEFAULT 0
+                    CHECK (example_rotation_index >= 0),
+                content_status TEXT NOT NULL DEFAULT 'active'
+                    CHECK (content_status IN ('active', 'removed', 'superseded')),
+                policy_version INTEGER NOT NULL DEFAULT 1 CHECK (policy_version >= 1),
+                dataset_generation TEXT,
+                normalization_version INTEGER CHECK (
+                    normalization_version IS NULL OR normalization_version >= 1
+                ),
+                updated_at_utc TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY(profile_id, track_id, card_key),
+                CHECK (
+                    (learning_item_id IS NULL AND prompt_facet_id IS NULL AND answer_facet_id IS NULL)
+                    OR (
+                        learning_item_id IS NOT NULL
+                        AND prompt_facet_id IS NOT NULL
+                        AND answer_facet_id IS NOT NULL
+                    )
+                )
+            )"""
+        )
+        connection.execute(
+            """INSERT INTO progress_v3
+               SELECT profile_id, track_id, card_key, learning_item_id,
+                      prompt_facet_id, answer_facet_id, state, mastery, box,
+                      seen_count, verified_correct_count, verified_wrong_count,
+                      self_known_count, self_review_count, first_seen_at_utc,
+                      last_seen_at_utc, last_result, next_due_at_utc,
+                      streak_correct, leech_score, difficulty_factor,
+                      last_verified_at_utc, verified_success_since_box,
+                      user_state, suspend_until_utc, example_rotation_index,
+                      content_status, policy_version, dataset_generation,
+                      normalization_version, updated_at_utc
+               FROM progress"""
+        )
+        connection.execute("DROP TABLE progress")
+        connection.execute("ALTER TABLE progress_v3 RENAME TO progress")
+        connection.execute(
+            """CREATE INDEX progress_due
+               ON progress(profile_id, track_id, state, next_due_at_utc)"""
+        )
+        connection.execute(
+            """CREATE INDEX progress_content_identity
+               ON progress(card_key, learning_item_id, prompt_facet_id, answer_facet_id)"""
+        )
+
+    _run_transactional_state_migration(path, 2, 3, migrate)
+
+
+def _migrate_state_v3_to_v4(path: Path, schema: str) -> None:
+    del schema
+
+    def migrate(connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(scheduled_slots)").fetchall()
+        }
+        if "deferred_until_utc" not in columns:
+            connection.execute("ALTER TABLE scheduled_slots ADD COLUMN deferred_until_utc TEXT")
+        if "defer_reason" not in columns:
+            connection.execute("ALTER TABLE scheduled_slots ADD COLUMN defer_reason TEXT")
+        connection.execute(
+            """CREATE TABLE IF NOT EXISTS receptivity_samples (
+                slot_id TEXT PRIMARY KEY
+                    REFERENCES scheduled_slots(slot_id) ON DELETE CASCADE,
+                profile_id TEXT NOT NULL,
+                target_id TEXT,
+                delivered_at_utc TEXT NOT NULL,
+                timezone_name TEXT NOT NULL,
+                weekday INTEGER NOT NULL CHECK (weekday >= 0 AND weekday <= 6),
+                local_hour INTEGER NOT NULL CHECK (local_hour >= 0 AND local_hour <= 23),
+                delivered INTEGER NOT NULL DEFAULT 1 CHECK (delivered IN (0, 1)),
+                cleared INTEGER NOT NULL DEFAULT 0 CHECK (cleared IN (0, 1)),
+                answered INTEGER NOT NULL DEFAULT 0 CHECK (answered IN (0, 1)),
+                delivery_to_action_ms INTEGER CHECK (
+                    delivery_to_action_ms IS NULL OR delivery_to_action_ms >= 0
+                ),
+                updated_at_utc TEXT NOT NULL
+            )"""
+        )
+        connection.execute(
+            """CREATE INDEX IF NOT EXISTS receptivity_samples_profile_hour
+               ON receptivity_samples(
+                   profile_id, weekday, local_hour, delivered_at_utc DESC
+               )"""
+        )
+
+    _run_transactional_state_migration(path, 3, 4, migrate)
+
+
+def _migrate_state_v4_to_v5(path: Path, schema: str) -> None:
+    del schema
+
+    def migrate(connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(scheduled_slots)").fetchall()
+        }
+        additions = (
+            ("card_key", "TEXT"),
+            ("learning_item_id", "TEXT"),
+            ("prompt_facet_id", "TEXT"),
+            ("answer_facet_id", "TEXT"),
+            ("selection_reason", "TEXT"),
+            ("expired_reason", "TEXT"),
+        )
+        for column_name, column_type in additions:
+            if column_name not in columns:
+                connection.execute(
+                    f"ALTER TABLE scheduled_slots ADD COLUMN {column_name} {column_type}"
+                )
+
+    _run_transactional_state_migration(path, 4, 5, migrate)
+
+
+_STATE_MIGRATIONS: dict[int, StateMigration] = {
+    1: _migrate_state_v1_to_v2,
+    2: _migrate_state_v2_to_v3,
+    3: _migrate_state_v3_to_v4,
+    4: _migrate_state_v4_to_v5,
+}
+
+
+def _migrate_state_database(path: Path, schema: str, current: int, target: int) -> None:
+    if current > target:
+        raise StateMigrationError(
+            f"Cannot migrate state database backwards from v{current} to v{target}"
+        )
+
+    while current < target:
+        migration = _STATE_MIGRATIONS.get(current)
+        if migration is None:
+            raise StateMigrationError(
+                f"No sequential state migration registered from v{current} to v{current + 1}"
+            )
+        expected = current + 1
+        migration(path, schema)
+
+        connection = sqlite3.connect(path)
+        try:
+            _configure_state_connection(connection)
+            _validate_state_connection(
+                connection,
+                path,
+                expected_version=expected,
+                require_current_schema=expected == target,
+            )
+        finally:
+            connection.close()
+        current = expected
 
 
 class SQLiteStorage:
@@ -242,7 +671,12 @@ class SQLiteStorage:
     async def _async_writer(self, operation: Callable[[sqlite3.Connection], T]) -> T:
         if self._closed:
             raise RuntimeError("LockLearn storage is closed")
+        queue_started = perf_counter()
         async with self._writes_gate:
+            INTERNAL_METRICS.record(
+                "storage.writer_queue_wait_ms",
+                (perf_counter() - queue_started) * 1000,
+            )
             loop = asyncio.get_running_loop()
             return await loop.run_in_executor(self._writer_executor, self._run_writer, operation)
 
@@ -277,20 +711,77 @@ class SQLiteStorage:
             connection.close()
 
     async def async_create_session(
-        self, session_id: str, profile_id: str, track_id: str | None
+        self,
+        session_id: str,
+        profile_id: str,
+        track_id: str | None,
+        *,
+        session_type: str = "learn",
+        strategy: str = "default",
+        settings: dict[str, Any] | None = None,
+        items: tuple[dict[str, Any], ...] = (),
     ) -> dict[str, Any]:
-        """Persist a new active session."""
+        """Persist a configured session and its prepared question state."""
         now = self._clock.now().isoformat()
+        serialized_settings = json.dumps(
+            settings or {},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
 
         def create(connection: sqlite3.Connection) -> None:
-            connection.execute(
-                """INSERT INTO sessions(
-                       id, profile_id, track_id, status, version, current_position,
-                       started_at_utc, last_activity_at_utc
-                   ) VALUES (?, ?, ?, 'active', 1, 0, ?, ?)""",
-                (session_id, profile_id, track_id, now, now),
-            )
-            connection.commit()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    """INSERT INTO sessions(
+                           id, profile_id, track_id, type, strategy, status, version,
+                           current_position, started_at_utc, last_activity_at_utc,
+                           question_count, settings_json
+                       ) VALUES (?, ?, ?, ?, ?, 'active', 1, 0, ?, ?, ?, ?)""",
+                    (
+                        session_id,
+                        profile_id,
+                        track_id,
+                        session_type,
+                        strategy,
+                        now,
+                        now,
+                        len(items),
+                        serialized_settings,
+                    ),
+                )
+                connection.executemany(
+                    """INSERT INTO session_items(
+                           session_id, position, question_id, card_key,
+                           learning_item_id, prompt_facet_id, answer_facet_id,
+                           status, payload_json
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        (
+                            session_id,
+                            position,
+                            str(item["question_id"]),
+                            str(item["card_key"]),
+                            str(item["learning_item_id"]),
+                            str(item["prompt_facet_id"]),
+                            str(item["answer_facet_id"]),
+                            "presented" if position == 0 else "queued",
+                            json.dumps(
+                                dict(item.get("payload", {})),
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                                sort_keys=True,
+                            ),
+                        )
+                        for position, item in enumerate(items)
+                    ),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
 
         await self._async_writer(create)
         session = await self.async_get_session(session_id)
@@ -298,12 +789,13 @@ class SQLiteStorage:
         return session
 
     async def async_get_session(self, session_id: str) -> dict[str, Any] | None:
-        """Read a session using a short-lived reader connection."""
+        """Read a complete resumable session snapshot."""
 
         def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
             row = connection.execute(
-                """SELECT id, profile_id, track_id, status, version, current_position,
-                          started_at_utc, last_activity_at_utc
+                """SELECT id, profile_id, track_id, type, strategy, status, version,
+                          current_position, started_at_utc, last_activity_at_utc,
+                          completed_at_utc, question_count, settings_json
                    FROM sessions WHERE id = ?""",
                 (session_id,),
             ).fetchone()
@@ -313,15 +805,105 @@ class SQLiteStorage:
                 "id",
                 "profile_id",
                 "track_id",
+                "type",
+                "strategy",
                 "status",
                 "version",
                 "current_position",
                 "started_at_utc",
                 "last_activity_at_utc",
+                "completed_at_utc",
+                "question_count",
+                "settings_json",
             )
-            return dict(zip(keys, row, strict=True))
+            result = dict(zip(keys, row, strict=True))
+            result["settings"] = json.loads(str(result.pop("settings_json")))
+            item_rows = connection.execute(
+                """SELECT position, question_id, card_key, learning_item_id,
+                          prompt_facet_id, answer_facet_id, status, payload_json
+                   FROM session_items
+                   WHERE session_id = ?
+                   ORDER BY position""",
+                (session_id,),
+            ).fetchall()
+            result["items"] = [
+                {
+                    "position": int(item[0]),
+                    "question_id": str(item[1]),
+                    "card_key": str(item[2]),
+                    "learning_item_id": str(item[3]),
+                    "prompt_facet_id": str(item[4]),
+                    "answer_facet_id": str(item[5]),
+                    "status": str(item[6]),
+                    "payload": json.loads(str(item[7])),
+                }
+                for item in item_rows
+            ]
+            answer_rows = connection.execute(
+                """SELECT id, question_id, answer_json, resulting_version, created_at_utc
+                   FROM session_answers
+                   WHERE session_id = ?
+                   ORDER BY resulting_version""",
+                (session_id,),
+            ).fetchall()
+            result["answers"] = [
+                {
+                    "id": int(answer[0]),
+                    "question_id": str(answer[1]),
+                    "answer": json.loads(str(answer[2])),
+                    "resulting_version": int(answer[3]),
+                    "created_at_utc": str(answer[4]),
+                }
+                for answer in answer_rows
+            ]
+            position = int(result["current_position"])
+            items = result["items"]
+            result["current_question"] = items[position] if 0 <= position < len(items) else None
+            return result
 
         return await self._async_reader(read)
+
+    async def async_redacted_diagnostic_status(self) -> dict[str, Any]:
+        """Return aggregate DB health/counts without private learning data."""
+
+        def inspect(connection: sqlite3.Connection) -> dict[str, Any]:
+            state_schema = connection.execute(
+                "SELECT version FROM schema_version LIMIT 1"
+            ).fetchone()
+            content_schema = connection.execute(
+                "SELECT version FROM content.schema_version WHERE singleton = 1"
+            ).fetchone()
+            integrity = connection.execute("PRAGMA integrity_check").fetchall()
+            return {
+                "state_schema_version": (None if state_schema is None else int(state_schema[0])),
+                "content_schema_version": (
+                    None if content_schema is None else int(content_schema[0])
+                ),
+                "migration_status": (
+                    "current"
+                    if state_schema is not None and int(state_schema[0]) == DB_SCHEMA_VERSION
+                    else "unknown"
+                ),
+                "integrity_status": "ok" if integrity == [("ok",)] else "error",
+                "foreign_key_violation_count": len(
+                    connection.execute("PRAGMA foreign_key_check").fetchall()
+                ),
+                "journal_mode": str(connection.execute("PRAGMA journal_mode").fetchone()[0]),
+                "profile_count": int(
+                    connection.execute("SELECT COUNT(*) FROM profiles").fetchone()[0]
+                ),
+                "dataset_count": int(
+                    connection.execute("SELECT COUNT(*) FROM content.datasets").fetchone()[0]
+                ),
+                "pack_count": int(
+                    connection.execute("SELECT COUNT(*) FROM content.packs").fetchone()[0]
+                ),
+            }
+
+        status = await self._async_reader(inspect)
+        status["writer_initialized"] = self._writer_thread_id is not None
+        status["backup_active"] = self._backup_active
+        return status
 
     async def async_diagnostic_status(self) -> dict[str, Any]:
         """Return privacy-safe SQLite health metadata from a reader worker."""
@@ -349,6 +931,277 @@ class SQLiteStorage:
         status["backup_active"] = self._backup_active
         return status
 
+    async def async_latest_session_summary(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+    ) -> dict[str, Any] | None:
+        """Return the most recently active session summary for one Track."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any] | None:
+            row = connection.execute(
+                """SELECT s.id, s.profile_id, s.track_id, s.type, s.status,
+                          s.started_at_utc, s.last_activity_at_utc,
+                          s.completed_at_utc, s.question_count,
+                          (
+                              SELECT COUNT(*)
+                              FROM session_items AS item
+                              WHERE item.session_id = s.id
+                                AND item.status = 'answered'
+                          ) AS answered_count
+                   FROM sessions AS s
+                   WHERE s.profile_id = ? AND s.track_id = ?
+                   ORDER BY COALESCE(
+                                s.completed_at_utc,
+                                s.last_activity_at_utc,
+                                s.started_at_utc
+                            ) DESC,
+                            s.id DESC
+                   LIMIT 1""",
+                (profile_id, track_id),
+            ).fetchone()
+            if row is None:
+                return None
+            keys = (
+                "session_id",
+                "profile_id",
+                "track_id",
+                "session_type",
+                "status",
+                "started_at_utc",
+                "last_activity_at_utc",
+                "completed_at_utc",
+                "question_count",
+                "answered_count",
+            )
+            return dict(zip(keys, row, strict=True))
+
+        return await self._async_reader(read)
+
+    async def async_answer_learning_session(
+        self,
+        event: ReviewEventRecord,
+        *,
+        expected_version: int,
+        question_id: str,
+        answer: Any,
+        follow_up: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Atomically append a ReviewEvent projection and advance one session question."""
+        valid = await self.async_validate_card_reference(
+            card_key=event.card_key,
+            learning_item_id=event.learning_item_id,
+            prompt_facet_id=event.prompt_facet_id,
+            answer_facet_id=event.answer_facet_id,
+        )
+        if not valid:
+            raise RuntimeError(f"unknown active card reference: {event.card_key}")
+        ReviewEventsRepository._validate_projection_identity(event, event.post_state_snapshot)
+        pre_json = json.dumps(
+            event.pre_state_snapshot,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        post_json = json.dumps(
+            event.post_state_snapshot,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        answer_json = json.dumps(answer, ensure_ascii=False, separators=(",", ":"))
+        follow_up_json: str | None = None
+        if follow_up is not None:
+            expected_identity = {
+                "card_key": event.card_key,
+                "learning_item_id": event.learning_item_id,
+                "prompt_facet_id": event.prompt_facet_id,
+                "answer_facet_id": event.answer_facet_id,
+            }
+            if any(str(follow_up.get(key)) != value for key, value in expected_identity.items()):
+                raise RuntimeError("learning follow-up must preserve CardDefinition identity")
+            follow_up_payload = follow_up.get("payload")
+            if not isinstance(follow_up_payload, dict):
+                raise RuntimeError("learning follow-up payload must be an object")
+            follow_up_json = json.dumps(
+                follow_up_payload,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        now = self._clock.now().isoformat()
+
+        def answer_cas(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                session = connection.execute(
+                    """SELECT profile_id, track_id, status, version,
+                              current_position, question_count
+                       FROM sessions WHERE id = ?""",
+                    (event.session_id,),
+                ).fetchone()
+                if session is None:
+                    connection.rollback()
+                    raise SessionNotFoundError(str(event.session_id))
+                profile_id, track_id, status, version, position, question_count = session
+                if (
+                    event.session_id is None
+                    or str(profile_id) != event.profile_id
+                    or str(track_id) != event.track_id
+                    or str(status) != "active"
+                    or int(version) != expected_version
+                ):
+                    connection.rollback()
+                    raise StaleSessionError(str(event.session_id))
+                item = connection.execute(
+                    """SELECT question_id, card_key, learning_item_id,
+                              prompt_facet_id, answer_facet_id, status
+                       FROM session_items
+                       WHERE session_id = ? AND position = ?""",
+                    (event.session_id, int(position)),
+                ).fetchone()
+                if (
+                    item is None
+                    or str(item[0]) != question_id
+                    or str(item[1]) != event.card_key
+                    or str(item[2]) != event.learning_item_id
+                    or str(item[3]) != event.prompt_facet_id
+                    or str(item[4]) != event.answer_facet_id
+                    or str(item[5]) not in {"queued", "presented"}
+                ):
+                    connection.rollback()
+                    raise StaleSessionError(str(event.session_id))
+
+                connection.execute(
+                    """INSERT INTO review_events(
+                           id, profile_id, track_id, learning_item_id,
+                           prompt_facet_id, answer_facet_id, card_key, mode,
+                           question_type, result, answer_id, expected_answer_id,
+                           hint_used, retrieval_occurred, scheduled_interval_days,
+                           elapsed_days, grading_result, signal_quality,
+                           policy_version, dataset_generation, normalization_version,
+                           pre_state_snapshot, post_state_snapshot,
+                           presentation_to_answer_ms, delivery_to_action_ms,
+                           session_id, notification_id, created_at_utc, local_date,
+                           timezone_name, utc_offset_minutes
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        event.id,
+                        event.profile_id,
+                        event.track_id,
+                        event.learning_item_id,
+                        event.prompt_facet_id,
+                        event.answer_facet_id,
+                        event.card_key,
+                        event.mode,
+                        event.question_type,
+                        event.result,
+                        event.answer_id,
+                        event.expected_answer_id,
+                        int(event.hint_used),
+                        int(event.retrieval_occurred),
+                        event.scheduled_interval_days,
+                        event.elapsed_days,
+                        event.grading_result,
+                        event.signal_quality,
+                        event.policy_version,
+                        event.dataset_generation,
+                        event.normalization_version,
+                        pre_json,
+                        post_json,
+                        event.presentation_to_answer_ms,
+                        event.delivery_to_action_ms,
+                        event.session_id,
+                        event.notification_id,
+                        event.created_at_utc,
+                        event.local_date,
+                        event.timezone_name,
+                        event.utc_offset_minutes,
+                    ),
+                )
+                ReviewEventsRepository._upsert_progress(connection, event.post_state_snapshot)
+                ReviewEventsRepository._rebuild_stats_day_in_connection(
+                    connection,
+                    profile_id=event.profile_id,
+                    track_id=event.track_id,
+                    local_date=event.local_date,
+                )
+
+                resulting_version = expected_version + 1
+                next_position = int(position) + 1
+                effective_question_count = int(question_count)
+                connection.execute(
+                    """UPDATE session_items
+                       SET status = 'answered'
+                       WHERE session_id = ? AND position = ?""",
+                    (event.session_id, int(position)),
+                )
+                if follow_up is not None:
+                    assert follow_up_json is not None
+                    connection.execute(
+                        """INSERT INTO session_items(
+                               session_id, position, question_id, card_key,
+                               learning_item_id, prompt_facet_id, answer_facet_id,
+                               status, payload_json
+                           ) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?)""",
+                        (
+                            event.session_id,
+                            effective_question_count,
+                            str(follow_up["question_id"]),
+                            str(follow_up["card_key"]),
+                            str(follow_up["learning_item_id"]),
+                            str(follow_up["prompt_facet_id"]),
+                            str(follow_up["answer_facet_id"]),
+                            follow_up_json,
+                        ),
+                    )
+                    effective_question_count += 1
+                if next_position < effective_question_count:
+                    connection.execute(
+                        """UPDATE session_items
+                           SET status = 'presented'
+                           WHERE session_id = ? AND position = ? AND status = 'queued'""",
+                        (event.session_id, next_position),
+                    )
+                cursor = connection.execute(
+                    """UPDATE sessions
+                       SET version = ?, current_position = ?, question_count = ?,
+                           last_activity_at_utc = ?
+                       WHERE id = ? AND version = ? AND status = 'active'""",
+                    (
+                        resulting_version,
+                        next_position,
+                        effective_question_count,
+                        now,
+                        event.session_id,
+                        expected_version,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    connection.rollback()
+                    raise StaleSessionError(str(event.session_id))
+                connection.execute(
+                    """INSERT INTO session_answers(
+                           session_id, question_id, answer_json,
+                           resulting_version, created_at_utc
+                       ) VALUES (?, ?, ?, ?, ?)""",
+                    (event.session_id, question_id, answer_json, resulting_version, now),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        answer_started = perf_counter()
+        await self._async_writer(answer_cas)
+        session = await self.async_get_session(str(event.session_id))
+        assert session is not None
+        INTERNAL_METRICS.record("session.answer_ms", (perf_counter() - answer_started) * 1000)
+        return session
+
     async def async_answer_session(
         self,
         session_id: str,
@@ -356,30 +1209,73 @@ class SQLiteStorage:
         question_id: str,
         answer: Any,
     ) -> dict[str, Any]:
-        """Apply an answer with an atomic optimistic version check."""
+        """Apply an answer with atomic session/question CAS semantics."""
         now = self._clock.now().isoformat()
         answer_json = json.dumps(answer, ensure_ascii=False, separators=(",", ":"))
 
         def answer_cas(connection: sqlite3.Connection) -> None:
             try:
                 connection.execute("BEGIN IMMEDIATE")
+                session = connection.execute(
+                    """SELECT status, version, current_position, question_count
+                       FROM sessions WHERE id = ?""",
+                    (session_id,),
+                ).fetchone()
+                if session is None:
+                    connection.rollback()
+                    raise SessionNotFoundError(session_id)
+                status, version, position, question_count = session
+                if str(status) != "active" or int(version) != expected_version:
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+                item = connection.execute(
+                    """SELECT question_id, status
+                       FROM session_items
+                       WHERE session_id = ? AND position = ?""",
+                    (session_id, int(position)),
+                ).fetchone()
+                if (
+                    item is None
+                    or str(item[0]) != question_id
+                    or str(item[1])
+                    not in {
+                        "queued",
+                        "presented",
+                    }
+                ):
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+
+                resulting_version = expected_version + 1
+                next_position = int(position) + 1
+                connection.execute(
+                    """UPDATE session_items
+                       SET status = 'answered'
+                       WHERE session_id = ? AND position = ?""",
+                    (session_id, int(position)),
+                )
+                if next_position < int(question_count):
+                    connection.execute(
+                        """UPDATE session_items
+                           SET status = 'presented'
+                           WHERE session_id = ? AND position = ? AND status = 'queued'""",
+                        (session_id, next_position),
+                    )
                 cursor = connection.execute(
                     """UPDATE sessions
-                       SET version = version + 1,
-                           current_position = current_position + 1,
-                           last_activity_at_utc = ?
+                       SET version = ?, current_position = ?, last_activity_at_utc = ?
                        WHERE id = ? AND version = ? AND status = 'active'""",
-                    (now, session_id, expected_version),
+                    (
+                        resulting_version,
+                        next_position,
+                        now,
+                        session_id,
+                        expected_version,
+                    ),
                 )
                 if cursor.rowcount != 1:
-                    exists = connection.execute(
-                        "SELECT 1 FROM sessions WHERE id = ?", (session_id,)
-                    ).fetchone()
                     connection.rollback()
-                    if exists is None:
-                        raise SessionNotFoundError(session_id)
                     raise StaleSessionError(session_id)
-                resulting_version = expected_version + 1
                 connection.execute(
                     """INSERT INTO session_answers(
                            session_id, question_id, answer_json, resulting_version, created_at_utc
@@ -392,7 +1288,156 @@ class SQLiteStorage:
                     connection.rollback()
                 raise
 
+        answer_started = perf_counter()
         await self._async_writer(answer_cas)
+        session = await self.async_get_session(session_id)
+        assert session is not None
+        INTERNAL_METRICS.record("session.answer_ms", (perf_counter() - answer_started) * 1000)
+        return session
+
+    async def async_set_session_status(
+        self,
+        session_id: str,
+        expected_version: int,
+        *,
+        status: str,
+    ) -> dict[str, Any]:
+        """CAS pause/resume/complete one persistent session."""
+        if status not in {"active", "paused", "completed"}:
+            raise ValueError(f"unsupported session status: {status}")
+        now = self._clock.now().isoformat()
+
+        def mutate(connection: sqlite3.Connection) -> None:
+            completed_at = now if status == "completed" else None
+            allowed_source = {
+                "paused": ("active",),
+                "active": ("paused",),
+                "completed": ("active", "paused"),
+            }[status]
+            placeholders = ",".join("?" for _ in allowed_source)
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                cursor = connection.execute(
+                    f"""UPDATE sessions
+                        SET status = ?, version = version + 1,
+                            last_activity_at_utc = ?,
+                            completed_at_utc = CASE
+                                WHEN ? = 'completed' THEN ?
+                                ELSE completed_at_utc
+                            END
+                        WHERE id = ? AND version = ?
+                          AND status IN ({placeholders})""",
+                    (
+                        status,
+                        now,
+                        status,
+                        completed_at,
+                        session_id,
+                        expected_version,
+                        *allowed_source,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    exists = connection.execute(
+                        "SELECT 1 FROM sessions WHERE id = ?",
+                        (session_id,),
+                    ).fetchone()
+                    connection.rollback()
+                    if exists is None:
+                        raise SessionNotFoundError(session_id)
+                    raise StaleSessionError(session_id)
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._async_writer(mutate)
+        session = await self.async_get_session(session_id)
+        assert session is not None
+        return session
+
+    async def async_undo_session_answer(
+        self,
+        session_id: str,
+        expected_version: int,
+        *,
+        actor_user_id: str | None = None,
+    ) -> dict[str, Any]:
+        """CAS-rewind session navigation while preserving answer history."""
+        now = self._clock.now().isoformat()
+
+        def undo(connection: sqlite3.Connection) -> None:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                session = connection.execute(
+                    """SELECT profile_id, status, version, current_position
+                       FROM sessions WHERE id = ?""",
+                    (session_id,),
+                ).fetchone()
+                if session is None:
+                    connection.rollback()
+                    raise SessionNotFoundError(session_id)
+                profile_id, status, version, position = session
+                if str(status) not in {"active", "paused"} or int(version) != expected_version:
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+                previous_position = int(position) - 1
+                if previous_position < 0:
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+                item = connection.execute(
+                    """SELECT question_id, status
+                       FROM session_items
+                       WHERE session_id = ? AND position = ?""",
+                    (session_id, previous_position),
+                ).fetchone()
+                if item is None or str(item[1]) != "answered":
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+                question_id = str(item[0])
+                connection.execute(
+                    """UPDATE session_items SET status = 'presented'
+                       WHERE session_id = ? AND position = ?""",
+                    (session_id, previous_position),
+                )
+                connection.execute(
+                    """UPDATE session_items SET status = 'queued'
+                       WHERE session_id = ? AND position = ? AND status = 'presented'""",
+                    (session_id, int(position)),
+                )
+                cursor = connection.execute(
+                    """UPDATE sessions
+                       SET version = version + 1, current_position = ?,
+                           status = 'active', last_activity_at_utc = ?
+                       WHERE id = ? AND version = ?""",
+                    (previous_position, now, session_id, expected_version),
+                )
+                if cursor.rowcount != 1:
+                    connection.rollback()
+                    raise StaleSessionError(session_id)
+                payload = json.dumps(
+                    {
+                        "session_id": session_id,
+                        "question_id": question_id,
+                        "previous_version": expected_version,
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+                connection.execute(
+                    """INSERT INTO audit_events(
+                           event_type, actor_user_id, profile_id, payload_json, created_at_utc
+                       ) VALUES ('session_undo_navigation', ?, ?, ?, ?)""",
+                    (actor_user_id, str(profile_id), payload, now),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        await self._async_writer(undo)
         session = await self.async_get_session(session_id)
         assert session is not None
         return session
@@ -419,6 +1464,54 @@ class SQLiteStorage:
 
         await self._async_writer(append)
 
+    async def async_dataset_attributions(
+        self,
+        dataset_id: str,
+        source_id: str,
+        *,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[dict[str, Any]], bool]:
+        """Return bounded individual attribution rows from active content."""
+
+        def query(connection: sqlite3.Connection) -> tuple[list[dict[str, Any]], bool]:
+            rows = connection.execute(
+                """SELECT DISTINCT provenance.source_record_id,
+                          provenance.author, provenance.language_tag,
+                          provenance.modified_from_source,
+                          provenance.attribution_text,
+                          provenance.license_id, provenance.license_scope
+                   FROM content.provenance_records AS provenance
+                   JOIN content.source_snapshots AS snapshot
+                     ON snapshot.snapshot_id = provenance.source_snapshot_id
+                   WHERE provenance.dataset_id = ?
+                     AND snapshot.source_id = ?
+                     AND provenance.attribution_text IS NOT NULL
+                     AND trim(provenance.attribution_text) <> ''
+                   ORDER BY provenance.source_record_id, provenance.attribution_text
+                   LIMIT ? OFFSET ?""",
+                (dataset_id, source_id, limit + 1, offset),
+            ).fetchall()
+            has_more = len(rows) > limit
+            visible = rows[:limit]
+            return (
+                [
+                    {
+                        "source_record_id": None if row[0] is None else str(row[0]),
+                        "author": None if row[1] is None else str(row[1]),
+                        "language_tag": None if row[2] is None else str(row[2]),
+                        "modified_from_source": bool(row[3]),
+                        "attribution_text": str(row[4]),
+                        "license_id": str(row[5]),
+                        "license_scope": str(row[6]),
+                    }
+                    for row in visible
+                ],
+                has_more,
+            )
+
+        return await self._async_reader(query)
+
     async def async_dataset_inventory(self) -> list[dict[str, Any]]:
         """Return privacy-safe installed dataset metadata from the active generation."""
 
@@ -443,28 +1536,53 @@ class SQLiteStorage:
             ) in package_rows:
                 dataset_id = str(raw_dataset_id)
                 source_rows = connection.execute(
-                    """SELECT DISTINCT source.source_id, snapshot.upstream_version,
+                    """SELECT source.source_id, source.name, source.provider,
+                              source.homepage, source.license_id,
+                              source.attribution_template, source.adapter_id,
+                              source.refresh_policy, source.commercial_compatible,
+                              source.notes, snapshot.upstream_version,
                               snapshot.upstream_date, snapshot.retrieved_at,
-                              snapshot.source_url, snapshot.adapter_version
+                              snapshot.source_url, snapshot.adapter_version,
+                              COUNT(provenance.provenance_id),
+                              SUM(CASE WHEN provenance.modified_from_source = 1
+                                       THEN 1 ELSE 0 END),
+                              SUM(CASE WHEN provenance.attribution_text IS NOT NULL
+                                            AND trim(provenance.attribution_text) <> ''
+                                       THEN 1 ELSE 0 END)
                        FROM content.provenance_records AS provenance
                        JOIN content.source_snapshots AS snapshot
                          ON snapshot.snapshot_id = provenance.source_snapshot_id
                        JOIN content.sources AS source
                          ON source.source_id = snapshot.source_id
                        WHERE provenance.dataset_id = ?
+                       GROUP BY source.source_id, source.name, source.provider,
+                                source.homepage, source.license_id,
+                                source.attribution_template, source.adapter_id,
+                                source.refresh_policy, source.commercial_compatible,
+                                source.notes, snapshot.snapshot_id,
+                                snapshot.upstream_version, snapshot.upstream_date,
+                                snapshot.retrieved_at, snapshot.source_url,
+                                snapshot.adapter_version
                        ORDER BY source.source_id, snapshot.snapshot_id""",
                     (dataset_id,),
                 ).fetchall()
-                licenses = [
-                    str(row[0])
-                    for row in connection.execute(
-                        """SELECT DISTINCT license_id
-                           FROM content.dataset_licenses
-                           WHERE dataset_id = ?
-                           ORDER BY license_id""",
-                        (dataset_id,),
-                    ).fetchall()
-                ]
+                license_rows = connection.execute(
+                    """SELECT dataset_license.license_id,
+                              dataset_license.license_scope,
+                              license.spdx_or_internal_id, license.name,
+                              license.version, license.commercial_use_allowed,
+                              license.derivatives_allowed, license.share_alike,
+                              license.attribution_required, license.source_url,
+                              license.notes
+                       FROM content.dataset_licenses AS dataset_license
+                       JOIN content.licenses AS license
+                         ON license.license_id = dataset_license.license_id
+                       WHERE dataset_license.dataset_id = ?
+                       ORDER BY dataset_license.license_id,
+                                dataset_license.license_scope""",
+                    (dataset_id,),
+                ).fetchall()
+                licenses = sorted({str(row[0]) for row in license_rows})
                 pack_versions = [
                     str(row[0])
                     for row in connection.execute(
@@ -487,15 +1605,54 @@ class SQLiteStorage:
                         "sources": tuple(
                             {
                                 "source_id": str(row[0]),
-                                "upstream_version": str(row[1]),
-                                "upstream_date": None if row[2] is None else str(row[2]),
-                                "retrieved_at": str(row[3]),
-                                "source_url": str(row[4]),
-                                "adapter_version": str(row[5]),
+                                "upstream_version": str(row[10]),
+                                "upstream_date": None if row[11] is None else str(row[11]),
+                                "retrieved_at": str(row[12]),
+                                "source_url": str(row[13]),
+                                "adapter_version": str(row[14]),
+                            }
+                            for row in source_rows
+                        ),
+                        "source_details": tuple(
+                            {
+                                "source_id": str(row[0]),
+                                "name": str(row[1]),
+                                "provider": str(row[2]),
+                                "homepage": str(row[3]),
+                                "license_id": str(row[4]),
+                                "attribution_template": str(row[5]),
+                                "adapter_id": str(row[6]),
+                                "refresh_policy": str(row[7]),
+                                "commercial_compatible": bool(row[8]),
+                                "notes": str(row[9]),
+                                "upstream_version": str(row[10]),
+                                "upstream_date": None if row[11] is None else str(row[11]),
+                                "retrieved_at": str(row[12]),
+                                "source_url": str(row[13]),
+                                "adapter_version": str(row[14]),
+                                "provenance_records": int(row[15]),
+                                "modified_records": int(row[16] or 0),
+                                "attribution_records": int(row[17] or 0),
                             }
                             for row in source_rows
                         ),
                         "licenses": tuple(licenses),
+                        "license_details": tuple(
+                            {
+                                "license_id": str(row[0]),
+                                "license_scope": str(row[1]),
+                                "spdx_or_internal_id": str(row[2]),
+                                "name": str(row[3]),
+                                "version": str(row[4]),
+                                "commercial_use_allowed": bool(row[5]),
+                                "derivatives_allowed": bool(row[6]),
+                                "share_alike": bool(row[7]),
+                                "attribution_required": bool(row[8]),
+                                "source_url": str(row[9]),
+                                "notes": str(row[10]),
+                            }
+                            for row in license_rows
+                        ),
                         "pack_version_ids": tuple(pack_versions),
                     }
                 )
@@ -562,6 +1719,40 @@ class SQLiteStorage:
                      ON stats.pack_version_id = version.pack_version_id
                    ORDER BY pack.name COLLATE NOCASE, pack.pack_id, version.version"""
             ).fetchall()
+            direction_rows = connection.execute(
+                """SELECT DISTINCT member.pack_version_id,
+                          prompt.language_tag, answer.language_tag
+                   FROM content.pack_items AS member
+                   JOIN content.learning_items AS item
+                     ON item.learning_item_id = member.learning_item_id
+                    AND item.lifecycle_status = 'active'
+                   JOIN content.card_definitions AS card
+                     ON card.learning_item_id = item.learning_item_id
+                    AND card.lifecycle_status = 'active'
+                   JOIN content.facets AS prompt
+                     ON prompt.facet_id = card.prompt_facet_id
+                    AND prompt.lifecycle_status = 'active'
+                   JOIN content.facets AS answer
+                     ON answer.facet_id = card.answer_facet_id
+                    AND answer.lifecycle_status = 'active'
+                   LEFT JOIN content.pack_item_card_defaults AS default_rule
+                     ON default_rule.pack_version_id = member.pack_version_id
+                    AND default_rule.learning_item_id = member.learning_item_id
+                    AND default_rule.card_key = card.card_key
+                   WHERE prompt.language_tag <> answer.language_tag
+                     AND COALESCE(default_rule.enabled_by_default, 1) = 1
+                   ORDER BY member.pack_version_id,
+                            prompt.language_tag COLLATE NOCASE,
+                            answer.language_tag COLLATE NOCASE"""
+            ).fetchall()
+            directions_by_pack: dict[str, list[dict[str, str]]] = {}
+            for pack_version_id, source_language, target_language in direction_rows:
+                directions_by_pack.setdefault(str(pack_version_id), []).append(
+                    {
+                        "source_language": str(source_language),
+                        "target_language": str(target_language),
+                    }
+                )
             return tuple(
                 {
                     "pack_id": str(row[0]),
@@ -572,6 +1763,7 @@ class SQLiteStorage:
                     "generation_id": str(row[5]),
                     "total_items": 0 if row[6] is None else int(row[6]),
                     "total_cards": 0 if row[7] is None else int(row[7]),
+                    "directions": directions_by_pack.get(str(row[2]), []),
                 }
                 for row in rows
             )
@@ -587,6 +1779,21 @@ class SQLiteStorage:
                     """SELECT 1 FROM content.pack_versions
                        WHERE pack_version_id = ?""",
                     (pack_version_id,),
+                ).fetchone()
+                is not None
+            )
+
+        return await self._async_reader(query)
+
+    async def async_validate_learning_item_reference(self, learning_item_id: str) -> bool:
+        """Validate one active LearningItem against the active content generation."""
+
+        def query(connection: sqlite3.Connection) -> bool:
+            return (
+                connection.execute(
+                    """SELECT 1 FROM content.learning_items
+                       WHERE learning_item_id = ? AND lifecycle_status = 'active'""",
+                    (learning_item_id,),
                 ).fetchone()
                 is not None
             )
@@ -741,7 +1948,7 @@ class SQLiteStorage:
         def query(connection: sqlite3.Connection) -> list[str]:
             rows = connection.execute(
                 """SELECT card.card_key
-                   FROM content.pack_items AS member
+                   FROM content.pack_items AS member INDEXED BY pack_items_version_item
                    JOIN content.learning_items AS item
                      ON item.learning_item_id = member.learning_item_id
                     AND item.lifecycle_status = 'active'
@@ -768,6 +1975,7 @@ class SQLiteStorage:
         generation_id: str | None = None,
     ) -> ContentBuildResult:
         """Build a validated candidate without making it visible to readers."""
+        build_started = perf_counter()
         package_list = tuple(packages)
         selected_generation_id = generation_id or f"generation-{uuid.uuid4().hex}"
         async with await self.content_generations.acquire_reader() as lease:
@@ -792,32 +2000,97 @@ class SQLiteStorage:
                     cancelled = True
             if cancelled:
                 raise asyncio.CancelledError
+            INTERNAL_METRICS.record("content.build_ms", (perf_counter() - build_started) * 1000)
             return result
 
+    async def _async_reconcile_progress_content_status(self) -> None:
+        """Project active content lifecycle into persistent progress tombstones."""
+        content_path = self.content_generations.active_path
+        now = self._clock.now().isoformat()
+
+        def reconcile(connection: sqlite3.Connection) -> None:
+            attached = False
+            try:
+                connection.execute(
+                    "ATTACH DATABASE ? AS reconcile_content",
+                    (_read_only_uri(content_path),),
+                )
+                attached = True
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    """UPDATE progress
+                       SET content_status = COALESCE(
+                               (
+                                   SELECT CASE card.lifecycle_status
+                                       WHEN 'active' THEN 'active'
+                                       WHEN 'superseded' THEN 'superseded'
+                                       ELSE 'removed'
+                                   END
+                                   FROM reconcile_content.card_definitions AS card
+                                   WHERE card.card_key = progress.card_key
+                               ),
+                               'removed'
+                           ),
+                           updated_at_utc = CASE
+                               WHEN content_status != COALESCE(
+                                   (
+                                       SELECT CASE card.lifecycle_status
+                                           WHEN 'active' THEN 'active'
+                                           WHEN 'superseded' THEN 'superseded'
+                                           ELSE 'removed'
+                                       END
+                                       FROM reconcile_content.card_definitions AS card
+                                       WHERE card.card_key = progress.card_key
+                                   ),
+                                   'removed'
+                               )
+                               THEN ?
+                               ELSE updated_at_utc
+                           END""",
+                    (now,),
+                )
+                connection.commit()
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+            finally:
+                if attached:
+                    connection.execute("DETACH DATABASE reconcile_content")
+
+        await self._async_writer(reconcile)
+
     async def async_activate_content_generation(self, candidate: Path) -> GenerationMetadata:
-        """Activate a validated candidate after every old reader has drained."""
-        return await self.content_generations.async_activate(candidate)
+        """Activate a validated candidate and reconcile persistent content tombstones."""
+        activation_started = perf_counter()
+        metadata = await self.content_generations.async_activate(candidate)
+        try:
+            await self._async_reconcile_progress_content_status()
+        except Exception:
+            await self.content_generations.async_rollback()
+            await self._async_reconcile_progress_content_status()
+            raise
+        INTERNAL_METRICS.record(
+            "content.activation_ms",
+            (perf_counter() - activation_started) * 1000,
+        )
+        return metadata
 
     async def async_rollback_content_generation(self) -> GenerationMetadata:
-        """Reactivate the retained previous generation."""
-        return await self.content_generations.async_rollback()
+        """Reactivate the retained previous generation and reconcile tombstones."""
+        metadata = await self.content_generations.async_rollback()
+        await self._async_reconcile_progress_content_status()
+        return metadata
 
     async def async_backup_to(self, destination: Path) -> None:
-        """Create a coherent state snapshot using SQLite's backup API."""
+        """Create and atomically publish a coherent state snapshot."""
 
-        def backup(connection: sqlite3.Connection) -> None:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            target = sqlite3.connect(destination)
-            try:
-                connection.backup(target)
-            finally:
-                target.close()
-
-        await self._async_writer(backup)
+        await self._async_writer(
+            lambda connection: _create_atomic_state_snapshot(connection, destination)
+        )
 
     async def async_prepare_ha_backup(self) -> None:
-        """Pause new writes and checkpoint WAL until HA finishes archiving."""
+        """Quiesce writes and publish the latest coherent HA recovery snapshot."""
         if self._backup_active:
             return
         await self._writes_gate.acquire()
@@ -827,9 +2100,13 @@ class SQLiteStorage:
             await loop.run_in_executor(
                 self._writer_executor,
                 self._run_writer,
-                lambda connection: connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall(),
+                lambda connection: _create_atomic_state_snapshot(
+                    connection,
+                    self.paths.ha_backup_snapshot,
+                ),
             )
-        except Exception:
+        except BaseException:
+            # asyncio timeout/cancellation must never strand the write gate.
             self._backup_active = False
             self._writes_gate.release()
             raise

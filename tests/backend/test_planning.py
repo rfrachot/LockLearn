@@ -194,3 +194,31 @@ async def test_notification_and_active_session_split_is_bounded_by_push_budget(
         assert "CardDefinitions" in forecast.assumptions[0]
     finally:
         await storage.async_close()
+
+
+async def test_plan_preview_is_non_mutating_and_matches_set_forecast(tmp_path: Path) -> None:
+    storage, _tracks, planning = await _services(tmp_path)
+    try:
+        plan = LearningPlan(
+            max_new_per_day_cards=2,
+            max_reviews_per_day_cards=20,
+            max_notification_new_teasers=1,
+            target_coverage=1.0,
+            target_retention=0.9,
+        )
+        before = await storage.repositories.tracks.async_get("track-plan")
+        assert before is not None
+        assert "learning_plan" not in before["settings"]
+
+        preview = await planning.async_preview_plan(track_id="track-plan", plan=plan)
+        after_preview = await storage.repositories.tracks.async_get("track-plan")
+        assert after_preview is not None
+        assert "learning_plan" not in after_preview["settings"]
+
+        applied = await planning.async_set_plan(track_id="track-plan", plan=plan)
+        assert preview == applied
+        after_set = await storage.repositories.tracks.async_get("track-plan")
+        assert after_set is not None
+        assert after_set["settings"]["learning_plan"]["max_new_per_day_cards"] == 2
+    finally:
+        await storage.async_close()

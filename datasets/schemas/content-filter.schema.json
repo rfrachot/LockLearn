@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://locklearn.local/schemas/content-filter.schema.json",
+  "title": "LockLearn V1 pack content filter",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "all"
+  ],
+  "properties": {
+    "all": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "field",
+          "op",
+          "value"
+        ],
+        "properties": {
+          "field": {
+            "enum": [
+              "content_type",
+              "register",
+              "dataset_id"
+            ]
+          },
+          "op": {
+            "enum": [
+              "eq",
+              "in"
+            ]
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 256,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "op": {
+                  "const": "eq"
+                }
+              },
+              "required": [
+                "op"
+              ]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "op": {
+                  "const": "in"
+                }
+              },
+              "required": [
+                "op"
+              ]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 256,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
