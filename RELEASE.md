@@ -10,13 +10,35 @@ published.
 - `custom_components/locklearn/manifest.json` is the Home Assistant/HACS release
   version and is mirrored by `INTEGRATION_VERSION` in
   `custom_components/locklearn/const.py`; CI requires them to match.
-- The current untagged V1 release candidate is `1.0.0`.
+- The current field-validation prerelease is `1.0.0-beta.1`; the stable target remains `1.0.0`.
 - `frontend/package.json` is private npm toolchain metadata and is not the LockLearn product version.
   The shipped frontend identity comes from the integration version plus the committed bundle hash.
 - Dataset/package versions are independent of the LockLearn software version.
-- Published software tags use `vMAJOR.MINOR.PATCH`.
+- Stable software tags use `vMAJOR.MINOR.PATCH`.
+- Field-validation prereleases use `vMAJOR.MINOR.PATCH-beta.N`.
 
-No `v1.0.0` tag or GitHub Release is created until P6.11 final acceptance is PASS.
+P6.11 and the P6 exit gate are PASS. Stable `v1.0.0` remains withheld until
+the Home Assistant beta field-validation cycle below is explicitly accepted.
+
+## Beta field-validation sequence
+
+`1.0.0-beta.1` is an installable prerelease, not a development-branch shortcut.
+
+1. start from the qualified P6 exit-gate baseline;
+2. bump only release/version/docs contracts to `1.0.0-beta.1`;
+3. require the complete CI release matrix on the exact beta commit;
+4. create tag `v1.0.0-beta.1` and a GitHub Release marked **Pre-release**;
+5. create a Home Assistant backup/snapshot before installation;
+6. install the prerelease through HACS as a custom integration repository;
+7. validate fresh setup, bundled starter, Learn/Quiz, Profiles/Tracks, real
+   Companion notifications, reload/restart, backup/restore and dataset update/
+   rollback on the test instance;
+8. record every beta defect. Runtime defects require a new beta commit/tag
+   (`beta.2`, `beta.3`, ...), never mutation of an already published tag;
+9. promote to stable `1.0.0` only after explicit field-validation acceptance.
+
+Do not downgrade a database already migrated by beta code. Restore a pre-beta
+backup or move forward to a fixed beta.
 
 ## Home Assistant compatibility
 
@@ -60,7 +82,7 @@ imports the integration in a fresh subprocess with the repository root absent fr
 checks the compiled frontend and rejects repository-only imports or private-key
 material.
 
-## Supported upgrade path for 1.0.0
+## Supported upgrade path for 1.0.0-beta.1 and 1.0.0
 
 The latest real published predecessor is `v0.0.2`. It shipped `state.db` schema v1
 and Config Entry schema v1. P6.10 freezes that exact released state schema as an
@@ -69,7 +91,8 @@ upgrade fixture and verifies:
 ```text
 v0.0.2 / state schema v1
         -> sequential v1 -> v2 -> v3 -> v4 -> v5 migrations
-        -> 1.0.0 candidate
+        -> 1.0.0-beta.1 field candidate
+        -> future 1.0.0 stable
 ```
 
 The smoke preserves legacy session/progress/audit rows and the coherent
@@ -122,7 +145,7 @@ The GitHub Actions candidate must also pass:
 
 ## Release
 
-Only after P6.11 acceptance is PASS:
+Only after P6.11/P6 exit-gate PASS **and** explicit beta field-validation acceptance:
 
 1. ensure the release commit is on clean `main` and every required CI job is green;
 2. ensure `CHANGELOG.md` has no release-candidate-only wording and move the final

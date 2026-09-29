@@ -21,7 +21,10 @@ HACS_PATH = ROOT / "hacs.json"
 CI_PATH = ROOT / ".github" / "workflows" / "ci.yml"
 FRONTEND_PACKAGE_PATH = ROOT / "frontend" / "package.json"
 
-SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+SEMVER_RE = re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
+)
 HACS_MINIMUM_HOME_ASSISTANT = "2025.2.0"
 TESTED_MINIMUM_HOME_ASSISTANT = "2025.2.5"
 FORBIDDEN_RUNTIME_IMPORT_ROOTS = frozenset({"datasets", "frontend", "scripts", "tests"})
@@ -115,8 +118,9 @@ def _validate_release_metadata() -> str:
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     runtime_version = _read_string_constant(CONST_PATH, "INTEGRATION_VERSION")
     assert manifest["version"] == runtime_version
-    assert SEMVER_RE.fullmatch(runtime_version), runtime_version
-    assert tuple(int(part) for part in runtime_version.split(".")) >= (1, 0, 0)
+    match = SEMVER_RE.fullmatch(runtime_version)
+    assert match is not None, runtime_version
+    assert tuple(int(match.group(index)) for index in range(1, 4)) >= (1, 0, 0)
 
     hacs = json.loads(HACS_PATH.read_text(encoding="utf-8"))
     assert hacs["homeassistant"] == HACS_MINIMUM_HOME_ASSISTANT

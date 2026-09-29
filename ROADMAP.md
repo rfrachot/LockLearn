@@ -15,8 +15,8 @@ V1 work through P6 release hardening:
 - lifecycle/recovery/security/privacy;
 - documentation/contracts, release packaging and final acceptance.
 
-Current next work: independently qualify P6.11 V1 acceptance, then execute the
-documented final 1.0 publication sequence.
+Current next work: publish and field-test `1.0.0-beta.1` on the Home Assistant
+test instance. Stable `1.0.0` follows only after explicit beta acceptance.
 
 ## Candidate
 

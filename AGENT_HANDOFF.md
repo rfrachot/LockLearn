@@ -2,44 +2,47 @@
 
 ## Current state
 
-Branch: `feat/p6-hardening`.
+Release-preparation branch: `release/1.0.0-beta.1`.
 
-P5 and its real-HA exit gate remain PASS. P6.1 through P6.10 are PASS.
+P6.1 through P6.11 are PASS and the P6 exit gate is PASS. The final qualified
+feature baseline is:
 
-P6.10 was independently qualified after the privacy-preserving history rewrite on
-HEAD `93ca19eea3b9e9347fc6f4cd15afe30e3575b49b`. GitHub Actions run
-`36474980367` passed every required backend/dataset/frontend/HA/HACS gate.
+```text
+3f980a4fba936c2d8124a47dec4e61e3554f5a2f
+```
 
-P6.11 — final V1 end-to-end acceptance — is implementation complete and requires
-independent qualification. No 1.0 tag or GitHub Release has been created.
+Independent P6.11 qualification reported 487 Python tests PASS, 49 Vitest tests,
+3 Playwright tests and no V1 blocker. GitHub Actions run `36542238235` passed
+backend, datasets, frontend/E2E, HA minimum 2025.2.5, current harness 2026.9.3,
+latest-stable smoke 2026.9.4, HACS and hassfest on that exact SHA.
 
-## P6.11 implementation
+Stable `v1.0.0` has deliberately **not** been published. The next phase is
+real Home Assistant field validation using `1.0.0-beta.1`.
 
-- `docs/P6_11_ACCEPTANCE.md` maps every §129 mandatory capability, all 32 §133
-  invariants, all §135 Adrien/Camille/Zoé steps and the five resilience scenarios
-  to permanent AUTO/E2E/REAL-HA/CI evidence.
-- `tests/backend/test_p6_11_v1_acceptance.py` exercises a fresh real bundled
-  starter through public WebSocket APIs: Profile, scheduler window, Pack/Dataset,
-  Track, a 20-card request respecting the §53.1 15-new-card final-quarter reserve,
-  cross-client resume, dashboard and stats.
-- `tests/backend/test_session_selection.py` contains the complementary 20-card
-  acceptance with 15 new cards plus five due reviews, preserving §53.1.
-- `tests/backend/test_tracks.py::test_one_profile_supports_japanese_and_spanish_tracks`
-  proves one Profile can own independent Japanese and Spanish Tracks with
-  direction-matched content, closing CAMILLE-02 explicitly.
-- `tests/backend/test_p6_11_acceptance_contracts.py` gates the evidence IDs,
-  critical test nodeids, real-HA evidence and explicit V1.1/V2 non-blockers.
-- CI has a dedicated `P6.11 V1 acceptance` backend-quality step; the normal full
-  Python, HA compatibility, frontend/Playwright, HACS and hassfest jobs remain the
-  authoritative release matrix.
+## Beta preparation
 
-## Independent qualification
+The beta branch changes release metadata/contracts only:
 
-Do not modify code during qualification. Run the targeted P6.11 tests first, then
-all existing backend/dataset/frontend/Playwright/release gates and the full GitHub
-Actions matrix. Verify that the acceptance documentation actually supports every
-§129/§133/§135 claim and that no V1.1/V2 feature has slipped into the 1.0 gate.
+- runtime/manifest version: `1.0.0-beta.1`;
+- SemVer release gates accept an explicit prerelease suffix while retaining one
+  authoritative runtime version;
+- P6.11/P6 exit status is recorded as PASS;
+- `CHANGELOG.md` contains the dated beta section;
+- `RELEASE.md` defines immutable beta tags and the field-validation gate;
+- `docs/BETA_VALIDATION.md` is the real-HA beta checklist.
 
-P6 becomes PASS only after this independent qualification. If PASS, the next action
-is the final documented 1.0 publication sequence; do not publish/tag as part of the
-qualification itself.
+Do not add features during beta deployment. A discovered runtime defect gets a
+new beta commit/tag (`beta.2`, etc.) after review.
+
+## Beta publication/deployment boundary
+
+Before deployment:
+
+1. require complete CI success on the exact beta commit;
+2. create `v1.0.0-beta.1` from that exact commit;
+3. publish a GitHub Release marked **Pre-release**;
+4. do not publish stable `v1.0.0`;
+5. use the dedicated HA test instance and make a backup before installation.
+
+The field-validation procedure is a release-readiness gate;
+`SPEC_V1.md` remains the product/architecture source of truth.

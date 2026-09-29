@@ -25,8 +25,11 @@ FRONTEND_PACKAGE_PATH = ROOT / "frontend" / "package.json"
 RELEASE_SMOKE_PATH = ROOT / "scripts" / "p6_10_release_smoke.py"
 
 PREVIOUS_SUPPORTED_RELEASE = "0.0.2"
-V1_RELEASE_CANDIDATE = "1.0.0"
-SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+V1_RELEASE_CANDIDATE = "1.0.0-beta.1"
+SEMVER_RE = re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$"
+)
 
 # Exact state schema shipped by the real v0.0.2 GitHub release.
 _V0_0_2_STATE_SCHEMA = """
@@ -82,10 +85,9 @@ CREATE TABLE IF NOT EXISTS audit_events (
 
 
 def _version_tuple(version: str) -> tuple[int, int, int]:
-    assert SEMVER_RE.fullmatch(version), version
-    parts = tuple(int(part) for part in version.split("."))
-    assert len(parts) == 3
-    return parts[0], parts[1], parts[2]
+    match = SEMVER_RE.fullmatch(version)
+    assert match is not None, version
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
 
 
 def test_v1_candidate_uses_one_authoritative_runtime_version() -> None:
