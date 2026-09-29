@@ -209,6 +209,22 @@ export class LockLearnLearnView extends LitElement {
       background: var(--secondary-background-color);
     }
 
+    dl {
+      display: grid;
+      grid-template-columns: minmax(170px, auto) 1fr;
+      gap: 6px 12px;
+      margin: 12px 0 0;
+    }
+
+    dt {
+      color: var(--secondary-text-color);
+    }
+
+    dd {
+      margin: 0;
+      font-weight: 650;
+    }
+
     .error {
       color: var(--error-color, var(--primary-text-color));
     }
@@ -649,17 +665,17 @@ export class LockLearnLearnView extends LitElement {
             </select>
           </label>
           <div class="actions">
-            ${resumable
+            ${this.session === undefined && resumable
               ? html`<button class="primary" @click=${this.resume} ?disabled=${this.loading}>
                   ${this.t("learn.resume")}
                 </button>`
-              : html`<button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
+              : this.session === undefined ? html`<button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
                   ${this.t("learn.start")}
-                </button>`}
+                </button>` : nothing}
           </div>
-          <p class="muted">
+          ${this.session === undefined ? html`<p class="muted">
             ${resumable ? this.t("learn.resumeHelp") : this.t("learn.startHelp")}
-          </p>
+          </p>` : nothing}
         </div>
         ${this.session === undefined && this.availability !== undefined ? html`
           <div class="notice" role="status">
@@ -668,6 +684,11 @@ export class LockLearnLearnView extends LitElement {
               ? html`<div>${this.availability.available_now} ${this.t("learn.cardsReady")}</div>`
               : html`
                   <div>${this.t("learn.noCardsReady")}</div>
+                  <dl>
+                    <dt>${this.t("learn.startedCards")}</dt><dd>${this.availability.introduced_cards}</dd>
+                    <dt>${this.t("learn.unstartedCards")}</dt><dd>${this.availability.new_cards}</dd>
+                    <dt>${this.t("learn.newQuotaRemaining")}</dt><dd>${this.availability.remaining_new_quota}</dd>
+                  </dl>
                   ${this.availability.next_available_at_utc === null
                     ? html`<div class="muted">${this.t("learn.noExactTime")}</div>`
                     : html`

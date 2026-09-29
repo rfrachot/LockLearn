@@ -281,6 +281,8 @@ const hass = {
               forceable_new: 0,
               forceable_early: 0,
               next_due_at_utc: "2026-09-27T02:10:00+00:00",
+              next_available_at_utc: "2026-09-27T02:10:00+00:00",
+              next_available_reason: "scheduled_step",
             }
           : {
               profile_id: profile.profile_id,
@@ -293,6 +295,8 @@ const hass = {
               forceable_new: 3,
               forceable_early: 3,
               next_due_at_utc: "2026-09-27T02:10:00+00:00",
+              next_available_at_utc: "2026-09-27T02:10:00+00:00",
+              next_available_reason: "scheduled_step",
             };
       case "locklearn/session/start":
         return session(message.session_type === "quiz" ? "quiz" : "learn");

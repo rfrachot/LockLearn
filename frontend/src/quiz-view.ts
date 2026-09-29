@@ -235,6 +235,22 @@ export class LockLearnQuizView extends LitElement {
       gap: 10px;
     }
 
+    dl {
+      display: grid;
+      grid-template-columns: minmax(170px, auto) 1fr;
+      gap: 6px 12px;
+      margin: 12px 0 0;
+    }
+
+    dt {
+      color: var(--secondary-text-color);
+    }
+
+    dd {
+      margin: 0;
+      font-weight: 650;
+    }
+
     @media (max-width: 600px) {
       .toolbar,
       .toolbar-fields,
@@ -678,17 +694,17 @@ export class LockLearnQuizView extends LitElement {
             </label>
           </div>
           <div class="actions">
-            ${resumable
+            ${this.session === undefined && resumable
               ? html`<button class="primary" @click=${this.resume} ?disabled=${this.loading}>
                   ${this.t("quiz.resume")}
                 </button>`
-              : html`<button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
+              : this.session === undefined ? html`<button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
                   ${this.t("quiz.start")}
-                </button>`}
+                </button>` : nothing}
           </div>
-          <p class="muted">
+          ${this.session === undefined ? html`<p class="muted">
             ${resumable ? this.t("quiz.resumeHelp") : this.t("quiz.startHelp")}
-          </p>
+          </p>` : nothing}
         </div>
         ${this.session === undefined && this.availability !== undefined ? html`
           <div class="notice" role="status">
@@ -699,6 +715,10 @@ export class LockLearnQuizView extends LitElement {
                 ? html`<div>${this.t("quiz.learnFirst")}</div>`
                 : html`
                     <div>${this.t("quiz.emptyExplain")}</div>
+                    <dl>
+                      <dt>${this.t("quiz.startedCards")}</dt><dd>${this.availability.introduced_cards}</dd>
+                      <dt>${this.t("quiz.readyCards")}</dt><dd>${this.availability.available_now}</dd>
+                    </dl>
                     ${this.availability.next_due_at_utc === null
                       ? html`<div class="muted">${this.t("quiz.noExactTime")}</div>`
                       : html`

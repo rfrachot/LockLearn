@@ -15,6 +15,9 @@ All notable changes will be documented here.
 - Base Quiz readiness copy on persisted Track progress rather than only the
   currently selectable candidate pool, and refresh Quiz automatically when its
   next scheduled card becomes due.
+- Show concrete started/new/quota facts before a Learn session starts, and keep
+  only the contextual action for an already opened session. Quiz now shows
+  started and ready counts whenever no review is due.
 
 ## [1.0.0-beta.3] - 2026-09-29
 
