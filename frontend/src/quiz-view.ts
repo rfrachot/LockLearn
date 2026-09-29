@@ -665,11 +665,30 @@ export class LockLearnQuizView extends LitElement {
                   ${this.t("quiz.resume")}
                 </button>`
               : nothing}
-            <button class="primary" @click=${this.start} ?disabled=${this.loading}>
+            <button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
               ${this.t("quiz.start")}
             </button>
           </div>
         </div>
+        ${this.session === undefined && this.availability !== undefined ? html`
+          <div class="notice" role="status">
+            <strong>${this.t("quiz.howItWorks")}</strong>
+            ${this.availability.available_now > 0
+              ? html`<div>${this.availability.available_now} ${this.t("quiz.cardsReady")}</div>`
+              : this.availability.introduced_cards === 0
+                ? html`<div>${this.t("quiz.learnFirst")}</div>`
+                : html`
+                    <div>${this.t("quiz.emptyExplain")}</div>
+                    ${this.availability.next_due_at_utc === null ? nothing : html`
+                      <div>
+                        <strong>${this.t("quiz.nextAvailable")}:</strong>
+                        ${this.dueLabel(this.availability.next_due_at_utc)}
+                      </div>
+                    `}
+                  `}
+            <div class="muted">${this.t("quiz.whyDueOnly")}</div>
+          </div>
+        ` : nothing}
         ${this.errorMessage
           ? html`<div class="error" role="alert">
               <strong>${this.t("quiz.error")}</strong>
@@ -709,7 +728,7 @@ export class LockLearnQuizView extends LitElement {
         <section class="quiz-card">
           <h2>${this.t("quiz.completed")}</h2>
           <p>${this.t("quiz.completedBody")}</p>
-          <button class="primary" @click=${this.start} ?disabled=${this.loading}>
+          <button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
             ${this.t("quiz.newSession")}
           </button>
         </section>
