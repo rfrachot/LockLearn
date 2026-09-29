@@ -1719,6 +1719,40 @@ class SQLiteStorage:
                      ON stats.pack_version_id = version.pack_version_id
                    ORDER BY pack.name COLLATE NOCASE, pack.pack_id, version.version"""
             ).fetchall()
+            direction_rows = connection.execute(
+                """SELECT DISTINCT member.pack_version_id,
+                          prompt.language_tag, answer.language_tag
+                   FROM content.pack_items AS member
+                   JOIN content.learning_items AS item
+                     ON item.learning_item_id = member.learning_item_id
+                    AND item.lifecycle_status = 'active'
+                   JOIN content.card_definitions AS card
+                     ON card.learning_item_id = item.learning_item_id
+                    AND card.lifecycle_status = 'active'
+                   JOIN content.facets AS prompt
+                     ON prompt.facet_id = card.prompt_facet_id
+                    AND prompt.lifecycle_status = 'active'
+                   JOIN content.facets AS answer
+                     ON answer.facet_id = card.answer_facet_id
+                    AND answer.lifecycle_status = 'active'
+                   LEFT JOIN content.pack_item_card_defaults AS default_rule
+                     ON default_rule.pack_version_id = member.pack_version_id
+                    AND default_rule.learning_item_id = member.learning_item_id
+                    AND default_rule.card_key = card.card_key
+                   WHERE prompt.language_tag <> answer.language_tag
+                     AND COALESCE(default_rule.enabled_by_default, 1) = 1
+                   ORDER BY member.pack_version_id,
+                            prompt.language_tag COLLATE NOCASE,
+                            answer.language_tag COLLATE NOCASE"""
+            ).fetchall()
+            directions_by_pack: dict[str, list[dict[str, str]]] = {}
+            for pack_version_id, source_language, target_language in direction_rows:
+                directions_by_pack.setdefault(str(pack_version_id), []).append(
+                    {
+                        "source_language": str(source_language),
+                        "target_language": str(target_language),
+                    }
+                )
             return tuple(
                 {
                     "pack_id": str(row[0]),
@@ -1729,6 +1763,7 @@ class SQLiteStorage:
                     "generation_id": str(row[5]),
                     "total_items": 0 if row[6] is None else int(row[6]),
                     "total_cards": 0 if row[7] is None else int(row[7]),
+                    "directions": directions_by_pack.get(str(row[2]), []),
                 }
                 for row in rows
             )
