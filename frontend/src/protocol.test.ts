@@ -223,6 +223,8 @@ describe("frontend protocol", () => {
             new_cards: 0,
             forceable_early: 1,
             next_due_at_utc: "2026-09-29T12:10:00+00:00",
+            next_available_at_utc: "2026-09-29T12:10:00+00:00",
+            next_available_reason: "scheduled_step",
           } as T;
         }
         return {
@@ -246,7 +248,10 @@ describe("frontend protocol", () => {
       },
     };
 
-    expect((await getSessionAvailability(hass, "p1", "t1", "learn")).forceable_early).toBe(1);
+    const availability = await getSessionAvailability(hass, "p1", "t1", "learn");
+    expect(availability.forceable_early).toBe(1);
+    expect(availability.next_available_at_utc).toBe("2026-09-29T12:10:00+00:00");
+    expect(availability.next_available_reason).toBe("scheduled_step");
     await startLearnSession(hass, "p1", "t1", 20, true);
 
     expect(messages).toEqual([
