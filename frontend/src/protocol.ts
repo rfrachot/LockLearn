@@ -141,6 +141,11 @@ export interface NotificationTargetPatch {
   daily_push_budget?: number | null;
 }
 
+export interface PackDirection {
+  source_language: string;
+  target_language: string;
+}
+
 export interface PackVersionRecord {
   pack_id: string;
   name: string;
@@ -150,6 +155,7 @@ export interface PackVersionRecord {
   generation_id: string;
   total_items: number;
   total_cards: number;
+  directions: PackDirection[];
 }
 
 export interface PackVersionDiff {
