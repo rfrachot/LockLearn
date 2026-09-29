@@ -17,6 +17,7 @@ import {
   completeSession,
   evaluateQuizAnswer,
   getSession,
+  getSessionAvailability,
   reportFreeTextShouldBeAccepted,
   reportQuestion,
   startQuizSession,
@@ -27,6 +28,7 @@ import {
   type QuizFeedback,
   type QuizFormat,
   type QuizQuestionPayload,
+  type SessionAvailability,
   type SessionQuestion,
   type SessionState,
   type VisibleProfile,
@@ -52,6 +54,7 @@ export class LockLearnQuizView extends LitElement {
   @state() private pendingSession?: SessionState;
   @state() private freeText = "";
   @state() private hintUsed = false;
+  @state() private availability?: SessionAvailability;
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
@@ -265,6 +268,7 @@ export class LockLearnQuizView extends LitElement {
         this.session = undefined;
         this.resetQuestionUi();
       }
+      void this.refreshAvailability();
     }
   }
 
@@ -296,6 +300,7 @@ export class LockLearnQuizView extends LitElement {
     this.session = undefined;
     this.errorMessage = "";
     this.resetQuestionUi();
+    void this.refreshAvailability();
   }
 
   private setFormat(event: Event): void {
@@ -325,6 +330,36 @@ export class LockLearnQuizView extends LitElement {
     if (changed) this.resetQuestionUi();
   }
 
+  private async refreshAvailability(): Promise<void> {
+    if (
+      this.hass === undefined ||
+      this.profile === undefined ||
+      this.trackId === ""
+    ) {
+      this.availability = undefined;
+      return;
+    }
+    try {
+      this.availability = await getSessionAvailability(
+        this.hass,
+        this.profile.profile_id,
+        this.trackId,
+        "quiz",
+      );
+    } catch {
+      this.availability = undefined;
+    }
+  }
+
+  private dueLabel(value: string | null): string {
+    if (value === null) return "";
+    const due = new Date(value);
+    if (Number.isNaN(due.getTime())) return "";
+    const minutes = Math.max(1, Math.ceil((due.getTime() - Date.now()) / 60_000));
+    const time = new Intl.DateTimeFormat(this.locale(), { timeStyle: "short" }).format(due);
+    return `${time} · ${this.t("quiz.inAbout")} ${minutes} min`;
+  }
+
   private elapsedMs(): number {
     return Math.max(0, Math.round(nowMs() - this.questionStartedAt));
   }
@@ -348,6 +383,7 @@ export class LockLearnQuizView extends LitElement {
           this.format,
         ),
       );
+      await this.refreshAvailability();
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : String(error);
     } finally {
@@ -651,7 +687,22 @@ export class LockLearnQuizView extends LitElement {
   private renderSession() {
     if (this.session === undefined) return nothing;
     if (this.session.question_count === 0) {
-      return html`<section class="quiz-card"><p>${this.t("quiz.empty")}</p></section>`;
+      const introduced = this.availability?.introduced_cards ?? 0;
+      const nextDue = this.availability?.next_due_at_utc ?? null;
+      return html`
+        <section class="quiz-card">
+          <h2>${this.t("quiz.notReadyTitle")}</h2>
+          <p>
+            ${introduced === 0
+              ? this.t("quiz.learnFirst")
+              : this.t("quiz.emptyExplain")}
+          </p>
+          ${nextDue === null ? nothing : html`
+            <p><strong>${this.t("quiz.nextAvailable")}:</strong> ${this.dueLabel(nextDue)}</p>
+          `}
+          <p class="muted">${this.t("quiz.whyDueOnly")}</p>
+        </section>
+      `;
     }
     if (this.session.current_question === null || this.session.status === "completed") {
       return html`
