@@ -1,0 +1,36 @@
+name: beta4-sync-generated-panel
+
+on:
+  push:
+    branches: [release/1.0.0-beta.4]
+
+permissions:
+  contents: write
+
+jobs:
+  sync-panel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: release/1.0.0-beta.4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+      - name: Build committed panel
+        working-directory: frontend
+        run: npm run build
+      - name: Commit generated panel if needed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components/locklearn/frontend/locklearn-panel.js
+          if git diff --cached --quiet; then
+            echo "Generated panel already synchronized."
+            exit 0
+          fi
+          git commit -m "build(beta4): synchronize frontend bundle"
+          git push origin HEAD:release/1.0.0-beta.4
