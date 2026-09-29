@@ -1,4 +1,4 @@
-const ne = globalThis, ke = ne.ShadowRoot && (ne.ShadyCSS === void 0 || ne.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, we = /* @__PURE__ */ Symbol(), Ce = /* @__PURE__ */ new WeakMap();
+const ne = globalThis, ke = ne.ShadowRoot && (ne.ShadyCSS === void 0 || ne.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, we = /* @__PURE__ */ Symbol(), Me = /* @__PURE__ */ new WeakMap();
 let st = class {
   constructor(e, t, i) {
     if (this._$cssResult$ = !0, i !== we) throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");
@@ -9,7 +9,7 @@ let st = class {
     const t = this.t;
     if (ke && e === void 0) {
       const i = t !== void 0 && t.length === 1;
-      i && (e = Ce.get(t)), e === void 0 && ((this.o = e = new CSSStyleSheet()).replaceSync(this.cssText), i && Ce.set(t, e));
+      i && (e = Me.get(t)), e === void 0 && ((this.o = e = new CSSStyleSheet()).replaceSync(this.cssText), i && Me.set(t, e));
     }
     return e;
   }
@@ -17,7 +17,7 @@ let st = class {
     return this.cssText;
   }
 };
-const yt = (s) => new st(typeof s == "string" ? s : s + "", void 0, we), M = (s, ...e) => {
+const yt = (s) => new st(typeof s == "string" ? s : s + "", void 0, we), C = (s, ...e) => {
   const t = s.length === 1 ? s[0] : e.reduce((i, a, n) => i + ((o) => {
     if (o._$cssResult$ === !0) return o.cssText;
     if (typeof o == "number") return o;
@@ -35,7 +35,7 @@ const yt = (s) => new st(typeof s == "string" ? s : s + "", void 0, we), M = (s,
   for (const i of e.cssRules) t += i.cssText;
   return yt(t);
 })(s) : s;
-const { is: _t, defineProperty: kt, getOwnPropertyDescriptor: wt, getOwnPropertyNames: xt, getOwnPropertySymbols: St, getPrototypeOf: Tt } = Object, ue = globalThis, Ne = ue.trustedTypes, qt = Ne ? Ne.emptyScript : "", At = ue.reactiveElementPolyfillSupport, K = (s, e) => s, oe = { toAttribute(s, e) {
+const { is: _t, defineProperty: kt, getOwnPropertyDescriptor: wt, getOwnPropertyNames: xt, getOwnPropertySymbols: St, getPrototypeOf: Tt } = Object, ue = globalThis, Re = ue.trustedTypes, qt = Re ? Re.emptyScript : "", At = ue.reactiveElementPolyfillSupport, K = (s, e) => s, oe = { toAttribute(s, e) {
   switch (e) {
     case Boolean:
       s = s ? qt : null;
@@ -63,7 +63,7 @@ const { is: _t, defineProperty: kt, getOwnPropertyDescriptor: wt, getOwnProperty
       }
   }
   return t;
-} }, xe = (s, e) => !_t(s, e), Re = { attribute: !0, type: String, converter: oe, reflect: !1, useDefault: !1, hasChanged: xe };
+} }, xe = (s, e) => !_t(s, e), Ne = { attribute: !0, type: String, converter: oe, reflect: !1, useDefault: !1, hasChanged: xe };
 Symbol.metadata ??= /* @__PURE__ */ Symbol("metadata"), ue.litPropertyMetadata ??= /* @__PURE__ */ new WeakMap();
 let H = class extends HTMLElement {
   static addInitializer(e) {
@@ -72,7 +72,7 @@ let H = class extends HTMLElement {
   static get observedAttributes() {
     return this.finalize(), this._$Eh && [...this._$Eh.keys()];
   }
-  static createProperty(e, t = Re) {
+  static createProperty(e, t = Ne) {
     if (t.state && (t.attribute = !1), this._$Ei(), this.prototype.hasOwnProperty(e) && ((t = Object.create(t)).wrapped = !0), this.elementProperties.set(e, t), !t.noAccessor) {
       const i = /* @__PURE__ */ Symbol(), a = this.getPropertyDescriptor(e, i, t);
       a !== void 0 && kt(this.prototype, e, a);
@@ -90,7 +90,7 @@ let H = class extends HTMLElement {
     }, configurable: !0, enumerable: !0 };
   }
   static getPropertyOptions(e) {
-    return this.elementProperties.get(e) ?? Re;
+    return this.elementProperties.get(e) ?? Ne;
   }
   static _$Ei() {
     if (this.hasOwnProperty(K("elementProperties"))) return;
@@ -247,21 +247,21 @@ let H = class extends HTMLElement {
   }
 };
 H.elementStyles = [], H.shadowRootOptions = { mode: "open" }, H[K("elementProperties")] = /* @__PURE__ */ new Map(), H[K("finalized")] = /* @__PURE__ */ new Map(), At?.({ ReactiveElement: H }), (ue.reactiveElementVersions ??= []).push("2.1.2");
-const Se = globalThis, Le = (s) => s, le = Se.trustedTypes, Ie = le ? le.createPolicy("lit-html", { createHTML: (s) => s }) : void 0, rt = "$lit$", E = `lit$${Math.random().toFixed(9).slice(2)}$`, nt = "?" + E, zt = `<${nt}>`, N = document, G = () => N.createComment(""), J = (s) => s === null || typeof s != "object" && typeof s != "function", Te = Array.isArray, Pt = (s) => Te(s) || typeof s?.[Symbol.iterator] == "function", pe = `[ 	
-\f\r]`, B = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, Ue = /-->/g, He = />/g, C = RegExp(`>|${pe}(?:([^\\s"'>=/]+)(${pe}*=${pe}*(?:[^ 	
-\f\r"'\`<>=]|("|')|))|$)`, "g"), Oe = /'/g, je = /"/g, ot = /^(?:script|style|textarea|title)$/i, Et = (s) => (e, ...t) => ({ _$litType$: s, strings: e, values: t }), r = Et(1), O = /* @__PURE__ */ Symbol.for("lit-noChange"), l = /* @__PURE__ */ Symbol.for("lit-nothing"), We = /* @__PURE__ */ new WeakMap(), D = N.createTreeWalker(N, 129);
+const Se = globalThis, Le = (s) => s, le = Se.trustedTypes, Ie = le ? le.createPolicy("lit-html", { createHTML: (s) => s }) : void 0, rt = "$lit$", E = `lit$${Math.random().toFixed(9).slice(2)}$`, nt = "?" + E, zt = `<${nt}>`, R = document, G = () => R.createComment(""), J = (s) => s === null || typeof s != "object" && typeof s != "function", Te = Array.isArray, Pt = (s) => Te(s) || typeof s?.[Symbol.iterator] == "function", pe = `[ 	
+\f\r]`, B = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, Ue = /-->/g, He = />/g, M = RegExp(`>|${pe}(?:([^\\s"'>=/]+)(${pe}*=${pe}*(?:[^ 	
+\f\r"'\`<>=]|("|')|))|$)`, "g"), Oe = /'/g, je = /"/g, ot = /^(?:script|style|textarea|title)$/i, Et = (s) => (e, ...t) => ({ _$litType$: s, strings: e, values: t }), r = Et(1), O = /* @__PURE__ */ Symbol.for("lit-noChange"), l = /* @__PURE__ */ Symbol.for("lit-nothing"), We = /* @__PURE__ */ new WeakMap(), D = R.createTreeWalker(R, 129);
 function lt(s, e) {
   if (!Te(s) || !s.hasOwnProperty("raw")) throw Error("invalid template strings array");
   return Ie !== void 0 ? Ie.createHTML(e) : e;
 }
-const Mt = (s, e) => {
+const Ct = (s, e) => {
   const t = s.length - 1, i = [];
   let a, n = e === 2 ? "<svg>" : e === 3 ? "<math>" : "", o = B;
   for (let c = 0; c < t; c++) {
     const u = s[c];
     let h, v, p = -1, z = 0;
-    for (; z < u.length && (o.lastIndex = z, v = o.exec(u), v !== null); ) z = o.lastIndex, o === B ? v[1] === "!--" ? o = Ue : v[1] !== void 0 ? o = He : v[2] !== void 0 ? (ot.test(v[2]) && (a = RegExp("</" + v[2], "g")), o = C) : v[3] !== void 0 && (o = C) : o === C ? v[0] === ">" ? (o = a ?? B, p = -1) : v[1] === void 0 ? p = -2 : (p = o.lastIndex - v[2].length, h = v[1], o = v[3] === void 0 ? C : v[3] === '"' ? je : Oe) : o === je || o === Oe ? o = C : o === Ue || o === He ? o = B : (o = C, a = void 0);
-    const P = o === C && s[c + 1].startsWith("/>") ? " " : "";
+    for (; z < u.length && (o.lastIndex = z, v = o.exec(u), v !== null); ) z = o.lastIndex, o === B ? v[1] === "!--" ? o = Ue : v[1] !== void 0 ? o = He : v[2] !== void 0 ? (ot.test(v[2]) && (a = RegExp("</" + v[2], "g")), o = M) : v[3] !== void 0 && (o = M) : o === M ? v[0] === ">" ? (o = a ?? B, p = -1) : v[1] === void 0 ? p = -2 : (p = o.lastIndex - v[2].length, h = v[1], o = v[3] === void 0 ? M : v[3] === '"' ? je : Oe) : o === je || o === Oe ? o = M : o === Ue || o === He ? o = B : (o = M, a = void 0);
+    const P = o === M && s[c + 1].startsWith("/>") ? " " : "";
     n += o === B ? u + zt : p >= 0 ? (i.push(h), u.slice(0, p) + rt + u.slice(p) + E + P) : u + E + (p === -2 ? c : P);
   }
   return [lt(s, n + (s[t] || "<?>") + (e === 2 ? "</svg>" : e === 3 ? "</math>" : "")), i];
@@ -271,7 +271,7 @@ class Y {
     let a;
     this.parts = [];
     let n = 0, o = 0;
-    const c = e.length - 1, u = this.parts, [h, v] = Mt(e, t);
+    const c = e.length - 1, u = this.parts, [h, v] = Ct(e, t);
     if (this.el = Y.createElement(h, i), D.currentNode = this.el.content, t === 2 || t === 3) {
       const p = this.el.content.firstChild;
       p.replaceWith(...p.childNodes);
@@ -280,7 +280,7 @@ class Y {
       if (a.nodeType === 1) {
         if (a.hasAttributes()) for (const p of a.getAttributeNames()) if (p.endsWith(rt)) {
           const z = v[o++], P = a.getAttribute(p).split(E), ee = /([.?@])?(.*)/.exec(z);
-          u.push({ type: 1, index: n, name: ee[2], strings: P, ctor: ee[1] === "." ? Dt : ee[1] === "?" ? Nt : ee[1] === "@" ? Rt : he }), a.removeAttribute(p);
+          u.push({ type: 1, index: n, name: ee[2], strings: P, ctor: ee[1] === "." ? Dt : ee[1] === "?" ? Rt : ee[1] === "@" ? Nt : he }), a.removeAttribute(p);
         } else p.startsWith(E) && (u.push({ type: 6, index: n }), a.removeAttribute(p));
         if (ot.test(a.tagName)) {
           const p = a.textContent.split(E), z = p.length - 1;
@@ -299,7 +299,7 @@ class Y {
     }
   }
   static createElement(e, t) {
-    const i = N.createElement("template");
+    const i = R.createElement("template");
     return i.innerHTML = e, i;
   }
 }
@@ -309,7 +309,7 @@ function j(s, e, t = s, i) {
   const n = J(e) ? void 0 : e._$litDirective$;
   return a?.constructor !== n && (a?._$AO?.(!1), n === void 0 ? a = void 0 : (a = new n(s), a._$AT(s, t, i)), i !== void 0 ? (t._$Co ??= [])[i] = a : t._$Cl = a), a !== void 0 && (e = j(s, a._$AS(s, e.values), a, i)), e;
 }
-class Ct {
+class Mt {
   constructor(e, t) {
     this._$AV = [], this._$AN = void 0, this._$AD = e, this._$AM = t;
   }
@@ -320,7 +320,7 @@ class Ct {
     return this._$AM._$AU;
   }
   u(e) {
-    const { el: { content: t }, parts: i } = this._$AD, a = (e?.creationScope ?? N).importNode(t, !0);
+    const { el: { content: t }, parts: i } = this._$AD, a = (e?.creationScope ?? R).importNode(t, !0);
     D.currentNode = a;
     let n = D.nextNode(), o = 0, c = 0, u = i[0];
     for (; u !== void 0; ) {
@@ -330,7 +330,7 @@ class Ct {
       }
       o !== u?.index && (n = D.nextNode(), o++);
     }
-    return D.currentNode = N, a;
+    return D.currentNode = R, a;
   }
   p(e) {
     let t = 0;
@@ -365,13 +365,13 @@ class Z {
     this._$AH !== e && (this._$AR(), this._$AH = this.O(e));
   }
   _(e) {
-    this._$AH !== l && J(this._$AH) ? this._$AA.nextSibling.data = e : this.T(N.createTextNode(e)), this._$AH = e;
+    this._$AH !== l && J(this._$AH) ? this._$AA.nextSibling.data = e : this.T(R.createTextNode(e)), this._$AH = e;
   }
   $(e) {
     const { values: t, _$litType$: i } = e, a = typeof i == "number" ? this._$AC(e) : (i.el === void 0 && (i.el = Y.createElement(lt(i.h, i.h[0]), this.options)), i);
     if (this._$AH?._$AD === a) this._$AH.p(t);
     else {
-      const n = new Ct(a, this), o = n.u(this.options);
+      const n = new Mt(a, this), o = n.u(this.options);
       n.p(t), this.T(o), this._$AH = n;
     }
   }
@@ -429,7 +429,7 @@ class Dt extends he {
     this.element[this.name] = e === l ? void 0 : e;
   }
 }
-class Nt extends he {
+class Rt extends he {
   constructor() {
     super(...arguments), this.type = 4;
   }
@@ -437,7 +437,7 @@ class Nt extends he {
     this.element.toggleAttribute(this.name, !!e && e !== l);
   }
 }
-class Rt extends he {
+class Nt extends he {
   constructor(e, t, i, a, n) {
     super(e, t, i, a, n), this.type = 5;
   }
@@ -529,7 +529,7 @@ function $(s) {
 function d(s) {
   return $({ ...s, state: !0, attribute: !1 });
 }
-const ct = M`
+const ct = C`
   .content-block {
     min-width: 0;
     max-width: 100%;
@@ -572,7 +572,7 @@ const ct = M`
     font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
     overflow-wrap: anywhere;
   }
-`, W = M`
+`, W = C`
   :where(button, a, input, select, textarea):focus-visible {
     outline: 3px solid var(--primary-color, currentColor);
     outline-offset: 2px;
@@ -684,6 +684,7 @@ const Fe = ["en", "fr"], Ve = {
     "learn.overrideNewHelp": "Your daily new-card target has been reached, but you can deliberately continue with more new cards. Failed and relearning cards still keep their required cooldown.",
     "learn.emptyExplain": "Nothing is due right now. LockLearn spaces recalls so you do not simply repeat from short-term memory.",
     "learn.nextAvailable": "Next scheduled step",
+    "learn.quotaReset": "New-card quota resets",
     "learn.inAbout": "in about",
     "learn.continueNow": "Continue now",
     "learn.continueEarlyHelp": "You can continue early with safe learning steps. Failed cards still keep their required cooldown.",
@@ -710,7 +711,7 @@ const Fe = ["en", "fr"], Ve = {
     "learn.prompt": "Prompt",
     "learn.feedbackIdk": "Here is the answer. Review it before continuing.",
     "learn.completed": "Session complete",
-    "learn.completedBody": "This learning session is finished.",
+    "learn.completedBody": "This learning session is finished. Some cards may still have spaced learning steps before a quiz becomes due.",
     "learn.newSession": "Start another session",
     "learn.error": "The learning session could not be updated.",
     "learn.reloaded": "The session changed on another client. The latest state was reloaded.",
@@ -731,7 +732,7 @@ const Fe = ["en", "fr"], Ve = {
     "quiz.howItWorks": "Quiz readiness",
     "quiz.cardsReady": "cards ready now",
     "quiz.learnFirst": "A quiz tests cards you have already learned. Start with Learn to introduce some cards first.",
-    "quiz.emptyExplain": "You have learned cards, but none has reached its scheduled quiz/review time yet.",
+    "quiz.emptyExplain": "You have cards in learning or review, but none has reached its scheduled quiz time yet.",
     "quiz.nextAvailable": "Next scheduled review",
     "quiz.inAbout": "in about",
     "quiz.whyDueOnly": "Quiz answers are verified retrievals, so LockLearn waits for cards to become due instead of testing them immediately from short-term memory.",
@@ -1026,6 +1027,7 @@ const Fe = ["en", "fr"], Ve = {
     "learn.overrideNewHelp": "Votre objectif quotidien de nouvelles cartes est atteint, mais vous pouvez choisir de continuer avec davantage de nouvelles cartes. Les cartes ratées et en réapprentissage conservent toujours leur délai obligatoire.",
     "learn.emptyExplain": "Rien n’est à revoir maintenant. LockLearn espace les rappels pour éviter de simplement répéter depuis la mémoire à court terme.",
     "learn.nextAvailable": "Prochaine étape prévue",
+    "learn.quotaReset": "Réinitialisation du quota de nouvelles cartes",
     "learn.inAbout": "dans environ",
     "learn.continueNow": "Continuer maintenant",
     "learn.continueEarlyHelp": "Vous pouvez continuer en avance sur les étapes d’apprentissage sûres. Une carte ratée conserve toujours son temps de pause obligatoire.",
@@ -1052,7 +1054,7 @@ const Fe = ["en", "fr"], Ve = {
     "learn.prompt": "Question",
     "learn.feedbackIdk": "Voici la réponse. Relisez-la avant de continuer.",
     "learn.completed": "Session terminée",
-    "learn.completedBody": "Cette session d’apprentissage est terminée.",
+    "learn.completedBody": "Cette session est terminée. Certaines cartes peuvent encore avoir des étapes d’apprentissage espacées avant qu’un quiz ne soit dû.",
     "learn.newSession": "Commencer une autre session",
     "learn.error": "Impossible de mettre à jour la session d’apprentissage.",
     "learn.reloaded": "La session a changé sur un autre client. Le dernier état a été rechargé.",
@@ -1073,7 +1075,7 @@ const Fe = ["en", "fr"], Ve = {
     "quiz.howItWorks": "Disponibilité du quiz",
     "quiz.cardsReady": "cartes disponibles maintenant",
     "quiz.learnFirst": "Le quiz teste des cartes déjà apprises. Commencez par Apprendre pour introduire quelques cartes.",
-    "quiz.emptyExplain": "Vous avez déjà appris des cartes, mais aucune n’a encore atteint son heure prévue de quiz ou de révision.",
+    "quiz.emptyExplain": "Vous avez des cartes en apprentissage ou en révision, mais aucune n’a encore atteint son heure prévue de quiz.",
     "quiz.nextAvailable": "Prochaine révision prévue",
     "quiz.inAbout": "dans environ",
     "quiz.whyDueOnly": "Les réponses de quiz sont des rappels vérifiés. LockLearn attend donc l’échéance des cartes au lieu de les retester immédiatement depuis la mémoire à court terme.",
@@ -1346,7 +1348,7 @@ function Qt(s) {
 function Be(s) {
   return s !== void 0 && s.role !== "viewer";
 }
-const R = 3;
+const N = 3;
 class ht extends Error {
   constructor(e, t, i) {
     super(
@@ -1358,9 +1360,9 @@ async function Kt(s) {
   const e = await s.callWS({
     type: "locklearn/bootstrap"
   });
-  if (e.frontend_protocol !== R)
+  if (e.frontend_protocol !== N)
     throw new ht(
-      R,
+      N,
       e.frontend_protocol,
       e.backend_version
     );
@@ -1803,7 +1805,7 @@ const Ae = class Ae extends q {
         this.trackId,
         "learn"
       ), this.nextDueTimer !== void 0 && globalThis.clearTimeout(this.nextDueTimer);
-      const e = this.availability.next_due_at_utc;
+      const e = this.availability.next_available_at_utc;
       if (e !== null) {
         const t = Date.parse(e) - Date.now();
         t > 0 && t < 2147e6 && (this.nextDueTimer = globalThis.setTimeout(() => {
@@ -1888,7 +1890,7 @@ const Ae = class Ae extends q {
             ...this.forceEarlyCurrent ? { force_early: !0 } : {}
           }
         );
-        this.applySession(await this.finalizeIfDone(a));
+        this.applySession(await this.finalizeIfDone(a)), await this.refreshAvailability();
       } catch (a) {
         await this.recover(a);
       } finally {
@@ -1923,7 +1925,7 @@ const Ae = class Ae extends q {
           t.question_id,
           { kind: "user_state", action: e }
         );
-        this.applySession(await this.finalizeIfDone(i));
+        this.applySession(await this.finalizeIfDone(i)), await this.refreshAvailability();
       } catch (i) {
         await this.recover(i);
       } finally {
@@ -2007,10 +2009,12 @@ const Ae = class Ae extends q {
             <strong>${this.t("learn.readiness")}</strong>
             ${this.availability.available_now > 0 ? r`<div>${this.availability.available_now} ${this.t("learn.cardsReady")}</div>` : r`
                   <div>${this.t("learn.noCardsReady")}</div>
-                  ${this.availability.next_due_at_utc === null ? l : r`
+                  ${this.availability.next_available_at_utc === null ? l : r`
                     <div>
-                      <strong>${this.t("learn.nextAvailable")}:</strong>
-                      ${this.dueLabel(this.availability.next_due_at_utc)}
+                      <strong>${this.t(
+      this.availability.next_available_reason === "new_quota_reset" ? "learn.quotaReset" : "learn.nextAvailable"
+    )}:</strong>
+                      ${this.dueLabel(this.availability.next_available_at_utc)}
                     </div>
                   `}
                   ${this.availability.forceable_early > 0 ? r`
@@ -2039,15 +2043,20 @@ const Ae = class Ae extends q {
   renderSession() {
     if (this.session === void 0) return l;
     if (this.session.question_count === 0) {
-      const e = this.availability?.next_due_at_utc ?? null, t = (this.availability?.forceable_early ?? 0) > 0;
+      const e = this.availability?.next_available_at_utc ?? null, t = this.availability?.next_available_reason ?? null, i = (this.availability?.forceable_early ?? 0) > 0;
       return r`
         <section class="learn-card">
           <h2>${this.t("learn.pauseTitle")}</h2>
           <p>${this.t("learn.emptyExplain")}</p>
           ${e === null ? l : r`
-            <p><strong>${this.t("learn.nextAvailable")}:</strong> ${this.dueLabel(e)}</p>
+            <p>
+              <strong>${this.t(
+        t === "new_quota_reset" ? "learn.quotaReset" : "learn.nextAvailable"
+      )}:</strong>
+              ${this.dueLabel(e)}
+            </p>
           `}
-          ${t ? r`
+          ${i ? r`
             <p class="muted">
               ${(this.availability?.forceable_new ?? 0) > 0 ? this.t("learn.overrideNewHelp") : this.t("learn.continueEarlyHelp")}
             </p>
@@ -2060,17 +2069,37 @@ const Ae = class Ae extends q {
         </section>
       `;
     }
-    return this.session.current_question === null || this.session.status === "completed" ? r`
+    if (this.session.current_question === null || this.session.status === "completed") {
+      const e = this.availability?.next_available_at_utc ?? null, t = this.availability?.next_available_reason ?? null, i = (this.availability?.forceable_early ?? 0) > 0;
+      return r`
         <section class="learn-card">
           <h2>${this.t("learn.completed")}</h2>
           <p>${this.t("learn.completedBody")}</p>
-          <button class="primary" @click=${() => {
-      this.start();
-    }} ?disabled=${this.loading}>
+          ${e === null ? l : r`
+            <p>
+              <strong>${this.t(
+        t === "new_quota_reset" ? "learn.quotaReset" : "learn.nextAvailable"
+      )}:</strong>
+              ${this.dueLabel(e)}
+            </p>
+          `}
+          ${i ? r`
+            <p class="muted">${this.t("learn.continueEarlyHelp")}</p>
+            <button class="primary" @click=${() => {
+        this.start(!0);
+      }} ?disabled=${this.loading}>
+              ${this.t("learn.continueNow")}
+            </button>
+          ` : l}
+          <button @click=${() => {
+        this.start();
+      }} ?disabled=${this.loading}>
             ${this.t("learn.newSession")}
           </button>
         </section>
-      ` : this.waitingUntil !== void 0 ? this.renderWaiting(this.session.current_question) : Bt(this.session.current_question) ? this.renderIntroduction(this.session.current_question) : this.renderRetrieval(this.session.current_question);
+      `;
+    }
+    return this.waitingUntil !== void 0 ? this.renderWaiting(this.session.current_question) : Bt(this.session.current_question) ? this.renderIntroduction(this.session.current_question) : this.renderRetrieval(this.session.current_question);
   }
   renderWaiting(e) {
     const t = this.waitingUntil;
@@ -2262,7 +2291,7 @@ const Ae = class Ae extends q {
     return ut(e, t);
   }
 };
-Ae.styles = M`
+Ae.styles = C`
     ${ct}
     ${W}
 
@@ -2533,6 +2562,9 @@ const ze = class ze extends q {
   constructor() {
     super(...arguments), this.trackId = "", this.format = "mixed", this.loading = !1, this.errorMessage = "", this.notice = "", this.freeText = "", this.hintUsed = !1, this.questionStartedAt = me(), this.questionId = null;
   }
+  disconnectedCallback() {
+    this.nextDueTimer !== void 0 && globalThis.clearTimeout(this.nextDueTimer), super.disconnectedCallback();
+  }
   updated(e) {
     if (e.has("profile") || e.has("dashboard")) {
       const t = this.tracks();
@@ -2578,7 +2610,14 @@ const ze = class ze extends q {
         this.profile.profile_id,
         this.trackId,
         "quiz"
-      );
+      ), this.nextDueTimer !== void 0 && globalThis.clearTimeout(this.nextDueTimer);
+      const e = this.availability.next_due_at_utc;
+      if (e !== null) {
+        const t = Date.parse(e) - Date.now();
+        t > 0 && t < 2147e6 && (this.nextDueTimer = globalThis.setTimeout(() => {
+          this.nextDueTimer = void 0, this.refreshAvailability();
+        }, t + 250));
+      }
     } catch {
       this.availability = void 0;
     }
@@ -3020,7 +3059,7 @@ const ze = class ze extends q {
     return ut(e);
   }
 };
-ze.styles = M`
+ze.styles = C`
     ${ct}
     ${W}
 
@@ -3316,7 +3355,7 @@ function ie(s, e) {
 function Ei(s) {
   return s === "owner";
 }
-function Mi(s) {
+function Ci(s) {
   return s === "owner" || s === "editor";
 }
 const Pe = class Pe extends q {
@@ -3338,7 +3377,7 @@ const Pe = class Pe extends q {
     return Ei(this.profile?.role);
   }
   canEditTrack() {
-    return Mi(this.profile?.role);
+    return Ci(this.profile?.role);
   }
   async load() {
     if (this.hass !== void 0) {
@@ -4039,7 +4078,7 @@ const Pe = class Pe extends q {
     `;
   }
 };
-Pe.styles = M`
+Pe.styles = C`
     ${W}
     :host, .stack, .grid, .card, .form-grid, .actions, label, input, select, button {
       box-sizing: border-box;
@@ -4214,10 +4253,10 @@ f([
   d()
 ], g.prototype, "notice");
 globalThis.customElements !== void 0 && customElements.get("locklearn-management-view") === void 0 && customElements.define("locklearn-management-view", g);
-var Ci = Object.defineProperty, L = (s, e, t, i) => {
+var Mi = Object.defineProperty, L = (s, e, t, i) => {
   for (var a = void 0, n = s.length - 1, o; n >= 0; n--)
     (o = s[n]) && (a = o(e, t, a) || a);
-  return a && Ci(e, t, a), a;
+  return a && Mi(e, t, a), a;
 };
 function ae(s) {
   if (s === null) return null;
@@ -4472,7 +4511,7 @@ const Ee = class Ee extends q {
     `;
   }
 };
-Ee.styles = M`
+Ee.styles = C`
     ${W}
     :host, .stack, .grid, .card, .actions, button, a { box-sizing: border-box; min-width: 0; max-width: 100%; }
     :host { display: block; }
@@ -4524,15 +4563,15 @@ L([
   d()
 ], A.prototype, "attributionPages");
 globalThis.customElements !== void 0 && customElements.get("locklearn-dataset-view") === void 0 && customElements.define("locklearn-dataset-view", A);
-var Ni = Object.defineProperty, x = (s, e, t, i) => {
+var Ri = Object.defineProperty, x = (s, e, t, i) => {
   for (var a = void 0, n = s.length - 1, o; n >= 0; n--)
     (o = s[n]) && (a = o(e, t, a) || a);
-  return a && Ni(e, t, a), a;
+  return a && Ri(e, t, a), a;
 };
 function ve(s) {
   return s === null ? "—" : `${Math.round(s * 100)}%`;
 }
-function Ri(s, e = 14) {
+function Ni(s, e = 14) {
   if (e <= 0) return [];
   const t = /* @__PURE__ */ new Map();
   for (const i of s) {
@@ -4554,7 +4593,7 @@ function Li(s) {
 function se(s) {
   return s?.role === "owner" || s?.role === "editor";
 }
-const Me = class Me extends q {
+const Ce = class Ce extends q {
   constructor() {
     super(...arguments), this.difficulties = [], this.tracks = [], this.selectedTrackId = "", this.loading = !1, this.errorMessage = "", this.notice = "", this.mnemonicEdits = {}, this.busyCardKey = null, this.loadGeneration = 0;
   }
@@ -4690,7 +4729,7 @@ const Me = class Me extends q {
     `;
   }
   renderStats(e) {
-    const t = e.recent_verified_accuracy, i = e.calibration, a = Ri(e.daily), n = Li(a);
+    const t = e.recent_verified_accuracy, i = e.calibration, a = Ni(e.daily), n = Li(a);
     return r`
       <section class="grid" aria-label=${this.t("stats.verifiedGroup")}>
         <article class="card metric verified">
@@ -4885,7 +4924,7 @@ const Me = class Me extends q {
     return r`<div class="metric"><span>${this.t(e)}</span><strong>${t}</strong></div>`;
   }
 };
-Me.styles = M`
+Ce.styles = C`
     ${W}
     :host, section, article, div, select { box-sizing: border-box; min-width: 0; max-width: 100%; }
     :host { display: block; }
@@ -4924,7 +4963,7 @@ Me.styles = M`
       .toolbar, label, select { width: 100%; }
     }
   `;
-let k = Me;
+let k = Ce;
 x([
   $({ attribute: !1 })
 ], k.prototype, "hass");
@@ -4994,10 +5033,10 @@ function it(s, e) {
 function Hi(s) {
   if (s === void 0) return { kind: "define" };
   const e = typeof s.locklearnFrontendProtocol == "number" ? s.locklearnFrontendProtocol : null;
-  return e === R ? { kind: "reuse" } : {
+  return e === N ? { kind: "reuse" } : {
     kind: "reload",
     existingProtocol: e,
-    frontendProtocol: R
+    frontendProtocol: N
   };
 }
 function Oi(s, e, t) {
@@ -5146,7 +5185,7 @@ const at = "locklearn-hard-reload-required", de = class de extends q {
               ${this.t("state.protocol.reload")}
             </button>
             <div class="meta">
-              frontend protocol ${R} · backend protocol
+              frontend protocol ${N} · backend protocol
               ${this.bootstrapState?.frontend_protocol ?? "?"} · backend
               ${this.bootstrapState?.backend_version ?? "?"}
             </div>
@@ -5345,7 +5384,7 @@ const at = "locklearn-hard-reload-required", de = class de extends q {
     return t === void 0 ? this.t("nav.home") : this.t(t.labelKey);
   }
 };
-de.locklearnFrontendProtocol = R, de.styles = M`
+de.locklearnFrontendProtocol = N, de.styles = C`
     ${W}
     :host {
       display: block;
@@ -5628,7 +5667,7 @@ function Bi(s) {
   const a = document.createElement("p");
   a.textContent = "An older LockLearn panel is still loaded in this browser. Perform a full browser reload before continuing.";
   const n = document.createElement("p");
-  n.textContent = `loaded protocol ${s ?? "unknown"} · current protocol ${R}`;
+  n.textContent = `loaded protocol ${s ?? "unknown"} · current protocol ${N}`;
   const o = document.createElement("button");
   o.textContent = "Reload now", o.addEventListener("click", () => globalThis.location?.reload()), t.append(i, a, n, o), e.append(t), document.body.append(e);
 }
