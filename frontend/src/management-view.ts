@@ -793,25 +793,63 @@ export class LockLearnManagementView extends LitElement {
     const forecast = this.forecasts[track.track_id];
     return html`
       <div class="stack">
-        <form class="form-grid" @submit=${(event: SubmitEvent) => {
+        <p class="muted">${this.t("manage.planHelp")}</p>
+        <form class="stack" @submit=${(event: SubmitEvent) => {
           event.preventDefault();
           if (this.hass === undefined) return;
           const plan = this.planFrom(event.currentTarget as HTMLFormElement);
           this.loading = true;
+          this.errorMessage = "";
           void previewTrackPlan(this.hass, track.track_id, plan)
             .then((nextForecast) => {
               this.forecasts = { ...this.forecasts, [track.track_id]: nextForecast };
               this.forecastPlans = { ...this.forecastPlans, [track.track_id]: plan };
             })
-            .catch((error: unknown) => { this.errorMessage = errorMessage(error); })
+            .catch((error: unknown) => {
+              this.forecasts = { ...this.forecasts, [track.track_id]: undefined };
+              this.errorMessage = `${this.t("manage.previewFailed")} ${errorMessage(error)}`;
+            })
             .finally(() => { this.loading = false; });
         }}>
-          <label>${this.t("manage.newPerDay")}<input name="new" type="number" min="0" .value=${String(raw.max_new_per_day_cards ?? profileNew)} /></label>
-          <label>${this.t("manage.reviewsPerDay")}<input name="reviews" type="number" min="1" .value=${String(raw.max_reviews_per_day_cards ?? 50)} /></label>
-          <label>${this.t("manage.notificationTeasers")}<input name="teasers" type="number" min="0" .value=${String(raw.max_notification_new_teasers ?? Math.min(2, profileNew))} /></label>
-          <label>${this.t("manage.targetDate")}<input name="date" type="date" .value=${String(raw.target_date ?? "")} /></label>
-          <label>${this.t("manage.coverage")}<input name="coverage" type="number" min=".01" max="1" step=".01" .value=${String(raw.target_coverage ?? 1)} /></label>
-          <label>${this.t("manage.retention")}<input name="retention" type="number" min=".01" max="1" step=".01" .value=${String(raw.target_retention ?? .9)} /></label>
+          <strong>${this.t("manage.basicPlan")}</strong>
+          <div class="form-grid">
+            <label>
+              ${this.t("manage.newPerDay")}
+              <input name="new" type="number" min="0" .value=${String(raw.max_new_per_day_cards ?? profileNew)} />
+              <span class="meta">${this.t("manage.newPerDayHelp")}</span>
+            </label>
+            <label>
+              ${this.t("manage.reviewsPerDay")}
+              <input name="reviews" type="number" min="1" .value=${String(raw.max_reviews_per_day_cards ?? 50)} />
+              <span class="meta">${this.t("manage.reviewsPerDayHelp")}</span>
+            </label>
+            <label>
+              ${this.t("manage.targetDate")}
+              <input name="date" type="date" .value=${String(raw.target_date ?? "")} />
+              <span class="meta">${this.t("manage.targetDateHelp")}</span>
+            </label>
+          </div>
+          <details class="section-panel">
+            <summary>${this.t("manage.advancedPlan")}</summary>
+            <div class="section-body form-grid">
+              <label>
+                ${this.t("manage.notificationTeasers")}
+                <input name="teasers" type="number" min="0" .value=${String(raw.max_notification_new_teasers ?? Math.min(2, profileNew))} />
+                <span class="meta">${this.t("manage.notificationTeasersHelp")}</span>
+              </label>
+              <label>
+                ${this.t("manage.coverage")}
+                <input name="coverage" type="number" min=".01" max="1" step=".01" .value=${String(raw.target_coverage ?? 1)} />
+                <span class="meta">${this.t("manage.coverageHelp")}</span>
+              </label>
+              <label>
+                ${this.t("manage.retention")}
+                <input name="retention" type="number" min=".01" max="1" step=".01" .value=${String(raw.target_retention ?? .9)} />
+                <span class="meta">${this.t("manage.retentionHelp")}</span>
+              </label>
+            </div>
+          </details>
+          <p class="muted">${this.t("manage.planPreviewHelp")}</p>
           <div class="actions"><button class="primary" type="submit">${this.t("manage.preview")}</button></div>
         </form>
         ${forecast === undefined ? nothing : this.renderForecast(track, forecast)}
@@ -819,13 +857,40 @@ export class LockLearnManagementView extends LitElement {
     `;
   }
 
+  private forecastWarning(item: string): string {
+    if (item === "target_date_requires_more_new_cards_than_daily_quota") {
+      return this.t("manage.warningTargetDate");
+    }
+    if (item === "review_load_exceeds_quota_in_3_weeks") {
+      return this.t("manage.warningReviews3Weeks");
+    }
+    if (item === "review_load_exceeds_quota_in_3_months") {
+      return this.t("manage.warningReviews3Months");
+    }
+    if (item === "current_due_backlog_exceeds_review_quota") {
+      return this.t("manage.warningDueBacklog");
+    }
+    return item;
+  }
+
   private renderForecast(track: TrackRecord, forecast: LoadForecast) {
+    const invalidZeroSnapshot = forecast.selected_cards === 0;
     return html`
-      <div class=${forecast.warnings.length > 0 ? "warning" : "notice"}>
+      <div class=${forecast.warnings.length > 0 || invalidZeroSnapshot ? "warning" : "notice"}>
         <strong>${this.t("manage.forecast")}</strong>
+        ${invalidZeroSnapshot ? html`<p>${this.t("manage.forecastZeroWarning")}</p>` : nothing}
+        <h3>${this.t("manage.forecastCurrent")}</h3>
         <dl>
+          <dt>${this.t("manage.selectedCards")}</dt><dd>${forecast.selected_cards}</dd>
+          <dt>${this.t("manage.introducedCards")}</dt><dd>${forecast.introduced_cards}</dd>
+          <dt>${this.t("manage.targetCards")}</dt><dd>${forecast.target_cards}</dd>
           <dt>${this.t("manage.cardsRemaining")}</dt><dd>${forecast.remaining_target_cards}</dd>
+          <dt>${this.t("manage.dueNow")}</dt><dd>${forecast.due_now}</dd>
           <dt>${this.t("manage.requiredNew")}</dt><dd>${forecast.required_new_per_day}</dd>
+          <dt>${this.t("manage.plannedNew")}</dt><dd>${forecast.planned_new_per_day}</dd>
+        </dl>
+        <h3>${this.t("manage.forecast")}</h3>
+        <dl>
           <dt>${this.t("manage.reviews3Weeks")}</dt><dd>${forecast.reviews_per_day_in_3_weeks}</dd>
           <dt>${this.t("manage.reviews3Months")}</dt><dd>${forecast.reviews_per_day_in_3_months}</dd>
           <dt>${this.t("manage.notifications3Weeks")}</dt><dd>${forecast.notification_deliverable_in_3_weeks}</dd>
@@ -833,8 +898,16 @@ export class LockLearnManagementView extends LitElement {
           <dt>${this.t("manage.sessionLoad3Weeks")}</dt><dd>${forecast.active_session_cards_in_3_weeks}</dd>
           <dt>${this.t("manage.sessionLoad3Months")}</dt><dd>${forecast.active_session_cards_in_3_months}</dd>
         </dl>
-        ${forecast.warnings.length === 0 ? nothing : html`<ul>${forecast.warnings.map((item) => html`<li>${item}</li>`)}</ul>`}
-        <div class="actions"><button class="primary" @click=${() => this.applyPlan(track)}>${this.t("manage.applyPlan")}</button></div>
+        <details class="section-panel">
+          <summary>${this.t("manage.forecastMethod")}</summary>
+          <div class="section-body"><p class="muted">${this.t("manage.forecastMethodHelp")}</p></div>
+        </details>
+        ${forecast.warnings.length === 0 ? nothing : html`<ul>${forecast.warnings.map((item) => html`<li>${this.forecastWarning(item)}</li>`)}</ul>`}
+        <div class="actions">
+          <button class="primary" @click=${() => this.applyPlan(track)} ?disabled=${invalidZeroSnapshot}>
+            ${this.t("manage.applyPlan")}
+          </button>
+        </div>
       </div>
     `;
   }
