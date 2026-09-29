@@ -348,6 +348,7 @@ export class LockLearnStatsView extends LitElement {
 
       <article class="card">
         <h2>${this.t("stats.states")}</h2>
+        <p class="muted">${this.t("stats.statesHelp")}</p>
         <div class="grid">
           ${this.stateMetric("stats.stateNew", stats.states.new)}
           ${this.stateMetric("stats.stateLearning", stats.states.learning)}
