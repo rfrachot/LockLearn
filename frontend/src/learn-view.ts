@@ -668,16 +668,18 @@ export class LockLearnLearnView extends LitElement {
               ? html`<div>${this.availability.available_now} ${this.t("learn.cardsReady")}</div>`
               : html`
                   <div>${this.t("learn.noCardsReady")}</div>
-                  ${this.availability.next_available_at_utc === null ? nothing : html`
-                    <div>
-                      <strong>${this.t(
-                        this.availability.next_available_reason === "new_quota_reset"
-                          ? "learn.quotaReset"
-                          : "learn.nextAvailable",
-                      )}:</strong>
-                      ${this.dueLabel(this.availability.next_available_at_utc)}
-                    </div>
-                  `}
+                  ${this.availability.next_available_at_utc === null
+                    ? html`<div class="muted">${this.t("learn.noExactTime")}</div>`
+                    : html`
+                        <div>
+                          <strong>${this.t(
+                            this.availability.next_available_reason === "new_quota_reset"
+                              ? "learn.quotaReset"
+                              : "learn.nextAvailable",
+                          )}:</strong>
+                          ${this.dueLabel(this.availability.next_available_at_utc)}
+                        </div>
+                      `}
                   ${this.availability.forceable_early > 0 ? html`
                     <p class="muted">
                       ${this.availability.forceable_new > 0
@@ -735,14 +737,16 @@ export class LockLearnLearnView extends LitElement {
             <dt>${this.t("learn.unstartedCards")}</dt><dd>${this.availability?.new_cards ?? 0}</dd>
             <dt>${this.t("learn.newQuotaRemaining")}</dt><dd>${this.availability?.remaining_new_quota ?? 0}</dd>
           </dl>
-          ${nextAvailable === null ? nothing : html`
-            <p>
-              <strong>${this.t(
-                nextReason === "new_quota_reset" ? "learn.quotaReset" : "learn.nextAvailable",
-              )}:</strong>
-              ${this.dueLabel(nextAvailable)}
-            </p>
-          `}
+          ${nextAvailable === null
+            ? html`<p class="muted">${this.t("learn.noExactTime")}</p>`
+            : html`
+                <p>
+                  <strong>${this.t(
+                    nextReason === "new_quota_reset" ? "learn.quotaReset" : "learn.nextAvailable",
+                  )}:</strong>
+                  ${this.dueLabel(nextAvailable)}
+                </p>
+              `}
           ${canContinue ? html`
             <p class="muted">
               ${(this.availability?.forceable_new ?? 0) > 0
