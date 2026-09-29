@@ -2,9 +2,20 @@
 
 ## Current state
 
-Field-test beta.4 qualification completed on `release/1.0.0-beta.4`.
+Beta.4 UX follow-up implemented on `fix/beta4-ux-readiness`, based on
+`release/1.0.0-beta.4` at `e9a47cd45270d0fc90a3bd6879116012478e74f9`.
 
-The committed frontend bundle was regenerated from source and pushed in:
+The follow-up keeps one contextual action visible after a Learn/Quiz session
+is opened, shows concrete Learn readiness counts before starting, and shows
+Quiz started/ready counts when no review is due. The E2E readiness fixture now
+includes the complete availability timing contract. The existing planning
+snapshot fix remains in place and zero-card forecasts are rejected by the
+backend rather than displayed as a useful estimate.
+
+The follow-up bundle was regenerated from source. Its current local SHA-256 is
+`2c37e0818214e51a8ed0a666ed40c9710dcdb5b790f2e40f59ee794ff58d70bb`.
+
+The previously committed frontend bundle was regenerated from source and pushed in:
 
 - `8a89677c510c231ba3f889ce587dd31c0f90d372` —
   `build(beta4): regenerate field-feedback frontend bundle`;
@@ -23,6 +34,9 @@ Local verification passed:
 - full backend suite: 506 passed, one non-blocking duplicate-ZIP-name warning;
 - Ruff format/lint, mypy, generated docs, resource and schema contracts;
 - frontend lint, typecheck, tests, no-polling, bundle budget and E2E: 7 passed.
+- follow-up frontend source/tests/build and backend full checks: backend 506
+  passed; frontend 57 passed; E2E 7 passed; Ruff, mypy, resource validation,
+  no-polling and bundle budget passed.
 
 Real HA 2026.7.4 qualification:
 
@@ -49,5 +63,12 @@ Observed real Track readiness:
 
 The source/test contract covers persisted Track readiness copy, scheduled
 learning steps, local new-card quota reset, availability/start parity, safe
-early learning, and non-bypassable failed/relearning cooldowns. No deployment
-or release action remains for this beta.4 field-test gate.
+early learning, and non-bypassable failed/relearning cooldowns.
+
+The real `locklearn/tracks/plan_preview` call was not repeatable from this
+workspace because `.env` is only the empty template and no `LOCKLEARN_HA_*`
+environment variables are available. No real Profile or Track was created,
+changed or deleted. Next action is to run the read-only preview against the
+existing qualification Track once the existing HA connection environment is
+available, capture all forecast fields, then qualify/deploy the regenerated
+bundle if the values are non-zero and coherent.

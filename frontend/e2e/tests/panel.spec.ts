@@ -52,6 +52,9 @@ test("Learn and Quiz explain readiness before a session starts", async ({ page }
   await expect(
     page.getByText("No card is due within the normal learning plan right now.", { exact: true }),
   ).toBeVisible();
+  await expect(page.getByText("Cards already started", { exact: true })).toBeVisible();
+  await expect(page.getByText("Cards not started yet", { exact: true })).toBeVisible();
+  await expect(page.getByText("New cards still allowed today", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue now" })).toBeVisible();
 
   await page.getByRole("button", { name: "Quiz", exact: true }).click();
@@ -84,7 +87,7 @@ test("multi-Track cards keep advanced settings and plans attached to each Track"
   const frenchCard = page
     .getByRole("heading", { name: "French Core" })
     .locator("xpath=ancestor::article[1]");
-  await expect(frenchCard.getByText("New cards / day", { exact: true })).toBeVisible();
+  await expect(frenchCard.getByRole("spinbutton", { name: /New cards \/ day/ })).toBeVisible();
 });
 
 test("Companion targets render as separate readable cards", async ({ page }) => {
