@@ -431,7 +431,7 @@ export class LockLearnLearnView extends LitElement {
         this.hass,
         this.profile.profile_id,
         this.trackId,
-        20,
+        undefined,
         allowEarlyLearning,
       );
       this.applySession(session);
