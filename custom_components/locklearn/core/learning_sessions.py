@@ -64,6 +64,9 @@ class LearningSessionService:
             isinstance(latency, bool) or not isinstance(latency, int) or latency < 0
         ):
             raise LearningSessionError("presentation_to_answer_ms must be a non-negative integer")
+        force_early = answer.get("force_early", False)
+        if not isinstance(force_early, bool):
+            raise LearningSessionError("force_early must be boolean")
 
         session = await self._sessions.async_get(session_id)
         if session is None:
@@ -71,7 +74,7 @@ class LearningSessionService:
         current = session.get("current_question")
         if not isinstance(current, dict) or current.get("question_id") != question_id:
             raise LearningSessionError("question is no longer current")
-        self._require_question_available(current)
+        self._require_question_available(current, allow_early=force_early)
         profile_id = str(session["profile_id"])
         track_raw = session.get("track_id")
         if not isinstance(track_raw, str) or not track_raw:
@@ -142,8 +145,13 @@ class LearningSessionService:
         self._sessions.publish(session_id, state)
         return state
 
-    def _require_question_available(self, current: dict[str, Any]) -> None:
-        """Reject a scheduled learning-step retrieval before its due instant."""
+    def _require_question_available(
+        self,
+        current: dict[str, Any],
+        *,
+        allow_early: bool = False,
+    ) -> None:
+        """Reject premature retrieval unless it is a safe post-introduction override."""
         payload = current.get("payload")
         if not isinstance(payload, dict):
             return
@@ -158,7 +166,16 @@ class LearningSessionService:
             raise LearningSessionError("available_at_utc must be an ISO timestamp") from err
         if available_at.tzinfo is None:
             raise LearningSessionError("available_at_utc must be timezone-aware")
-        if self._clock.now() < available_at:
+        if self._clock.now() >= available_at:
+            return
+        selection = payload.get("selection")
+        safe_early = (
+            allow_early
+            and isinstance(selection, dict)
+            and selection.get("progress_state") == "learning"
+            and selection.get("reason") == "learning_step"
+        )
+        if not safe_early:
             raise LearningSessionError("learning step is not due yet")
 
     @staticmethod
