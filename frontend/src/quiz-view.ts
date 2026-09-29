@@ -58,6 +58,7 @@ export class LockLearnQuizView extends LitElement {
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
+  private nextDueTimer?: number;
 
   static styles = css`
     ${contentRendererStyles}
@@ -258,6 +259,11 @@ export class LockLearnQuizView extends LitElement {
     }
   `;
 
+  disconnectedCallback(): void {
+    if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
+    super.disconnectedCallback();
+  }
+
   protected updated(changed: Map<PropertyKey, unknown>): void {
     if (changed.has("profile") || changed.has("dashboard")) {
       const available = this.tracks();
@@ -346,6 +352,17 @@ export class LockLearnQuizView extends LitElement {
         this.trackId,
         "quiz",
       );
+      if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
+      const nextDue = this.availability.next_due_at_utc;
+      if (nextDue !== null) {
+        const delay = Date.parse(nextDue) - Date.now();
+        if (delay > 0 && delay < 2_147_000_000) {
+          this.nextDueTimer = globalThis.setTimeout(() => {
+            this.nextDueTimer = undefined;
+            void this.refreshAvailability();
+          }, delay + 250);
+        }
+      }
     } catch {
       this.availability = undefined;
     }
