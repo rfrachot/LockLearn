@@ -556,6 +556,101 @@ async def test_availability_applies_same_learning_item_dedupe_as_session_start()
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("session_length", "session_type", "expected"),
+    (
+        (10, "learn", 10),
+        (20, "quiz", 20),
+        (30, "quiz", 30),
+    ),
+)
+async def test_availability_matches_prepare_for_profile_session_length(
+    session_length: int,
+    session_type: str,
+    expected: int,
+) -> None:
+    due = "2026-09-23T10:00:00+00:00"
+    candidates = tuple(
+        _candidate(index, state="review", content_type="vocabulary", due=due)
+        for index in range(1, 36)
+    )
+    service = _service(
+        candidates,
+        profiles=_Profiles(max_new=40, session_length=session_length),
+    )
+
+    availability = await service.async_availability(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type=session_type,
+    )
+    selected = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type=session_type,
+        settings={},
+    )
+
+    assert availability["available_now"] == expected
+    assert len(selected) == expected
+
+
+@pytest.mark.asyncio
+async def test_availability_matches_prepare_for_explicit_requested_cards() -> None:
+    due = "2026-09-23T10:00:00+00:00"
+    candidates = tuple(
+        _candidate(index, state="review", content_type="vocabulary", due=due)
+        for index in range(1, 16)
+    )
+    service = _service(candidates)
+
+    settings = {"requested_cards": 7}
+    availability = await service.async_availability(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="quiz",
+        settings=settings,
+    )
+    selected = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="quiz",
+        settings=settings,
+    )
+
+    assert availability["available_now"] == 7
+    assert len(selected) == 7
+
+
+@pytest.mark.asyncio
+async def test_availability_applies_same_content_type_filter_as_prepare() -> None:
+    due = "2026-09-23T10:00:00+00:00"
+    candidates = (
+        _candidate(1, state="review", content_type="vocabulary", due=due),
+        _candidate(2, state="review", content_type="grammar", due=due),
+        _candidate(3, state="review", content_type="vocabulary", due=due),
+    )
+    service = _service(candidates)
+
+    settings = {"requested_cards": 3, "content_types": ["grammar"]}
+    availability = await service.async_availability(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="quiz",
+        settings=settings,
+    )
+    selected = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="quiz",
+        settings=settings,
+    )
+
+    assert availability["available_now"] == 1
+    assert [item.card_key for item in selected] == ["card-2"]
+
+
+@pytest.mark.asyncio
 async def test_availability_reports_next_due_and_forceable_learning() -> None:
     service = _service(
         (
