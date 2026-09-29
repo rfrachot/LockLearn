@@ -340,9 +340,7 @@ class SessionSelectionService:
         )
         available_new = min(eligible_new, remaining_new_quota)
         forceable_new = (
-            max(0, eligible_new - available_new)
-            if normalized_type in _NEW_SESSION_TYPES
-            else 0
+            max(0, eligible_new - available_new) if normalized_type in _NEW_SESSION_TYPES else 0
         )
 
         return {
