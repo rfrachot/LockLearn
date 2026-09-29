@@ -2,54 +2,49 @@
 
 ## Current state
 
-Release-fix branch: `release/1.0.0-beta.2`.
+Release UX branch: `release/1.0.0-beta.3`.
 
-P6.1 through P6.11 and the P6 exit gate remain PASS on the qualified feature
-baseline `3f980a4fba936c2d8124a47dec4e61e3554f5a2f`.
+P6.1 through P6.11 and the P6 exit gate remain PASS on the qualified V1 feature
+baseline. `v1.0.0-beta.2` is published and validated on the real HA test VM,
+but real-user review identified pre-stable usability issues that should be
+resolved before `v1.0.0`.
 
-`v1.0.0-beta.1` is published and immutable. Real Home Assistant field
-validation proved HACS installation, Config Flow, panel, starter, Learn/Quiz,
-dashboard/stats, FR/EN, reload/restart, persistence and backups, but returned:
+Beta.3 starts from the immutable beta.2 tag target
+`48f45839d278f87b82f45a6128239f36aa536715`.
 
-```text
-BETA FIELD VALIDATION BLOCKED
-```
+## Beta.3 field-UX scope
 
-The blocker was not notification delivery itself: no LockLearn notification
-target could be created through any public/user-facing path.
+- Track cards separate essential controls, a collapsed advanced-settings
+  section, learning-plan controls and an explicit danger zone.
+- Track deletion is labelled unambiguously and requires confirmation. Removing a
+  shared Profile member also requires confirmation; existing Profile archive/
+  permanent-delete protections remain.
+- Language tags remain canonical internally, but UI labels are human-readable;
+  `ja-Latn` renders as Japanese romaji.
+- Profile Sharing explains viewer/editor/owner meaning.
+- Configured Companion targets have an owner-only **Test notification** action.
+- `locklearn/session/availability` reports available-now counts and next due
+  time without mutating SRS state.
+- Learn explains cooldowns and may explicitly continue safe future `learning`
+  steps after introduction/success. Failed or relearning cards cannot be pulled
+  forward.
+- Quiz explains that it tests introduced cards only when due, shows readiness
+  before start and displays the next scheduled review when none is ready.
 
-## Beta.2 fix
+The early-Learn override is deliberately narrow and is covered at both selection
+and LearningSession boundaries. It must never bypass a cooldown after failure.
 
-Beta.2 closes only that V1 configuration gap:
+New WebSocket commands are classified under the existing Profile ACL boundary:
+`locklearn/session/availability` (Profile READ) and
+`locklearn/targets/test` (owner/EDIT_PROFILE).
 
-- owner-only `locklearn/targets/discover` enumerates real enabled Companion
-  `mobile_app` Device Registry candidates;
-- owner-only `locklearn/targets/create` persists stable
-  `device_registry_id` identity without optimistic capability assumptions;
-- owner-only `locklearn/targets/update` edits target privacy/share/budget
-  settings without changing stable identity;
-- existing `locklearn/targets/list` remains usable by Track editors and now
-  returns the complete authorized target configuration needed by Settings;
-- Settings exposes Companion target add/edit controls;
-- target capabilities remain evidence-driven; unknown is never upgraded to
-  supported from platform name alone;
-- Pack inventory exposes valid prompt-language → answer-language directions,
-  and Track creation uses those directions instead of free-form language codes;
-- WebSocket object errors are rendered as their actionable message instead of
-  `[object Object]`;
-- P6.8 command classification/negative ACL and dedicated target-management
-  regressions cover the new path.
-
-No state schema migration and no new pedagogical feature are part of beta.2.
+No stable tag/release and no merge are authorized by this handoff.
 
 ## Next gate
 
-Run the complete release CI on the exact beta.2 commit. Only if green:
-
-1. tag immutable `v1.0.0-beta.2`;
-2. publish GitHub Release as **Pre-release**;
-3. upgrade the existing HA test VM from beta.1 through HACS;
-4. configure a real Companion target through LockLearn;
-5. qualify Learning + Quiz notifications and available fallback/Repair paths;
-6. do not create stable `v1.0.0` and do not merge PR #3 until explicit
-   field-validation acceptance.
+1. build the exact frontend bundle for beta.3;
+2. run the complete release CI matrix on the immutable candidate SHA;
+3. independently review all new UX and safety contracts;
+4. only after green CI, publish immutable `v1.0.0-beta.3` as Pre-release;
+5. upgrade the real HA VM from beta.2 and re-run the field-UX checklist;
+6. stable `v1.0.0` remains forbidden until explicit beta.3 acceptance.
