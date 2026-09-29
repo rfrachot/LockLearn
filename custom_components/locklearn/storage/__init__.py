@@ -12,10 +12,19 @@ from .content import (
     GenerationMetadata,
     initialize_content_database,
 )
-from .database import SQLiteStorage, StoragePaths
+from .database import (
+    SQLiteStorage,
+    StateIntegrityError,
+    StateMigrationError,
+    StoragePaths,
+    UnsupportedStateSchemaError,
+)
 from .repositories import (
     CardReference,
     ContentReferenceError,
+    NotificationInteractionConsumeResult,
+    NotificationInteractionRecord,
+    NotificationTargetRecord,
     ProfileMemberRecord,
     ProfileRecord,
     ReviewEventRecord,
@@ -36,13 +45,19 @@ __all__ = [
     "ContentReferenceError",
     "ContentValidationError",
     "GenerationMetadata",
+    "NotificationInteractionConsumeResult",
+    "NotificationInteractionRecord",
+    "NotificationTargetRecord",
     "ProfileMemberRecord",
     "ProfileRecord",
     "ReviewEventRecord",
     "SQLiteStorage",
+    "StateIntegrityError",
+    "StateMigrationError",
     "StateRepositories",
     "StoragePaths",
     "TrackCardRuleRecord",
     "TrackRecord",
+    "UnsupportedStateSchemaError",
     "initialize_content_database",
 ]

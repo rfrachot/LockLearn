@@ -25,9 +25,14 @@ from ..storage import ContentGenerationValidator, SQLiteStorage
 from .manifest import DatasetManifest, FileRole
 from .package import validate_dataset_package
 from .policy import OfficialRegistryPolicy
-from .trust import KeyStatus, KeyUsage, TrustedKey, TrustStore
+from .storage_budget import (
+    ACTIVATION_SAFETY_MARGIN_DEFAULT_BYTES,
+    DATASET_CACHE_WARNING_DEFAULT_BYTES,
+    OFFICIAL_DATASET_ARTIFACT_DEFAULT_MAX_BYTES,
+    activation_required_free_disk,
+)
+from .trust import KeyStatus, KeyUsage, TrustedKey, TrustError, TrustStore
 
-_OFFICIAL_ARTIFACT_DEFAULT_MAX_BYTES = 150 * 1024 * 1024
 _CATALOG_MAX_BYTES = 1024 * 1024
 _STREAM_CHUNK_SIZE = 1024 * 1024
 
@@ -56,7 +61,7 @@ class DatasetDefinition:
     name: str
     catalog_url: str
     artifact_hosts: frozenset[str]
-    artifact_max_bytes: int = _OFFICIAL_ARTIFACT_DEFAULT_MAX_BYTES
+    artifact_max_bytes: int = OFFICIAL_DATASET_ARTIFACT_DEFAULT_MAX_BYTES
 
     def __post_init__(self) -> None:
         if not self.dataset_id or not self.name or not self.catalog_url:
@@ -213,6 +218,8 @@ class DatasetManager:
         freshness_targets: Mapping[str, int] | None = None,
         issue_callback: IssueCallback | None = None,
         issue_clear_callback: IssueClearCallback | None = None,
+        cache_warning_bytes: int = DATASET_CACHE_WARNING_DEFAULT_BYTES,
+        activation_margin_bytes: int = ACTIVATION_SAFETY_MARGIN_DEFAULT_BYTES,
     ) -> None:
         self._storage = storage
         self._transport = transport
@@ -224,8 +231,23 @@ class DatasetManager:
         self._freshness_targets = dict(freshness_targets or {})
         self._issue_callback = issue_callback
         self._issue_clear_callback = issue_clear_callback
+        if (
+            isinstance(cache_warning_bytes, bool)
+            or not isinstance(cache_warning_bytes, int)
+            or cache_warning_bytes <= 0
+        ):
+            raise DatasetManagerError("cache_warning_bytes must be a positive integer")
+        if (
+            isinstance(activation_margin_bytes, bool)
+            or not isinstance(activation_margin_bytes, int)
+            or activation_margin_bytes < 0
+        ):
+            raise DatasetManagerError("activation_margin_bytes must be an integer >= 0")
+        self._cache_warning_bytes = cache_warning_bytes
+        self._activation_margin_bytes = activation_margin_bytes
         self._available: dict[str, tuple[DatasetRelease, ...]] = {}
         self._errors: dict[str, str] = {}
+        self._error_kinds: dict[str, str] = {}
         self._lock = asyncio.Lock()
         self._validator = ContentGenerationValidator()
         self._packages_root = storage.paths.content_root / "packages"
@@ -249,6 +271,7 @@ class DatasetManager:
                 releases = _parse_release_catalog(document, definition)
             except Exception as err:
                 self._errors[definition.dataset_id] = str(err)
+                self._error_kinds[definition.dataset_id] = "discovery"
                 await self._report_issue(
                     f"dataset_discovery_{_issue_suffix(definition.dataset_id)}",
                     "dataset_discovery_failed",
@@ -257,6 +280,8 @@ class DatasetManager:
                 continue
             self._available[definition.dataset_id] = releases
             self._errors.pop(definition.dataset_id, None)
+            if self._error_kinds.get(definition.dataset_id) == "discovery":
+                self._error_kinds.pop(definition.dataset_id, None)
             await self._clear_issue(f"dataset_discovery_{_issue_suffix(definition.dataset_id)}")
         return await self.async_statuses()
 
@@ -321,7 +346,66 @@ class DatasetManager:
                 )
             else:
                 await self._clear_issue(stale_issue_id)
+        await self._async_update_cache_budget_issue()
         return tuple(statuses)
+
+    async def _async_update_cache_budget_issue(self) -> int:
+        """Create or clear the aggregate reconstructible-cache budget warning."""
+        cache_bytes = await asyncio.to_thread(
+            _cached_roots_size,
+            self._packages_root,
+            self._assets_root,
+        )
+        if cache_bytes > self._cache_warning_bytes:
+            await self._report_issue(
+                "dataset_cache_budget",
+                "dataset_cache_budget_warning",
+                {
+                    "cache_bytes": str(cache_bytes),
+                    "budget_bytes": str(self._cache_warning_bytes),
+                },
+            )
+        else:
+            await self._clear_issue("dataset_cache_budget")
+        return cache_bytes
+
+    async def async_diagnostic_status(self) -> dict[str, object]:
+        """Return aggregate dataset status without IDs, URLs, or raw errors."""
+        installed_rows = await self._storage.async_dataset_inventory()
+        installed = {
+            str(item["dataset_id"]): _installed_dataset_from_row(item) for item in installed_rows
+        }
+        now = datetime.now(UTC)
+        update_available_count = 0
+        stale_dataset_count = 0
+        for definition in self.definitions:
+            active = installed.get(definition.dataset_id)
+            latest = _latest_release(self._available.get(definition.dataset_id, ()))
+            if (
+                active is not None
+                and latest is not None
+                and AwesomeVersion(latest.version) > AwesomeVersion(active.version)
+            ) or (active is None and latest is not None):
+                update_available_count += 1
+            if _stale_sources(active, self._freshness_targets, now):
+                stale_dataset_count += 1
+
+        cache_bytes = await asyncio.to_thread(
+            _cached_roots_size,
+            self._packages_root,
+            self._assets_root,
+        )
+        return {
+            "official_dataset_count": len(self._definitions),
+            "installed_dataset_count": len(installed_rows),
+            "update_available_count": update_available_count,
+            "stale_dataset_count": stale_dataset_count,
+            "error_dataset_count": len(self._errors),
+            "error_types": tuple(sorted(set(self._error_kinds.values()))),
+            "cache_bytes": cache_bytes,
+            "cache_warning_bytes": self._cache_warning_bytes,
+            "cache_budget_exceeded": cache_bytes > self._cache_warning_bytes,
+        }
 
     async def async_status(self, dataset_id: str) -> DatasetStatus:
         """Return one official dataset status without performing network I/O."""
@@ -407,17 +491,30 @@ class DatasetManager:
                 )
             except Exception as err:
                 self._errors[dataset_id] = str(err)
-                await self._report_issue(
-                    f"dataset_install_{_issue_suffix(dataset_id)}",
-                    "dataset_install_failed",
-                    {"dataset_id": dataset_id},
-                )
+                if isinstance(err, TrustError):
+                    self._error_kinds[dataset_id] = "signature_invalid"
+                    await self._report_issue(
+                        f"dataset_signature_{_issue_suffix(dataset_id)}",
+                        "dataset_signature_invalid",
+                        {"dataset_id": dataset_id},
+                    )
+                    await self._clear_issue(f"dataset_install_{_issue_suffix(dataset_id)}")
+                else:
+                    self._error_kinds[dataset_id] = "install"
+                    await self._report_issue(
+                        f"dataset_install_{_issue_suffix(dataset_id)}",
+                        "dataset_install_failed",
+                        {"dataset_id": dataset_id},
+                    )
+                    await self._clear_issue(f"dataset_signature_{_issue_suffix(dataset_id)}")
                 raise
             finally:
                 download.unlink(missing_ok=True)
 
             self._errors.pop(dataset_id, None)
+            self._error_kinds.pop(dataset_id, None)
             await self._clear_issue(f"dataset_install_{_issue_suffix(dataset_id)}")
+            await self._clear_issue(f"dataset_signature_{_issue_suffix(dataset_id)}")
             return result
 
     async def async_install_bundled(
@@ -444,14 +541,29 @@ class DatasetManager:
                 )
             except Exception as err:
                 self._errors[bundled.dataset_id] = str(err)
-                await self._report_issue(
-                    f"dataset_install_{_issue_suffix(bundled.dataset_id)}",
-                    "dataset_install_failed",
-                    {"dataset_id": bundled.dataset_id},
-                )
+                if isinstance(err, TrustError):
+                    self._error_kinds[bundled.dataset_id] = "signature_invalid"
+                    await self._report_issue(
+                        f"dataset_signature_{_issue_suffix(bundled.dataset_id)}",
+                        "dataset_signature_invalid",
+                        {"dataset_id": bundled.dataset_id},
+                    )
+                    await self._clear_issue(f"dataset_install_{_issue_suffix(bundled.dataset_id)}")
+                else:
+                    self._error_kinds[bundled.dataset_id] = "install"
+                    await self._report_issue(
+                        f"dataset_install_{_issue_suffix(bundled.dataset_id)}",
+                        "dataset_install_failed",
+                        {"dataset_id": bundled.dataset_id},
+                    )
+                    await self._clear_issue(
+                        f"dataset_signature_{_issue_suffix(bundled.dataset_id)}"
+                    )
                 raise
             self._errors.pop(bundled.dataset_id, None)
+            self._error_kinds.pop(bundled.dataset_id, None)
             await self._clear_issue(f"dataset_install_{_issue_suffix(bundled.dataset_id)}")
+            await self._clear_issue(f"dataset_signature_{_issue_suffix(bundled.dataset_id)}")
             return result
 
     async def _async_install_archive(
@@ -479,10 +591,6 @@ class DatasetManager:
                 dataset_id=dataset_id,
                 version=version,
             )
-            if shutil.disk_usage(self._storage.paths.content_root).free < (
-                validated.manifest.required_free_disk
-            ):
-                raise DatasetInstallError("insufficient free disk for dataset installation")
             await asyncio.to_thread(_extract_dataset_database, archive, extracted)
             package = await asyncio.to_thread(self._validator.validate_package, extracted)
             _validate_package_matches_manifest(package, validated.manifest)
@@ -502,6 +610,22 @@ class DatasetManager:
                         "an installed dataset version cannot change canonical content"
                     )
                 raise DatasetInstallError("dataset version is already installed")
+            packages_for_estimate = await asyncio.to_thread(
+                self._complete_package_set,
+                installed_rows,
+                dataset_id,
+                extracted,
+            )
+            estimated_generated_bytes = sum(path.stat().st_size for path in packages_for_estimate)
+            required_free_disk = max(
+                validated.manifest.required_free_disk,
+                activation_required_free_disk(
+                    estimated_generated_bytes,
+                    margin_bytes=self._activation_margin_bytes,
+                ),
+            )
+            if shutil.disk_usage(self._storage.paths.content_root).free < required_free_disk:
+                raise DatasetInstallError("insufficient free disk for dataset installation")
             await asyncio.to_thread(
                 _store_assets_atomically,
                 archive,
@@ -511,11 +635,10 @@ class DatasetManager:
                 version,
             )
             await asyncio.to_thread(_store_package_atomically, extracted, package_path)
-            packages = await asyncio.to_thread(
-                self._complete_package_set,
-                installed_rows,
-                dataset_id,
-                package_path,
+            packages = tuple(
+                sorted(
+                    package_path if path == extracted else path for path in packages_for_estimate
+                )
             )
             generation_id = f"dataset-update-{uuid.uuid4().hex}"
             await self._storage.async_build_content_generation(
@@ -730,7 +853,7 @@ def load_runtime_dataset_definitions(
                 artifact_max_bytes=_required_int(
                     row,
                     "artifact_max_bytes",
-                    default=_OFFICIAL_ARTIFACT_DEFAULT_MAX_BYTES,
+                    default=OFFICIAL_DATASET_ARTIFACT_DEFAULT_MAX_BYTES,
                 ),
             )
         )
@@ -1048,6 +1171,16 @@ def _sha256_file(path: Path) -> str:
         while chunk := stream.read(_STREAM_CHUNK_SIZE):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _cached_roots_size(packages_root: Path, assets_root: Path) -> int:
+    return sum(
+        path.stat().st_size
+        for root in (packages_root, assets_root)
+        if root.is_dir()
+        for path in root.rglob("*")
+        if path.is_file()
+    )
 
 
 def _cached_dataset_size(

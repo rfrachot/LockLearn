@@ -4,7 +4,227 @@ All notable changes will be documented here.
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## [1.0.0-beta.1] - 2026-09-29
+
+### Fixed
+- Load bundled dataset registries through Home Assistant's executor during
+  runtime setup, avoiding blocking-call warnings on the HA event loop.
+
 ### Added
+- P6.11 final V1 acceptance gate with a fresh-install Japanese Starter public-API
+  smoke, explicit §129 capability/§133 invariant/§135 scenario evidence map and
+  permanent resilience/non-blocker contracts before the 1.0 release.
+- P6.10 release readiness with the V1 runtime candidate, isolated
+  HACS-payload import/resource smoke, a real v0.0.2 state-schema upgrade
+  contract, explicit SemVer/HACS compatibility policy and release-payload gates
+  across the supported Home Assistant CI matrix.
+- P6.9 documentation architecture with complete root reference docs, generated
+  state/content SQLite and WebSocket contracts, CI drift detection, source/
+  licensing detail derived from machine registries and reproducible Playwright
+  documentation screenshot tooling.
+- P6.8 release-gate matrix with explicit negative WebSocket ACL classification,
+  deterministic-clock enforcement, machine-readable JSON Schema validation,
+  frontend source lint, dataset licence/provenance/reproducibility CI gates,
+  verified Home Assistant minimum/current-harness pins and a latest-stable HA
+  compatibility smoke when the upstream pytest harness lags a patch release.
+- P6.7 performance/scale hardening with bounded aggregate runtime timings,
+  a reusable 60,000-card content build/activation gate, a real-schema 1,826-day
+  state growth projection, centralized 150 MiB/500 MiB dataset budgets and a
+  conservative 2x-generation-plus-margin activation free-space policy. Dataset
+  cache over-budget state is a self-clearing warning and no internal metric is
+  automatically exposed as a Home Assistant sensor.
+- P6.6 security hardening with pre-signing rich-text canonicalization, build-time
+  SVG sanitization, strict parameterized Pack content filters, private/static
+  asset boundary regressions and a consolidated V1 threat model; runtime now
+  rejects raw signed SVGs, and Profile ZIP member reads enforce actual
+  decompressed-size bounds.
+- P6.5 executable Home Assistant entity/privacy contract: stable Track-UUID
+  identity, Profile logical-device grouping, explicit Profile+Track double
+  opt-in, aggregate-only/no-attribute defaults, five-minute debounce, Recorder
+  guidance and conservative state_class semantics while keeping optional
+  private learning sensors out of the 1.0 platform set.
+- P6.4 private versioned Profile export/import with authenticated one-shot
+  transfers, hostile-archive validation and dry-run mapping, plus archive versus
+  strongly confirmed permanent deletion and progress tombstone reconciliation.
+- P6.3 Home Assistant Repairs and privacy-redacted diagnostics covering dataset
+  freshness/signature/install failures, notification-target resolution,
+  migration/integrity failures, scheduler infeasibility and backup-cache
+  anomalies without exporting private learning data or raw exception text;
+  missing, disabled and unroutable notification targets now all raise the
+  target-unavailable Repair.
+- P6.2 backup/recovery lifecycle hardening with coherent atomic state snapshots,
+  fail-closed read-only integrity validation, explicit snapshot recovery,
+  bounded maintenance retention, storage/backup-size visibility, reconstructible
+  cache purge/rebuild, and persisted uninstall data-retention choices.
+- P5.9 permanent frontend performance/compatibility gates: 500 KiB gzip budget,
+  direct-network/permanent-polling audit, Playwright Chromium core-flow smoke,
+  minimum/latest Home Assistant compatibility, and reproducible §80 p95
+  benchmarks for session answer, next-card selection and scheduler generation.
+- P5.8 frontend i18n/accessibility hardening with exact→base→English locale
+  fallback, shared safe CJK/ruby rendering for Learn/Quiz, system Japanese font
+  stack, readable CJK sizing, focus-visible keyboard affordances and long-text
+  containment across panel views.
+- P5.7 Stats & difficulties UI backed by the existing private P3.13/P3.11 read
+  models, with due/SRS state, trusted verified accuracy and retention,
+  metacognitive calibration, leeches, confusions, recent daily activity and an
+  explicitly secondary time-decaying mastery estimate. Exposure counts remain
+  separate from verified retrieval evidence.
+- P5.6 Sources & Licences product UI with installed/available dataset status,
+  source freshness and disk-cache visibility, changelog links, persisted
+  provenance/attribution details, licence facts and HA-admin-only refresh/install
+  actions backed by the existing DatasetManager trust pipeline.
+- P5.6 realistic-content qualification recipe and local harness using the
+  existing streaming JMdict adapter, signed package pipeline, generation
+  activation/rollback path and measured hot-query scale checks.
+- P5.2 ACL-protected Home dashboard aggregation for per-Track due counts,
+  recent verified retention/accuracy, latest session summary and next notification.
+- Profile switcher grouped into owned and shared Profiles using only
+  backend-authorized profile discovery, with typed frontend dashboard loading.
+- P5.2 ACL-protected Home dashboard aggregation for per-Track due counts,
+  recent verified retention/accuracy, latest session summary and next notification.
+- Profile switcher grouped into owned and shared Profiles using only
+  backend-authorized profile discovery, with typed frontend dashboard loading.
+- P5.1 versioned frontend bootstrap handshake, dependency-free panel routing,
+  permission-aware navigation visibility and explicit stale-bundle/full-reload UX.
+- Lit/Vite shell modules and frontend tests for protocol mismatch, paginated
+  Profile bootstrap, routing, navigation visibility and custom-element reuse.
+- Panel asset cache-busting by integration version plus committed bundle hash,
+  with CI verification that the Vite output matches the bundled HACS artifact.
+- P4.9 three importable Home Assistant automation blueprints for correct/wrong
+  light feedback, daily-goal scene reward and repeated-failure encouragement with
+  optional audited unattended Track pause.
+- Home Assistant Blueprint-schema validation plus stable event/service and
+  privacy-contract tests for shipped blueprint assets.
+- P4.8 native Home Assistant services for session start, immediate scheduler
+  request, snooze and Track pause/resume with Profile ACL and audited unattended
+  allowlist enforcement.
+- Companion action bridge from P4.6 single-use tokens into canonical P3
+  LearningStateMachine/SignalPolicy/ReviewEvent/Progress transitions.
+- Post-commit privacy-minimal pedagogical events with stable event/interaction
+  identifiers, automation counters, clear-event handling and observation-only
+  bus semantics.
+- P4.8 service metadata, HA action/event documentation and ADR-0043.
+- P4.7 capability-aware learning/quiz notification renderers with same-tag
+  reveal, direct-exposure fallback, bounded mobile quiz and panel handoff.
+- Distinct learning/quiz/relearning channels, private-by-default visibility and
+  explicit Profile labeling on shared devices.
+- Stable target delivery through dynamic mobile_app route resolution, plain
+  direct-exposure fallback and persistent target-unavailable Repairs.
+- Private recent-unrecorded-mobile-response warning surface derived only from
+  expired action attempts, plus ADR-0042.
+- P4.6 persistent single-use notification interactions with cryptographically
+  random stage tokens, durable expiry/status and atomic replay-safe consumption.
+- Profile ANSWER ACL validation whenever Companion supplies HA user context,
+  with token-only correlation fallback for qualified context-less action paths.
+- Privacy-minimal audit for consumed, expired, replayed, unknown and forbidden
+  notification actions without persisting bearer tokens in audit payloads.
+- P4.6 notification protocol documentation and ADR-0041; no state schema bump
+  because the reserved V1 interaction table already satisfies the contract.
+- P4.5 send-time CardDefinition selection with explicit relearning/review/
+  difficult/calibration/teaser priority and idempotent slot binding.
+- Default `skip_if_pending`, explicit missed/no-candidate expiry reasons and
+  catch-up-free reconciliation.
+- Target/Profile adaptive notification backoff from expiry/clear streaks with
+  progressive interaction recovery, isolated from SRS state.
+- State schema v5 migration for selected CardDefinition identity and slot expiry
+  reasons, plus ADR-0040.
+- P4.4 send-time Home Assistant `receptive_when` evaluation with bounded,
+  pedagogically neutral slot deferral.
+- Persistent V1 receptivity samples for local weekday/hour, delivered, cleared,
+  answered and delivery-to-action latency without automatic schedule learning.
+- Opt-in HA entity hooks for `pre_sleep_consolidation` and
+  `morning_first_review` routine slots, preserving P4.3 capacity constraints.
+- State schema v4 migration for deferred-slot metadata and receptivity samples,
+  plus ADR-0039.
+- P4.3 deterministic smooth weighted round-robin allocation of Profile slots
+  across active Tracks using Track priority and explicit learning/quiz demand.
+- Stable notification-target persistence primitives plus per-target and shared
+  physical-device daily/hour/gap capacity enforcement.
+- Active-session Track suppression and a three-day persistent-capacity Repair
+  with automatic recovery clearing.
+- Track scheduler demand configuration through the authenticated Track
+  WebSocket CRUD surface and ADR-0038 documenting arbitration boundaries.
+- P4.2 explicit civil-time scheduler mapping for DST spring-forward gaps,
+  fall-back duplicate hours and cross-midnight active windows.
+- Persistent scheduler UTC high-watermark with Config Entry startup/reload,
+  backward/forward clock-jump reconciliation and overdue unsent-slot expiry
+  without catch-up floods.
+- Timezone-change reconciliation that preserves sent/consumed history, cancels
+  only future unsent slots from older config versions and regenerates against
+  the new Profile timezone.
+- ADR-0037 documenting timezone, DST, restart and clock-jump semantics.
+- P4.1 deterministic profile-level scheduler previews and materialized generic
+  notification slots honoring active days/windows, quiet hours, minimum gaps,
+  hourly limits and Profile push budgets.
+- Authoritative `scheduled_slots` behavior: existing materialized rows are never
+  rewritten by later scheduler config changes, and pedagogical content remains a
+  send-time decision.
+- Profile-ACL-protected `locklearn/scheduler/preview`, scheduler documentation
+  and ADR-0036 defining the P4.1/P4.2+ boundary.
+- P3.14 deterministic ~180-day SRS simulation using the production learning,
+  review and leech policy primitives across child/standard/intensive presets.
+- Sustainability detectors for due-queue explosion, starvation, relearning
+  oscillation, over-promotion and unrealistic p95 daily workload, plus an
+  explicit negative-control stress scenario.
+- Executable `scripts/p3_14_srs_simulation.py` quality gate and deterministic
+  backend tests suitable for CI.
+- ADR-0035 documenting simulation assumptions, detector thresholds and the rule
+  that production defaults are tuned only from measured before/after evidence.
+
+- P3.13 live `stats_daily` materialization on committed ReviewEvents with
+  undo-aware per-day repair using the same rebuild primitive.
+- Private `locklearn/stats/get` dashboard backend for due-today, current
+  learning states, verified retention/accuracy, secondary mastery, daily
+  aggregates, frequent confusions and streak state.
+- Card-based metacognitive calibration comparing explicit/self-assessed known
+  declarations with the first later trusted verified retrieval.
+- Due-queue streak semantics with 80% default goal, configurable minimum,
+  one grace day and neutral no-due days reconstructed from historical SRS state.
+- ADR-0034 documenting dashboard honesty, historical timezone and streak rules.
+
+- P3.12 append-only progress undo using pre-state snapshots, compensating
+  ReviewEvents and audited undo targets.
+- Explicit admin progress rebuild, independent stats rebuild and target-policy
+  recompute operations with observable terminal result/divergence reports.
+- Fail-closed policy recompute that excludes undone evidence and refuses to
+  replace Progress when historical event semantics cannot be replayed safely.
+- ADR-0033 documenting undo, historical rebuild and recompute boundaries.
+
+- P3.11 versioned leech detection using the V1 6-of-10 and 8-relapse
+  thresholds over trusted verified retrievals in a 60-day window.
+- Profile-private difficulties/confusion/annotation WebSocket surfaces,
+  targeted `leeches_only` sessions and manual leech reactivation.
+- State schema v3 and explicit v2→v3 migration adding the normative
+  `leech` Progress state.
+- ADR-0032 documenting leech persistence, reduced automatic frequency,
+  derived confusion evidence and mnemonic-first remediation.
+- P3.10 user-owned card states for known-already, indefinite suspension,
+  timed burial and explicit reactivation without fabricating ReviewEvents.
+- Deterministic read-only initial calibration sampling over 20–40 requested
+  new cards, with explicit known-already decisions kept outside SRS evidence.
+- P3.10 WebSocket boundaries for progress user state and calibration with
+  backend MANAGE_PROGRESS ACL enforcement.
+- ADR-0031 documenting user-state/SRS/content-lifecycle separation and the
+  P3.12 rebuild/recompute preservation boundary.
+- P3.9 backend-owned session candidate preparation with due short-step priority,
+  Track content-weight interleaving, profile-local new-card quotas and explainable
+  selection metadata (PASS).
+- Bounded-session final-quarter protection for new cards plus prospective
+  sibling/confusable guards across the prepared sequence.
+- Advisory fatigue detection from the ten most recent trusted verified
+  ReviewEvents, exposing finish/recognition-only/continue without mutating SRS
+  history.
+- ADR-0030 documenting the P3.5 eligibility/P3.9 ranking boundary, read-only
+  selection contract and fatigue evidence policy.
+- P3.8 persistent resumable sessions with stored strategy/settings, prepared
+  question state, immutable answer attempts and active content-generation pinning
+  (PASS, including targeted real-HA qualification through the P3.9 public path).
+- Optimistic session CAS across answer/pause/resume/complete/navigation-undo,
+  winner-only subscriptions and cross-client WebSocket resume under real Profile ACL.
+- ADR-0029 documenting the persistent-session source of truth, CAS token,
+  lifecycle transitions and the separation between navigation undo and P3.12 SRS undo.
 - P3.7 versioned panel free-text grading for exact, any_of and conservative
   script-gated fuzzy_normalized policies, with explicit correct/wrong/unrecognized
   outcomes and normalization-version propagation (PASS).

@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from custom_components.locklearn.const import DB_SCHEMA_VERSION
+from custom_components.locklearn.observability import INTERNAL_METRICS
 from custom_components.locklearn.storage.database import (
     SQLiteStorage,
     StaleSessionError,
@@ -91,7 +93,7 @@ async def test_storage_diagnostic_is_private_and_off_event_loop(storage: SQLiteS
         "integrity_check": ["ok"],
         "journal_mode": "wal",
         "reader_off_event_loop": True,
-        "schema_version": 2,
+        "schema_version": DB_SCHEMA_VERSION,
         "session_answer_count": 0,
         "session_count": 1,
         "writer_initialized": True,
@@ -100,7 +102,21 @@ async def test_storage_diagnostic_is_private_and_off_event_loop(storage: SQLiteS
 
 async def test_session_cas_allows_only_one_client(storage: SQLiteStorage) -> None:
     """Two clients with the same expected version cannot both mutate."""
-    await storage.async_create_session("s1", "p1", "t1")
+    await storage.async_create_session(
+        "s1",
+        "p1",
+        "t1",
+        items=(
+            {
+                "question_id": "q1",
+                "card_key": "card-1",
+                "learning_item_id": "item-1",
+                "prompt_facet_id": "prompt-1",
+                "answer_facet_id": "answer-1",
+                "payload": {},
+            },
+        ),
+    )
     results = await asyncio.gather(
         storage.async_answer_session("s1", 1, "q1", {"choice": "a"}),
         storage.async_answer_session("s1", 1, "q1", {"choice": "b"}),
@@ -163,3 +179,52 @@ async def test_content_merge_and_hot_queries(storage: SQLiteStorage, tmp_path: P
 
     await storage._async_writer(seed)
     assert await storage.async_due_cards("p1", "t1", now, 10) == [card_key]
+
+
+async def test_storage_records_p6_7_internal_timings(
+    storage: SQLiteStorage,
+    tmp_path: Path,
+) -> None:
+    """Writer, answer, build and activation paths emit aggregate timings."""
+    INTERNAL_METRICS.clear()
+    await storage.async_create_session(
+        "p6-7-session",
+        "p6-7-profile",
+        "p6-7-track",
+        items=(
+            {
+                "question_id": "p6-7-question",
+                "card_key": "p6-7-card",
+                "learning_item_id": "p6-7-item",
+                "prompt_facet_id": "p6-7-prompt",
+                "answer_facet_id": "p6-7-answer",
+                "payload": {},
+            },
+        ),
+    )
+    await storage.async_answer_session(
+        "p6-7-session",
+        1,
+        "p6-7-question",
+        {"choice": "known"},
+    )
+    package = create_package(tmp_path / "p6-7-package.db", "p6-7")
+    candidate = storage.paths.content_staging_dir / "p6-7.next.db"
+    await storage.async_build_content_generation(
+        (package,),
+        candidate,
+        generation_id="p6-7-metrics",
+    )
+    await storage.async_activate_content_generation(candidate)
+
+    metrics = INTERNAL_METRICS.snapshot()
+    for name in (
+        "storage.writer_queue_wait_ms",
+        "session.answer_ms",
+        "content.build_ms",
+        "content.activation_ms",
+    ):
+        count = metrics[name]["count"]
+        assert isinstance(count, int)
+        assert count >= 1
+        assert metrics[name]["p95_ms"] is not None

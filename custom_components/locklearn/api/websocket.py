@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 import voluptuous as vol
@@ -9,16 +10,38 @@ from homeassistant.components import websocket_api
 from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.core import HomeAssistant
 
-from ..const import CONF_CREATE_PERSONAL_PROFILE, DATA_RUNTIME, DOMAIN, FRONTEND_PROTOCOL_VERSION
+from ..const import (
+    CONF_CREATE_PERSONAL_PROFILE,
+    DATA_RUNTIME,
+    DOMAIN,
+    FRONTEND_PROTOCOL_VERSION,
+    INTEGRATION_VERSION,
+    PANEL_URL_PATH,
+)
 from ..core.acl import LastOwnerError, ProfilePermission, ProfileRole
 from ..core.content import GradingOutcome, GradingPolicyKind
 from ..core.content_reports import ContentReportError
+from ..core.dashboard import DashboardServiceError
+from ..core.difficulties import DifficultyServiceError
 from ..core.grading import FreeTextGradingResult
+from ..core.integrity import IntegrityServiceError
+from ..core.learning_sessions import LearningSessionError
+from ..core.operations import OperationContext
+from ..core.planning import LearningPlan, LearningPlanValidationError
+from ..core.presentation import PresentationError
 from ..core.profiles import ProfileValidationError
+from ..core.progress_state import ProgressUserStateError
+from ..core.quiz_sessions import QuizSessionError
+from ..core.scheduler import SchedulerValidationError
+from ..core.session_selection import SessionSelectionError
+from ..core.sessions import SessionQuestion, SessionValidationError
+from ..core.stats import StatsServiceError
 from ..core.tracks import TrackValidationError
+from ..datasets.manager import DatasetManagerError, DatasetStatus
+from ..profile_transfer import ProfileTransferError
 from ..runtime import LockLearnRuntime
 from ..storage.database import SessionNotFoundError, StaleSessionError
-from ..storage.repositories import CardReference, ContentReferenceError
+from ..storage.repositories import CardReference, ContentReferenceError, StateRepositoryError
 
 ERR_FORBIDDEN = "locklearn/forbidden"
 ERR_NOT_FOUND = "locklearn/not_found"
@@ -47,9 +70,80 @@ def _require_runtime(
     return runtime
 
 
-def _probe_profile_id(connection: ActiveConnection) -> str:
-    """Use an isolated P0 profile namespace until P2 supplies real ACL data."""
-    return f"p0-probe:{connection.user.id}"
+def _require_admin(connection: ActiveConnection, message_id: int) -> bool:
+    """Require Home Assistant administrator privileges for global dataset mutations."""
+    if connection.user.is_admin:
+        return True
+    connection.send_error(message_id, ERR_FORBIDDEN, "Home Assistant administrator required")
+    return False
+
+
+def _dataset_status_payload(
+    status: DatasetStatus,
+    inventory: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Serialize one global dataset status without exposing private learning state."""
+    installed = status.installed
+    latest = status.latest
+    details = inventory.get(status.definition.dataset_id, {})
+    return {
+        "dataset_id": status.definition.dataset_id,
+        "name": status.definition.name,
+        "state": status.state,
+        "installed_version": None if installed is None else installed.version,
+        "available_version": None if latest is None else latest.version,
+        "update_available": status.update_available,
+        "source_age_days": status.source_age_days,
+        "stale_sources": list(status.stale_sources),
+        "cache_bytes": status.cache_bytes,
+        "error": status.error,
+        "changelog": None if latest is None else latest.changelog,
+        "release_url": None if latest is None else latest.release_url,
+        "artifact_size": None if latest is None else latest.artifact_size,
+        "built_at_utc": None if installed is None else installed.built_at_utc,
+        "dataset_version_id": None if installed is None else installed.dataset_version_id,
+        "canonical_content_hash": (None if installed is None else installed.canonical_content_hash),
+        "sources": list(details.get("source_details", ())),
+        "licenses": list(details.get("license_details", ())),
+        "pack_version_ids": ([] if installed is None else list(installed.pack_version_ids)),
+    }
+
+
+async def _dataset_statuses_payload(runtime: LockLearnRuntime) -> list[dict[str, Any]]:
+    inventory_rows = await runtime.storage.async_dataset_inventory()
+    inventory = {str(item["dataset_id"]): item for item in inventory_rows}
+    result = [
+        _dataset_status_payload(status, inventory)
+        for status in await runtime.datasets.async_statuses()
+    ]
+    official_ids = {str(item["dataset_id"]) for item in result}
+    for dataset_id, details in sorted(inventory.items()):
+        if dataset_id in official_ids:
+            continue
+        result.append(
+            {
+                "dataset_id": dataset_id,
+                "name": dataset_id,
+                "state": "installed",
+                "installed_version": details["version"],
+                "available_version": None,
+                "update_available": False,
+                "source_age_days": None,
+                "stale_sources": [],
+                "cache_bytes": 0,
+                "error": None,
+                "changelog": None,
+                "release_url": None,
+                "artifact_size": None,
+                "built_at_utc": details["built_at_utc"],
+                "dataset_version_id": details["dataset_version_id"],
+                "canonical_content_hash": details["canonical_content_hash"],
+                "sources": list(details.get("source_details", ())),
+                "licenses": list(details.get("license_details", ())),
+                "pack_version_ids": list(details.get("pack_version_ids", ())),
+            }
+        )
+    return sorted(result, key=lambda item: str(item["dataset_id"]))
 
 
 def _paginate(
@@ -71,6 +165,34 @@ def _paginate(
         "items": page,
         "cursor": str(next_offset) if next_offset < len(items) else None,
     }
+
+
+async def _with_track_management(
+    runtime: LockLearnRuntime,
+    track: dict[str, Any],
+) -> dict[str, Any]:
+    """Attach editable Track configuration kept in normalized side tables."""
+    enriched = dict(track)
+    enriched[
+        "content_weights"
+    ] = await runtime.storage.repositories.tracks.async_get_content_weights(str(track["track_id"]))
+    return enriched
+
+
+async def _with_fatigue_advice(
+    runtime: LockLearnRuntime,
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    """Decorate a session response with non-mutating P3.9 fatigue advice."""
+    enriched = dict(state)
+    settings = state.get("settings")
+    advice = await runtime.session_selection.async_fatigue_advice(
+        str(state["id"]),
+        settings=dict(settings) if isinstance(settings, dict) else {},
+        active=str(state.get("status")) == "active",
+    )
+    enriched["fatigue_advice"] = advice.as_dict()
+    return enriched
 
 
 async def _require_profile_permission(
@@ -131,14 +253,20 @@ async def _authorized_session(
     connection: ActiveConnection,
     message_id: int,
     session_id: str,
+    permission: ProfilePermission,
 ) -> dict[str, Any] | None:
-    """Reject cross-user session reads/mutations at the backend boundary."""
+    """Recheck Profile ACL for every persistent-session read or mutation."""
     state = await runtime.sessions.async_get(session_id)
     if state is None:
         connection.send_error(message_id, ERR_NOT_FOUND, "Session not found")
         return None
-    if state["profile_id"] != _probe_profile_id(connection):
-        connection.send_error(message_id, ERR_FORBIDDEN, "Session access denied")
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        message_id,
+        str(state["profile_id"]),
+        permission,
+    ):
         return None
     return state
 
@@ -169,7 +297,10 @@ async def ws_bootstrap(
         msg["id"],
         {
             "frontend_protocol": FRONTEND_PROTOCOL_VERSION,
+            "backend_version": INTEGRATION_VERSION,
+            "panel_path": f"/{PANEL_URL_PATH}",
             "authenticated_user_id": connection.user.id,
+            "is_admin": connection.user.is_admin,
             "personal_profile": personal_profile,
         },
     )
@@ -228,6 +359,7 @@ async def ws_profiles_create(
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     profile["role"] = ProfileRole.OWNER.value
+    await runtime.scheduler_ha.async_refresh()
     connection.send_result(msg["id"], profile)
 
 
@@ -271,6 +403,7 @@ async def ws_profiles_update(
     profile["role"] = await runtime.storage.repositories.profiles.async_get_role(
         profile_id, connection.user.id
     )
+    await runtime.scheduler_ha.async_refresh()
     connection.send_result(msg["id"], profile)
 
 
@@ -278,12 +411,15 @@ async def ws_profiles_update(
     {
         vol.Required("type"): "locklearn/profiles/delete",
         vol.Required("profile_id"): str,
+        vol.Optional("action", default="archive"): vol.In(("archive", "delete_permanently")),
+        vol.Optional("confirmation"): str,
     }
 )
 @websocket_api.async_response
 async def ws_profiles_delete(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
+    """Archive by default; permanent deletion requires owner ACL + strong confirmation."""
     runtime = _require_runtime(hass, connection, msg["id"])
     if runtime is None:
         return
@@ -296,10 +432,159 @@ async def ws_profiles_delete(
         ProfilePermission.DELETE,
     ):
         return
-    if not await runtime.profiles.async_delete_profile(profile_id):
+
+    action = msg["action"]
+    try:
+        if action == "archive":
+            changed = await runtime.profiles.async_archive_profile(profile_id)
+        else:
+            changed = await runtime.profiles.async_delete_profile(
+                profile_id,
+                confirmation=msg.get("confirmation", ""),
+            )
+    except ProfileValidationError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+
+    if not changed:
         connection.send_error(msg["id"], ERR_NOT_FOUND, "Profile not found")
         return
-    connection.send_result(msg["id"])
+    await runtime.scheduler_ha.async_refresh()
+    connection.send_result(
+        msg["id"],
+        {"profile_id": profile_id, "action": action},
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/profiles/export",
+        vol.Required("profile_id"): str,
+        vol.Optional("include_reviews", default=True): bool,
+        vol.Optional("include_sessions", default=False): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_profiles_export(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Start an owner-only private Profile export operation."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.MANAGE_ACL,
+    ):
+        return
+    owner_user_id = connection.user.id
+
+    async def worker(context: OperationContext) -> None:
+        await context.async_update("collecting", 0.1)
+        context.raise_if_cancelled()
+        transfer = await runtime.profile_transfers.async_create_export(
+            profile_id=profile_id,
+            owner_user_id=owner_user_id,
+            include_reviews=msg["include_reviews"],
+            include_sessions=msg["include_sessions"],
+        )
+        context.raise_if_cancelled()
+        await context.async_set_result(
+            {
+                "download_url": f"/api/locklearn/profile-export/{transfer.token}",
+                "expires_at_utc": transfer.expires_at.isoformat(),
+                "filename": transfer.filename,
+                "one_time": True,
+            }
+        )
+
+    operation_id = runtime.operations.start(
+        "profile_export",
+        worker,
+        cancellable=True,
+        owner_user_id=owner_user_id,
+    )
+    connection.send_result(msg["id"], {"operation_id": operation_id})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/profiles/import_dry_run",
+        vol.Required("upload_token"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_profiles_import_dry_run(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Validate a private uploaded archive and return its mapping plan."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    try:
+        dry_run = await runtime.profile_transfers.async_dry_run_import(
+            upload_token=msg["upload_token"],
+            owner_user_id=connection.user.id,
+        )
+    except ProfileTransferError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], dry_run.as_dict())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/profiles/import_apply",
+        vol.Required("upload_token"): str,
+        vol.Optional("name_override"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_profiles_import_apply(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Start an import operation that creates a new archived Profile."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    owner_user_id = connection.user.id
+    if (
+        await runtime.profile_transfers.store.async_resolve_import(
+            msg["upload_token"],
+            owner_user_id,
+        )
+        is None
+    ):
+        connection.send_error(
+            msg["id"],
+            ERR_INVALID_REQUEST,
+            "profile import upload is unavailable or expired",
+        )
+        return
+
+    async def worker(context: OperationContext) -> None:
+        await context.async_update("validating", 0.1)
+        context.raise_if_cancelled()
+        result = await runtime.profile_transfers.async_apply_import(
+            upload_token=msg["upload_token"],
+            owner_user_id=owner_user_id,
+            name_override=msg.get("name_override"),
+        )
+        context.raise_if_cancelled()
+        await runtime.scheduler_ha.async_refresh()
+        await context.async_set_result(result)
+
+    operation_id = runtime.operations.start(
+        "profile_import",
+        worker,
+        cancellable=True,
+        owner_user_id=owner_user_id,
+    )
+    connection.send_result(msg["id"], {"operation_id": operation_id})
 
 
 @websocket_api.websocket_command(
@@ -356,6 +641,72 @@ async def ws_profiles_share(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "locklearn/profiles/members",
+        vol.Required("profile_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_profiles_members(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List visible Profile members with friendly HA user names."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        msg["profile_id"],
+        ProfilePermission.MANAGE_ACL,
+    ):
+        return
+    members = await runtime.storage.repositories.profiles.async_list_members(msg["profile_id"])
+    result: list[dict[str, str]] = []
+    for member in members:
+        user = await hass.auth.async_get_user(member["ha_user_id"])
+        result.append(
+            {
+                **member,
+                "name": member["ha_user_id"]
+                if user is None
+                else (user.name or member["ha_user_id"]),
+            }
+        )
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/profiles/share_targets",
+        vol.Required("profile_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_profiles_share_targets(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List active HA users available to an owner for explicit sharing."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        msg["profile_id"],
+        ProfilePermission.MANAGE_ACL,
+    ):
+        return
+    users = await hass.auth.async_get_users()
+    connection.send_result(
+        msg["id"],
+        [{"ha_user_id": user.id, "name": user.name or user.id} for user in users if user.is_active],
+    )
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "locklearn/tracks/list",
         vol.Required("profile_id"): str,
         vol.Optional("limit", default=_DEFAULT_PAGE_LIMIT): vol.All(
@@ -381,8 +732,63 @@ async def ws_tracks_list(
     ):
         return
     tracks = await runtime.storage.repositories.tracks.async_list_for_profile(profile_id)
+    configured_tracks = [await _with_track_management(runtime, track) for track in tracks]
     try:
-        result = _paginate(tracks, limit=msg["limit"], cursor=msg.get("cursor"))
+        result = _paginate(
+            configured_tracks,
+            limit=msg["limit"],
+            cursor=msg.get("cursor"),
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/targets/list",
+        vol.Required("profile_id"): str,
+        vol.Optional("limit", default=_DEFAULT_PAGE_LIMIT): vol.All(
+            int, vol.Range(min=1, max=_MAX_PAGE_LIMIT)
+        ),
+        vol.Optional("cursor"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_targets_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List privacy-minimal enabled notification targets for Track editing."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.EDIT_TRACK,
+    ):
+        return
+    raw_targets = await runtime.storage.repositories.notification_targets.async_list_for_profile(
+        profile_id
+    )
+    targets = [
+        {
+            "target_id": str(target["target_id"]),
+            "friendly_name": str(target["friendly_name"]),
+            "platform": str(target["platform"]),
+            "shared_device": bool(target["shared_device"]),
+            "lockscreen_visibility": str(target["lockscreen_visibility"]),
+            "enabled": bool(target["enabled"]),
+            "daily_push_budget": target["daily_push_budget"],
+        }
+        for target in raw_targets
+    ]
+    try:
+        result = _paginate(targets, limit=msg["limit"], cursor=msg.get("cursor"))
     except ValueError as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
@@ -400,6 +806,7 @@ async def ws_tracks_list(
         vol.Optional("priority", default=1): vol.All(int, vol.Range(min=1)),
         vol.Optional("content_weights"): dict,
         vol.Optional("explicit_card_keys"): [str],
+        vol.Optional("scheduler_settings"): dict,
     }
 )
 @websocket_api.async_response
@@ -430,6 +837,7 @@ async def ws_tracks_create(
             explicit_card_keys=(
                 None if "explicit_card_keys" not in msg else tuple(msg["explicit_card_keys"])
             ),
+            scheduler_settings=msg.get("scheduler_settings"),
         )
     except ContentReferenceError as err:
         connection.send_error(msg["id"], ERR_DATASET_UNAVAILABLE, str(err))
@@ -437,7 +845,10 @@ async def ws_tracks_create(
     except TrackValidationError as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
-    connection.send_result(msg["id"], track)
+    connection.send_result(
+        msg["id"],
+        await _with_track_management(runtime, track),
+    )
 
 
 @websocket_api.websocket_command(
@@ -451,6 +862,7 @@ async def ws_tracks_create(
         vol.Optional("priority"): vol.All(int, vol.Range(min=1)),
         vol.Optional("content_weights"): dict,
         vol.Optional("explicit_card_keys"): [str],
+        vol.Optional("scheduler_settings"): dict,
     }
 )
 @websocket_api.async_response
@@ -483,11 +895,15 @@ async def ws_tracks_update(
             explicit_card_keys=(
                 None if "explicit_card_keys" not in msg else tuple(msg["explicit_card_keys"])
             ),
+            scheduler_settings=msg.get("scheduler_settings"),
         )
     except TrackValidationError as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
-    connection.send_result(msg["id"], track)
+    connection.send_result(
+        msg["id"],
+        await _with_track_management(runtime, track),
+    )
 
 
 @websocket_api.websocket_command(
@@ -575,6 +991,175 @@ async def ws_tracks_integrate_pack_update(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "locklearn/tracks/preview_pack_update",
+        vol.Required("track_id"): str,
+        vol.Required("pack_version_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_tracks_preview_pack_update(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Preview a pinned PackVersion update without mutating the Track."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _require_track_permission(
+            runtime,
+            connection,
+            msg["id"],
+            msg["track_id"],
+            ProfilePermission.EDIT_TRACK,
+        )
+        is None
+    ):
+        return
+    try:
+        diff = await runtime.tracks.async_preview_pack_update(
+            track_id=msg["track_id"],
+            target_pack_version_id=msg["pack_version_id"],
+        )
+    except ContentReferenceError as err:
+        connection.send_error(msg["id"], ERR_DATASET_UNAVAILABLE, str(err))
+        return
+    except TrackValidationError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(
+        msg["id"],
+        {
+            "from_pack_version_id": diff.from_pack_version_id,
+            "to_pack_version_id": diff.to_pack_version_id,
+            "added_learning_item_ids": list(diff.added_learning_item_ids),
+            "removed_learning_item_ids": list(diff.removed_learning_item_ids),
+            "changed_learning_item_ids": list(diff.changed_learning_item_ids),
+        },
+    )
+
+
+def _learning_plan_from_message(msg: dict[str, Any]) -> LearningPlan:
+    raw_target_date = msg.get("target_date")
+    return LearningPlan(
+        max_new_per_day_cards=msg["max_new_per_day_cards"],
+        max_reviews_per_day_cards=msg["max_reviews_per_day_cards"],
+        max_notification_new_teasers=msg["max_notification_new_teasers"],
+        target_date=None if raw_target_date is None else date.fromisoformat(raw_target_date),
+        target_coverage=msg["target_coverage"],
+        target_retention=msg["target_retention"],
+    )
+
+
+def _forecast_payload(forecast: Any) -> dict[str, Any]:
+    return {
+        "selected_cards": forecast.selected_cards,
+        "introduced_cards": forecast.introduced_cards,
+        "target_cards": forecast.target_cards,
+        "remaining_target_cards": forecast.remaining_target_cards,
+        "required_new_per_day": forecast.required_new_per_day,
+        "planned_new_per_day": forecast.planned_new_per_day,
+        "reviews_per_day_in_3_weeks": forecast.reviews_per_day_in_3_weeks,
+        "reviews_per_day_in_3_months": forecast.reviews_per_day_in_3_months,
+        "due_now": forecast.due_now,
+        "notification_deliverable_in_3_weeks": forecast.notification_deliverable_in_3_weeks,
+        "active_session_cards_in_3_weeks": forecast.active_session_cards_in_3_weeks,
+        "notification_deliverable_in_3_months": forecast.notification_deliverable_in_3_months,
+        "active_session_cards_in_3_months": forecast.active_session_cards_in_3_months,
+        "target_date_feasible": forecast.target_date_feasible,
+        "review_capacity_feasible_in_3_weeks": forecast.review_capacity_feasible_in_3_weeks,
+        "review_capacity_feasible_in_3_months": forecast.review_capacity_feasible_in_3_months,
+        "warnings": list(forecast.warnings),
+        "assumptions": list(forecast.assumptions),
+    }
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/tracks/plan_preview",
+        vol.Required("track_id"): str,
+        vol.Required("max_new_per_day_cards"): vol.All(int, vol.Range(min=0)),
+        vol.Required("max_reviews_per_day_cards"): vol.All(int, vol.Range(min=1)),
+        vol.Required("max_notification_new_teasers"): vol.All(int, vol.Range(min=0)),
+        vol.Optional("target_date"): vol.Any(str, None),
+        vol.Required("target_coverage"): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1.0)),
+        vol.Required("target_retention"): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1.0)),
+    }
+)
+@websocket_api.async_response
+async def ws_tracks_plan_preview(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Preview Track workload before persisting quotas or a target."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _require_track_permission(
+            runtime,
+            connection,
+            msg["id"],
+            msg["track_id"],
+            ProfilePermission.EDIT_TRACK,
+        )
+        is None
+    ):
+        return
+    try:
+        forecast = await runtime.planning.async_preview_plan(
+            track_id=msg["track_id"],
+            plan=_learning_plan_from_message(msg),
+        )
+    except (LearningPlanValidationError, ValueError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], _forecast_payload(forecast))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/tracks/plan_set",
+        vol.Required("track_id"): str,
+        vol.Required("max_new_per_day_cards"): vol.All(int, vol.Range(min=0)),
+        vol.Required("max_reviews_per_day_cards"): vol.All(int, vol.Range(min=1)),
+        vol.Required("max_notification_new_teasers"): vol.All(int, vol.Range(min=0)),
+        vol.Optional("target_date"): vol.Any(str, None),
+        vol.Required("target_coverage"): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1.0)),
+        vol.Required("target_retention"): vol.All(vol.Coerce(float), vol.Range(min=0.01, max=1.0)),
+    }
+)
+@websocket_api.async_response
+async def ws_tracks_plan_set(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Persist a Track learning plan after explicit user confirmation."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _require_track_permission(
+            runtime,
+            connection,
+            msg["id"],
+            msg["track_id"],
+            ProfilePermission.EDIT_TRACK,
+        )
+        is None
+    ):
+        return
+    try:
+        forecast = await runtime.planning.async_set_plan(
+            track_id=msg["track_id"],
+            plan=_learning_plan_from_message(msg),
+        )
+    except (LearningPlanValidationError, ValueError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    await runtime.scheduler_ha.async_refresh()
+    connection.send_result(msg["id"], _forecast_payload(forecast))
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "locklearn/packs/list",
         vol.Optional("limit", default=_DEFAULT_PAGE_LIMIT): vol.All(
             int, vol.Range(min=1, max=_MAX_PAGE_LIMIT)
@@ -614,13 +1199,102 @@ async def ws_datasets_list(
     runtime = _require_runtime(hass, connection, msg["id"])
     if runtime is None:
         return
-    items = await runtime.storage.async_dataset_inventory()
+    items = await _dataset_statuses_payload(runtime)
     try:
         result = _paginate(items, limit=msg["limit"], cursor=msg.get("cursor"))
     except ValueError as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/datasets/attributions",
+        vol.Required("dataset_id"): str,
+        vol.Required("source_id"): str,
+        vol.Optional("limit", default=_DEFAULT_PAGE_LIMIT): vol.All(
+            int, vol.Range(min=1, max=_MAX_PAGE_LIMIT)
+        ),
+        vol.Optional("cursor"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_datasets_attributions(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return bounded public attribution details from the active content generation."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    try:
+        offset = 0 if msg.get("cursor") is None else int(msg["cursor"])
+        if offset < 0:
+            raise ValueError
+    except ValueError:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, "invalid cursor")
+        return
+    items, has_more = await runtime.storage.async_dataset_attributions(
+        msg["dataset_id"],
+        msg["source_id"],
+        limit=msg["limit"],
+        offset=offset,
+    )
+    connection.send_result(
+        msg["id"],
+        {
+            "items": items,
+            "cursor": str(offset + len(items)) if has_more else None,
+        },
+    )
+
+
+@websocket_api.websocket_command({vol.Required("type"): "locklearn/datasets/refresh"})
+@websocket_api.async_response
+async def ws_datasets_refresh(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Refresh official release discovery; global network mutations are admin-only."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None or not _require_admin(connection, msg["id"]):
+        return
+    await runtime.datasets.async_refresh()
+    connection.send_result(msg["id"], {"items": await _dataset_statuses_payload(runtime)})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/datasets/install",
+        vol.Required("dataset_id"): str,
+        vol.Optional("version"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_datasets_install(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Install one verified official dataset release for an HA administrator."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None or not _require_admin(connection, msg["id"]):
+        return
+    try:
+        result = await runtime.datasets.async_install(
+            msg["dataset_id"],
+            version=msg.get("version"),
+        )
+    except DatasetManagerError as err:
+        connection.send_error(msg["id"], ERR_DATASET_UNAVAILABLE, str(err))
+        return
+    connection.send_result(
+        msg["id"],
+        {
+            "dataset_id": result.dataset_id,
+            "version": result.version,
+            "generation_id": result.generation_id,
+            "previous_generation_id": result.previous_generation_id,
+            "statuses": await _dataset_statuses_payload(runtime),
+        },
+    )
 
 
 @websocket_api.websocket_command(
@@ -700,6 +1374,611 @@ async def ws_content_report(
     )
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/content/report_question",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("card_key"): str,
+        vol.Required("learning_item_id"): str,
+        vol.Required("prompt_facet_id"): str,
+        vol.Required("answer_facet_id"): str,
+        vol.Optional("reason", default="user_reported_question"): str,
+        vol.Optional("message"): vol.All(str, vol.Length(max=1000)),
+    }
+)
+@websocket_api.async_response
+async def ws_content_report_question(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Report a question/content issue without fabricating an SRS result."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.ANSWER,
+    ):
+        return
+    try:
+        receipt = await runtime.content_reports.async_report_question(
+            actor_user_id=connection.user.id,
+            profile_id=profile_id,
+            track_id=msg["track_id"],
+            card=CardReference(
+                card_key=msg["card_key"],
+                learning_item_id=msg["learning_item_id"],
+                prompt_facet_id=msg["prompt_facet_id"],
+                answer_facet_id=msg["answer_facet_id"],
+            ),
+            dataset_generation=runtime.storage.content_generations.active_metadata.generation_id,
+            reason=msg["reason"],
+            message=msg.get("message"),
+        )
+    except (ContentReportError, ContentReferenceError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(
+        msg["id"],
+        {"report_id": receipt.report_id, "srs_penalized": receipt.srs_penalized},
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/progress/set_user_state",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("card_key"): str,
+        vol.Required("user_state"): vol.In(("active", "known_already", "suspended", "buried")),
+        vol.Optional("suspend_until_utc"): vol.Any(str, None),
+    }
+)
+@websocket_api.async_response
+async def ws_progress_set_user_state(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Set user-owned card state without fabricating a ReviewEvent."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.MANAGE_PROGRESS,
+    ):
+        return
+    track = await runtime.storage.repositories.tracks.async_get(msg["track_id"])
+    if track is None or str(track["profile_id"]) != profile_id:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Track not found")
+        return
+    try:
+        result = await runtime.progress_state.async_set_user_state(
+            actor_user_id=connection.user.id,
+            profile_id=profile_id,
+            track_id=msg["track_id"],
+            card_key=msg["card_key"],
+            user_state=msg["user_state"],
+            suspend_until_utc=msg.get("suspend_until_utc"),
+        )
+    except (ProgressUserStateError, ContentReferenceError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/calibration/sample",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Optional("sample_size", default=30): vol.All(int, vol.Range(min=20, max=40)),
+    }
+)
+@websocket_api.async_response
+async def ws_calibration_sample(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return a bounded read-only initial calibration sample."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.MANAGE_PROGRESS,
+    ):
+        return
+    track = await runtime.storage.repositories.tracks.async_get(msg["track_id"])
+    if track is None or str(track["profile_id"]) != profile_id:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Track not found")
+        return
+    try:
+        sample = await runtime.progress_state.async_calibration_sample(
+            profile_id=profile_id,
+            track_id=msg["track_id"],
+            sample_size=msg["sample_size"],
+        )
+    except ProgressUserStateError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], sample.as_dict())
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/stats/get",
+        vol.Required("profile_id"): str,
+        vol.Optional("track_id"): str,
+        vol.Optional("recent_verified_limit", default=30): vol.All(int, vol.Range(min=1, max=200)),
+        vol.Optional("calibration_days", default=7): vol.All(int, vol.Range(min=1, max=90)),
+        vol.Optional("confusion_limit", default=10): vol.All(int, vol.Range(min=1, max=100)),
+    }
+)
+@websocket_api.async_response
+async def ws_stats_get(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return private pedagogically honest dashboard statistics."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.READ
+    ):
+        return
+    try:
+        result = await runtime.stats.async_get(
+            profile_id=profile_id,
+            track_id=msg.get("track_id"),
+            recent_verified_limit=msg["recent_verified_limit"],
+            calibration_days=msg["calibration_days"],
+            confusion_limit=msg["confusion_limit"],
+        )
+    except StatsServiceError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/dashboard/get",
+        vol.Required("profile_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_dashboard_get(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return the P5.2 Home dashboard for one visible Profile."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.READ,
+    ):
+        return
+    try:
+        result = await runtime.dashboard.async_get(profile_id=profile_id)
+    except DashboardServiceError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/difficulties/list",
+        vol.Required("profile_id"): str,
+        vol.Optional("track_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_difficulties_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List profile-private leeches and remediation context."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.READ
+    ):
+        return
+    track_id = msg.get("track_id")
+    if track_id is not None:
+        track = await runtime.storage.repositories.tracks.async_get(track_id)
+        if track is None or str(track["profile_id"]) != profile_id:
+            connection.send_error(msg["id"], ERR_NOT_FOUND, "Track not found")
+            return
+    items = await runtime.difficulties.async_list(
+        profile_id=profile_id,
+        track_id=track_id,
+    )
+    connection.send_result(msg["id"], {"items": list(items)})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/confusions/list",
+        vol.Required("profile_id"): str,
+        vol.Optional("track_id"): str,
+        vol.Optional("card_key"): str,
+        vol.Optional("limit", default=50): vol.All(int, vol.Range(min=1, max=200)),
+    }
+)
+@websocket_api.async_response
+async def ws_confusions_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return a profile-private confusion matrix derived from ReviewEvents."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.READ
+    ):
+        return
+    track_id = msg.get("track_id")
+    if track_id is not None:
+        track = await runtime.storage.repositories.tracks.async_get(track_id)
+        if track is None or str(track["profile_id"]) != profile_id:
+            connection.send_error(msg["id"], ERR_NOT_FOUND, "Track not found")
+            return
+    items = await runtime.difficulties.async_list_confusions(
+        profile_id=profile_id,
+        track_id=track_id,
+        card_key=msg.get("card_key"),
+        limit=msg["limit"],
+    )
+    connection.send_result(msg["id"], {"items": list(items)})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/annotations/list",
+        vol.Required("profile_id"): str,
+        vol.Optional("learning_item_id"): str,
+        vol.Optional("card_key"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_annotations_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List private/exportable annotations visible through profile ACL."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.READ
+    ):
+        return
+    items = await runtime.difficulties.async_list_annotations(
+        profile_id=profile_id,
+        learning_item_id=msg.get("learning_item_id"),
+        card_key=msg.get("card_key"),
+    )
+    connection.send_result(msg["id"], {"items": list(items)})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/annotations/create",
+        vol.Required("profile_id"): str,
+        vol.Required("note"): str,
+        vol.Optional("learning_item_id"): str,
+        vol.Optional("card_key"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_annotations_create(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Create one profile-private note or mnemonic."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.MANAGE_PROGRESS
+    ):
+        return
+    try:
+        item = await runtime.difficulties.async_create_annotation(
+            profile_id=profile_id,
+            note=msg["note"],
+            learning_item_id=msg.get("learning_item_id"),
+            card_key=msg.get("card_key"),
+        )
+    except (DifficultyServiceError, ContentReferenceError, StateRepositoryError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], item)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/annotations/update",
+        vol.Required("profile_id"): str,
+        vol.Required("annotation_id"): str,
+        vol.Required("note"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_annotations_update(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Update one profile-private annotation."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.MANAGE_PROGRESS
+    ):
+        return
+    try:
+        item = await runtime.difficulties.async_update_annotation(
+            profile_id=profile_id,
+            annotation_id=msg["annotation_id"],
+            note=msg["note"],
+        )
+    except (DifficultyServiceError, StateRepositoryError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], item)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/annotations/delete",
+        vol.Required("profile_id"): str,
+        vol.Required("annotation_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_annotations_delete(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Delete one profile-private annotation."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.MANAGE_PROGRESS
+    ):
+        return
+    try:
+        await runtime.difficulties.async_delete_annotation(
+            profile_id=profile_id,
+            annotation_id=msg["annotation_id"],
+        )
+    except DifficultyServiceError as err:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, str(err))
+        return
+    connection.send_result(msg["id"])
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/leeches/reactivate",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("card_key"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_leeches_reactivate(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Reactivate one leech through a canonical non-retrieval ReviewEvent."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], profile_id, ProfilePermission.MANAGE_PROGRESS
+    ):
+        return
+    try:
+        state = await runtime.difficulties.async_reactivate_leech(
+            profile_id=profile_id,
+            track_id=msg["track_id"],
+            card_key=msg["card_key"],
+        )
+    except DifficultyServiceError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], state)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/progress/undo_last",
+        vol.Required("profile_id"): str,
+        vol.Optional("track_id"): str,
+        vol.Optional("card_key"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_progress_undo_last(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Undo the latest admissible progress mutation by compensation."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.MANAGE_PROGRESS,
+    ):
+        return
+    try:
+        result = await runtime.integrity.async_undo_last(
+            actor_user_id=connection.user.id,
+            profile_id=profile_id,
+            track_id=msg.get("track_id"),
+            card_key=msg.get("card_key"),
+        )
+    except IntegrityServiceError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+def _admin_integrity_scope(msg: dict[str, Any]) -> tuple[str | None, str | None]:
+    profile_id = msg.get("profile_id")
+    track_id = msg.get("track_id")
+    if track_id is not None and profile_id is None:
+        raise IntegrityServiceError("track-scoped operation requires profile_id")
+    return profile_id, track_id
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/admin/rebuild_progress",
+        vol.Optional("profile_id"): str,
+        vol.Optional("track_id"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_admin_rebuild_progress(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Start an explicit historical-snapshot progress rebuild."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    try:
+        profile_id, track_id = _admin_integrity_scope(msg)
+    except IntegrityServiceError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+
+    async def worker(context: Any) -> None:
+        await context.async_update("rebuild_progress", 0.1)
+        result = await runtime.integrity.async_rebuild_progress(
+            profile_id=profile_id,
+            track_id=track_id,
+        )
+        await context.async_set_result(result)
+        await context.async_update("rebuild_progress", 0.95)
+
+    operation_id = runtime.operations.start(
+        "rebuild_progress",
+        worker,
+        owner_user_id=connection.user.id,
+    )
+    connection.send_result(msg["id"], {"operation_id": operation_id})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/admin/rebuild_stats",
+        vol.Optional("profile_id"): str,
+        vol.Optional("track_id"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_admin_rebuild_stats(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Start an independent stats_daily rebuild."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    try:
+        profile_id, track_id = _admin_integrity_scope(msg)
+    except IntegrityServiceError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+
+    async def worker(context: Any) -> None:
+        await context.async_update("rebuild_stats", 0.1)
+        result = await runtime.integrity.async_rebuild_stats(
+            profile_id=profile_id,
+            track_id=track_id,
+        )
+        await context.async_set_result(result)
+        await context.async_update("rebuild_stats", 0.95)
+
+    operation_id = runtime.operations.start(
+        "rebuild_stats",
+        worker,
+        owner_user_id=connection.user.id,
+    )
+    connection.send_result(msg["id"], {"operation_id": operation_id})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/admin/recompute_progress",
+        vol.Required("policy_version"): vol.All(int, vol.Range(min=1)),
+        vol.Optional("profile_id"): str,
+        vol.Optional("track_id"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_admin_recompute_progress(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Start a deliberate policy-targeted progress recompute."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    try:
+        profile_id, track_id = _admin_integrity_scope(msg)
+    except IntegrityServiceError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+
+    async def worker(context: Any) -> None:
+        await context.async_update("recompute_progress", 0.05)
+        report = await runtime.integrity.async_recompute_progress(
+            target_policy_version=msg["policy_version"],
+            profile_id=profile_id,
+            track_id=track_id,
+        )
+        await context.async_set_result(report.as_dict())
+        await context.async_update("recompute_progress", 0.95)
+
+    operation_id = runtime.operations.start(
+        "recompute_progress",
+        worker,
+        owner_user_id=connection.user.id,
+    )
+    connection.send_result(msg["id"], {"operation_id": operation_id})
+
+
 @websocket_api.websocket_command({vol.Required("type"): "locklearn/admin/storage/status"})
 @websocket_api.require_admin
 @websocket_api.async_response
@@ -716,18 +1995,91 @@ async def ws_admin_storage_status(
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "locklearn/session/start",
+        vol.Required("profile_id"): str,
         vol.Optional("track_id"): str,
+        vol.Optional("session_type", default="learn"): str,
+        vol.Optional("strategy", default="default"): str,
+        vol.Optional("settings", default={}): dict,
     }
 )
 @websocket_api.async_response
 async def ws_session_start(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Start the P0 persistent session prototype."""
+    """Start a persistent session owned by a real LockLearn Profile."""
     runtime = _require_runtime(hass, connection, msg["id"])
     if runtime is None:
         return
-    state = await runtime.sessions.async_start(_probe_profile_id(connection), msg.get("track_id"))
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.ANSWER,
+    ):
+        return
+    track_id = msg.get("track_id")
+    if track_id is not None:
+        track = await runtime.storage.repositories.tracks.async_get(track_id)
+        if track is None or str(track["profile_id"]) != profile_id:
+            connection.send_error(msg["id"], ERR_NOT_FOUND, "Track not found")
+            return
+    try:
+        prepared_questions: tuple[SessionQuestion, ...] = ()
+        if track_id is not None:
+            selected = await runtime.session_selection.async_prepare(
+                profile_id=profile_id,
+                track_id=track_id,
+                session_type=msg["session_type"],
+                settings=msg["settings"],
+            )
+            if msg["session_type"] == "quiz":
+                prepared_questions = await runtime.quiz_sessions.async_prepare_questions(
+                    track_id=track_id,
+                    selected=selected,
+                    settings=msg["settings"],
+                )
+            else:
+                prepared: list[SessionQuestion] = []
+                for position, candidate in enumerate(selected):
+                    payload = dict(candidate.payload)
+                    if msg["session_type"] == "learn":
+                        payload["presentation"] = await runtime.presentation.async_for_card(
+                            track_id=track_id,
+                            card_key=candidate.card_key,
+                        )
+                    prepared.append(
+                        SessionQuestion(
+                            question_id=f"q-{position + 1}-{candidate.card_key}",
+                            card_key=candidate.card_key,
+                            learning_item_id=candidate.learning_item_id,
+                            prompt_facet_id=candidate.prompt_facet_id,
+                            answer_facet_id=candidate.answer_facet_id,
+                            payload=payload,
+                        )
+                    )
+                prepared_questions = tuple(prepared)
+        else:
+            runtime.session_selection.validate_session_settings(msg["settings"])
+
+        state = await runtime.sessions.async_start(
+            profile_id,
+            track_id,
+            session_type=msg["session_type"],
+            strategy=msg["strategy"],
+            settings=msg["settings"],
+            questions=prepared_questions,
+        )
+        state = await _with_fatigue_advice(runtime, state)
+    except (
+        PresentationError,
+        QuizSessionError,
+        SessionSelectionError,
+        SessionValidationError,
+    ) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
     connection.send_result(msg["id"], state)
 
 
@@ -741,14 +2093,108 @@ async def ws_session_start(
 async def ws_session_get(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Get a P0 session."""
+    """Get a complete resumable persistent-session snapshot."""
     runtime = _require_runtime(hass, connection, msg["id"])
     if runtime is None:
         return
-    state = await _authorized_session(runtime, connection, msg["id"], msg["session_id"])
+    state = await _authorized_session(
+        runtime,
+        connection,
+        msg["id"],
+        msg["session_id"],
+        ProfilePermission.READ,
+    )
     if state is None:
         return
-    connection.send_result(msg["id"], state)
+    connection.send_result(msg["id"], await _with_fatigue_advice(runtime, state))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/quiz/evaluate",
+        vol.Required("session_id"): str,
+        vol.Required("question_id"): str,
+        vol.Required("answer"): object,
+    }
+)
+@websocket_api.async_response
+async def ws_quiz_evaluate(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Provisionally grade current free text without advancing the session."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _authorized_session(
+            runtime,
+            connection,
+            msg["id"],
+            msg["session_id"],
+            ProfilePermission.ANSWER,
+        )
+        is None
+    ):
+        return
+    try:
+        feedback = await runtime.quiz_sessions.async_evaluate(
+            msg["session_id"],
+            msg["question_id"],
+            msg["answer"],
+        )
+    except QuizSessionError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], feedback)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/quiz/answer",
+        vol.Required("session_id"): str,
+        vol.Required("expected_version"): vol.All(int, vol.Range(min=1)),
+        vol.Required("question_id"): str,
+        vol.Required("answer"): object,
+    }
+)
+@websocket_api.async_response
+async def ws_quiz_answer(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Atomically grade, persist and advance one quiz question."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    state = await _authorized_session(
+        runtime,
+        connection,
+        msg["id"],
+        msg["session_id"],
+        ProfilePermission.ANSWER,
+    )
+    if state is None:
+        return
+    if str(state.get("type")) != "quiz":
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, "Session is not a quiz")
+        return
+    try:
+        result = await runtime.quiz_sessions.async_answer(
+            msg["session_id"],
+            msg["expected_version"],
+            msg["question_id"],
+            msg["answer"],
+        )
+    except QuizSessionError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    except SessionNotFoundError:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Session not found")
+        return
+    except StaleSessionError:
+        connection.send_error(msg["id"], ERR_STALE_SESSION, "The session changed on another client")
+        return
+    result["session"] = await _with_fatigue_advice(runtime, result["session"])
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.websocket_command(
@@ -764,24 +2210,169 @@ async def ws_session_get(
 async def ws_session_answer(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Apply a session answer using CAS."""
+    """Apply one current-question answer using session/version CAS."""
     runtime = _require_runtime(hass, connection, msg["id"])
     if runtime is None:
         return
-    if await _authorized_session(runtime, connection, msg["id"], msg["session_id"]) is None:
+    authorized = await _authorized_session(
+        runtime,
+        connection,
+        msg["id"],
+        msg["session_id"],
+        ProfilePermission.ANSWER,
+    )
+    if authorized is None:
+        return
+    if str(authorized.get("type")) == "quiz":
+        connection.send_error(
+            msg["id"],
+            ERR_INVALID_REQUEST,
+            "Quiz sessions must use locklearn/quiz/answer",
+        )
         return
     try:
-        state = await runtime.sessions.async_answer(
-            msg["session_id"],
-            msg["expected_version"],
-            msg["question_id"],
-            msg["answer"],
-        )
+        answer = msg["answer"]
+        if isinstance(answer, dict) and answer.get("kind") == "learning":
+            state = await runtime.learning_sessions.async_answer(
+                msg["session_id"],
+                msg["expected_version"],
+                msg["question_id"],
+                answer,
+            )
+        else:
+            state = await runtime.sessions.async_answer(
+                msg["session_id"],
+                msg["expected_version"],
+                msg["question_id"],
+                answer,
+            )
+    except (LearningSessionError, QuizSessionError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
     except SessionNotFoundError:
         connection.send_error(msg["id"], ERR_NOT_FOUND, "Session not found")
         return
     except StaleSessionError:
         connection.send_error(msg["id"], ERR_STALE_SESSION, "The session changed on another client")
+        return
+    connection.send_result(msg["id"], await _with_fatigue_advice(runtime, state))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/session/pause",
+        vol.Required("session_id"): str,
+        vol.Required("expected_version"): vol.All(int, vol.Range(min=1)),
+        vol.Optional("paused", default=True): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_session_pause(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Pause or resume a session through one CAS lifecycle command."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _authorized_session(
+            runtime,
+            connection,
+            msg["id"],
+            msg["session_id"],
+            ProfilePermission.ANSWER,
+        )
+        is None
+    ):
+        return
+    try:
+        if msg["paused"]:
+            state = await runtime.sessions.async_pause(msg["session_id"], msg["expected_version"])
+        else:
+            state = await runtime.sessions.async_resume(msg["session_id"], msg["expected_version"])
+    except SessionNotFoundError:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Session not found")
+        return
+    except StaleSessionError:
+        connection.send_error(msg["id"], ERR_STALE_SESSION, "The session changed on another client")
+        return
+    connection.send_result(msg["id"], state)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/session/complete",
+        vol.Required("session_id"): str,
+        vol.Required("expected_version"): vol.All(int, vol.Range(min=1)),
+    }
+)
+@websocket_api.async_response
+async def ws_session_complete(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Complete a persistent session with CAS."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _authorized_session(
+            runtime,
+            connection,
+            msg["id"],
+            msg["session_id"],
+            ProfilePermission.ANSWER,
+        )
+        is None
+    ):
+        return
+    try:
+        state = await runtime.sessions.async_complete(msg["session_id"], msg["expected_version"])
+    except SessionNotFoundError:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Session not found")
+        return
+    except StaleSessionError:
+        connection.send_error(msg["id"], ERR_STALE_SESSION, "The session changed on another client")
+        return
+    connection.send_result(msg["id"], state)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/session/undo",
+        vol.Required("session_id"): str,
+        vol.Required("expected_version"): vol.All(int, vol.Range(min=1)),
+    }
+)
+@websocket_api.async_response
+async def ws_session_undo(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Undo session navigation only; P3.12 owns ReviewEvent/progress undo."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _authorized_session(
+            runtime,
+            connection,
+            msg["id"],
+            msg["session_id"],
+            ProfilePermission.ANSWER,
+        )
+        is None
+    ):
+        return
+    try:
+        state = await runtime.sessions.async_undo(
+            msg["session_id"],
+            msg["expected_version"],
+            actor_user_id=connection.user.id,
+        )
+    except SessionNotFoundError:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Session not found")
+        return
+    except StaleSessionError:
+        connection.send_error(msg["id"], ERR_STALE_SESSION, "No admissible session answer to undo")
         return
     connection.send_result(msg["id"], state)
 
@@ -796,18 +2387,27 @@ async def ws_session_answer(
 async def ws_session_subscribe(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
-    """Subscribe a client to session mutations."""
+    """Subscribe a client to persistent session mutations."""
     runtime = _require_runtime(hass, connection, msg["id"])
     if runtime is None:
         return
-    state = await _authorized_session(runtime, connection, msg["id"], msg["session_id"])
+    state = await _authorized_session(
+        runtime,
+        connection,
+        msg["id"],
+        msg["session_id"],
+        ProfilePermission.READ,
+    )
     if state is None:
         return
 
     def forward(snapshot: dict[str, Any]) -> None:
         connection.send_event(msg["id"], snapshot)
 
-    connection.subscriptions[msg["id"]] = runtime.sessions.subscribe(msg["session_id"], forward)
+    connection.subscriptions[msg["id"]] = runtime.sessions.subscribe(
+        msg["session_id"],
+        forward,
+    )
     connection.send_result(msg["id"], state)
 
 
@@ -872,25 +2472,134 @@ async def ws_operation_cancel(
     connection.send_result(msg["id"])
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/notifications/unrecorded_responses",
+        vol.Required("profile_id"): str,
+        vol.Optional("lookback_hours", default=168): vol.All(int, vol.Range(min=1, max=720)),
+        vol.Optional("limit", default=20): vol.All(int, vol.Range(min=1, max=100)),
+    }
+)
+@websocket_api.async_response
+async def ws_notification_unrecorded_responses(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return the private recent-unrecorded-mobile-response warning surface."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.READ,
+    ):
+        return
+    try:
+        result = await runtime.notification_warnings.async_recent_unrecorded(
+            profile_id=profile_id,
+            lookback_hours=msg["lookback_hours"],
+            limit=msg["limit"],
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/scheduler/preview",
+        vol.Required("profile_id"): str,
+        vol.Optional("local_date"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_scheduler_preview(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Preview deterministic generic slots without materializing them."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.READ,
+    ):
+        return
+    try:
+        raw_date = msg.get("local_date")
+        local_date = None if raw_date is None else date.fromisoformat(raw_date)
+        preview = await runtime.scheduler.async_preview(
+            profile_id=profile_id,
+            local_date=local_date,
+        )
+    except (SchedulerValidationError, ValueError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], preview)
+
+
 COMMANDS = (
     ws_bootstrap,
     ws_profiles_list,
     ws_profiles_create,
     ws_profiles_update,
     ws_profiles_delete,
+    ws_profiles_export,
+    ws_profiles_import_dry_run,
+    ws_profiles_import_apply,
     ws_profiles_share,
+    ws_profiles_members,
+    ws_profiles_share_targets,
     ws_tracks_list,
+    ws_targets_list,
     ws_tracks_create,
     ws_tracks_update,
     ws_tracks_delete,
     ws_tracks_integrate_pack_update,
+    ws_tracks_preview_pack_update,
+    ws_tracks_plan_preview,
+    ws_tracks_plan_set,
     ws_packs_list,
     ws_datasets_list,
+    ws_datasets_attributions,
+    ws_datasets_refresh,
+    ws_datasets_install,
     ws_content_report,
+    ws_content_report_question,
+    ws_progress_set_user_state,
+    ws_calibration_sample,
+    ws_stats_get,
+    ws_dashboard_get,
+    ws_difficulties_list,
+    ws_confusions_list,
+    ws_annotations_list,
+    ws_annotations_create,
+    ws_annotations_update,
+    ws_annotations_delete,
+    ws_leeches_reactivate,
+    ws_progress_undo_last,
+    ws_admin_rebuild_progress,
+    ws_admin_rebuild_stats,
+    ws_admin_recompute_progress,
     ws_admin_storage_status,
+    ws_notification_unrecorded_responses,
+    ws_scheduler_preview,
     ws_session_start,
     ws_session_get,
+    ws_quiz_evaluate,
+    ws_quiz_answer,
     ws_session_answer,
+    ws_session_pause,
+    ws_session_complete,
+    ws_session_undo,
     ws_session_subscribe,
     ws_operation_subscribe,
     ws_operation_cancel,

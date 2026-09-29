@@ -33,24 +33,26 @@ Development Python:
 - use the newest stable interpreter installed on the dev VM that is compatible
   with the supported Home Assistant versions;
 - current HA development requires Python 3.14.2+, but the V1 HA floor remains a
-  P0 confirmed HA >= 2025.2; CI tests HA 2025.2.5/Python 3.13 and current
-  stable HA 2026.9.3/Python 3.14.
+  P0 confirmed HA >= 2025.2; CI tests HA 2025.2.5/Python 3.13 and the current
+  full harness HA 2026.9.3/Python 3.14, plus a latest-stable HA 2026.9.4 smoke
+  until a matching pytest Home Assistant harness is available.
 
 Verified P0 development environment (2026-09-21):
 - Python 3.14.4 locally; Python 3.13.15 compatibility environment;
 - Node 24.20.0 and npm 11.19.0 locally; Node 22 in CI;
 - configured HA API instance 2026.7.4;
-- current stable HA 2026.9.3;
+- current full harness HA 2026.9.3;
+- latest stable smoke HA 2026.9.4;
 - evidence and external/manual gates: `docs/P0_EVIDENCE.md`.
 
 ## AI workflow
 
-the maintainer is the only human developer and alternates mainly between Claude Code and
-Codex. Both may modify, test and commit locally. Push/PR/merge/tag/release only
+The maintainer is the only human developer and alternates mainly between Claude Code
+and Codex. Both may modify, test and commit locally. Push/PR/merge/tag/release only
 on explicit request.
 
-The uploaded `the maintainer's AI configuration` v1.0.0 was deployed into this repository and then
-adapted to LockLearn's mixed Python + TypeScript stack.
+The maintainer's uploaded AI configuration v1.0.0 was deployed into this repository
+and then adapted to LockLearn's mixed Python + TypeScript stack.
 
 ## Commands
 
@@ -67,6 +69,26 @@ Frontend  : cd frontend && npm run typecheck && npm test && npm run build
 Commands that depend on Home Assistant or npm packages become authoritative only
 after activating `.venv`; P0 verified every command above on the dev VM. The
 minimum/current HA matrix is also reproducible through `.github/workflows/ci.yml`.
+
+## Development and release deployment
+
+- Development branches (`feat/*`, `fix/*`, and other non-release branches) are
+  deployed to the development Home Assistant instance by copying the complete
+  `custom_components/locklearn/` directory directly to
+  `/config/custom_components/locklearn/`. Stage and rename on the same
+  filesystem when the available access method permits it; never deploy only the
+  frontend bundle or otherwise leave frontend/backend versions mixed.
+- HACS is the release path only. It installs published tags/releases and is not
+  a development-branch deployment mechanism.
+- Verify the deployed backend schema marker and frontend bundle SHA-256 before
+  restarting Home Assistant Core.
+
+> Do not use HACS “Redownload” during development to return to the public
+> release when `state.db` has already been migrated by a newer development
+> branch.
+
+Never delete, recreate, downgrade or manually rewrite the development database
+to make an older release accept a newer schema. Deploy compatible code instead.
 
 ## Architecture invariants
 

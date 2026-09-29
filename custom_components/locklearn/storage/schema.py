@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS progress (
     learning_item_id TEXT,
     prompt_facet_id TEXT,
     answer_facet_id TEXT,
-    state TEXT NOT NULL CHECK (state IN ('new', 'learning', 'review', 'relearning')),
+    state TEXT NOT NULL CHECK (state IN ('new', 'learning', 'review', 'relearning', 'leech')),
     mastery REAL NOT NULL DEFAULT 0 CHECK (mastery >= 0 AND mastery <= 1),
     box INTEGER NOT NULL DEFAULT 0 CHECK (box >= 0),
     seen_count INTEGER NOT NULL DEFAULT 0 CHECK (seen_count >= 0),
@@ -296,6 +296,14 @@ CREATE TABLE IF NOT EXISTS scheduled_slots (
     target_id TEXT,
     slot_type TEXT NOT NULL,
     scheduled_for_utc TEXT NOT NULL,
+    deferred_until_utc TEXT,
+    defer_reason TEXT,
+    card_key TEXT,
+    learning_item_id TEXT,
+    prompt_facet_id TEXT,
+    answer_facet_id TEXT,
+    selection_reason TEXT,
+    expired_reason TEXT,
     status TEXT NOT NULL CHECK (
         status IN ('scheduled', 'deferred', 'sent', 'consumed', 'expired', 'cancelled')
     ),
@@ -329,6 +337,25 @@ CREATE INDEX IF NOT EXISTS notification_interactions_target_status_expires
 ON notification_interactions(target_id, status, expires_at_utc);
 CREATE INDEX IF NOT EXISTS notification_interactions_profile_created
 ON notification_interactions(profile_id, created_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS receptivity_samples (
+    slot_id TEXT PRIMARY KEY REFERENCES scheduled_slots(slot_id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL,
+    target_id TEXT,
+    delivered_at_utc TEXT NOT NULL,
+    timezone_name TEXT NOT NULL,
+    weekday INTEGER NOT NULL CHECK (weekday >= 0 AND weekday <= 6),
+    local_hour INTEGER NOT NULL CHECK (local_hour >= 0 AND local_hour <= 23),
+    delivered INTEGER NOT NULL DEFAULT 1 CHECK (delivered IN (0, 1)),
+    cleared INTEGER NOT NULL DEFAULT 0 CHECK (cleared IN (0, 1)),
+    answered INTEGER NOT NULL DEFAULT 0 CHECK (answered IN (0, 1)),
+    delivery_to_action_ms INTEGER CHECK (
+        delivery_to_action_ms IS NULL OR delivery_to_action_ms >= 0
+    ),
+    updated_at_utc TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS receptivity_samples_profile_hour
+ON receptivity_samples(profile_id, weekday, local_hour, delivered_at_utc DESC);
 
 CREATE TABLE IF NOT EXISTS stats_daily (
     profile_id TEXT NOT NULL,
@@ -370,6 +397,59 @@ CREATE TABLE IF NOT EXISTS audit_events (
     created_at_utc TEXT NOT NULL
 );
 """
+
+
+STATE_REQUIRED_TABLES = frozenset(
+    {
+        "schema_version",
+        "profiles",
+        "profile_members",
+        "tracks",
+        "track_pack_versions",
+        "track_card_rules",
+        "track_content_weights",
+        "notification_targets",
+        "progress",
+        "review_events",
+        "user_annotations",
+        "sessions",
+        "session_items",
+        "session_answers",
+        "exam_attempts",
+        "scheduler_config",
+        "scheduled_slots",
+        "notification_interactions",
+        "receptivity_samples",
+        "stats_daily",
+        "settings",
+        "audit_events",
+    }
+)
+
+STATE_REQUIRED_INDEXES = frozenset(
+    {
+        "profiles_status_name",
+        "profile_members_user_role",
+        "tracks_profile_status",
+        "track_pack_versions_pack",
+        "track_card_rules_card",
+        "notification_targets_profile_enabled",
+        "progress_due",
+        "progress_content_identity",
+        "review_events_card_created",
+        "review_events_profile_created",
+        "review_events_track_created",
+        "user_annotations_profile_item",
+        "sessions_profile_status_activity",
+        "session_items_card",
+        "exam_attempts_profile_started",
+        "scheduled_slots_profile_scheduled_status",
+        "notification_interactions_target_status_expires",
+        "notification_interactions_profile_created",
+        "receptivity_samples_profile_hour",
+        "stats_daily_profile_date",
+    }
+)
 
 
 # Package databases and generated catalogs intentionally share these normalized
