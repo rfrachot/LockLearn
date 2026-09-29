@@ -450,6 +450,7 @@ export class LockLearnLearnView extends LitElement {
     this.errorMessage = "";
     try {
       this.applySession(await getSession(this.hass, last.session_id));
+      await this.refreshAvailability();
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : String(error);
     } finally {
@@ -649,14 +650,16 @@ export class LockLearnLearnView extends LitElement {
           </label>
           <div class="actions">
             ${resumable
-              ? html`<button @click=${this.resume} ?disabled=${this.loading}>
+              ? html`<button class="primary" @click=${this.resume} ?disabled=${this.loading}>
                   ${this.t("learn.resume")}
                 </button>`
-              : nothing}
-            <button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
-              ${this.t("learn.start")}
-            </button>
+              : html`<button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
+                  ${this.t("learn.start")}
+                </button>`}
           </div>
+          <p class="muted">
+            ${resumable ? this.t("learn.resumeHelp") : this.t("learn.startHelp")}
+          </p>
         </div>
         ${this.session === undefined && this.availability !== undefined ? html`
           <div class="notice" role="status">
@@ -711,10 +714,27 @@ export class LockLearnLearnView extends LitElement {
       const nextAvailable = this.availability?.next_available_at_utc ?? null;
       const nextReason = this.availability?.next_available_reason ?? null;
       const canContinue = (this.availability?.forceable_early ?? 0) > 0;
+      const readyNow = this.availability?.available_now ?? 0;
+      if (readyNow > 0) {
+        return html`
+          <section class="learn-card">
+            <h2>${this.t("learn.readyTitle")}</h2>
+            <p>${this.t("learn.readyFromEmpty").replace("{count}", String(readyNow))}</p>
+            <button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
+              ${this.t("learn.start")}
+            </button>
+          </section>
+        `;
+      }
       return html`
         <section class="learn-card">
           <h2>${this.t("learn.pauseTitle")}</h2>
           <p>${this.t("learn.emptyExplain")}</p>
+          <dl>
+            <dt>${this.t("learn.startedCards")}</dt><dd>${this.availability?.introduced_cards ?? 0}</dd>
+            <dt>${this.t("learn.unstartedCards")}</dt><dd>${this.availability?.new_cards ?? 0}</dd>
+            <dt>${this.t("learn.newQuotaRemaining")}</dt><dd>${this.availability?.remaining_new_quota ?? 0}</dd>
+          </dl>
           ${nextAvailable === null ? nothing : html`
             <p>
               <strong>${this.t(
