@@ -739,6 +739,7 @@ export class LockLearnLearnView extends LitElement {
     if (this.session.current_question === null || this.session.status === "completed") {
       const nextAvailable = this.availability?.next_available_at_utc ?? null;
       const nextReason = this.availability?.next_available_reason ?? null;
+      const canContinue = (this.availability?.forceable_early ?? 0) > 0;
       return html`
         <section class="learn-card">
           <h2>${this.t("learn.completed")}</h2>
@@ -751,7 +752,13 @@ export class LockLearnLearnView extends LitElement {
               ${this.dueLabel(nextAvailable)}
             </p>
           `}
-          <button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
+          ${canContinue ? html`
+            <p class="muted">${this.t("learn.continueEarlyHelp")}</p>
+            <button class="primary" @click=${() => void this.start(true)} ?disabled=${this.loading}>
+              ${this.t("learn.continueNow")}
+            </button>
+          ` : nothing}
+          <button @click=${() => void this.start()} ?disabled=${this.loading}>
             ${this.t("learn.newSession")}
           </button>
         </section>
