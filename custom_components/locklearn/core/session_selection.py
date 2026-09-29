@@ -98,6 +98,7 @@ class _Candidate:
     pack_position: int
     user_state: str
     suspend_until_utc: str | None
+    last_result: str | None
     confusable_group_ids: tuple[str, ...]
 
     @classmethod
@@ -117,6 +118,7 @@ class _Candidate:
             suspend_until_utc=(
                 None if row.get("suspend_until_utc") is None else str(row["suspend_until_utc"])
             ),
+            last_result=None if row.get("last_result") is None else str(row["last_result"]),
             confusable_group_ids=tuple(str(v) for v in row.get("confusable_group_ids", ())),
         )
 
@@ -149,6 +151,9 @@ class SessionSelectionService:
         raw_leeches_only = settings.get("leeches_only", False)
         if not isinstance(raw_leeches_only, bool):
             raise SessionSelectionError("leeches_only must be boolean")
+        raw_allow_early = settings.get("allow_early_learning", False)
+        if not isinstance(raw_allow_early, bool):
+            raise SessionSelectionError("allow_early_learning must be boolean")
 
     async def async_prepare(
         self,
@@ -170,6 +175,7 @@ class SessionSelectionService:
         requested_cards = self._requested_cards(settings, profile)
         allowed_types = self._allowed_content_types(settings)
         leeches_only = bool(settings.get("leeches_only", False))
+        allow_early_learning = bool(settings.get("allow_early_learning", False))
         weights = await self._tracks.async_get_content_weights(track_id)
         raw_candidates = await self._tracks.async_session_candidates(
             profile_id=profile_id,
@@ -192,7 +198,12 @@ class SessionSelectionService:
                 continue
             if self._weight(candidate.content_type, weights) <= 0:
                 continue
-            if not self._state_available(candidate, now=now, session_type=session_type):
+            if not self._state_available(
+                candidate,
+                now=now,
+                session_type=session_type,
+                allow_early_learning=allow_early_learning,
+            ):
                 continue
             if not constraints_required:
                 candidates.append(candidate)
@@ -239,6 +250,12 @@ class SessionSelectionService:
                         "reason": c.reason,
                         "pack_position": c.pack_position,
                         "content_weight": self._weight(c.content_type, weights),
+                        "early_learning": (
+                            allow_early_learning
+                            and c.state == "learning"
+                            and c.next_due_at_utc is not None
+                            and datetime.fromisoformat(c.next_due_at_utc) > now
+                        ),
                     }
                 },
             )
@@ -484,6 +501,7 @@ class SessionSelectionService:
         *,
         now: datetime,
         session_type: str,
+        allow_early_learning: bool = False,
     ) -> bool:
         if candidate.state == "new":
             return session_type.strip().lower() in _NEW_SESSION_TYPES
@@ -494,7 +512,14 @@ class SessionSelectionService:
         due = datetime.fromisoformat(candidate.next_due_at_utc)
         if due.tzinfo is None:
             raise SessionSelectionError("candidate due timestamp must be timezone-aware")
-        return due <= now
+        if due <= now:
+            return True
+        return (
+            allow_early_learning
+            and session_type.strip().lower() in _NEW_SESSION_TYPES
+            and candidate.state == "learning"
+            and candidate.last_result != "wrong"
+        )
 
     @staticmethod
     def _requested_cards(settings: dict[str, Any], profile: dict[str, Any]) -> int:
