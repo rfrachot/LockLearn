@@ -40,6 +40,7 @@ from ..core.sessions import SessionQuestion, SessionValidationError
 from ..core.stats import StatsServiceError
 from ..core.tracks import TrackValidationError
 from ..datasets.manager import DatasetManagerError, DatasetStatus
+from ..notifications.delivery import NotificationDeliveryError
 from ..notifications.renderers import NotificationRenderMode, RenderedNotification
 from ..notifications.targets import TargetUnavailableError, async_resolve_notify_route
 from ..profile_transfer import ProfileTransferError
@@ -1145,7 +1146,7 @@ async def ws_targets_test(
                 pedagogical_signal="none",
             )
         )
-    except Exception as err:
+    except (NotificationDeliveryError, TargetUnavailableError) as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     connection.send_result(
