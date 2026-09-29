@@ -231,6 +231,11 @@ class SessionSelectionService:
             track_id=track_id,
             session_type=session_type,
         )
+        if allow_early_learning and session_type.strip().lower() in _NEW_SESSION_TYPES:
+            # An explicit user override may exceed the daily introduction target,
+            # but it never changes _state_available(): failed/relearning cooldowns
+            # remain authoritative.
+            new_quota = max(new_quota, requested_cards)
         ordered = self._build_sequence(
             candidates,
             requested_cards=requested_cards,
@@ -283,8 +288,10 @@ class SessionSelectionService:
             track_id=track_id,
         )
         now = self._clock.now()
-        available_now = 0
-        forceable_early = 0
+        normalized_type = session_type.strip().lower()
+        available_due = 0
+        eligible_new = 0
+        forceable_learning = 0
         introduced = 0
         new_cards = 0
         next_due: datetime | None = None
@@ -297,15 +304,18 @@ class SessionSelectionService:
                 continue
             if candidate.state == "new":
                 new_cards += 1
-            else:
-                introduced += 1
+                if normalized_type in _NEW_SESSION_TYPES:
+                    eligible_new += 1
+                continue
+
+            introduced += 1
             if self._state_available(
                 candidate,
                 now=now,
                 session_type=session_type,
                 allow_early_learning=False,
             ):
-                available_now += 1
+                available_due += 1
                 continue
             if candidate.next_due_at_utc is None:
                 continue
@@ -315,20 +325,36 @@ class SessionSelectionService:
             if next_due is None or due < next_due:
                 next_due = due
             if (
-                session_type.strip().lower() in _NEW_SESSION_TYPES
+                normalized_type in _NEW_SESSION_TYPES
                 and candidate.state == "learning"
                 and candidate.last_result != "wrong"
             ):
-                forceable_early += 1
+                forceable_learning += 1
+
+        remaining_new_quota = await self._remaining_new_quota(
+            profile=profile,
+            track=track,
+            profile_id=profile_id,
+            track_id=track_id,
+            session_type=session_type,
+        )
+        available_new = min(eligible_new, remaining_new_quota)
+        forceable_new = (
+            max(0, eligible_new - available_new)
+            if normalized_type in _NEW_SESSION_TYPES
+            else 0
+        )
 
         return {
             "profile_id": profile_id,
             "track_id": track_id,
             "session_type": session_type,
-            "available_now": available_now,
+            "available_now": available_due + available_new,
             "introduced_cards": introduced,
             "new_cards": new_cards,
-            "forceable_early": forceable_early,
+            "remaining_new_quota": remaining_new_quota,
+            "forceable_new": forceable_new,
+            "forceable_early": forceable_learning + forceable_new,
             "next_due_at_utc": None if next_due is None else next_due.isoformat(),
         }
 
