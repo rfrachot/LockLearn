@@ -250,8 +250,11 @@ class SessionSelectionService:
         profile_id: str,
         track_id: str,
         session_type: str,
+        settings: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Describe availability using the same eligibility and sequence rules as start."""
+        """Describe availability for the same prospective request used by session/start."""
+        settings = {} if settings is None else settings
+        self.validate_session_settings(settings)
         track = await self._tracks.async_get(track_id)
         if track is None or str(track["profile_id"]) != profile_id:
             raise SessionSelectionError("track does not belong to profile")
@@ -262,13 +265,18 @@ class SessionSelectionService:
         weights = await self._tracks.async_get_content_weights(track_id)
         now = self._clock.now()
         normalized_type = session_type.strip().lower()
-        requested_cards = self._requested_cards({}, profile)
+        requested_cards = self._requested_cards(settings, profile)
+        allowed_types = self._allowed_content_types(settings)
+        leeches_only = bool(settings.get("leeches_only", False))
+        allow_early_learning = bool(settings.get("allow_early_learning", False))
         candidate_pool = await self._async_candidate_pool(
             profile_id=profile_id,
             track_id=track_id,
             track=track,
             weights=weights,
             now=now,
+            allowed_types=allowed_types,
+            leeches_only=leeches_only,
         )
 
         introduced = sum(candidate.state != "new" for candidate in candidate_pool)
@@ -298,13 +306,16 @@ class SessionSelectionService:
                 candidate,
                 now=now,
                 session_type=session_type,
-                allow_early_learning=False,
+                allow_early_learning=allow_early_learning,
             )
         ]
+        normal_new_quota = remaining_new_quota
+        if allow_early_learning and normalized_type in _NEW_SESSION_TYPES:
+            normal_new_quota = max(normal_new_quota, requested_cards)
         normal_selected = self._build_sequence(
             normal_candidates,
             requested_cards=requested_cards,
-            new_quota=remaining_new_quota,
+            new_quota=normal_new_quota,
             weights=weights,
         )
 
