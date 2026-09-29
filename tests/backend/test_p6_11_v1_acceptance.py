@@ -68,9 +68,7 @@ async def test_fresh_starter_public_api_acceptance(
     datasets = await owner.receive_json()
     assert datasets["success"] is True
     starter_dataset = next(
-        item
-        for item in datasets["result"]["items"]
-        if item["dataset_id"] == STARTER_DATASET_ID
+        item for item in datasets["result"]["items"] if item["dataset_id"] == STARTER_DATASET_ID
     )
     assert starter_dataset["installed_version"] == "1.0.0"
     assert starter_dataset["state"] == "installed"
@@ -119,10 +117,7 @@ async def test_fresh_starter_public_api_acceptance(
     # introductions. A fresh all-new 20-card request therefore prepares 15.
     assert session["question_count"] == 15
     assert len(session["items"]) == 15
-    assert all(
-        item["payload"]["selection"]["progress_state"] == "new"
-        for item in session["items"]
-    )
+    assert all(item["payload"]["selection"]["progress_state"] == "new" for item in session["items"])
     assert session["current_question"] is not None
 
     other_client = await hass_ws_client(hass)

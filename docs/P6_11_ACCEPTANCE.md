@@ -130,7 +130,7 @@ P6.10 release readiness is qualified on rewritten privacy-safe baseline
 | ID | Scenario step | Evidence |
 |---|---|---|
 | CAMILLE-01 | creates a private Profile | Profiles + ACL tests |
-| CAMILLE-02 | enables Japanese and Spanish Tracks | generic multilingual Track model/tests |
+| CAMILLE-02 | enables Japanese and Spanish Tracks | AUTO same-Profile Japanese + Spanish Track creation with direction-matched synthetic content |
 | CAMILLE-03 | owns independent settings/progression | Profile/Track/progress isolation tests |
 
 ### Zoé
@@ -163,6 +163,12 @@ The fresh-install E2E deliberately requests 20 cards and receives 15 new cards:
 §53.1 forbids introducing new cards in the final 25% of a bounded session. The
 separate 20-card selector acceptance uses 15 new cards followed by five due
 reviews, proving A-09 without violating that fatigue invariant.
+
+The committed documentation screenshot is qualified structurally and semantically
+by the P6.9 contract and Playwright flow. PNG byte-for-byte equality across
+different Chromium/OS rasterizers is not a V1 release invariant. A frontend
+source/bundle drift or behavioral Playwright failure is blocking; a raster-only
+PNG encoding difference with an unchanged committed artifact is not.
 
 P6.11 qualification must fail on a missing V1 capability or resilience scenario;
 it must **not** fail merely because one of these deferred features is absent.

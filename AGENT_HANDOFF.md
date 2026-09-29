@@ -24,6 +24,9 @@ independent qualification. No 1.0 tag or GitHub Release has been created.
   cross-client resume, dashboard and stats.
 - `tests/backend/test_session_selection.py` contains the complementary 20-card
   acceptance with 15 new cards plus five due reviews, preserving §53.1.
+- `tests/backend/test_tracks.py::test_one_profile_supports_japanese_and_spanish_tracks`
+  proves one Profile can own independent Japanese and Spanish Tracks with
+  direction-matched content, closing CAMILLE-02 explicitly.
 - `tests/backend/test_p6_11_acceptance_contracts.py` gates the evidence IDs,
   critical test nodeids, real-HA evidence and explicit V1.1/V2 non-blockers.
 - CI has a dedicated `P6.11 V1 acceptance` backend-quality step; the normal full

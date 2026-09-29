@@ -21,6 +21,7 @@ DOD_IDS = (
 CRITICAL_NODEIDS = (
     "tests/backend/test_p6_11_v1_acceptance.py::test_fresh_starter_public_api_acceptance",
     "tests/backend/test_profiles.py::test_child_profile_needs_no_dedicated_ha_account_and_supports_multiple_owners",
+    "tests/backend/test_tracks.py::test_one_profile_supports_japanese_and_spanish_tracks",
     "tests/backend/test_websocket_crud.py::test_track_crud_pack_integration_and_catalog_surfaces",
     "tests/backend/test_websocket_sessions.py::test_session_start_pause_resume_complete_and_cross_client_get",
     "tests/backend/test_session_selection.py::test_twenty_card_session_fills_with_due_reviews_in_final_quarter",

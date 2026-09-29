@@ -266,10 +266,7 @@ async def test_selection_prioritizes_short_steps_and_reserves_final_quarter() ->
 async def test_twenty_card_session_fills_with_due_reviews_in_final_quarter() -> None:
     due = "2026-09-23T10:00:00+00:00"
     candidates = (
-        *(
-            _candidate(index, state="new", content_type="vocabulary")
-            for index in range(1, 16)
-        ),
+        *(_candidate(index, state="new", content_type="vocabulary") for index in range(1, 16)),
         *(
             _candidate(index, state="review", content_type="vocabulary", due=due)
             for index in range(16, 21)
