@@ -17,6 +17,7 @@ import {
   completeSession,
   createCardAnnotation,
   getSession,
+  getSessionAvailability,
   reportQuestion,
   setCardUserState,
   startLearnSession,
@@ -24,6 +25,7 @@ import {
   type DashboardTrack,
   type HomeAssistantLike,
   type LearnContentBlock,
+  type SessionAvailability,
   type SessionQuestion,
   type SessionState,
   type VisibleProfile,
@@ -51,10 +53,13 @@ export class LockLearnLearnView extends LitElement {
   @state() private mnemonic = "";
   @state() private reportMessage = "";
   @state() private waitingUntil?: string;
+  @state() private availability?: SessionAvailability;
+  @state() private forceEarlyCurrent = false;
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
   private availabilityTimer?: ReturnType<typeof globalThis.setTimeout>;
+  private nextDueTimer?: ReturnType<typeof globalThis.setTimeout>;
 
   static styles = css`
     ${contentRendererStyles}
@@ -250,6 +255,7 @@ export class LockLearnLearnView extends LitElement {
 
   disconnectedCallback(): void {
     this.clearAvailabilityTimer();
+    if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
     super.disconnectedCallback();
   }
 
@@ -263,6 +269,7 @@ export class LockLearnLearnView extends LitElement {
         this.session = undefined;
         this.resetQuestionUi();
       }
+      void this.refreshAvailability();
     }
     if (
       changed.has("externalSession") &&
@@ -311,6 +318,7 @@ export class LockLearnLearnView extends LitElement {
     this.errorMessage = "";
     this.notice = "";
     this.resetQuestionUi();
+    void this.refreshAvailability();
   }
 
   private resetQuestionUi(): void {
@@ -323,6 +331,7 @@ export class LockLearnLearnView extends LitElement {
     this.mnemonic = "";
     this.reportMessage = "";
     this.notice = "";
+    this.forceEarlyCurrent = false;
     this.questionStartedAt = nowMs();
     this.questionId = this.session?.current_question?.question_id ?? null;
   }
@@ -355,11 +364,59 @@ export class LockLearnLearnView extends LitElement {
     }
   }
 
+  private async refreshAvailability(): Promise<void> {
+    if (
+      this.hass === undefined ||
+      this.profile === undefined ||
+      this.trackId === ""
+    ) {
+      this.availability = undefined;
+      return;
+    }
+    try {
+      this.availability = await getSessionAvailability(
+        this.hass,
+        this.profile.profile_id,
+        this.trackId,
+        "learn",
+      );
+      if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
+      const nextDue = this.availability.next_due_at_utc;
+      if (nextDue !== null) {
+        const delay = Date.parse(nextDue) - Date.now();
+        if (delay > 0 && delay < 2_147_000_000) {
+          this.nextDueTimer = globalThis.setTimeout(() => {
+            this.nextDueTimer = undefined;
+            void this.refreshAvailability();
+          }, delay + 250);
+        }
+      }
+    } catch {
+      this.availability = undefined;
+    }
+  }
+
+  private dueLabel(value: string | null): string {
+    if (value === null) return "";
+    const due = new Date(value);
+    if (Number.isNaN(due.getTime())) return "";
+    const minutes = Math.max(1, Math.ceil((due.getTime() - Date.now()) / 60_000));
+    const time = new Intl.DateTimeFormat(this.locale(), { timeStyle: "short" }).format(due);
+    return `${time} · ${this.t("learn.inAbout")} ${minutes} min`;
+  }
+
+  private continueCurrentEarly(): void {
+    this.clearAvailabilityTimer();
+    this.waitingUntil = undefined;
+    this.forceEarlyCurrent = true;
+    this.questionStartedAt = nowMs();
+  }
+
   private elapsedMs(): number {
     return Math.max(0, Math.round(nowMs() - this.questionStartedAt));
   }
 
-  private async start(): Promise<void> {
+  private async start(allowEarlyLearning = false): Promise<void> {
     if (
       this.hass === undefined ||
       this.profile === undefined ||
@@ -374,8 +431,11 @@ export class LockLearnLearnView extends LitElement {
         this.hass,
         this.profile.profile_id,
         this.trackId,
+        20,
+        allowEarlyLearning,
       );
       this.applySession(session);
+      await this.refreshAvailability();
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : String(error);
     } finally {
@@ -440,6 +500,7 @@ export class LockLearnLearnView extends LitElement {
           action,
           hint_used: this.hintUsed,
           presentation_to_answer_ms: latency ?? this.elapsedMs(),
+          ...(this.forceEarlyCurrent ? { force_early: true } : {}),
         },
       );
       this.applySession(await this.finalizeIfDone(answered));
@@ -590,7 +651,7 @@ export class LockLearnLearnView extends LitElement {
                   ${this.t("learn.resume")}
                 </button>`
               : nothing}
-            <button class="primary" @click=${this.start} ?disabled=${this.loading}>
+            <button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
               ${this.t("learn.start")}
             </button>
           </div>
@@ -615,14 +676,30 @@ export class LockLearnLearnView extends LitElement {
   private renderSession() {
     if (this.session === undefined) return nothing;
     if (this.session.question_count === 0) {
-      return html`<section class="learn-card"><p>${this.t("learn.empty")}</p></section>`;
+      const nextDue = this.availability?.next_due_at_utc ?? null;
+      const canContinue = (this.availability?.forceable_early ?? 0) > 0;
+      return html`
+        <section class="learn-card">
+          <h2>${this.t("learn.pauseTitle")}</h2>
+          <p>${this.t("learn.emptyExplain")}</p>
+          ${nextDue === null ? nothing : html`
+            <p><strong>${this.t("learn.nextAvailable")}:</strong> ${this.dueLabel(nextDue)}</p>
+          `}
+          ${canContinue ? html`
+            <p class="muted">${this.t("learn.continueEarlyHelp")}</p>
+            <button class="primary" @click=${() => void this.start(true)} ?disabled=${this.loading}>
+              ${this.t("learn.continueNow")}
+            </button>
+          ` : nothing}
+        </section>
+      `;
     }
     if (this.session.current_question === null || this.session.status === "completed") {
       return html`
         <section class="learn-card">
           <h2>${this.t("learn.completed")}</h2>
           <p>${this.t("learn.completedBody")}</p>
-          <button class="primary" @click=${this.start} ?disabled=${this.loading}>
+          <button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
             ${this.t("learn.newSession")}
           </button>
         </section>
@@ -652,6 +729,10 @@ export class LockLearnLearnView extends LitElement {
           ${this.t("learn.waitingUntil")}
           <time datetime=${waitingUntil}>${formatted}</time>
         </p>
+        <p class="muted">${this.t("learn.waitingExplain")}</p>
+        <button class="primary" @click=${this.continueCurrentEarly} ?disabled=${this.loading}>
+          ${this.t("learn.continueNow")}
+        </button>
       </article>
     `;
   }
