@@ -920,6 +920,8 @@ export interface SessionAvailability {
   forceable_new: number;
   forceable_early: number;
   next_due_at_utc: string | null;
+  next_available_at_utc: string | null;
+  next_available_reason: "scheduled_step" | "new_quota_reset" | null;
 }
 
 export async function getSessionAvailability(
