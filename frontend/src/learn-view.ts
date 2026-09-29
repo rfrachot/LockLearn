@@ -665,10 +665,14 @@ export class LockLearnLearnView extends LitElement {
               ? html`<div>${this.availability.available_now} ${this.t("learn.cardsReady")}</div>`
               : html`
                   <div>${this.t("learn.noCardsReady")}</div>
-                  ${this.availability.next_due_at_utc === null ? nothing : html`
+                  ${this.availability.next_available_at_utc === null ? nothing : html`
                     <div>
-                      <strong>${this.t("learn.nextAvailable")}:</strong>
-                      ${this.dueLabel(this.availability.next_due_at_utc)}
+                      <strong>${this.t(
+                        this.availability.next_available_reason === "new_quota_reset"
+                          ? "learn.quotaReset"
+                          : "learn.nextAvailable",
+                      )}:</strong>
+                      ${this.dueLabel(this.availability.next_available_at_utc)}
                     </div>
                   `}
                   ${this.availability.forceable_early > 0 ? html`
@@ -704,14 +708,20 @@ export class LockLearnLearnView extends LitElement {
   private renderSession() {
     if (this.session === undefined) return nothing;
     if (this.session.question_count === 0) {
-      const nextDue = this.availability?.next_due_at_utc ?? null;
+      const nextAvailable = this.availability?.next_available_at_utc ?? null;
+      const nextReason = this.availability?.next_available_reason ?? null;
       const canContinue = (this.availability?.forceable_early ?? 0) > 0;
       return html`
         <section class="learn-card">
           <h2>${this.t("learn.pauseTitle")}</h2>
           <p>${this.t("learn.emptyExplain")}</p>
-          ${nextDue === null ? nothing : html`
-            <p><strong>${this.t("learn.nextAvailable")}:</strong> ${this.dueLabel(nextDue)}</p>
+          ${nextAvailable === null ? nothing : html`
+            <p>
+              <strong>${this.t(
+                nextReason === "new_quota_reset" ? "learn.quotaReset" : "learn.nextAvailable",
+              )}:</strong>
+              ${this.dueLabel(nextAvailable)}
+            </p>
           `}
           ${canContinue ? html`
             <p class="muted">
@@ -727,10 +737,20 @@ export class LockLearnLearnView extends LitElement {
       `;
     }
     if (this.session.current_question === null || this.session.status === "completed") {
+      const nextAvailable = this.availability?.next_available_at_utc ?? null;
+      const nextReason = this.availability?.next_available_reason ?? null;
       return html`
         <section class="learn-card">
           <h2>${this.t("learn.completed")}</h2>
           <p>${this.t("learn.completedBody")}</p>
+          ${nextAvailable === null ? nothing : html`
+            <p>
+              <strong>${this.t(
+                nextReason === "new_quota_reset" ? "learn.quotaReset" : "learn.nextAvailable",
+              )}:</strong>
+              ${this.dueLabel(nextAvailable)}
+            </p>
+          `}
           <button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
             ${this.t("learn.newSession")}
           </button>
