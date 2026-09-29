@@ -3417,9 +3417,7 @@ class NotificationTargetsRepository:
                 connection.commit()
             except sqlite3.IntegrityError as err:
                 connection.rollback()
-                raise StateRepositoryError(
-                    "notification target identity already exists"
-                ) from err
+                raise StateRepositoryError("notification target identity already exists") from err
 
         await self._storage._async_writer(write)
 
