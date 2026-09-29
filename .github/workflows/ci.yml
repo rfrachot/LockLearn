@@ -177,6 +177,12 @@ jobs:
       - run: npm run check:no-polling
       - run: npm run build
       - run: npm run check:bundle
+      - name: Upload built panel
+        uses: actions/upload-artifact@v4
+        with:
+          name: locklearn-built-panel
+          path: custom_components/locklearn/frontend/locklearn-panel.js
+          if-no-files-found: error
       - run: git diff --exit-code -- ../custom_components/locklearn/frontend/locklearn-panel.js
 
   frontend-e2e:

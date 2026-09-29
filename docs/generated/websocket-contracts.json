@@ -782,6 +782,46 @@
     },
     {
       "access": "profile-acl",
+      "command": "locklearn/targets/create",
+      "errors": [
+        "ERR_INVALID_REQUEST",
+        "ERR_NOT_FOUND"
+      ],
+      "handler": "ws_targets_create",
+      "optional_request_fields": [
+        "friendly_name",
+        "capabilities",
+        "minimum_gap_seconds",
+        "maximum_notifications_per_hour",
+        "daily_push_budget"
+      ],
+      "protocol_version": 3,
+      "required_request_fields": [
+        "profile_id",
+        "device_registry_id"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false
+    },
+    {
+      "access": "profile-acl",
+      "command": "locklearn/targets/discover",
+      "errors": [
+        "ERR_INVALID_REQUEST"
+      ],
+      "handler": "ws_targets_discover",
+      "optional_request_fields": [
+        "cursor"
+      ],
+      "protocol_version": 3,
+      "required_request_fields": [
+        "profile_id"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false
+    },
+    {
+      "access": "profile-acl",
       "command": "locklearn/targets/list",
       "errors": [
         "ERR_INVALID_REQUEST"
@@ -793,6 +833,32 @@
       "protocol_version": 3,
       "required_request_fields": [
         "profile_id"
+      ],
+      "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
+      "subscription": false
+    },
+    {
+      "access": "profile-acl",
+      "command": "locklearn/targets/update",
+      "errors": [
+        "ERR_INVALID_REQUEST",
+        "ERR_NOT_FOUND"
+      ],
+      "handler": "ws_targets_update",
+      "optional_request_fields": [
+        "friendly_name",
+        "capabilities",
+        "shared_device",
+        "lockscreen_visibility",
+        "enabled",
+        "minimum_gap_seconds",
+        "maximum_notifications_per_hour",
+        "daily_push_budget"
+      ],
+      "protocol_version": 3,
+      "required_request_fields": [
+        "profile_id",
+        "target_id"
       ],
       "response": "Home Assistant WebSocket result envelope; payload is handler-defined",
       "subscription": false

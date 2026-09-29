@@ -57,7 +57,10 @@ describes the additional LockLearn authorization boundary enforced by the backen
 | `locklearn/session/subscribe` | `ws_session_subscribe` | session-via-profile-acl | `session_id` | — | — |
 | `locklearn/session/undo` | `ws_session_undo` | session-via-profile-acl | `session_id`, `expected_version` | — | `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
 | `locklearn/stats/get` | `ws_stats_get` | profile-acl | `profile_id` | `track_id` | `ERR_INVALID_REQUEST` |
+| `locklearn/targets/create` | `ws_targets_create` | profile-acl | `profile_id`, `device_registry_id` | `friendly_name`, `capabilities`, `minimum_gap_seconds`, `maximum_notifications_per_hour`, `daily_push_budget` | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND` |
+| `locklearn/targets/discover` | `ws_targets_discover` | profile-acl | `profile_id` | `cursor` | `ERR_INVALID_REQUEST` |
 | `locklearn/targets/list` | `ws_targets_list` | profile-acl | `profile_id` | `cursor` | `ERR_INVALID_REQUEST` |
+| `locklearn/targets/update` | `ws_targets_update` | profile-acl | `profile_id`, `target_id` | `friendly_name`, `capabilities`, `shared_device`, `lockscreen_visibility`, `enabled`, `minimum_gap_seconds`, `maximum_notifications_per_hour`, `daily_push_budget` | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND` |
 | `locklearn/tracks/create` | `ws_tracks_create` | profile-acl | `profile_id`, `name`, `pack_version_id`, `source_language`, `target_language` | `content_weights`, `explicit_card_keys`, `scheduler_settings` | `ERR_DATASET_UNAVAILABLE`, `ERR_INVALID_REQUEST` |
 | `locklearn/tracks/delete` | `ws_tracks_delete` | track-via-profile-acl | `track_id` | — | `ERR_NOT_FOUND` |
 | `locklearn/tracks/integrate_pack_update` | `ws_tracks_integrate_pack_update` | track-via-profile-acl | `track_id`, `pack_version_id` | — | `ERR_DATASET_UNAVAILABLE`, `ERR_INVALID_REQUEST`, `ERR_PACK_VERSION_MISMATCH` |
