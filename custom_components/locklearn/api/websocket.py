@@ -3035,6 +3035,7 @@ COMMANDS = (
     ws_admin_storage_status,
     ws_notification_unrecorded_responses,
     ws_scheduler_preview,
+    ws_session_availability,
     ws_session_start,
     ws_session_get,
     ws_quiz_evaluate,
