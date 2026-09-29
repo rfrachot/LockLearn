@@ -65,7 +65,7 @@ test("multi-Track cards keep advanced settings and plans attached to each Track"
   await expect(page.getByRole("heading", { name: "French Core" })).toBeVisible();
 
   const advanced = page.locator("summary").filter({ hasText: "Advanced Track settings" });
-  const plans = page.locator("summary").filter({ hasText: "Learning plan" });
+  const plans = page.locator("summary").filter({ hasText: "Learning pace & goal" });
   await expect(advanced).toHaveCount(2);
   await expect(plans).toHaveCount(2);
 
