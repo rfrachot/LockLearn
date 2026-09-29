@@ -10,6 +10,7 @@ import {
   discoverNotificationTargets,
   getDashboard,
   getSession,
+  getSessionAvailability,
   getStats,
   installDataset,
   listDatasetAttributions,
@@ -33,6 +34,7 @@ import {
   startLeechSession,
   startQuizSession,
   submitQuizAnswer,
+  testNotificationTarget,
   updateCardAnnotation,
   updateNotificationTarget,
   evaluateQuizAnswer,
@@ -206,6 +208,68 @@ describe("frontend protocol", () => {
     ]);
   });
 
+  it("uses availability and safe early-learning contracts", async () => {
+    const messages: Record<string, unknown>[] = [];
+    const hass: HomeAssistantLike = {
+      callWS: async <T>(message: Record<string, unknown>): Promise<T> => {
+        messages.push(message);
+        if (message.type === "locklearn/session/availability") {
+          return {
+            profile_id: "p1",
+            track_id: "t1",
+            session_type: "learn",
+            available_now: 0,
+            introduced_cards: 2,
+            new_cards: 0,
+            forceable_early: 1,
+            next_due_at_utc: "2026-09-29T12:10:00+00:00",
+          } as T;
+        }
+        return {
+          id: "s1",
+          profile_id: "p1",
+          track_id: "t1",
+          type: "learn",
+          strategy: "default",
+          status: "active",
+          version: 1,
+          current_position: 0,
+          started_at_utc: "2026-09-29T12:00:00+00:00",
+          last_activity_at_utc: "2026-09-29T12:00:00+00:00",
+          completed_at_utc: null,
+          question_count: 0,
+          settings: {},
+          items: [],
+          answers: [],
+          current_question: null,
+        } as T;
+      },
+    };
+
+    expect((await getSessionAvailability(hass, "p1", "t1", "learn")).forceable_early).toBe(1);
+    await startLearnSession(hass, "p1", "t1", 20, true);
+
+    expect(messages).toEqual([
+      {
+        type: "locklearn/session/availability",
+        profile_id: "p1",
+        track_id: "t1",
+        session_type: "learn",
+      },
+      {
+        type: "locklearn/session/start",
+        profile_id: "p1",
+        track_id: "t1",
+        session_type: "learn",
+        strategy: "default",
+        settings: {
+          requested_cards: 20,
+          allow_early_learning: true,
+        },
+      },
+    ]);
+  });
+
   it("uses explicit Quiz evaluate/report/session contracts", async () => {
     const messages: Record<string, unknown>[] = [];
     const session = {
@@ -367,6 +431,7 @@ describe("frontend protocol", () => {
       shared_device: true,
       daily_push_budget: 3,
     });
+    await testNotificationTarget(hass, "p1", "target-1");
 
     expect(messages).toEqual([
       { type: "locklearn/targets/discover", limit: 100, profile_id: "p1" },
@@ -381,6 +446,11 @@ describe("frontend protocol", () => {
         target_id: "target-1",
         shared_device: true,
         daily_push_budget: 3,
+      },
+      {
+        type: "locklearn/targets/test",
+        profile_id: "p1",
+        target_id: "target-1",
       },
     ]);
   });
