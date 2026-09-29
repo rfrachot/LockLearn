@@ -26,6 +26,14 @@ const track = {
   content_weights: {},
 };
 
+const track2 = {
+  ...track,
+  track_id: "track-fr",
+  name: "French Core",
+  source_language: "fr",
+  target_language: "en",
+};
+
 const dashboardTrack = {
   track_id: track.track_id,
   name: track.name,
@@ -38,6 +46,60 @@ const dashboardTrack = {
   last_session: null,
   next_notification: null,
 };
+
+const dashboardTrack2 = {
+  ...dashboardTrack,
+  track_id: track2.track_id,
+  name: track2.name,
+  source_language: track2.source_language,
+  target_language: track2.target_language,
+};
+
+const pack = {
+  pack_id: "pack-1",
+  name: "Core Languages",
+  pack_version_id: "pack-v1",
+  version: "1.0.0",
+  curation_policy_id: null,
+  generation_id: "gen-1",
+  total_items: 20,
+  total_cards: 40,
+  directions: [
+    { source_language: "ja", target_language: "en" },
+    { source_language: "fr", target_language: "en" },
+  ],
+};
+
+const notificationTargets = [
+  {
+    target_id: "target-phone",
+    profile_id: profile.profile_id,
+    device_registry_id: "device-phone",
+    friendly_name: "Pixel 9 Pro",
+    platform: "android",
+    capabilities: {},
+    shared_device: false,
+    lockscreen_visibility: "private",
+    enabled: true,
+    minimum_gap_seconds: 300,
+    maximum_notifications_per_hour: 4,
+    daily_push_budget: 8,
+  },
+  {
+    target_id: "target-tablet",
+    profile_id: profile.profile_id,
+    device_registry_id: "device-tablet",
+    friendly_name: "Galaxy Tab",
+    platform: "android",
+    capabilities: {},
+    shared_device: true,
+    lockscreen_visibility: "private",
+    enabled: true,
+    minimum_gap_seconds: 600,
+    maximum_notifications_per_hour: 2,
+    daily_push_budget: 4,
+  },
+];
 
 const presentation = {
   card_key: "card-e2e",
@@ -202,10 +264,36 @@ const hass = {
             timezone: profile.timezone,
           },
           generated_at_utc: now,
-          tracks: [dashboardTrack],
+          tracks: [dashboardTrack, dashboardTrack2],
         };
       case "locklearn/tracks/list":
-        return { items: [track], cursor: null };
+        return { items: [track, track2], cursor: null };
+      case "locklearn/session/availability":
+        return message.session_type === "quiz"
+          ? {
+              profile_id: profile.profile_id,
+              track_id: String(message.track_id),
+              session_type: "quiz",
+              available_now: 1,
+              introduced_cards: 2,
+              new_cards: 3,
+              remaining_new_quota: 0,
+              forceable_new: 0,
+              forceable_early: 0,
+              next_due_at_utc: "2026-09-27T02:10:00+00:00",
+            }
+          : {
+              profile_id: profile.profile_id,
+              track_id: String(message.track_id),
+              session_type: "learn",
+              available_now: 0,
+              introduced_cards: 2,
+              new_cards: 3,
+              remaining_new_quota: 0,
+              forceable_new: 3,
+              forceable_early: 3,
+              next_due_at_utc: "2026-09-27T02:10:00+00:00",
+            };
       case "locklearn/session/start":
         return session(message.session_type === "quiz" ? "quiz" : "learn");
       case "locklearn/session/get":
@@ -272,7 +360,10 @@ const hass = {
       case "locklearn/difficulties/list":
         return { items: [] };
       case "locklearn/packs/list":
+        return { items: [pack], cursor: null };
       case "locklearn/targets/list":
+        return { items: notificationTargets, cursor: null };
+      case "locklearn/targets/discover":
       case "locklearn/datasets/list":
         return { items: [], cursor: null };
       case "locklearn/profiles/members":
