@@ -48,6 +48,13 @@ jobs:
           tests/backend/test_tracks.py::test_one_profile_supports_japanese_and_spanish_tracks
       - name: Beta notification target configuration
         run: python -m pytest -q --tb=short tests/backend/test_notification_target_management.py
+      - name: Beta.3 field UX and safe early learning
+        run: >-
+          python -m pytest -q --tb=short
+          tests/backend/test_beta3_early_learning.py
+          tests/backend/test_session_selection.py::test_early_learning_can_be_forced_after_exposure_or_success
+          tests/backend/test_session_selection.py::test_early_learning_never_bypasses_failed_or_relearning_cooldown
+          tests/backend/test_session_selection.py::test_availability_reports_next_due_and_forceable_learning
       - name: P6.8 release contracts
         run: >-
           python -m pytest -q --tb=short
