@@ -2,50 +2,52 @@
 
 ## Current state
 
-Release UX branch: `release/1.0.0-beta.4`.
+Field-test beta.4 qualification completed on `release/1.0.0-beta.4`.
 
-Beta.4 qualification passed on candidate
-`741c94be7e8c8b2f42478b227fbfc8964a7d9413`.
+The committed frontend bundle was regenerated from source and pushed in:
 
-The candidate fixed a real readiness/start divergence on top of
-`3af7c4a63967c124babb9b6ee808b3ce146c91da`.
+- `8a89677c510c231ba3f889ce587dd31c0f90d372` —
+  `build(beta4): regenerate field-feedback frontend bundle`;
+- bundle SHA-256:
+  `21e279603274fa10ff07e79e42629b90c3bcc676229e68bd2672bfda3700013f`.
 
-Root cause: the frontend started Quiz with a hard-coded 10 cards and Learn with
-a hard-coded 20 cards, while `session/availability` resolved
-`profile.settings.session_length_cards`. This produced standard Quiz
-availability=20/start=10 and child Learn availability=10/start=20.
+The second Vite build was reproducible and left the worktree clean before
+qualification. GitHub CI run `36626168374` passed all jobs: backend-quality,
+frontend, frontend-e2e, dataset-contracts, home-assistant-validation, HA
+minimum 2025.2.5, current harness 2026.9.3 and latest stable 2026.9.4.
 
-## Fix now on branch
+Local verification passed:
 
-- Learn and Quiz no longer invent a default requested-card count. When the user
-  has not explicitly chosen a size, `session/start` lets the backend resolve
-  the Profile's `session_length_cards`.
-- `locklearn/session/availability` accepts optional selection `settings` and
-  resolves requested cards, content-type filters and leech-only filtering through
-  the same backend selection path as `async_prepare`.
-- Availability continues to be read-only and preserves the narrow safe
-  early-learning override; failed/relearning cooldowns remain authoritative.
-- Regression coverage locks child/standard/intensive profile lengths, explicit
-  requested-card overrides and content-type parity, plus frontend protocol
-  contracts that omit hard-coded default lengths.
-- Generated WebSocket contracts and changelog were updated.
+- targeted session-selection tests: 27 passed;
+- frontend targeted tests: 57 passed;
+- full backend suite: 506 passed, one non-blocking duplicate-ZIP-name warning;
+- Ruff format/lint, mypy, generated docs, resource and schema contracts;
+- frontend lint, typecheck, tests, no-polling, bundle budget and E2E: 7 passed.
 
-The existing HA deployment was already on this exact candidate; it was verified
-in place and not redeployed unnecessarily.
+Real HA 2026.7.4 qualification:
 
-## Qualification evidence
+- HACS `hacs/repository/download` used for repository `1371828774`, branch
+  `release/1.0.0-beta.4`, then HA was restarted;
+- LockLearn Config Entry is `loaded`, frontend protocol is `3`, panel module
+  URL contains bundle digest `21e279603274`;
+- served bundle SHA-256 matches the local bundle exactly;
+- storage status: integrity `ok`, foreign keys `0`, schema `5`, WAL,
+  writer initialized and reader off the event loop;
+- system log query has no LockLearn warning/error/critical entries;
+- existing qualification Profile/Track was reused; no Profile was created or
+  deleted by this qualification.
 
-- GitHub CI run `36617120890`: all jobs green, including backend-quality,
-  frontend, frontend-e2e, dataset-contracts, Home Assistant validation,
-  HA 2025.2.5, HA 2026.9.3 and HA 2026.9.4.
-- Focused session-selection tests: 5 passed, covering profile 10, Quiz 20/30,
-  explicit 7 and content-type parity.
-- Existing HA 2026.7.4 deployment remains loaded; static bundle is 214857 bytes
-  with SHA-256 `9e5f8f492cd56fa4cd8a1b3eff73c2b7251f5f8f3fde242146209486f26469af`.
-- Real UI smoke passed for Learn completion, resume, safe Continue now, Tracks,
-  responsive layout and Companion targets. Quiz currently has an honest 0/0
-  fixture with next due displayed; this is neutral under the beta.4 rule.
-- No Profile was created or deleted during qualification.
+Observed real Track readiness:
 
-Manual beta.4 UI testing may now begin. Do not start beta.5 or publish/merge/tag
-a stable release during this gate.
+- Learn: `introduced_cards=32`, `new_cards=68`, `available_now=15`,
+  `forceable_early=1`, `next_available_reason=scheduled_step`, and the next
+  due/available timestamp is `2026-09-29T20:44:05.309081+00:00`;
+- Quiz: `introduced_cards=32`, `available_now=15`, same scheduled-step
+  timestamp, so the UI does not use the first-learning message;
+- Stats: `learning=19`, `review=0`, confirming that completion of a short
+  learning-step session does not imply review graduation.
+
+The source/test contract covers persisted Track readiness copy, scheduled
+learning steps, local new-card quota reset, availability/start parity, safe
+early learning, and non-bypassable failed/relearning cooldowns. No deployment
+or release action remains for this beta.4 field-test gate.
