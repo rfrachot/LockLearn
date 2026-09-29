@@ -427,6 +427,7 @@ export class LockLearnManagementView extends LitElement {
 
   private async removeMember(userId: string): Promise<void> {
     if (this.hass === undefined || this.profile === undefined) return;
+    if (!globalThis.confirm?.(this.t("manage.confirmRemoveMember"))) return;
     await this.mutate(() => removeProfileMember(this.hass!, this.profile!.profile_id, userId), this.t("manage.saved"));
   }
 
@@ -533,7 +534,13 @@ export class LockLearnManagementView extends LitElement {
       <article class="card">
         <div class="track-summary">
           <h2>${track.name}</h2>
-          <p class="meta">${sourceLabel} → ${targetLabel} · ${this.t(`manage.status.${track.status}` as Parameters<typeof translate>[1])}</p>
+          <p class="meta">${sourceLabel} → ${targetLabel} · ${
+  track.status === "active"
+    ? this.t("manage.active")
+    : track.status === "paused"
+      ? this.t("manage.paused")
+      : this.t("manage.archived")
+}</p>
           <p class="meta">${this.t("manage.packVersion")}: ${track.pack_version_id ?? "—"}</p>
         </div>
         ${this.canEditTrack() ? html`
