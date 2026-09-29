@@ -62,9 +62,7 @@ async def test_owner_can_discover_create_and_update_companion_target(
     discovered = await owner.receive_json()
     assert discovered["success"] is True
     candidate = next(
-        item
-        for item in discovered["result"]["items"]
-        if item["device_registry_id"] == device.id
+        item for item in discovered["result"]["items"] if item["device_registry_id"] == device.id
     )
     assert candidate == {
         "device_registry_id": device.id,
@@ -124,9 +122,7 @@ async def test_owner_can_discover_create_and_update_companion_target(
     )
     rediscovered = await owner.receive_json()
     candidate = next(
-        item
-        for item in rediscovered["result"]["items"]
-        if item["device_registry_id"] == device.id
+        item for item in rediscovered["result"]["items"] if item["device_registry_id"] == device.id
     )
     assert candidate["configured_target_id"] == target_id
 
