@@ -683,6 +683,54 @@ async def test_availability_reports_next_due_and_forceable_learning() -> None:
     assert availability["new_cards"] == 1
     assert availability["forceable_early"] == 1
     assert availability["next_due_at_utc"] == "2026-09-23T12:10:00+00:00"
+    assert availability["next_available_at_utc"] == "2026-09-23T12:10:00+00:00"
+    assert availability["next_available_reason"] == "scheduled_step"
+
+
+@pytest.mark.asyncio
+async def test_availability_exposes_next_scheduled_step_for_learning_pause() -> None:
+    service = _service(
+        (
+            _candidate(
+                1,
+                state="learning",
+                content_type="vocabulary",
+                due="2026-09-23T12:10:00+00:00",
+                last_result="correct",
+            ),
+        )
+    )
+
+    availability = await service.async_availability(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="learn",
+    )
+
+    assert availability["available_now"] == 0
+    assert availability["next_due_at_utc"] == "2026-09-23T12:10:00+00:00"
+    assert availability["next_available_at_utc"] == "2026-09-23T12:10:00+00:00"
+    assert availability["next_available_reason"] == "scheduled_step"
+
+
+@pytest.mark.asyncio
+async def test_availability_exposes_next_local_quota_reset_when_new_cards_remain() -> None:
+    service = _service(
+        (_candidate(1, state="new", content_type="vocabulary"),),
+        reviews=_Reviews(introductions=8),
+        profiles=_Profiles(max_new=8),
+    )
+
+    availability = await service.async_availability(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="learn",
+    )
+
+    assert availability["available_now"] == 0
+    assert availability["remaining_new_quota"] == 0
+    assert availability["next_available_at_utc"] == "2026-09-24T00:00:00+02:00"
+    assert availability["next_available_reason"] == "new_quota_reset"
 
 
 @pytest.mark.asyncio
