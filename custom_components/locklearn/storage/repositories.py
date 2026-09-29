@@ -1353,6 +1353,7 @@ class TracksRepository:
                           COALESCE(progress.difficulty_factor, 1.0),
                           progress.last_verified_at_utc,
                           progress.last_seen_at_utc,
+                          progress.last_result,
                           COALESCE(progress.self_known_count, 0),
                           COALESCE(progress.verified_correct_count, 0),
                           COALESCE(progress.verified_wrong_count, 0)
@@ -1404,9 +1405,10 @@ class TracksRepository:
                     "difficulty_factor": float(row[10]),
                     "last_verified_at_utc": None if row[11] is None else str(row[11]),
                     "last_seen_at_utc": None if row[12] is None else str(row[12]),
-                    "self_known_count": int(row[13]),
-                    "verified_correct_count": int(row[14]),
-                    "verified_wrong_count": int(row[15]),
+                    "last_result": None if row[13] is None else str(row[13]),
+                    "self_known_count": int(row[14]),
+                    "verified_correct_count": int(row[15]),
+                    "verified_wrong_count": int(row[16]),
                     "confusable_group_ids": tuple(confusable_by_item.get(str(row[1]), ())),
                 }
                 for row in rows
