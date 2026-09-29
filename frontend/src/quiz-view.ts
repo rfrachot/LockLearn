@@ -58,7 +58,7 @@ export class LockLearnQuizView extends LitElement {
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
-  private nextDueTimer?: number;
+  private nextDueTimer?: ReturnType<typeof globalThis.setTimeout>;
 
   static styles = css`
     ${contentRendererStyles}
