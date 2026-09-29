@@ -4,7 +4,12 @@ All notable changes will be documented here.
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Fixed
+- Keep Learn/Quiz readiness counts and actual session starts on the same
+  profile-defined session length; the frontend no longer overrides child,
+  standard or intensive Profile defaults with hard-coded 20/10-card values.
+- Let `locklearn/session/availability` evaluate the same selection settings as
+  `session/start`, including explicit requested-card and content-type filters.
 
 ## [1.0.0-beta.3] - 2026-09-29
 
