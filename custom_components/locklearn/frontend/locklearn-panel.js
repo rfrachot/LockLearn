@@ -1598,7 +1598,6 @@ async function bi(s, e, t, i, a = "mixed") {
     session_type: "quiz",
     strategy: "default",
     settings: {
-      ...i === void 0 ? {} : { requested_cards: i },
       quiz_format: a,
       option_count: 4
     }
@@ -1647,7 +1646,6 @@ async function _i(s, e, t, i, a = !1) {
     session_type: "learn",
     strategy: "default",
     settings: {
-      ...i === void 0 ? {} : { requested_cards: i },
       ...a ? { allow_early_learning: !0 } : {}
     }
   });
