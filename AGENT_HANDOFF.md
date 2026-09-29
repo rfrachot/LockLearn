@@ -39,6 +39,6 @@ No deployment has been performed for this fix.
    instance;
 4. smoke Learn/Quiz readiness, next-due guidance, safe Continue now and Companion
    target UX;
-5. only then allow Renaud to begin manual beta.4 UI testing.
+5. only then allow manual beta.4 UI testing to begin.
 
 Do not start beta.5 and do not publish/merge/tag a stable release during this gate.
