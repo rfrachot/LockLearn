@@ -396,6 +396,43 @@ async def test_early_learning_can_be_forced_after_exposure_or_success() -> None:
 
 
 @pytest.mark.asyncio
+async def test_explicit_continue_can_exceed_daily_new_target_without_relaxing_cooldowns() -> None:
+    service = _service(
+        (
+            _candidate(1, state="new", content_type="vocabulary"),
+            _candidate(2, state="new", content_type="grammar"),
+        ),
+        reviews=_Reviews(introductions=1),
+        profiles=_Profiles(max_new=1),
+    )
+
+    normal = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="learn",
+        settings={"requested_cards": 2},
+    )
+    availability = await service.async_availability(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="learn",
+    )
+    forced = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="learn",
+        settings={"requested_cards": 2, "allow_early_learning": True},
+    )
+
+    assert normal == ()
+    assert availability["available_now"] == 0
+    assert availability["remaining_new_quota"] == 0
+    assert availability["forceable_new"] == 2
+    assert availability["forceable_early"] == 2
+    assert [item.card_key for item in forced] == ["card-1", "card-2"]
+
+
+@pytest.mark.asyncio
 async def test_early_learning_never_bypasses_failed_or_relearning_cooldown() -> None:
     future = "2026-09-23T12:10:00+00:00"
     service = _service(
