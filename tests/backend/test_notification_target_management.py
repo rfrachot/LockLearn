@@ -35,8 +35,10 @@ async def test_owner_can_discover_create_and_update_companion_target(
         name="Beta Test Phone",
     )
 
-    async def handle_service(_call: ServiceCall) -> None:
-        return None
+    service_calls: list[ServiceCall] = []
+
+    async def handle_service(call: ServiceCall) -> None:
+        service_calls.append(call)
 
     hass.services.async_register("notify", "mobile_app_beta_test_phone", handle_service)
 
@@ -147,6 +149,21 @@ async def test_owner_can_discover_create_and_update_companion_target(
     assert updated["result"]["daily_push_budget"] == 2
     assert updated["result"]["capabilities"] == target["capabilities"]
 
+    await owner.send_json_auto_id(
+        {
+            "type": "locklearn/targets/test",
+            "profile_id": profile_id,
+            "target_id": target_id,
+        }
+    )
+    tested = await owner.receive_json()
+    assert tested["success"] is True
+    assert tested["result"]["target_id"] == target_id
+    assert tested["result"]["service"] == "notify.mobile_app_beta_test_phone"
+    assert len(service_calls) == 1
+    assert service_calls[0].data["title"] == "LockLearn"
+    assert service_calls[0].data["message"] == "Notification test successful."
+
     runtime = hass.data[DOMAIN][DATA_RUNTIME]
     persisted = await runtime.storage.repositories.notification_targets.async_get(target_id)
     assert persisted is not None
@@ -187,6 +204,11 @@ async def test_owner_can_discover_create_and_update_companion_target(
             "profile_id": profile_id,
             "target_id": target_id,
             "friendly_name": "Denied",
+        },
+        {
+            "type": "locklearn/targets/test",
+            "profile_id": profile_id,
+            "target_id": target_id,
         },
     ):
         await editor.send_json_auto_id(payload)
