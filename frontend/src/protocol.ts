@@ -927,12 +927,14 @@ export async function getSessionAvailability(
   profileId: string,
   trackId: string,
   sessionType: "learn" | "quiz",
+  settings: Record<string, unknown> = {},
 ): Promise<SessionAvailability> {
   return hass.callWS<SessionAvailability>({
     type: "locklearn/session/availability",
     profile_id: profileId,
     track_id: trackId,
     session_type: sessionType,
+    settings,
   });
 }
 
@@ -978,7 +980,7 @@ export async function startQuizSession(
   hass: HomeAssistantLike,
   profileId: string,
   trackId: string,
-  requestedCards = 10,
+  requestedCards?: number,
   quizFormat: QuizFormat = "mixed",
 ): Promise<SessionState> {
   return hass.callWS<SessionState>({
@@ -988,7 +990,7 @@ export async function startQuizSession(
     session_type: "quiz",
     strategy: "default",
     settings: {
-      requested_cards: requestedCards,
+      ...(requestedCards === undefined ? {} : { requested_cards: requestedCards }),
       quiz_format: quizFormat,
       option_count: 4,
     },
@@ -1065,7 +1067,7 @@ export async function startLearnSession(
   hass: HomeAssistantLike,
   profileId: string,
   trackId: string,
-  requestedCards = 20,
+  requestedCards?: number,
   allowEarlyLearning = false,
 ): Promise<SessionState> {
   return hass.callWS<SessionState>({
@@ -1075,7 +1077,7 @@ export async function startLearnSession(
     session_type: "learn",
     strategy: "default",
     settings: {
-      requested_cards: requestedCards,
+      ...(requestedCards === undefined ? {} : { requested_cards: requestedCards }),
       ...(allowEarlyLearning ? { allow_early_learning: true } : {}),
     },
   });
