@@ -175,6 +175,7 @@ def _candidate(
     group: str | None = None,
     user_state: str = "active",
     suspend_until_utc: str | None = None,
+    last_result: str | None = None,
 ) -> dict[str, Any]:
     return {
         "card_key": f"card-{index}",
@@ -187,6 +188,7 @@ def _candidate(
         "pack_position": index,
         "user_state": user_state,
         "suspend_until_utc": suspend_until_utc,
+        "last_result": last_result,
         "confusable_group_ids": () if group is None else (group,),
     }
 
@@ -351,6 +353,113 @@ async def test_not_yet_due_review_is_not_selected() -> None:
     )
 
     assert selected == ()
+
+
+@pytest.mark.asyncio
+async def test_early_learning_can_be_forced_after_exposure_or_success() -> None:
+    future = "2026-09-23T12:10:00+00:00"
+    service = _service(
+        (
+            _candidate(
+                1,
+                state="learning",
+                content_type="vocabulary",
+                due=future,
+                last_result="exposure",
+            ),
+            _candidate(
+                2,
+                state="learning",
+                content_type="vocabulary",
+                due=future,
+                last_result="correct",
+            ),
+        )
+    )
+
+    normal = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="learn",
+        settings={"requested_cards": 2},
+    )
+    forced = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="learn",
+        settings={"requested_cards": 2, "allow_early_learning": True},
+    )
+
+    assert normal == ()
+    assert [item.card_key for item in forced] == ["card-1", "card-2"]
+    assert all(item.payload["selection"]["early_learning"] for item in forced)
+
+
+@pytest.mark.asyncio
+async def test_early_learning_never_bypasses_failed_or_relearning_cooldown() -> None:
+    future = "2026-09-23T12:10:00+00:00"
+    service = _service(
+        (
+            _candidate(
+                1,
+                state="learning",
+                content_type="vocabulary",
+                due=future,
+                last_result="wrong",
+            ),
+            _candidate(
+                2,
+                state="relearning",
+                content_type="vocabulary",
+                due=future,
+                last_result="wrong",
+            ),
+        )
+    )
+
+    selected = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="learn",
+        settings={"requested_cards": 2, "allow_early_learning": True},
+    )
+
+    assert selected == ()
+
+
+@pytest.mark.asyncio
+async def test_availability_reports_next_due_and_forceable_learning() -> None:
+    service = _service(
+        (
+            _candidate(1, state="new", content_type="vocabulary"),
+            _candidate(
+                2,
+                state="learning",
+                content_type="vocabulary",
+                due="2026-09-23T12:10:00+00:00",
+                last_result="correct",
+            ),
+            _candidate(
+                3,
+                state="review",
+                content_type="vocabulary",
+                due="2026-09-23T12:30:00+00:00",
+                last_result="correct",
+            ),
+        )
+    )
+
+    availability = await service.async_availability(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="learn",
+    )
+
+    assert availability["available_now"] == 1
+    assert availability["introduced_cards"] == 2
+    assert availability["new_cards"] == 1
+    assert availability["forceable_early"] == 1
+    assert availability["next_due_at_utc"] == "2026-09-23T12:10:00+00:00"
 
 
 @pytest.mark.asyncio
