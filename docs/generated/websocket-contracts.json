@@ -675,7 +675,9 @@
         "ERR_INVALID_REQUEST"
       ],
       "handler": "ws_session_availability",
-      "optional_request_fields": [],
+      "optional_request_fields": [
+        "settings"
+      ],
       "protocol_version": 3,
       "required_request_fields": [
         "profile_id",
