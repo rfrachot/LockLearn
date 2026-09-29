@@ -310,7 +310,7 @@ class SessionSelectionService:
         next_available_reason: str | None = "scheduled_step" if next_due is not None else None
         if (
             normalized_type in _NEW_SESSION_TYPES
-            and new_cards > 0
+            and any(candidate.state == "new" for candidate in candidate_pool)
             and remaining_new_quota == 0
         ):
             timezone = ZoneInfo(str(profile["timezone"]))
