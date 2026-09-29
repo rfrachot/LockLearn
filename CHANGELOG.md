@@ -15,6 +15,11 @@ _No unreleased changes._
 - Keep target identity bound to the Home Assistant Device Registry while
   preserving conservative per-device capability defaults and existing
   scheduler/Track target selection.
+- Replace free-form Track language entry with pack-derived valid language
+  directions so users can only choose source/target pairs backed by active
+  CardDefinitions.
+- Render Home Assistant WebSocket object errors as useful messages instead of
+  `[object Object]`, including Track-creation validation failures.
 
 ## [1.0.0-beta.1] - 2026-09-29
 
