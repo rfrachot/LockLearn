@@ -179,6 +179,18 @@ class _CountingConstraints(_Constraints):
         )
 
 
+class _PlanningTracks(_Tracks):
+    async def async_planning_snapshot(
+        self,
+        *,
+        track_id: str,
+        now_utc: str,
+    ) -> dict[str, int]:
+        assert track_id == "track-1"
+        assert now_utc == "2026-09-23T12:00:00+00:00"
+        return {"selected_cards": 10, "introduced_cards": 8, "due_now": 0}
+
+
 class _UnconstrainedTracks(_Tracks):
     async def async_get(self, track_id: str) -> dict[str, Any] | None:
         track = await super().async_get(track_id)
@@ -685,6 +697,27 @@ async def test_availability_reports_next_due_and_forceable_learning() -> None:
     assert availability["next_due_at_utc"] == "2026-09-23T12:10:00+00:00"
     assert availability["next_available_at_utc"] == "2026-09-23T12:10:00+00:00"
     assert availability["next_available_reason"] == "scheduled_step"
+
+
+@pytest.mark.asyncio
+async def test_availability_uses_persisted_track_progress_for_readiness_copy() -> None:
+    service = SessionSelectionService(
+        _PlanningTracks((), weights={"vocabulary": 1.0}),
+        _Profiles(),
+        _Reviews(),
+        _Constraints(),
+        clock=_FixedClock(datetime(2026, 9, 23, 12, 0, tzinfo=UTC)),
+    )
+
+    availability = await service.async_availability(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="quiz",
+    )
+
+    assert availability["available_now"] == 0
+    assert availability["introduced_cards"] == 8
+    assert availability["new_cards"] == 2
 
 
 @pytest.mark.asyncio
