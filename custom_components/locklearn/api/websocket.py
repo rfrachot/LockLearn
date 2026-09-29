@@ -40,6 +40,7 @@ from ..core.sessions import SessionQuestion, SessionValidationError
 from ..core.stats import StatsServiceError
 from ..core.tracks import TrackValidationError
 from ..datasets.manager import DatasetManagerError, DatasetStatus
+from ..notifications.renderers import NotificationRenderMode, RenderedNotification
 from ..notifications.targets import TargetUnavailableError, async_resolve_notify_route
 from ..profile_transfer import ProfileTransferError
 from ..runtime import LockLearnRuntime
@@ -1099,6 +1100,61 @@ async def ws_targets_update(
         return
     await runtime.scheduler_ha.async_refresh()
     connection.send_result(msg["id"], _notification_target_payload(updated))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/targets/test",
+        vol.Required("profile_id"): str,
+        vol.Required("target_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_targets_test(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Send a privacy-minimal test notification to one configured target."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.EDIT_PROFILE,
+    ):
+        return
+
+    target = await runtime.storage.repositories.notification_targets.async_get(msg["target_id"])
+    if target is None or str(target["profile_id"]) != profile_id:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Notification target not found")
+        return
+    try:
+        route = await runtime.notification_delivery.async_send(
+            RenderedNotification(
+                profile_id=profile_id,
+                target_id=msg["target_id"],
+                tag=f"locklearn-test-{msg['target_id']}",
+                stage="test",
+                mode=NotificationRenderMode.DIRECT_EXPOSURE,
+                title="LockLearn",
+                message="Notification test successful.",
+                data={},
+                pedagogical_signal="none",
+            )
+        )
+    except Exception as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(
+        msg["id"],
+        {
+            "target_id": msg["target_id"],
+            "service": route.service,
+        },
+    )
 
 
 @websocket_api.websocket_command(
@@ -2339,6 +2395,43 @@ async def ws_admin_storage_status(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "locklearn/session/availability",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("session_type"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_session_availability(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return a privacy-safe availability explanation for one Track/session type."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.READ,
+    ):
+        return
+    try:
+        payload = await runtime.session_selection.async_availability(
+            profile_id=profile_id,
+            track_id=msg["track_id"],
+            session_type=msg["session_type"],
+        )
+    except SessionSelectionError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], payload)
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "locklearn/session/start",
         vol.Required("profile_id"): str,
         vol.Optional("track_id"): str,
@@ -2907,6 +3000,7 @@ COMMANDS = (
     ws_targets_discover,
     ws_targets_create,
     ws_targets_update,
+    ws_targets_test,
     ws_targets_list,
     ws_tracks_create,
     ws_tracks_update,
