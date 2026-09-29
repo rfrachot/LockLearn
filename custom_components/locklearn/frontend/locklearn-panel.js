@@ -678,6 +678,10 @@ const Fe = ["en", "fr"], Ve = {
     "learn.readOnly": "This Profile is read-only for your Home Assistant user.",
     "learn.empty": "No card is currently available for this Track.",
     "learn.pauseTitle": "Learning pause",
+    "learn.readiness": "Learning availability",
+    "learn.cardsReady": "cards available now",
+    "learn.noCardsReady": "No card is due within the normal learning plan right now.",
+    "learn.overrideNewHelp": "Your daily new-card target has been reached, but you can deliberately continue with more new cards. Failed and relearning cards still keep their required cooldown.",
     "learn.emptyExplain": "Nothing is due right now. LockLearn spaces recalls so you do not simply repeat from short-term memory.",
     "learn.nextAvailable": "Next scheduled step",
     "learn.inAbout": "in about",
@@ -842,6 +846,7 @@ const Fe = ["en", "fr"], Ve = {
     "manage.noNotificationTargets": "No notification target is configured for this Profile.",
     "manage.notificationTargetSettings": "Companion notification targets",
     "manage.notificationTargetSettingsHelp": "Targets use stable Home Assistant device identity. Technical capabilities stay conservative until they have been qualified.",
+    "manage.advancedTargetSettings": "Advanced target settings",
     "manage.availableNotificationDevice": "Available Companion device",
     "manage.noAvailableNotificationDevices": "No unconfigured Companion device is available.",
     "manage.addNotificationTarget": "Add target",
@@ -1015,6 +1020,10 @@ const Fe = ["en", "fr"], Ve = {
     "learn.readOnly": "Ce profil est en lecture seule pour votre utilisateur Home Assistant.",
     "learn.empty": "Aucune carte n’est disponible actuellement pour ce parcours.",
     "learn.pauseTitle": "Pause d’apprentissage",
+    "learn.readiness": "Disponibilité de l’apprentissage",
+    "learn.cardsReady": "cartes disponibles maintenant",
+    "learn.noCardsReady": "Aucune carte n’est disponible dans le plan d’apprentissage normal pour le moment.",
+    "learn.overrideNewHelp": "Votre objectif quotidien de nouvelles cartes est atteint, mais vous pouvez choisir de continuer avec davantage de nouvelles cartes. Les cartes ratées et en réapprentissage conservent toujours leur délai obligatoire.",
     "learn.emptyExplain": "Rien n’est à revoir maintenant. LockLearn espace les rappels pour éviter de simplement répéter depuis la mémoire à court terme.",
     "learn.nextAvailable": "Prochaine étape prévue",
     "learn.inAbout": "dans environ",
@@ -1179,6 +1188,7 @@ const Fe = ["en", "fr"], Ve = {
     "manage.noNotificationTargets": "Aucune cible de notification n’est configurée pour ce profil.",
     "manage.notificationTargetSettings": "Cibles de notification Companion",
     "manage.notificationTargetSettingsHelp": "Les cibles utilisent l’identité stable des appareils Home Assistant. Les capacités techniques restent prudentes tant qu’elles n’ont pas été qualifiées.",
+    "manage.advancedTargetSettings": "Paramètres avancés de la cible",
     "manage.availableNotificationDevice": "Appareil Companion disponible",
     "manage.noAvailableNotificationDevices": "Aucun appareil Companion non configuré n’est disponible.",
     "manage.addNotificationTarget": "Ajouter la cible",
@@ -1993,6 +2003,30 @@ const Ae = class Ae extends q {
             </button>
           </div>
         </div>
+        ${this.session === void 0 && this.availability !== void 0 ? r`
+          <div class="notice" role="status">
+            <strong>${this.t("learn.readiness")}</strong>
+            ${this.availability.available_now > 0 ? r`<div>${this.availability.available_now} ${this.t("learn.cardsReady")}</div>` : r`
+                  <div>${this.t("learn.noCardsReady")}</div>
+                  ${this.availability.next_due_at_utc === null ? l : r`
+                    <div>
+                      <strong>${this.t("learn.nextAvailable")}:</strong>
+                      ${this.dueLabel(this.availability.next_due_at_utc)}
+                    </div>
+                  `}
+                  ${this.availability.forceable_early > 0 ? r`
+                    <p class="muted">
+                      ${this.availability.forceable_new > 0 ? this.t("learn.overrideNewHelp") : this.t("learn.continueEarlyHelp")}
+                    </p>
+                    <button class="primary" @click=${() => {
+      this.start(!0);
+    }} ?disabled=${this.loading}>
+                      ${this.t("learn.continueNow")}
+                    </button>
+                  ` : l}
+                `}
+          </div>
+        ` : l}
         ${this.loading && this.session === void 0 ? r`<div class="notice" role="status">${this.t("learn.loading")}</div>` : l}
         ${this.errorMessage ? r`<div class="error" role="alert">
               <strong>${this.t("learn.error")}</strong>
@@ -2015,7 +2049,9 @@ const Ae = class Ae extends q {
             <p><strong>${this.t("learn.nextAvailable")}:</strong> ${this.dueLabel(e)}</p>
           `}
           ${t ? r`
-            <p class="muted">${this.t("learn.continueEarlyHelp")}</p>
+            <p class="muted">
+              ${(this.availability?.forceable_new ?? 0) > 0 ? this.t("learn.overrideNewHelp") : this.t("learn.continueEarlyHelp")}
+            </p>
             <button class="primary" @click=${() => {
         this.start(!0);
       }} ?disabled=${this.loading}>
@@ -3286,7 +3322,7 @@ function Mi(s) {
 }
 const Pe = class Pe extends q {
   constructor() {
-    super(...arguments), this.route = "profiles", this.tracks = [], this.packs = [], this.notificationTargets = [], this.notificationCandidates = [], this.members = [], this.shareTargets = [], this.selectedTrackId = "", this.createTrackPackId = "", this.createTrackSource = "", this.packDiffTrack = "", this.packDiffTarget = "", this.loading = !1, this.errorMessage = "", this.notice = "";
+    super(...arguments), this.route = "profiles", this.tracks = [], this.packs = [], this.notificationTargets = [], this.notificationCandidates = [], this.members = [], this.shareTargets = [], this.createTrackPackId = "", this.createTrackSource = "", this.forecasts = {}, this.forecastPlans = {}, this.packDiffTrack = "", this.packDiffTarget = "", this.loading = !1, this.errorMessage = "", this.notice = "";
   }
   updated(e) {
     (e.has("profile") || e.has("route")) && this.load();
@@ -3316,7 +3352,7 @@ const Pe = class Pe extends q {
         [this.tracks, this.packs] = await Promise.all([
           pt(this.hass, this.profile.profile_id),
           ci(this.hass)
-        ]), this.notificationTargets = this.canEditTrack() ? await Xt(this.hass, this.profile.profile_id) : [], this.notificationCandidates = this.isOwner() && this.route === "settings" ? await ei(this.hass, this.profile.profile_id) : [], this.tracks.some((e) => e.track_id === this.selectedTrackId) || (this.selectedTrackId = this.tracks[0]?.track_id ?? ""), this.packs.some((e) => e.pack_version_id === this.createTrackPackId) || (this.createTrackPackId = this.packs[0]?.pack_version_id ?? "", this.createTrackSource = ""), this.isOwner() && this.route === "profiles" ? [this.members, this.shareTargets] = await Promise.all([
+        ]), this.notificationTargets = this.canEditTrack() ? await Xt(this.hass, this.profile.profile_id) : [], this.notificationCandidates = this.isOwner() && this.route === "settings" ? await ei(this.hass, this.profile.profile_id) : [], this.packs.some((e) => e.pack_version_id === this.createTrackPackId) || (this.createTrackPackId = this.packs[0]?.pack_version_id ?? "", this.createTrackSource = ""), this.isOwner() && this.route === "profiles" ? [this.members, this.shareTargets] = await Promise.all([
           Jt(this.hass, this.profile.profile_id),
           Yt(this.hass, this.profile.profile_id)
         ]) : (this.members = [], this.shareTargets = []);
@@ -3539,7 +3575,7 @@ const Pe = class Pe extends q {
           <p class="meta">${this.t("manage.packVersion")}: ${e.pack_version_id ?? "—"}</p>
         </div>
         ${this.canEditTrack() ? r`
-          <form class="form-grid" @submit=${(c) => {
+          <form class="track-form" @submit=${(c) => {
       c.preventDefault();
       const u = new FormData(c.currentTarget);
       if (this.hass === void 0) return;
@@ -3563,63 +3599,68 @@ const Pe = class Pe extends q {
         }
       }), this.t("manage.saved"));
     }}>
-            <label>${this.t("manage.name")}<input name="name" .value=${e.name} /></label>
-            <label>${this.t("manage.status")}
-              <select name="status" .value=${e.status}>
-                <option value="active">${this.t("manage.active")}</option>
-                <option value="paused">${this.t("manage.paused")}</option>
-                <option value="archived">${this.t("manage.archived")}</option>
-              </select>
-            </label>
-            <label>${this.t("manage.sourceLanguage")}
-              <select name="source" .value=${e.source_language ?? ""} required>
-                ${this.sourceLanguages(e.pack_version_id ?? "").map((c) => r`
-                  <option value=${c}>${U(c, this.locale())}</option>
-                `)}
-              </select>
-            </label>
-            <label>${this.t("manage.targetLanguage")}
-              <select name="target" .value=${e.target_language ?? ""} required>
-                ${this.targetLanguages(
+            <div class="form-grid">
+              <label>${this.t("manage.name")}<input name="name" .value=${e.name} /></label>
+              <label>${this.t("manage.status")}
+                <select name="status" .value=${e.status}>
+                  <option value="active">${this.t("manage.active")}</option>
+                  <option value="paused">${this.t("manage.paused")}</option>
+                  <option value="archived">${this.t("manage.archived")}</option>
+                </select>
+              </label>
+              <label>${this.t("manage.sourceLanguage")}
+                <select name="source" .value=${e.source_language ?? ""} required>
+                  ${this.sourceLanguages(e.pack_version_id ?? "").map((c) => r`
+                    <option value=${c}>${U(c, this.locale())}</option>
+                  `)}
+                </select>
+              </label>
+              <label>${this.t("manage.targetLanguage")}
+                <select name="target" .value=${e.target_language ?? ""} required>
+                  ${this.targetLanguages(
       e.pack_version_id ?? "",
       e.source_language ?? ""
     ).map((c) => r`
-                  <option value=${c}>${U(c, this.locale())}</option>
-                `)}
-              </select>
-            </label>
-            <div class="actions">
-              <button class="primary" type="submit">${this.t("manage.save")}</button>
-              <button type="button" @click=${() => {
-      this.selectedTrackId = e.track_id, this.forecast = void 0, this.forecastPlan = void 0;
-    }}>${this.t("manage.plan")}</button>
+                    <option value=${c}>${U(c, this.locale())}</option>
+                  `)}
+                </select>
+              </label>
             </div>
 
-            <details>
+            <div class="actions">
+              <button class="primary" type="submit">${this.t("manage.save")}</button>
+            </div>
+
+            <details class="section-panel">
               <summary>${this.t("manage.advancedTrackSettings")}</summary>
-              <p class="muted">${this.t("manage.advancedTrackSettingsHelp")}</p>
-              <div class="form-grid">
-                <label>${this.t("manage.priority")}<input name="priority" type="number" min="1" .value=${String(e.priority)} /></label>
-                <label>${this.t("manage.weightVocabulary")}<input name="weightVocabulary" type="number" min="0" step=".1" .value=${String(a.vocabulary ?? 1)} /></label>
-                <label>${this.t("manage.weightKanji")}<input name="weightKanji" type="number" min="0" step=".1" .value=${String(a.kanji ?? 1)} /></label>
-                <label>${this.t("manage.weightGrammar")}<input name="weightGrammar" type="number" min="0" step=".1" .value=${String(a.grammar ?? 1)} /></label>
-                <label>${this.t("manage.weightExpression")}<input name="weightExpression" type="number" min="0" step=".1" .value=${String(a.expression ?? 1)} /></label>
-                <label>${this.t("manage.learningNotifications")}<input name="learningCount" type="number" min="0" .value=${String(t.learning_count ?? 0)} /></label>
-                <label>${this.t("manage.quizNotifications")}<input name="quizCount" type="number" min="0" .value=${String(t.quiz_count ?? 0)} /></label>
-                <label>${this.t("manage.notificationTargets")}
-                  <select name="notificationTarget" multiple size=${Math.min(4, Math.max(2, this.notificationTargets.length))}>
-                    ${this.notificationTargets.map((c) => r`
-                      <option value=${c.target_id} ?selected=${i.includes(c.target_id)}>
-                        ${c.friendly_name} · ${c.platform}
-                      </option>`)}
-                  </select>
-                  <span class="meta">${this.notificationTargets.length === 0 ? this.t("manage.noNotificationTargets") : this.t("manage.notificationTargetsHelp")}</span>
-                </label>
+              <div class="section-body">
+                <p class="muted">${this.t("manage.advancedTrackSettingsHelp")}</p>
+                <div class="form-grid">
+                  <label>${this.t("manage.priority")}<input name="priority" type="number" min="1" .value=${String(e.priority)} /></label>
+                  <label>${this.t("manage.weightVocabulary")}<input name="weightVocabulary" type="number" min="0" step=".1" .value=${String(a.vocabulary ?? 1)} /></label>
+                  <label>${this.t("manage.weightKanji")}<input name="weightKanji" type="number" min="0" step=".1" .value=${String(a.kanji ?? 1)} /></label>
+                  <label>${this.t("manage.weightGrammar")}<input name="weightGrammar" type="number" min="0" step=".1" .value=${String(a.grammar ?? 1)} /></label>
+                  <label>${this.t("manage.weightExpression")}<input name="weightExpression" type="number" min="0" step=".1" .value=${String(a.expression ?? 1)} /></label>
+                  <label>${this.t("manage.learningNotifications")}<input name="learningCount" type="number" min="0" .value=${String(t.learning_count ?? 0)} /></label>
+                  <label>${this.t("manage.quizNotifications")}<input name="quizCount" type="number" min="0" .value=${String(t.quiz_count ?? 0)} /></label>
+                  <label>${this.t("manage.notificationTargets")}
+                    <select name="notificationTarget" multiple size=${Math.min(4, Math.max(2, this.notificationTargets.length))}>
+                      ${this.notificationTargets.map((c) => r`
+                        <option value=${c.target_id} ?selected=${i.includes(c.target_id)}>
+                          ${c.friendly_name} · ${c.platform}
+                        </option>`)}
+                    </select>
+                    <span class="meta">${this.notificationTargets.length === 0 ? this.t("manage.noNotificationTargets") : this.t("manage.notificationTargetsHelp")}</span>
+                  </label>
+                </div>
               </div>
             </details>
           </form>
 
-          ${this.selectedTrackId === e.track_id ? this.renderPlan(e) : l}
+          <details class="section-panel">
+            <summary>${this.t("manage.plan")}</summary>
+            <div class="section-body">${this.renderPlan(e)}</div>
+          </details>
 
           <div class="danger-zone">
             <strong>${this.t("manage.dangerZone")}</strong>
@@ -3716,17 +3757,16 @@ const Pe = class Pe extends q {
     };
   }
   renderPlan(e) {
-    const t = ie(e.settings, "learning_plan"), i = Number(this.profile?.settings?.max_new_per_day_cards ?? 8);
+    const t = ie(e.settings, "learning_plan"), i = Number(this.profile?.settings?.max_new_per_day_cards ?? 8), a = this.forecasts[e.track_id];
     return r`
       <div class="stack">
-        <h3>${this.t("manage.plan")}</h3>
-        <form class="form-grid" @submit=${(a) => {
-      if (a.preventDefault(), this.hass === void 0) return;
-      const n = this.planFrom(a.currentTarget);
-      this.loading = !0, mi(this.hass, e.track_id, n).then((o) => {
-        this.forecast = o, this.forecastPlan = n;
-      }).catch((o) => {
-        this.errorMessage = te(o);
+        <form class="form-grid" @submit=${(n) => {
+      if (n.preventDefault(), this.hass === void 0) return;
+      const o = this.planFrom(n.currentTarget);
+      this.loading = !0, mi(this.hass, e.track_id, o).then((c) => {
+        this.forecasts = { ...this.forecasts, [e.track_id]: c }, this.forecastPlans = { ...this.forecastPlans, [e.track_id]: o };
+      }).catch((c) => {
+        this.errorMessage = te(c);
       }).finally(() => {
         this.loading = !1;
       });
@@ -3739,12 +3779,11 @@ const Pe = class Pe extends q {
           <label>${this.t("manage.retention")}<input name="retention" type="number" min=".01" max="1" step=".01" .value=${String(t.target_retention ?? 0.9)} /></label>
           <div class="actions"><button class="primary" type="submit">${this.t("manage.preview")}</button></div>
         </form>
-        ${this.forecast === void 0 ? l : this.renderForecast(e)}
+        ${a === void 0 ? l : this.renderForecast(e, a)}
       </div>
     `;
   }
-  renderForecast(e) {
-    const t = this.forecast;
+  renderForecast(e, t) {
     return r`
       <div class=${t.warnings.length > 0 ? "warning" : "notice"}>
         <strong>${this.t("manage.forecast")}</strong>
@@ -3764,7 +3803,8 @@ const Pe = class Pe extends q {
     `;
   }
   async applyPlan(e) {
-    this.hass === void 0 || this.forecastPlan === void 0 || await this.mutate(() => fi(this.hass, e.track_id, this.forecastPlan), this.t("manage.saved"));
+    const t = this.forecastPlans[e.track_id];
+    this.hass === void 0 || t === void 0 || await this.mutate(() => fi(this.hass, e.track_id, t), this.t("manage.saved"));
   }
   renderPacks() {
     return r`
@@ -3826,10 +3866,13 @@ const Pe = class Pe extends q {
       <article class="card">
         <h2>${this.t("manage.notificationTargetSettings")}</h2>
         <p class="muted">${this.t("manage.notificationTargetSettingsHelp")}</p>
-        ${e.length === 0 ? r`
-          <p class="muted">${this.t("manage.noAvailableNotificationDevices")}</p>
-        ` : r`
-          <form class="form-grid" @submit=${(t) => {
+
+        <div class="section-panel">
+          <div class="section-body">
+            ${e.length === 0 ? r`
+              <p class="muted">${this.t("manage.noAvailableNotificationDevices")}</p>
+            ` : r`
+              <form class="form-grid" @submit=${(t) => {
       t.preventDefault();
       const i = new FormData(t.currentTarget), a = String(i.get("device") ?? "");
       !a || this.hass === void 0 || this.profile === void 0 || this.mutate(
@@ -3837,25 +3880,30 @@ const Pe = class Pe extends q {
         this.t("manage.notificationTargetCreated")
       );
     }}>
-            <label>${this.t("manage.availableNotificationDevice")}
-              <select name="device" required>
-                ${e.map((t) => r`
-                  <option value=${t.device_registry_id}>
-                    ${t.friendly_name} · ${t.platform}
-                    ${t.route_available ? "" : ` · ${this.t("manage.routeUnavailable")}`}
-                  </option>
-                `)}
-              </select>
-            </label>
-            <div class="actions">
-              <button class="primary" type="submit">${this.t("manage.addNotificationTarget")}</button>
-            </div>
-          </form>
-        `}
+                <label>${this.t("manage.availableNotificationDevice")}
+                  <select name="device" required>
+                    ${e.map((t) => r`
+                      <option value=${t.device_registry_id}>
+                        ${t.friendly_name} · ${t.platform}
+                        ${t.route_available ? "" : ` · ${this.t("manage.routeUnavailable")}`}
+                      </option>
+                    `)}
+                  </select>
+                </label>
+                <div class="actions">
+                  <button class="primary" type="submit">${this.t("manage.addNotificationTarget")}</button>
+                </div>
+              </form>
+            `}
+          </div>
+        </div>
+
         ${this.notificationTargets.length === 0 ? r`
           <p>${this.t("manage.noNotificationTargets")}</p>
-        ` : this.notificationTargets.map((t) => r`
-          <form class="form-grid" @submit=${(i) => {
+        ` : r`
+          <div class="target-grid">
+            ${this.notificationTargets.map((t) => r`
+              <form class="target-card" @submit=${(i) => {
       i.preventDefault();
       const a = new FormData(i.currentTarget);
       this.hass === void 0 || this.profile === void 0 || this.mutate(
@@ -3878,60 +3926,57 @@ const Pe = class Pe extends q {
         this.t("manage.notificationTargetUpdated")
       );
     }}>
-            <label>${this.t("manage.name")}
-              <input name="friendlyName" .value=${t.friendly_name} required />
-            </label>
-            <label>${this.t("manage.platform")}
-              <input .value=${t.platform} disabled />
-            </label>
-            <label>${this.t("manage.lockscreenVisibility")}
-              <select name="lockscreenVisibility" .value=${t.lockscreen_visibility}>
-                <option value="public">public</option>
-                <option value="private">private</option>
-                <option value="secret">secret</option>
-              </select>
-            </label>
-            <label>${this.t("manage.minimumGapSeconds")}
-              <input
-                name="minimumGap"
-                type="number"
-                min="0"
-                .value=${t.minimum_gap_seconds === null ? "" : String(t.minimum_gap_seconds)}
-              />
-            </label>
-            <label>${this.t("manage.maximumPerHour")}
-              <input
-                name="maxPerHour"
-                type="number"
-                min="1"
-                .value=${t.maximum_notifications_per_hour === null ? "" : String(t.maximum_notifications_per_hour)}
-              />
-            </label>
-            <label>${this.t("manage.targetPushBudget")}
-              <input
-                name="targetBudget"
-                type="number"
-                min="0"
-                .value=${t.daily_push_budget === null ? "" : String(t.daily_push_budget)}
-              />
-            </label>
-            <label>
-              <input name="enabled" type="checkbox" .checked=${t.enabled} />
-              ${this.t("manage.targetEnabled")}
-            </label>
-            <label>
-              <input name="sharedDevice" type="checkbox" .checked=${t.shared_device} />
-              ${this.t("manage.sharedDevice")}
-            </label>
-            <p class="meta">
-              ${this.t("manage.capabilitiesConservative")}
-              · ${t.device_registry_id}
-            </p>
-            <div class="actions">
-              <button class="primary" type="submit">${this.t("manage.save")}</button>
-              <button
-                type="button"
-                @click=${() => {
+                <div class="target-header">
+                  <h3>${t.friendly_name}</h3>
+                  <span class="meta">${t.platform} · ${t.enabled ? this.t("manage.active") : this.t("manage.paused")}</span>
+                </div>
+
+                <div class="form-grid">
+                  <label>${this.t("manage.name")}
+                    <input name="friendlyName" .value=${t.friendly_name} required />
+                  </label>
+                  <label class="check-row">
+                    <input name="enabled" type="checkbox" .checked=${t.enabled} />
+                    ${this.t("manage.targetEnabled")}
+                  </label>
+                  <label class="check-row">
+                    <input name="sharedDevice" type="checkbox" .checked=${t.shared_device} />
+                    ${this.t("manage.sharedDevice")}
+                  </label>
+                </div>
+
+                <details class="section-panel">
+                  <summary>${this.t("manage.advancedTargetSettings")}</summary>
+                  <div class="section-body">
+                    <div class="form-grid">
+                      <label>${this.t("manage.lockscreenVisibility")}
+                        <select name="lockscreenVisibility" .value=${t.lockscreen_visibility}>
+                          <option value="public">public</option>
+                          <option value="private">private</option>
+                          <option value="secret">secret</option>
+                        </select>
+                      </label>
+                      <label>${this.t("manage.minimumGapSeconds")}
+                        <input name="minimumGap" type="number" min="0" .value=${t.minimum_gap_seconds === null ? "" : String(t.minimum_gap_seconds)} />
+                      </label>
+                      <label>${this.t("manage.maximumPerHour")}
+                        <input name="maxPerHour" type="number" min="1" .value=${t.maximum_notifications_per_hour === null ? "" : String(t.maximum_notifications_per_hour)} />
+                      </label>
+                      <label>${this.t("manage.targetPushBudget")}
+                        <input name="targetBudget" type="number" min="0" .value=${t.daily_push_budget === null ? "" : String(t.daily_push_budget)} />
+                      </label>
+                    </div>
+                    <p class="meta">
+                      ${this.t("manage.capabilitiesConservative")} · ${t.device_registry_id}
+                    </p>
+                  </div>
+                </details>
+
+                <div class="actions">
+                  <button class="primary" type="submit">${this.t("manage.save")}</button>
+                  <button
+                    type="button"
+                    @click=${() => {
       this.hass === void 0 || this.profile === void 0 || this.mutate(
         () => ai(
           this.hass,
@@ -3941,12 +3986,14 @@ const Pe = class Pe extends q {
         this.t("manage.notificationTestSent")
       );
     }}
-              >
-                ${this.t("manage.testNotification")}
-              </button>
-            </div>
-          </form>
-        `)}
+                  >
+                    ${this.t("manage.testNotification")}
+                  </button>
+                </div>
+              </form>
+            `)}
+          </div>
+        `}
       </article>
     `;
   }
@@ -4023,16 +4070,63 @@ Pe.styles = M`
     button.primary { border-color: var(--primary-color); color: var(--text-primary-color,white); background: var(--primary-color); }
     button:disabled { cursor: not-allowed; opacity: .55; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-    details {
+    .track-form { display: grid; gap: 14px; }
+    .section-panel {
       margin-top: 14px;
-      border-top: 1px solid var(--divider-color);
-      padding-top: 12px;
+      border: 1px solid var(--divider-color);
+      border-radius: 10px;
+      overflow: clip;
+      background: var(--secondary-background-color);
     }
-    summary {
+    .section-panel > summary {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 12px 14px;
       cursor: pointer;
+      list-style: none;
       font-weight: 650;
       color: var(--primary-text-color);
+      background: var(--card-background-color,var(--primary-background-color));
     }
+    .section-panel > summary::-webkit-details-marker { display: none; }
+    .section-panel > summary::before {
+      content: "›";
+      display: inline-block;
+      font-size: 1.2rem;
+      line-height: 1;
+      transition: transform 120ms ease;
+    }
+    .section-panel[open] > summary::before { transform: rotate(90deg); }
+    .section-body { padding: 14px; }
+    .section-body > :first-child { margin-top: 0; }
+    .section-body > :last-child { margin-bottom: 0; }
+    .target-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit,minmax(300px,1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+    .target-card {
+      display: grid;
+      align-content: start;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--divider-color);
+      border-radius: 10px;
+      background: var(--card-background-color,var(--primary-background-color));
+    }
+    .target-header { display: grid; gap: 3px; }
+    .target-header h3 { margin: 0; }
+    .target-card .section-panel { margin-top: 0; }
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--primary-text-color);
+      font-size: .9rem;
+    }
+    .check-row input { width: auto; }
     .track-summary {
       display: grid;
       gap: 4px;
@@ -4092,19 +4186,16 @@ f([
 ], g.prototype, "shareTargets");
 f([
   d()
-], g.prototype, "selectedTrackId");
-f([
-  d()
 ], g.prototype, "createTrackPackId");
 f([
   d()
 ], g.prototype, "createTrackSource");
 f([
   d()
-], g.prototype, "forecast");
+], g.prototype, "forecasts");
 f([
   d()
-], g.prototype, "forecastPlan");
+], g.prototype, "forecastPlans");
 f([
   d()
 ], g.prototype, "packDiff");
