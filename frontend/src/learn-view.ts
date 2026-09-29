@@ -656,6 +656,32 @@ export class LockLearnLearnView extends LitElement {
             </button>
           </div>
         </div>
+        ${this.session === undefined && this.availability !== undefined ? html`
+          <div class="notice" role="status">
+            <strong>${this.t("learn.readiness")}</strong>
+            ${this.availability.available_now > 0
+              ? html`<div>${this.availability.available_now} ${this.t("learn.cardsReady")}</div>`
+              : html`
+                  <div>${this.t("learn.noCardsReady")}</div>
+                  ${this.availability.next_due_at_utc === null ? nothing : html`
+                    <div>
+                      <strong>${this.t("learn.nextAvailable")}:</strong>
+                      ${this.dueLabel(this.availability.next_due_at_utc)}
+                    </div>
+                  `}
+                  ${this.availability.forceable_early > 0 ? html`
+                    <p class="muted">
+                      ${this.availability.forceable_new > 0
+                        ? this.t("learn.overrideNewHelp")
+                        : this.t("learn.continueEarlyHelp")}
+                    </p>
+                    <button class="primary" @click=${() => void this.start(true)} ?disabled=${this.loading}>
+                      ${this.t("learn.continueNow")}
+                    </button>
+                  ` : nothing}
+                `}
+          </div>
+        ` : nothing}
         ${this.loading && this.session === undefined
           ? html`<div class="notice" role="status">${this.t("learn.loading")}</div>`
           : nothing}
@@ -686,7 +712,11 @@ export class LockLearnLearnView extends LitElement {
             <p><strong>${this.t("learn.nextAvailable")}:</strong> ${this.dueLabel(nextDue)}</p>
           `}
           ${canContinue ? html`
-            <p class="muted">${this.t("learn.continueEarlyHelp")}</p>
+            <p class="muted">
+              ${(this.availability?.forceable_new ?? 0) > 0
+                ? this.t("learn.overrideNewHelp")
+                : this.t("learn.continueEarlyHelp")}
+            </p>
             <button class="primary" @click=${() => void this.start(true)} ?disabled=${this.loading}>
               ${this.t("learn.continueNow")}
             </button>
