@@ -1581,15 +1581,16 @@ async function vi(s, e) {
     profile_id: e
   });
 }
-async function mt(s, e, t, i) {
+async function mt(s, e, t, i, a = {}) {
   return s.callWS({
     type: "locklearn/session/availability",
     profile_id: e,
     track_id: t,
-    session_type: i
+    session_type: i,
+    settings: a
   });
 }
-async function bi(s, e, t, i = 10, a = "mixed") {
+async function bi(s, e, t, i, a = "mixed") {
   return s.callWS({
     type: "locklearn/session/start",
     profile_id: e,
@@ -1597,7 +1598,7 @@ async function bi(s, e, t, i = 10, a = "mixed") {
     session_type: "quiz",
     strategy: "default",
     settings: {
-      requested_cards: i,
+      ...i === void 0 ? {} : { requested_cards: i },
       quiz_format: a,
       option_count: 4
     }
@@ -1638,7 +1639,7 @@ async function $i(s, e, t, i, a) {
     normalization_version: a.normalization_version
   });
 }
-async function _i(s, e, t, i = 20, a = !1) {
+async function _i(s, e, t, i, a = !1) {
   return s.callWS({
     type: "locklearn/session/start",
     profile_id: e,
@@ -1646,7 +1647,7 @@ async function _i(s, e, t, i = 20, a = !1) {
     session_type: "learn",
     strategy: "default",
     settings: {
-      requested_cards: i,
+      ...i === void 0 ? {} : { requested_cards: i },
       ...a ? { allow_early_learning: !0 } : {}
     }
   });
@@ -1836,7 +1837,7 @@ const Ae = class Ae extends q {
           this.hass,
           this.profile.profile_id,
           this.trackId,
-          20,
+          void 0,
           e
         );
         this.applySession(t), await this.refreshAvailability();
@@ -2603,7 +2604,7 @@ const ze = class ze extends q {
             this.hass,
             this.profile.profile_id,
             this.trackId,
-            10,
+            void 0,
             this.format
           )
         ), await this.refreshAvailability();
