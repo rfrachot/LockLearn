@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from math import ceil
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
@@ -281,6 +281,13 @@ class SessionSelectionService:
 
         introduced = sum(candidate.state != "new" for candidate in candidate_pool)
         new_cards = sum(candidate.state == "new" for candidate in candidate_pool)
+        planning_snapshot = getattr(self._tracks, "async_planning_snapshot", None)
+        if callable(planning_snapshot):
+            snapshot = await planning_snapshot(track_id=track_id, now_utc=now.isoformat())
+            introduced = int(snapshot.get("introduced_cards", introduced))
+            selected_cards = int(snapshot.get("selected_cards", introduced + new_cards))
+            new_cards = max(0, selected_cards - introduced)
+
         next_due: datetime | None = None
         for candidate in candidate_pool:
             if candidate.state == "new" or candidate.next_due_at_utc is None:
@@ -298,6 +305,21 @@ class SessionSelectionService:
             track_id=track_id,
             session_type=session_type,
         )
+
+        next_available = next_due
+        next_available_reason: str | None = "scheduled_step" if next_due is not None else None
+        if (
+            normalized_type in _NEW_SESSION_TYPES
+            and new_cards > 0
+            and remaining_new_quota == 0
+        ):
+            timezone = ZoneInfo(str(profile["timezone"]))
+            local_now = now.astimezone(timezone)
+            next_local_day = local_now.date() + timedelta(days=1)
+            quota_reset = datetime.combine(next_local_day, time.min, tzinfo=timezone)
+            if next_available is None or quota_reset < next_available:
+                next_available = quota_reset
+                next_available_reason = "new_quota_reset"
 
         normal_candidates = [
             candidate
@@ -353,6 +375,10 @@ class SessionSelectionService:
             "forceable_new": max(0, forced_new - normal_new),
             "forceable_early": max(0, len(forced_selected) - len(normal_selected)),
             "next_due_at_utc": None if next_due is None else next_due.isoformat(),
+            "next_available_at_utc": (
+                None if next_available is None else next_available.isoformat()
+            ),
+            "next_available_reason": next_available_reason,
         }
 
     async def async_fatigue_advice(
