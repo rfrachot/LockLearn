@@ -573,6 +573,18 @@ export async function updateNotificationTarget(
   });
 }
 
+export async function testNotificationTarget(
+  hass: HomeAssistantLike,
+  profileId: string,
+  targetId: string,
+): Promise<{ target_id: string; service: string }> {
+  return hass.callWS({
+    type: "locklearn/targets/test",
+    profile_id: profileId,
+    target_id: targetId,
+  });
+}
+
 export async function getStats(
   hass: HomeAssistantLike,
   profileId: string,
@@ -897,6 +909,31 @@ export interface SessionState {
 }
 
 
+export interface SessionAvailability {
+  profile_id: string;
+  track_id: string;
+  session_type: string;
+  available_now: number;
+  introduced_cards: number;
+  new_cards: number;
+  forceable_early: number;
+  next_due_at_utc: string | null;
+}
+
+export async function getSessionAvailability(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  sessionType: "learn" | "quiz",
+): Promise<SessionAvailability> {
+  return hass.callWS<SessionAvailability>({
+    type: "locklearn/session/availability",
+    profile_id: profileId,
+    track_id: trackId,
+    session_type: sessionType,
+  });
+}
+
 export type QuizFormat = "mixed" | "mcq" | "free_text" | "cloze_mcq";
 
 export interface QuizOption {
@@ -1027,6 +1064,7 @@ export async function startLearnSession(
   profileId: string,
   trackId: string,
   requestedCards = 20,
+  allowEarlyLearning = false,
 ): Promise<SessionState> {
   return hass.callWS<SessionState>({
     type: "locklearn/session/start",
@@ -1034,7 +1072,10 @@ export async function startLearnSession(
     track_id: trackId,
     session_type: "learn",
     strategy: "default",
-    settings: { requested_cards: requestedCards },
+    settings: {
+      requested_cards: requestedCards,
+      ...(allowEarlyLearning ? { allow_early_learning: true } : {}),
+    },
   });
 }
 
