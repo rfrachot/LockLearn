@@ -262,6 +262,76 @@ class SessionSelectionService:
             for c in ordered
         )
 
+    async def async_availability(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        session_type: str,
+    ) -> dict[str, Any]:
+        """Describe current/future session availability without mutating state."""
+        track = await self._tracks.async_get(track_id)
+        if track is None or str(track["profile_id"]) != profile_id:
+            raise SessionSelectionError("track does not belong to profile")
+        profile = await self._profiles.async_get(profile_id)
+        if profile is None:
+            raise SessionSelectionError("profile does not exist")
+
+        weights = await self._tracks.async_get_content_weights(track_id)
+        raw_candidates = await self._tracks.async_session_candidates(
+            profile_id=profile_id,
+            track_id=track_id,
+        )
+        now = self._clock.now()
+        available_now = 0
+        forceable_early = 0
+        introduced = 0
+        new_cards = 0
+        next_due: datetime | None = None
+
+        for row in raw_candidates:
+            candidate = _Candidate.from_row(row)
+            if not self._user_state_available(candidate, now=now):
+                continue
+            if self._weight(candidate.content_type, weights) <= 0:
+                continue
+            if candidate.state == "new":
+                new_cards += 1
+            else:
+                introduced += 1
+            if self._state_available(
+                candidate,
+                now=now,
+                session_type=session_type,
+                allow_early_learning=False,
+            ):
+                available_now += 1
+                continue
+            if candidate.next_due_at_utc is None:
+                continue
+            due = datetime.fromisoformat(candidate.next_due_at_utc)
+            if due.tzinfo is None:
+                raise SessionSelectionError("candidate due timestamp must be timezone-aware")
+            if next_due is None or due < next_due:
+                next_due = due
+            if (
+                session_type.strip().lower() in _NEW_SESSION_TYPES
+                and candidate.state == "learning"
+                and candidate.last_result != "wrong"
+            ):
+                forceable_early += 1
+
+        return {
+            "profile_id": profile_id,
+            "track_id": track_id,
+            "session_type": session_type,
+            "available_now": available_now,
+            "introduced_cards": introduced,
+            "new_cards": new_cards,
+            "forceable_early": forceable_early,
+            "next_due_at_utc": None if next_due is None else next_due.isoformat(),
+        }
+
     async def async_fatigue_advice(
         self,
         session_id: str,
