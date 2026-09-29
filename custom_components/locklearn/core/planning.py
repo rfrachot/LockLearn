@@ -191,6 +191,10 @@ class LearningPlanService:
             now_utc=now.isoformat(),
         )
         selected_cards = snapshot["selected_cards"]
+        if selected_cards <= 0:
+            raise LearningPlanValidationError(
+                "track has no selected cards; workload forecast is unavailable"
+            )
         introduced_cards = min(snapshot["introduced_cards"], selected_cards)
         target_cards = ceil(selected_cards * plan.target_coverage)
         remaining_target_cards = max(0, target_cards - introduced_cards)
