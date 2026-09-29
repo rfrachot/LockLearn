@@ -65,6 +65,22 @@ function asFloat(
   return Number.isFinite(parsed) && parsed >= min && parsed <= max ? parsed : fallback;
 }
 
+export function errorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string") return error;
+  if (typeof error === "object" && error !== null) {
+    const record = error as Record<string, unknown>;
+    if (typeof record.message === "string" && record.message) return record.message;
+    if (typeof record.code === "string" && record.code) return record.code;
+    try {
+      return JSON.stringify(record);
+    } catch {
+      return "Unknown error";
+    }
+  }
+  return String(error);
+}
+
 function objectSetting(
   settings: Record<string, unknown> | undefined,
   key: string,
@@ -95,6 +111,8 @@ export class LockLearnManagementView extends LitElement {
   @state() private members: ProfileMember[] = [];
   @state() private shareTargets: ShareTarget[] = [];
   @state() private selectedTrackId = "";
+  @state() private createTrackPackId = "";
+  @state() private createTrackSource = "";
   @state() private forecast?: LoadForecast;
   @state() private forecastPlan?: LearningPlanInput;
   @state() private packDiff?: PackVersionDiff;
@@ -198,6 +216,10 @@ export class LockLearnManagementView extends LitElement {
       if (!this.tracks.some((item) => item.track_id === this.selectedTrackId)) {
         this.selectedTrackId = this.tracks[0]?.track_id ?? "";
       }
+      if (!this.packs.some((item) => item.pack_version_id === this.createTrackPackId)) {
+        this.createTrackPackId = this.packs[0]?.pack_version_id ?? "";
+        this.createTrackSource = "";
+      }
       if (this.isOwner() && this.route === "profiles") {
         [this.members, this.shareTargets] = await Promise.all([
           listProfileMembers(this.hass, this.profile.profile_id),
@@ -208,7 +230,7 @@ export class LockLearnManagementView extends LitElement {
         this.shareTargets = [];
       }
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = errorMessage(error);
     } finally {
       this.loading = false;
     }
@@ -223,7 +245,7 @@ export class LockLearnManagementView extends LitElement {
       this.notice = message;
       this.dispatchEvent(new CustomEvent("locklearn-refresh", { bubbles: true, composed: true }));
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = errorMessage(error);
     } finally {
       this.loading = false;
     }
@@ -441,6 +463,24 @@ export class LockLearnManagementView extends LitElement {
     `;
   }
 
+  private packDirections(packVersionId: string) {
+    return this.packs.find((pack) => pack.pack_version_id === packVersionId)?.directions ?? [];
+  }
+
+  private sourceLanguages(packVersionId: string): string[] {
+    return [...new Set(
+      this.packDirections(packVersionId).map((direction) => direction.source_language),
+    )].sort((left, right) => left.localeCompare(right));
+  }
+
+  private targetLanguages(packVersionId: string, sourceLanguage: string): string[] {
+    return [...new Set(
+      this.packDirections(packVersionId)
+        .filter((direction) => direction.source_language === sourceLanguage)
+        .map((direction) => direction.target_language),
+    )].sort((left, right) => left.localeCompare(right));
+  }
+
   private renderTrack(track: TrackRecord) {
     const scheduler = objectSetting(track.settings, "scheduler");
     const targetIds = Array.isArray(scheduler.target_ids)
@@ -484,8 +524,23 @@ export class LockLearnManagementView extends LitElement {
               <option value="paused">${this.t("manage.paused")}</option>
               <option value="archived">${this.t("manage.archived")}</option>
             </select></label>
-            <label>${this.t("manage.sourceLanguage")}<input name="source" .value=${track.source_language ?? ""} required /></label>
-            <label>${this.t("manage.targetLanguage")}<input name="target" .value=${track.target_language ?? ""} required /></label>
+            <label>${this.t("manage.sourceLanguage")}
+              <select name="source" .value=${track.source_language ?? ""} required>
+                ${this.sourceLanguages(track.pack_version_id ?? "").map((language) => html`
+                  <option value=${language}>${language}</option>
+                `)}
+              </select>
+            </label>
+            <label>${this.t("manage.targetLanguage")}
+              <select name="target" .value=${track.target_language ?? ""} required>
+                ${this.targetLanguages(
+                  track.pack_version_id ?? "",
+                  track.source_language ?? "",
+                ).map((language) => html`
+                  <option value=${language}>${language}</option>
+                `)}
+              </select>
+            </label>
             <label>${this.t("manage.priority")}<input name="priority" type="number" min="1" .value=${String(track.priority)} /></label>
             <label>${this.t("manage.weightVocabulary")}<input name="weightVocabulary" type="number" min="0" step=".1" .value=${String(weights.vocabulary ?? 1)} /></label>
             <label>${this.t("manage.weightKanji")}<input name="weightKanji" type="number" min="0" step=".1" .value=${String(weights.kanji ?? 1)} /></label>
@@ -521,6 +576,12 @@ export class LockLearnManagementView extends LitElement {
   }
 
   private renderCreateTrack() {
+    const selectedPackId = this.createTrackPackId || this.packs[0]?.pack_version_id || "";
+    const sources = this.sourceLanguages(selectedPackId);
+    const selectedSource = sources.includes(this.createTrackSource)
+      ? this.createTrackSource
+      : sources[0] ?? "";
+    const targets = this.targetLanguages(selectedPackId, selectedSource);
     return html`
       <article class="card">
         <h2>${this.t("manage.createTrack")}</h2>
@@ -539,13 +600,56 @@ export class LockLearnManagementView extends LitElement {
             }), this.t("manage.created"));
           }}>
             <label>${this.t("manage.name")}<input name="name" required /></label>
-            <label>${this.t("manage.pack")}<select name="pack">
-              ${this.packs.map((pack) => html`<option value=${pack.pack_version_id}>${pack.name} · ${pack.version}</option>`)}
-            </select></label>
-            <label>${this.t("manage.sourceLanguage")}<input name="source" placeholder="ja" required /></label>
-            <label>${this.t("manage.targetLanguage")}<input name="target" placeholder="fr" required /></label>
+            <label>${this.t("manage.pack")}
+              <select
+                name="pack"
+                .value=${selectedPackId}
+                @change=${(event: Event) => {
+                  const target = event.currentTarget;
+                  if (!(target instanceof HTMLSelectElement)) return;
+                  this.createTrackPackId = target.value;
+                  this.createTrackSource = "";
+                }}
+              >
+                ${this.packs.map((pack) => html`
+                  <option value=${pack.pack_version_id}>${pack.name} · ${pack.version}</option>
+                `)}
+              </select>
+            </label>
+            ${sources.length === 0 ? html`
+              <p class="warning">${this.t("manage.noPackDirections")}</p>
+            ` : html`
+              <label>${this.t("manage.sourceLanguage")}
+                <select
+                  name="source"
+                  .value=${selectedSource}
+                  required
+                  @change=${(event: Event) => {
+                    const target = event.currentTarget;
+                    if (target instanceof HTMLSelectElement) {
+                      this.createTrackSource = target.value;
+                    }
+                  }}
+                >
+                  ${sources.map((language) => html`
+                    <option value=${language}>${language}</option>
+                  `)}
+                </select>
+              </label>
+              <label>${this.t("manage.targetLanguage")}
+                <select name="target" required>
+                  ${targets.map((language) => html`
+                    <option value=${language}>${language}</option>
+                  `)}
+                </select>
+              </label>
+            `}
             <label>${this.t("manage.priority")}<input name="priority" type="number" min="1" value="1" /></label>
-            <div class="actions"><button class="primary" type="submit">${this.t("manage.create")}</button></div>
+            <div class="actions">
+              <button class="primary" type="submit" ?disabled=${sources.length === 0 || targets.length === 0}>
+                ${this.t("manage.create")}
+              </button>
+            </div>
           </form>`}
       </article>
     `;
@@ -581,7 +685,7 @@ export class LockLearnManagementView extends LitElement {
           this.loading = true;
           void previewTrackPlan(this.hass, track.track_id, plan)
             .then((forecast) => { this.forecast = forecast; this.forecastPlan = plan; })
-            .catch((error: unknown) => { this.errorMessage = error instanceof Error ? error.message : String(error); })
+            .catch((error: unknown) => { this.errorMessage = errorMessage(error); })
             .finally(() => { this.loading = false; });
         }}>
           <label>${this.t("manage.newPerDay")}<input name="new" type="number" min="0" .value=${String(raw.max_new_per_day_cards ?? profileNew)} /></label>
@@ -668,7 +772,7 @@ export class LockLearnManagementView extends LitElement {
       this.packDiffTrack = track.track_id;
       this.packDiffTarget = pack.pack_version_id;
     } catch (error) {
-      this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.errorMessage = errorMessage(error);
     } finally {
       this.loading = false;
     }
