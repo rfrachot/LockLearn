@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,11 +21,77 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements-dev.txt
-      - run: python -m ruff format --check .
-      - run: python -m ruff check .
-      - run: python -m mypy custom_components datasets tests
-      - run: python datasets/tools/validate_resources.py
-      - run: python -m pytest -q --tb=short
+      - name: Backend format
+        run: python -m ruff format --check .
+      - name: Backend lint
+        run: python -m ruff check .
+      - name: Backend typing
+        run: python -m mypy custom_components datasets tests
+      - name: Resource and licence policy
+        run: python datasets/tools/validate_resources.py
+      - name: JSON schema validation
+        run: python datasets/tools/validate_schemas.py
+      - name: Generated documentation contracts
+        run: python scripts/generate_docs_contracts.py --check
+      - name: P6.9 documentation contract
+        run: python -m pytest -q --tb=short tests/backend/test_p6_9_documentation_contracts.py
+      - name: P6.10 release readiness
+        run: |
+          python scripts/p6_10_release_smoke.py
+          python -m pytest -q --tb=short tests/backend/test_p6_10_release_readiness.py
+      - name: P6.11 V1 acceptance
+        run: >-
+          python -m pytest -q --tb=short
+          tests/backend/test_p6_11_acceptance_contracts.py
+          tests/backend/test_p6_11_v1_acceptance.py
+          tests/backend/test_session_selection.py::test_twenty_card_session_fills_with_due_reviews_in_final_quarter
+          tests/backend/test_tracks.py::test_one_profile_supports_japanese_and_spanish_tracks
+      - name: Beta notification target configuration
+        run: python -m pytest -q --tb=short tests/backend/test_notification_target_management.py
+      - name: P6.8 release contracts
+        run: >-
+          python -m pytest -q --tb=short
+          tests/backend/test_p6_8_release_contracts.py
+          tests/backend/test_p6_8_acl_matrix.py
+      - name: Migration and recovery gates
+        run: >-
+          python -m pytest -q --tb=short
+          tests/backend/test_state_foundation.py
+          tests/backend/test_lifecycle.py
+          tests/backend/test_storage_lifecycle.py
+      - name: Full Python test suite
+        run: python -m pytest -q --tb=short
+      - name: Shared-runner hot-path performance telemetry
+        run: python scripts/p6_8_ci_performance.py
+      - name: Scale and storage performance gate
+        run: python scripts/p6_7_scale_validation.py --hot-path-report-only
+
+  dataset-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          check-latest: true
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Schema and registry validation
+        run: |
+          python datasets/tools/validate_schemas.py
+          python datasets/tools/validate_resources.py
+      - name: Licence, provenance, signature and bundled-content gates
+        run: >-
+          python -m pytest -q --tb=short
+          tests/datasets/test_resource_registry.py
+          tests/datasets/test_dataset_package.py
+          tests/datasets/test_japanese_starter.py
+          tests/datasets/test_assets.py
+          tests/datasets/test_asset_pipeline.py
+          tests/datasets/test_svg_security.py
+      - name: Canonical-content reproducibility gate
+        run: python -m pytest -q --tb=short tests/datasets/test_build_pipeline.py
 
   home-assistant-compatibility:
     strategy:
@@ -36,7 +103,7 @@ jobs:
             harness: "0.13.215"
             home_assistant: "2025.2.5"
             frontend: "20250221.0"
-          - name: latest
+          - name: current-harness
             python: "3.14"
             harness: "0.13.366"
             home_assistant: "2026.9.3"
@@ -51,11 +118,46 @@ jobs:
           check-latest: true
           cache: pip
       - run: python -m pip install --upgrade pip
-      - run: >-
+      - name: Install pinned Home Assistant lane
+        run: >-
           python -m pip install
           pytest-homeassistant-custom-component==${{ matrix.harness }}
+          homeassistant==${{ matrix.home_assistant }}
           home-assistant-frontend==${{ matrix.frontend }}
-      - run: python -m pytest -q --tb=short tests/backend
+      - name: Verify Home Assistant pin
+        run: >-
+          python -c "from importlib.metadata import version;
+          expected='${{ matrix.home_assistant }}';
+          actual=version('homeassistant');
+          print(f'Home Assistant {actual}');
+          assert actual == expected, (actual, expected)"
+      - name: HA integration suite
+        run: python -m pytest -q --tb=short tests/backend
+      - name: Release payload smoke
+        run: python scripts/p6_10_release_smoke.py
+
+  latest-home-assistant-smoke:
+    name: HA latest stable smoke (2026.9.4)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          check-latest: true
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - name: Install latest stable Home Assistant
+        run: >-
+          python -m pip install
+          homeassistant==2026.9.4
+          home-assistant-frontend==20260826.7
+      - name: Import and compatibility smoke
+        env:
+          LOCKLEARN_EXPECTED_HA_VERSION: "2026.9.4"
+        run: python scripts/p6_8_ha_smoke.py
+      - name: Release payload smoke
+        run: python scripts/p6_10_release_smoke.py
 
   frontend:
     runs-on: ubuntu-latest
@@ -68,9 +170,42 @@ jobs:
         with:
           node-version: "22"
       - run: npm install
+      - name: Frontend lint
+        run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - run: npm run check:no-polling
       - run: npm run build
+      - run: npm run check:bundle
+      - name: Upload built panel
+        uses: actions/upload-artifact@v4
+        with:
+          name: locklearn-built-panel
+          path: custom_components/locklearn/frontend/locklearn-panel.js
+          if-no-files-found: error
+      - run: git diff --exit-code -- ../custom_components/locklearn/frontend/locklearn-panel.js
+
+  frontend-e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Capture documentation screenshot
+        run: npm run docs:screenshot
+      - name: Upload documentation screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: locklearn-docs-screenshot
+          path: docs/assets/locklearn-home.png
+          if-no-files-found: error
 
   home-assistant-validation:
     runs-on: ubuntu-latest

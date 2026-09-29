@@ -26,6 +26,52 @@
     "dataset_sources_stale": {
       "title": "Dataset sources are stale",
       "description": "The sources {sources} used by {dataset_id} exceed their freshness target. The installed dataset remains usable, but an update is recommended."
+    },
+    "scheduler_configuration_infeasible": {
+      "title": "Scheduler capacity is insufficient",
+      "description": "Profile {profile_id} requests {requested} daily notification slots but only {capacity} are currently allocatable. Adjust Track demand, target budgets, or scheduler windows."
+    },
+    "notification_target_unavailable": {
+      "title": "Notification target unavailable",
+      "description": "LockLearn cannot currently resolve or deliver to {friendly_name} ({target_id}). The notification was not recorded as sent."
+    },
+    "state_integrity_failure": {
+      "title": "LockLearn user state needs recovery",
+      "description": "LockLearn did not open its state writer because state.db failed integrity validation. {snapshot_count} validated recovery snapshot(s) are currently available. Open the LockLearn integration options to inspect storage and explicitly restore a snapshot. LockLearn will never overwrite the only user-state copy automatically."
+    },
+    "state_migration_failure": {
+      "title": "LockLearn state migration failed",
+      "description": "LockLearn could not complete a state database migration. {snapshot_count} validated recovery snapshot(s) are available. User state was not silently discarded."
+    },
+    "dataset_signature_invalid": {
+      "title": "Dataset signature is invalid",
+      "description": "LockLearn rejected the signed dataset {dataset_id} because its signing key or Ed25519 signature could not be trusted. The last valid installed generation remains active."
+    },
+    "backup_cache_anomaly": {
+      "title": "Unexpected reconstructible cache under persistent state",
+      "description": "LockLearn found {cache_bytes} bytes of reconstructible cache under persistent state storage. This may enlarge backups unexpectedly. Use the LockLearn storage options to purge/rebuild cache after inspecting the installation."
+    },
+    "dataset_cache_budget_warning": {
+      "title": "Dataset cache is above the recommended budget",
+      "description": "LockLearn is using {cache_bytes} bytes of reconstructible dataset cache, above the configured warning budget of {budget_bytes} bytes. Installed content remains usable; review installed datasets if disk pressure matters."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Storage, backup and recovery",
+        "description": "Persistent state: {state_size}. Reconstructible content cache: {content_cache_size}, including assets: {asset_size}. Recovery snapshots: {recovery_size} ({snapshot_count} available). On the Home Assistant 2025.2 compatibility floor the reconstructible content cache is included in HA backups; LockLearn checkpoints and snapshots state coherently before the archive is created. Choose what LockLearn may delete if the Config Entry is later removed. Restoring a snapshot is explicit and preserves the current live files in a bounded quarantine first.",
+        "data": {
+          "uninstall_data_policy": "Data policy when LockLearn is removed",
+          "restore_snapshot": "Restore a validated recovery snapshot now",
+          "purge_content_cache": "Purge the reconstructible content cache now and rebuild it"
+        }
+      }
+    },
+    "error": {
+      "storage_unload_failed": "LockLearn could not unload safely. No storage action was performed.",
+      "storage_action_failed": "The requested storage action failed. The existing data was preserved or rolled back.",
+      "storage_reload_failed": "The storage action completed, but LockLearn could not reload. Check the Repair before continuing."
     }
   }
 }

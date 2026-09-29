@@ -16,5 +16,9 @@ describe("LockLearn panel module", () => {
 
     await import("./locklearn-panel");
     expect(definitions.has("locklearn-panel")).toBe(true);
+
+    const PanelConstructor = definitions.get("locklearn-panel") as new () => object;
+    const panel = new PanelConstructor();
+    expect(Object.hasOwn(panel, "route")).toBe(false);
   });
 });

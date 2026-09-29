@@ -10,7 +10,13 @@ import pytest
 
 from custom_components.locklearn.core.tracks import TrackService, TrackValidationError
 from custom_components.locklearn.storage import ProfileRecord, SQLiteStorage, StoragePaths
-from tests.backend.content_db_helpers import ITEM_A, ITEM_B, card_identity, create_package
+from tests.backend.content_db_helpers import (
+    ITEM_A,
+    ITEM_B,
+    card_identity,
+    create_package,
+    facet_ids,
+)
 
 ITEM_C = "locklearn:item:c"
 
@@ -80,6 +86,90 @@ async def _activate_v2(storage: SQLiteStorage, tmp_path: Path) -> None:
     await storage.async_activate_content_generation(candidate)
 
 
+async def _storage_with_multilingual_pack(tmp_path: Path) -> SQLiteStorage:
+    storage = SQLiteStorage(
+        StoragePaths(tmp_path / "state" / "state.db", tmp_path / "content" / "current.db")
+    )
+    await storage.async_open()
+    package = create_package(
+        tmp_path / "package-multilingual.db",
+        "multilingual",
+        active_item_ids=(ITEM_A, ITEM_B),
+    )
+    item_a_prompt, item_a_answer = facet_ids(ITEM_A)
+    item_b_prompt, item_b_answer = facet_ids(ITEM_B)
+    with sqlite3.connect(package) as connection:
+        connection.executemany(
+            "UPDATE facets SET language_tag = ?, script = ? WHERE facet_id = ?",
+            (
+                ("ja", "Jpan", item_a_prompt),
+                ("ja-Latn", "Latn", item_a_answer),
+                ("es", "Latn", item_b_prompt),
+                ("fr", "Latn", item_b_answer),
+            ),
+        )
+        connection.commit()
+
+    candidate = storage.paths.content_staging_dir / "generation-multilingual.db"
+    await storage.async_build_content_generation(
+        (package,),
+        candidate,
+        generation_id="generation-multilingual",
+    )
+    await storage.async_activate_content_generation(candidate)
+    now = "2026-09-22T21:00:00+00:00"
+    await storage.repositories.profiles.async_insert(
+        ProfileRecord(
+            profile_id="profile-1",
+            name="Camille",
+            preset="standard",
+            timezone="Europe/Paris",
+            created_at_utc=now,
+            updated_at_utc=now,
+        )
+    )
+    return storage
+
+
+async def test_one_profile_supports_japanese_and_spanish_tracks(tmp_path: Path) -> None:
+    storage = await _storage_with_multilingual_pack(tmp_path)
+    track_ids = iter(("track-japanese", "track-spanish"))
+    service = TrackService(
+        storage.repositories.tracks,
+        clock=_FixedClock(),
+        id_factory=lambda: next(track_ids),
+    )
+    try:
+        japanese = await service.async_create_track(
+            profile_id="profile-1",
+            name="Japanese",
+            pack_version_id="locklearn:pack-version:multilingual",
+            source_language="ja",
+            target_language="ja-Latn",
+        )
+        spanish = await service.async_create_track(
+            profile_id="profile-1",
+            name="Spanish",
+            pack_version_id="locklearn:pack-version:multilingual",
+            source_language="es",
+            target_language="fr",
+        )
+
+        assert japanese["profile_id"] == spanish["profile_id"] == "profile-1"
+        assert (japanese["source_language"], japanese["target_language"]) == ("ja", "ja-Latn")
+        assert (spanish["source_language"], spanish["target_language"]) == ("es", "fr")
+        assert {
+            rule["card_key"]
+            for rule in await storage.repositories.tracks.async_get_card_rules("track-japanese")
+        } == {card_identity(ITEM_A)[1]}
+        assert {
+            rule["card_key"]
+            for rule in await storage.repositories.tracks.async_get_card_rules("track-spanish")
+        } == {card_identity(ITEM_B)[1]}
+    finally:
+        await storage.async_close()
+
+
 async def test_direction_configuration_resolves_to_exact_card_rules(tmp_path: Path) -> None:
     storage = await _storage_with_v1(tmp_path)
     service = TrackService(
@@ -112,6 +202,41 @@ async def test_direction_configuration_resolves_to_exact_card_rules(tmp_path: Pa
         assert await storage.repositories.tracks.async_get_content_weights("track-direction") == {
             "vocabulary": 50.0
         }
+    finally:
+        await storage.async_close()
+
+
+async def test_track_scheduler_settings_are_validated_and_persisted(tmp_path: Path) -> None:
+    storage = await _storage_with_v1(tmp_path)
+    service = TrackService(
+        storage.repositories.tracks,
+        clock=_FixedClock(),
+        id_factory=lambda: "track-scheduler",
+    )
+    try:
+        track = await service.async_create_track(
+            profile_id="profile-1",
+            name="Scheduled",
+            pack_version_id="locklearn:pack-version:v1",
+            source_language="en",
+            target_language="fr",
+            scheduler_settings={
+                "learning_count": 3,
+                "quiz_count": 1,
+                "target_ids": ["target-b", "target-a", "target-b"],
+            },
+        )
+        assert track["settings"]["scheduler"] == {
+            "learning_count": 3,
+            "quiz_count": 1,
+            "target_ids": ["target-b", "target-a"],
+        }
+
+        with pytest.raises(TrackValidationError, match="learning_count"):
+            await service.async_update_track(
+                track_id="track-scheduler",
+                scheduler_settings={"learning_count": -1},
+            )
     finally:
         await storage.async_close()
 

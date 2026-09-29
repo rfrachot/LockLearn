@@ -7,9 +7,11 @@ import sqlite3
 import stat
 import tempfile
 import zipfile
+import zlib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from ..core.security_content import MAX_SVG_BYTES, ContentSecurityError, sanitize_svg_bytes
 from .manifest import DatasetManifest, parse_manifest
 from .policy import OfficialRegistryPolicy
 from .trust import KeyUsage, TrustedKey, TrustStore
@@ -105,9 +107,11 @@ def validate_dataset_package(
                 usage=key_usage,
             )
             _validate_membership(manifest, members)
-            _verify_payloads(archive, manifest, members)
             policy.validate(manifest)
-            _verify_sqlite(archive, members[_DATABASE_PATH], manifest)
+            _verify_sqlite(
+                archive, members[_DATABASE_PATH], manifest, members=members, limits=limits
+            )
+            _verify_payloads(archive, manifest, members, limits=limits)
     except zipfile.BadZipFile as err:
         raise ArchiveStructureError("invalid or corrupt ZIP archive") from err
     except OSError as err:
@@ -214,7 +218,7 @@ def _bounded_read(
     try:
         with archive.open(info) as handle:
             value = handle.read(maximum + 1)
-    except (RuntimeError, EOFError) as err:
+    except (RuntimeError, EOFError, zlib.error) as err:
         raise ArchiveStructureError(f"cannot read {label}") from err
     if len(value) > maximum:
         raise ArchiveStructureError(f"{label} exceeds its bounded-read limit")
@@ -240,19 +244,34 @@ def _verify_payloads(
     archive: zipfile.ZipFile,
     manifest: DatasetManifest,
     members: dict[str, zipfile.ZipInfo],
+    *,
+    limits: ArchiveLimits,
 ) -> None:
+    total_size = 0
     for declared in manifest.files:
         info = members[declared.path]
         if info.file_size != declared.size:
             raise PayloadIntegrityError(f"payload size mismatch: {declared.path}")
-        digest, streamed_size = _stream_digest(archive, info)
+        digest, streamed_size = _stream_digest(
+            archive,
+            info,
+            maximum=limits.max_member_uncompressed,
+        )
         if streamed_size != declared.size:
             raise PayloadIntegrityError(f"streamed payload size mismatch: {declared.path}")
         if digest != declared.sha256:
             raise PayloadIntegrityError(f"payload SHA-256 mismatch: {declared.path}")
+        total_size += streamed_size
+        if total_size > limits.max_total_uncompressed:
+            raise PayloadIntegrityError("streamed payloads exceed the total size safety limit")
 
 
-def _stream_digest(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> tuple[str, int]:
+def _stream_digest(
+    archive: zipfile.ZipFile,
+    info: zipfile.ZipInfo,
+    *,
+    maximum: int,
+) -> tuple[str, int]:
     digest = hashlib.sha256()
     size = 0
     try:
@@ -260,7 +279,11 @@ def _stream_digest(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> tuple[str
             while chunk := handle.read(_STREAM_CHUNK_SIZE):
                 digest.update(chunk)
                 size += len(chunk)
-    except (RuntimeError, EOFError) as err:
+                if size > maximum:
+                    raise PayloadIntegrityError(
+                        f"streamed payload exceeds the size safety limit: {info.filename}"
+                    )
+    except (RuntimeError, EOFError, zlib.error) as err:
         raise PayloadIntegrityError(f"cannot stream payload: {info.filename}") from err
     return digest.hexdigest(), size
 
@@ -269,14 +292,21 @@ def _verify_sqlite(
     archive: zipfile.ZipFile,
     info: zipfile.ZipInfo,
     manifest: DatasetManifest,
+    *,
+    members: dict[str, zipfile.ZipInfo],
+    limits: ArchiveLimits,
 ) -> None:
     with tempfile.TemporaryDirectory(prefix="locklearn-dataset-") as temporary_directory:
         database_path = Path(temporary_directory) / _DATABASE_PATH
         try:
             with archive.open(info) as source, database_path.open("xb") as destination:
+                size = 0
                 while chunk := source.read(_STREAM_CHUNK_SIZE):
+                    size += len(chunk)
+                    if size > limits.max_member_uncompressed:
+                        raise DatasetDatabaseError("dataset.db exceeds the size safety limit")
                     destination.write(chunk)
-        except (RuntimeError, EOFError, OSError) as err:
+        except (RuntimeError, EOFError, OSError, zlib.error) as err:
             raise DatasetDatabaseError("cannot stage dataset.db for read-only validation") from err
         uri = f"{database_path.as_uri()}?mode=ro&immutable=1"
         try:
@@ -313,3 +343,22 @@ def _verify_sqlite(
                     raise PayloadIntegrityError(
                         "asset metadata does not match signed manifest asset payloads"
                     )
+                for asset_path, _mime_type in connection.execute(
+                    "SELECT path, mime_type FROM assets_metadata WHERE mime_type = ?",
+                    ("image/svg+xml",),
+                ):
+                    try:
+                        raw_svg = _bounded_read(
+                            archive,
+                            members[str(asset_path)],
+                            maximum=MAX_SVG_BYTES,
+                            label=str(asset_path),
+                        )
+                        if sanitize_svg_bytes(raw_svg) != raw_svg:
+                            raise PayloadIntegrityError(
+                                f"SVG payload is not the sanitized build derivative: {asset_path}"
+                            )
+                    except (KeyError, ArchiveStructureError, ContentSecurityError) as err:
+                        raise PayloadIntegrityError(
+                            f"invalid sanitized SVG payload: {asset_path}"
+                        ) from err

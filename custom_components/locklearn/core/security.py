@@ -15,6 +15,7 @@ class ActionKind(StrEnum):
     SEND_NOW = "send_now"
     SNOOZE = "snooze"
     PAUSE_TRACK = "pause_track"
+    RESUME_TRACK = "resume_track"
     READ_PRIVATE = "read_private"
     EXPORT = "export"
     DELETE = "delete"
@@ -32,6 +33,7 @@ UNATTENDED_ALLOWLIST = frozenset(
         ActionKind.SEND_NOW,
         ActionKind.SNOOZE,
         ActionKind.PAUSE_TRACK,
+        ActionKind.RESUME_TRACK,
     }
 )
 

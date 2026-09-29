@@ -36,9 +36,29 @@ only.
 LockLearn ACL and Home Assistant entity permissions are separate systems.
 Detailed learning data belongs in the authenticated LockLearn panel.
 
-Sensors are opt-in per profile/track and must not expose studied vocabulary,
-answers, annotations, or other personal learning content by default. Home
-Assistant events likewise carry only the minimum data required for automation.
+LockLearn 1.0 does not ship optional private learning `SensorEntity` entities;
+the existing dataset `UpdateEntity` platform exposes public dataset/update
+metadata only.
+
+Any future learning sensor must obey `ha_entity_contract.py`:
+
+- exposure requires explicit Profile **and** Track opt-in;
+- Track opt-in is an allowlist of known metrics; unknown metric keys fail closed;
+- every metric is disabled by default;
+- entity identity derives from the stable Track UUID, never display names;
+- sensors for a Profile share one logical Profile Device;
+- default state attributes are empty and never contain studied content, answers,
+  annotations, target/device details or Profile/Track names;
+- publish cadence is debounced to at least five minutes;
+- Recorder exclusion is recommended for noisy counters/snapshots;
+- `state.db` remains the canonical source for complete learning history;
+- `state_class` is used only when the HA long-term-statistics semantics are
+  genuinely valid.
+
+The LockLearn panel remains the recommended surface for detailed/private
+statistics. Home Assistant events likewise carry only the minimum data required
+for automation and do not include words/translations/responses in clear text by
+default.
 
 ## Companion App notifications
 
@@ -52,5 +72,8 @@ learning signals unless explicitly trusted.
 `state.db` contains persistent private learning state and is included in
 coherent backups. Reconstructible public content caches are separate.
 
-Secure export/import is a later V1 hardening work package. Until that boundary
-is implemented, no API should expose bulk private profile state by default.
+Profile export/import is implemented through authenticated, owner-bound private
+temporary transfers. Export URLs are short-lived and one-shot; imported
+archives are validated and applied to a new archived Profile rather than
+overwriting existing learner state. Private exports are never public static
+assets.

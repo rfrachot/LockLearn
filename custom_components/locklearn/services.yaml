@@ -1,0 +1,105 @@
+start_session:
+  name: Start session
+  description: Start a persistent LockLearn session for an authorized Profile.
+  fields:
+    profile_id:
+      name: Profile
+      description: Stable LockLearn Profile ID.
+      required: true
+      selector:
+        text:
+    track_id:
+      name: Track
+      description: Optional stable Track ID to prepare session questions from.
+      required: false
+      selector:
+        text:
+    session_type:
+      name: Session type
+      default: learn
+      selector:
+        text:
+    strategy:
+      name: Strategy
+      default: default
+      selector:
+        text:
+    settings:
+      name: Settings
+      description: Optional session settings object.
+      required: false
+      selector:
+        object:
+
+send_now:
+  name: Send now
+  description: Materialize and prepare one immediate notification slot using normal scheduler policy.
+  fields:
+    profile_id:
+      name: Profile
+      required: true
+      selector:
+        text:
+    track_id:
+      name: Track
+      required: false
+      selector:
+        text:
+    target_id:
+      name: Target
+      required: false
+      selector:
+        text:
+
+snooze:
+  name: Snooze notification
+  description: Defer one unsent LockLearn scheduler slot without creating learning evidence.
+  fields:
+    profile_id:
+      name: Profile
+      required: true
+      selector:
+        text:
+    slot_id:
+      name: Slot
+      required: true
+      selector:
+        text:
+    minutes:
+      name: Minutes
+      default: 15
+      selector:
+        number:
+          min: 1
+          max: 1440
+          mode: box
+
+pause_track:
+  name: Pause track
+  description: Pause one LockLearn Track after Profile authorization.
+  fields:
+    profile_id:
+      name: Profile
+      required: true
+      selector:
+        text:
+    track_id:
+      name: Track
+      required: true
+      selector:
+        text:
+
+resume_track:
+  name: Resume track
+  description: Resume one paused LockLearn Track after Profile authorization.
+  fields:
+    profile_id:
+      name: Profile
+      required: true
+      selector:
+        text:
+    track_id:
+      name: Track
+      required: true
+      selector:
+        text:

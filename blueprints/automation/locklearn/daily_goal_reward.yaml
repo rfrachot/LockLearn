@@ -1,0 +1,41 @@
+blueprint:
+  name: LockLearn - Daily goal reward
+  description: >-
+    Activate a selected Home Assistant scene when LockLearn reports that a
+    Profile has reached its daily goal. Optionally restrict the automation to
+    one LockLearn Profile ID. No learning content is read from the event.
+  domain: automation
+  author: LockLearn
+  source_url: https://github.com/rfrachot/LockLearn/blob/main/blueprints/automation/locklearn/daily_goal_reward.yaml
+  input:
+    profile_id:
+      name: LockLearn Profile ID
+      description: Leave empty to react to every Profile visible to this Home Assistant automation.
+      default: ""
+      selector:
+        text:
+    reward_scene:
+      name: Reward scene
+      selector:
+        target:
+          entity:
+            domain: scene
+
+variables:
+  locklearn_profile_id: !input profile_id
+
+triggers:
+  - trigger: event
+    event_type: locklearn_daily_goal_reached
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ locklearn_profile_id == ""
+         or trigger.event.data.profile_id == locklearn_profile_id }}
+
+actions:
+  - action: scene.turn_on
+    target: !input reward_scene
+
+mode: single

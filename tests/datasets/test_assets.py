@@ -196,8 +196,8 @@ def test_asset_model_rejects_unsafe_paths_mime_and_dimensions() -> None:
         Asset(
             **common,
             kind=AssetKind.IMAGE,
-            path="assets/image.svg",
-            mime_type="image/svg+xml",
+            path="assets/image.gif",
+            mime_type="image/gif",
             width=1,
             height=1,
         )

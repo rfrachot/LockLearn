@@ -129,6 +129,22 @@ An UpdateEntity exists for each official dataset definition and exposes
 installed/latest version, source freshness, disk cache size, sources, licenses
 and release notes. Installed content remains usable when discovery is offline.
 
+## P5.6 product surface
+
+The panel exposes the same runtime truth through the authenticated WebSocket
+boundary. The Sources & Licences view shows official update state together with
+all currently installed datasets, including datasets outside the official
+discovery registry. It reads provenance and licence facts from the active
+content generation rather than reconstructing attribution from frontend
+constants.
+
+Checking release catalogs and installing an official dataset are global Home
+Assistant mutations and therefore require a Home Assistant administrator in the
+backend. Read-only source/licence metadata remains available to authenticated
+LockLearn panel users. Installing still delegates to DatasetManager, so the UI
+cannot bypass host allowlists, checksum/signature checks, schema/licence
+validation, staging, atomic generation activation or rollback.
+
 
 ## P1.10 bundled first-run dataset
 

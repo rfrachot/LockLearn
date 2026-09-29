@@ -9,8 +9,8 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.locklearn.const import DOMAIN
-from tests.backend.content_db_helpers import DATASET_ID, ITEM_A, ITEM_B, create_package
+from custom_components.locklearn.const import DOMAIN, FRONTEND_PROTOCOL_VERSION, INTEGRATION_VERSION
+from tests.backend.content_db_helpers import DATASET_ID, ITEM_A, ITEM_B, SOURCE_ID, create_package
 
 
 def _directional_package(
@@ -68,6 +68,10 @@ async def test_bootstrap_profile_crud_privacy_share_and_pagination(
     await owner.send_json_auto_id({"type": "locklearn/bootstrap"})
     bootstrap = await owner.receive_json()
     assert bootstrap["success"] is True
+    assert bootstrap["result"]["frontend_protocol"] == FRONTEND_PROTOCOL_VERSION
+    assert bootstrap["result"]["backend_version"] == INTEGRATION_VERSION
+    assert bootstrap["result"]["panel_path"] == "/locklearn"
+    assert bootstrap["result"]["is_admin"] is True
     personal = bootstrap["result"]["personal_profile"]
     assert personal["role"] == "owner"
     personal_id = personal["profile_id"]
@@ -137,6 +141,27 @@ async def test_bootstrap_profile_crud_privacy_share_and_pagination(
     assert shared["success"] is True
     assert shared["result"]["role"] == "viewer"
 
+    await owner.send_json_auto_id({"type": "locklearn/profiles/members", "profile_id": second_id})
+    members = await owner.receive_json()
+    assert members["success"] is True
+    assert {item["ha_user_id"] for item in members["result"]} >= {hass_read_only_user.id}
+
+    await owner.send_json_auto_id(
+        {"type": "locklearn/profiles/share_targets", "profile_id": second_id}
+    )
+    targets = await owner.receive_json()
+    assert targets["success"] is True
+    assert any(item["ha_user_id"] == hass_read_only_user.id for item in targets["result"])
+
+    for command in (
+        {"type": "locklearn/profiles/members", "profile_id": second_id},
+        {"type": "locklearn/profiles/share_targets", "profile_id": second_id},
+    ):
+        await outsider.send_json_auto_id(command)
+        private_acl = await outsider.receive_json()
+        assert private_acl["success"] is False
+        assert private_acl["error"]["code"] == "locklearn/forbidden"
+
     await outsider.send_json_auto_id({"type": "locklearn/profiles/list"})
     visible = await outsider.receive_json()
     assert visible["success"] is True
@@ -183,9 +208,17 @@ async def test_bootstrap_profile_crud_privacy_share_and_pagination(
     assert invalid_cursor["success"] is False
     assert invalid_cursor["error"]["code"] == "locklearn/invalid_request"
 
-    await owner.send_json_auto_id({"type": "locklearn/profiles/delete", "profile_id": personal_id})
+    await owner.send_json_auto_id(
+        {
+            "type": "locklearn/profiles/delete",
+            "profile_id": personal_id,
+            "action": "delete_permanently",
+            "confirmation": f"DELETE {personal_id}",
+        }
+    )
     deleted = await owner.receive_json()
     assert deleted["success"] is True
+    assert deleted["result"]["action"] == "delete_permanently"
 
     await owner.send_json_auto_id({"type": "locklearn/profiles/list"})
     remaining = await owner.receive_json()
@@ -226,11 +259,38 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
     assert any(
         item["pack_version_id"] == "locklearn:pack-version:v1" for item in packs["result"]["items"]
     )
+    listed_pack = next(
+        item
+        for item in packs["result"]["items"]
+        if item["pack_version_id"] == "locklearn:pack-version:v1"
+    )
+    assert {"source_language": "en", "target_language": "fr"} in listed_pack["directions"]
 
     await client.send_json_auto_id({"type": "locklearn/datasets/list", "limit": 10})
     datasets = await client.receive_json()
     assert datasets["success"] is True
-    assert any(item["dataset_id"] == DATASET_ID for item in datasets["result"]["items"])
+    dataset = next(item for item in datasets["result"]["items"] if item["dataset_id"] == DATASET_ID)
+    assert dataset["installed_version"] == "v1"
+    assert dataset["state"] == "installed"
+    assert dataset["sources"]
+    assert dataset["sources"][0]["attribution_template"]
+    assert dataset["sources"][0]["provenance_records"] >= 1
+    assert dataset["licenses"]
+    assert dataset["licenses"][0]["license_id"]
+
+    await client.send_json_auto_id(
+        {
+            "type": "locklearn/datasets/attributions",
+            "dataset_id": DATASET_ID,
+            "source_id": SOURCE_ID,
+            "limit": 10,
+        }
+    )
+    attributions = await client.receive_json()
+    assert attributions["success"] is True
+    assert attributions["result"]["cursor"] is None
+    assert attributions["result"]["items"][0]["attribution_text"] == "Synthetic dataset provenance"
+    assert attributions["result"]["items"][0]["modified_from_source"] is True
 
     await client.send_json_auto_id(
         {
@@ -241,12 +301,26 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
             "source_language": "en",
             "target_language": "fr",
             "priority": 2,
+            "scheduler_settings": {
+                "learning_count": 2,
+                "quiz_count": 1,
+            },
         }
     )
     created = await client.receive_json()
     assert created["success"] is True
     track_id = created["result"]["track_id"]
     assert created["result"]["pack_version_id"] == "locklearn:pack-version:v1"
+    assert created["result"]["content_weights"] == {"vocabulary": 1.0}
+    assert created["result"]["settings"]["scheduler"] == {
+        "learning_count": 2,
+        "quiz_count": 1,
+    }
+
+    await client.send_json_auto_id({"type": "locklearn/targets/list", "profile_id": profile_id})
+    targets = await client.receive_json()
+    assert targets["success"] is True
+    assert targets["result"]["items"] == []
 
     outsider = await hass_ws_client(hass, hass_read_only_access_token)
     await outsider.send_json_auto_id({"type": "locklearn/tracks/list", "profile_id": profile_id})
@@ -263,6 +337,11 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
         }
     )
     assert (await client.receive_json())["success"] is True
+
+    await outsider.send_json_auto_id({"type": "locklearn/targets/list", "profile_id": profile_id})
+    viewer_targets = await outsider.receive_json()
+    assert viewer_targets["success"] is False
+    assert viewer_targets["error"]["code"] == "locklearn/forbidden"
 
     await outsider.send_json_auto_id(
         {
@@ -304,12 +383,22 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
             "track_id": track_id,
             "name": "Updated track",
             "priority": 3,
+            "content_weights": {"vocabulary": 2.5},
+            "scheduler_settings": {
+                "learning_count": 1,
+                "quiz_count": 2,
+            },
         }
     )
     updated = await client.receive_json()
     assert updated["success"] is True
     assert updated["result"]["name"] == "Updated track"
     assert updated["result"]["priority"] == 3
+    assert updated["result"]["content_weights"] == {"vocabulary": 2.5}
+    assert updated["result"]["settings"]["scheduler"] == {
+        "learning_count": 1,
+        "quiz_count": 2,
+    }
 
     await _activate_package(
         hass,
@@ -317,6 +406,64 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
         version="v2",
         active_item_ids=(ITEM_A, ITEM_B),
     )
+
+    plan = {
+        "track_id": track_id,
+        "max_new_per_day_cards": 2,
+        "max_reviews_per_day_cards": 20,
+        "max_notification_new_teasers": 1,
+        "target_date": None,
+        "target_coverage": 1.0,
+        "target_retention": 0.9,
+    }
+    await client.send_json_auto_id({"type": "locklearn/tracks/plan_preview", **plan})
+    preview = await client.receive_json()
+    assert preview["success"] is True
+    assert preview["result"]["selected_cards"] == 1
+
+    await client.send_json_auto_id(
+        {"type": "locklearn/tracks/list", "profile_id": profile_id, "limit": 10}
+    )
+    preview_did_not_persist = await client.receive_json()
+    assert "learning_plan" not in preview_did_not_persist["result"]["items"][0]["settings"]
+
+    await outsider.send_json_auto_id({"type": "locklearn/tracks/plan_preview", **plan})
+    viewer_plan = await outsider.receive_json()
+    assert viewer_plan["success"] is False
+    assert viewer_plan["error"]["code"] == "locklearn/forbidden"
+
+    await client.send_json_auto_id({"type": "locklearn/tracks/plan_set", **plan})
+    plan_set = await client.receive_json()
+    assert plan_set["success"] is True
+
+    await client.send_json_auto_id(
+        {
+            "type": "locklearn/tracks/preview_pack_update",
+            "track_id": track_id,
+            "pack_version_id": "locklearn:pack-version:v2",
+        }
+    )
+    preview_update = await client.receive_json()
+    assert preview_update["success"] is True
+    assert preview_update["result"]["added_learning_item_ids"] == [ITEM_B]
+
+    await client.send_json_auto_id(
+        {"type": "locklearn/tracks/list", "profile_id": profile_id, "limit": 10}
+    )
+    still_v1 = await client.receive_json()
+    assert still_v1["result"]["items"][0]["pack_version_id"] == "locklearn:pack-version:v1"
+
+    await outsider.send_json_auto_id(
+        {
+            "type": "locklearn/tracks/preview_pack_update",
+            "track_id": track_id,
+            "pack_version_id": "locklearn:pack-version:v2",
+        }
+    )
+    viewer_preview = await outsider.receive_json()
+    assert viewer_preview["success"] is False
+    assert viewer_preview["error"]["code"] == "locklearn/forbidden"
+
     await outsider.send_json_auto_id(
         {
             "type": "locklearn/tracks/integrate_pack_update",
@@ -351,3 +498,38 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
     assert empty["result"]["items"] == []
 
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_dataset_mutations_require_home_assistant_admin(
+    hass: HomeAssistant,
+    hass_ws_client: Any,
+    hass_read_only_access_token: str,
+) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=DOMAIN,
+        data={"create_personal_profile": False, "ui_language": "en"},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+
+    client = await hass_ws_client(hass, hass_read_only_access_token)
+
+    await client.send_json_auto_id({"type": "locklearn/datasets/list", "limit": 10})
+    visible = await client.receive_json()
+    assert visible["success"] is True
+
+    await client.send_json_auto_id({"type": "locklearn/datasets/refresh"})
+    refresh = await client.receive_json()
+    assert refresh["success"] is False
+    assert refresh["error"]["code"] == "locklearn/forbidden"
+
+    await client.send_json_auto_id(
+        {
+            "type": "locklearn/datasets/install",
+            "dataset_id": DATASET_ID,
+        }
+    )
+    install = await client.receive_json()
+    assert install["success"] is False
+    assert install["error"]["code"] == "locklearn/forbidden"
