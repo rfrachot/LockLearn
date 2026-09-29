@@ -102,6 +102,12 @@ async def test_all_acl_scoped_websocket_endpoints_have_negative_access_coverage(
         {"type": "locklearn/annotations/list", "profile_id": profile_id},
         {"type": "locklearn/notifications/unrecorded_responses", "profile_id": profile_id},
         {"type": "locklearn/scheduler/preview", "profile_id": profile_id},
+        {
+            "type": "locklearn/session/availability",
+            "profile_id": profile_id,
+            "track_id": track_id,
+            "session_type": "learn",
+        },
         {"type": "locklearn/session/get", "session_id": session_id},
         {"type": "locklearn/session/subscribe", "session_id": session_id},
     )
@@ -142,6 +148,11 @@ async def test_all_acl_scoped_websocket_endpoints_have_negative_access_coverage(
             "profile_id": profile_id,
             "target_id": "missing-target",
             "friendly_name": "Denied",
+        },
+        {
+            "type": "locklearn/targets/test",
+            "profile_id": profile_id,
+            "target_id": "missing-target",
         },
         {
             "type": "locklearn/tracks/create",
