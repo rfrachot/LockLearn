@@ -916,6 +916,8 @@ export interface SessionAvailability {
   available_now: number;
   introduced_cards: number;
   new_cards: number;
+  remaining_new_quota: number;
+  forceable_new: number;
   forceable_early: number;
   next_due_at_utc: string | null;
 }
