@@ -33,6 +33,10 @@ Beta.2 closes only that V1 configuration gap:
 - Settings exposes Companion target add/edit controls;
 - target capabilities remain evidence-driven; unknown is never upgraded to
   supported from platform name alone;
+- Pack inventory exposes valid prompt-language → answer-language directions,
+  and Track creation uses those directions instead of free-form language codes;
+- WebSocket object errors are rendered as their actionable message instead of
+  `[object Object]`;
 - P6.8 command classification/negative ACL and dedicated target-management
   regressions cover the new path.
 
