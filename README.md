@@ -7,7 +7,7 @@ integration. It combines active study sessions, deterministic spaced repetition,
 actionable Companion notifications, multi-user learner Profiles and signed
 versioned datasets without requiring a LockLearn cloud account.
 
-**Status:** 1.0.0-beta.1 field-validation candidate. P6.1 through P6.11 and the
+**Status:** 1.0.0-beta.2 field-validation candidate. P6.1 through P6.11 and the
 P6 exit gate are qualified; stable 1.0.0 is intentionally withheld until real
 Home Assistant beta validation is accepted.
 
@@ -108,7 +108,7 @@ upstream network access.
 
 | Contract | Current V1 hardening value |
 |---|---|
-| LockLearn runtime | 1.0.0-beta.1 field-validation candidate |
+| LockLearn runtime | 1.0.0-beta.2 field-validation candidate |
 | HACS minimum Home Assistant | 2025.2.0 |
 | Minimum full CI lane | 2025.2.5 |
 | Current full harness lane | 2026.9.3 |

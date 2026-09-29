@@ -6,6 +6,8 @@ import {
   answerSession,
   completeSession,
   createCardAnnotation,
+  createNotificationTarget,
+  discoverNotificationTargets,
   getDashboard,
   getSession,
   getStats,
@@ -32,6 +34,7 @@ import {
   startQuizSession,
   submitQuizAnswer,
   updateCardAnnotation,
+  updateNotificationTarget,
   evaluateQuizAnswer,
   ProtocolMismatchError,
   type HomeAssistantLike,
@@ -315,6 +318,69 @@ describe("frontend protocol", () => {
         grading_policy_kind: "exact",
         grading_policy_version: 1,
         normalization_version: 1,
+      },
+    ]);
+  });
+
+  it("uses owner-managed notification target contracts", async () => {
+    const messages: Record<string, unknown>[] = [];
+    const hass: HomeAssistantLike = {
+      callWS: async <T>(message: Record<string, unknown>): Promise<T> => {
+        messages.push(message);
+        if (message.type === "locklearn/targets/discover") {
+          return {
+            items: [{
+              device_registry_id: "device-1",
+              friendly_name: "Phone",
+              platform: "android",
+              route_available: true,
+              supports_platform_data: true,
+              configured_target_id: null,
+            }],
+            cursor: null,
+          } as T;
+        }
+        return {
+          target_id: "target-1",
+          profile_id: "p1",
+          device_registry_id: "device-1",
+          friendly_name: "Phone",
+          platform: "android",
+          capabilities: {},
+          shared_device: false,
+          lockscreen_visibility: "private",
+          enabled: true,
+          minimum_gap_seconds: null,
+          maximum_notifications_per_hour: null,
+          daily_push_budget: null,
+        } as T;
+      },
+    };
+
+    expect((await discoverNotificationTargets(hass, "p1"))[0]?.device_registry_id).toBe(
+      "device-1",
+    );
+    expect((await createNotificationTarget(hass, "p1", "device-1")).target_id).toBe(
+      "target-1",
+    );
+    await updateNotificationTarget(hass, "p1", "target-1", {
+      shared_device: true,
+      daily_push_budget: 3,
+    });
+
+    expect(messages).toEqual([
+      { type: "locklearn/targets/discover", limit: 100, profile_id: "p1" },
+      {
+        type: "locklearn/targets/create",
+        profile_id: "p1",
+        device_registry_id: "device-1",
+      },
+      {
+        type: "locklearn/targets/update",
+        profile_id: "p1",
+        target_id: "target-1",
+        shared_device: true,
+        daily_push_budget: 3,
       },
     ]);
   });

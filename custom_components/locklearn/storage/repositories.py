@@ -3385,35 +3385,41 @@ class NotificationTargetsRepository:
         )
 
         def write(connection: sqlite3.Connection) -> None:
-            connection.execute(
-                """INSERT INTO notification_targets(
-                       target_id, profile_id, device_registry_id, platform,
-                       capabilities_json, friendly_name, last_resolved_notify_service,
-                       shared_device, lockscreen_visibility, enabled,
-                       minimum_gap_seconds, maximum_notifications_per_hour,
-                       daily_push_budget, adaptive_backoff_json,
-                       created_at_utc, updated_at_utc
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    target.target_id,
-                    target.profile_id,
-                    target.device_registry_id,
-                    target.platform,
-                    capabilities_json,
-                    target.friendly_name,
-                    target.last_resolved_notify_service,
-                    int(target.shared_device),
-                    target.lockscreen_visibility,
-                    int(target.enabled),
-                    target.minimum_gap_seconds,
-                    target.maximum_notifications_per_hour,
-                    target.daily_push_budget,
-                    adaptive_backoff_json,
-                    target.created_at_utc,
-                    target.updated_at_utc,
-                ),
-            )
-            connection.commit()
+            try:
+                connection.execute(
+                    """INSERT INTO notification_targets(
+                           target_id, profile_id, device_registry_id, platform,
+                           capabilities_json, friendly_name, last_resolved_notify_service,
+                           shared_device, lockscreen_visibility, enabled,
+                           minimum_gap_seconds, maximum_notifications_per_hour,
+                           daily_push_budget, adaptive_backoff_json,
+                           created_at_utc, updated_at_utc
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        target.target_id,
+                        target.profile_id,
+                        target.device_registry_id,
+                        target.platform,
+                        capabilities_json,
+                        target.friendly_name,
+                        target.last_resolved_notify_service,
+                        int(target.shared_device),
+                        target.lockscreen_visibility,
+                        int(target.enabled),
+                        target.minimum_gap_seconds,
+                        target.maximum_notifications_per_hour,
+                        target.daily_push_budget,
+                        adaptive_backoff_json,
+                        target.created_at_utc,
+                        target.updated_at_utc,
+                    ),
+                )
+                connection.commit()
+            except sqlite3.IntegrityError as err:
+                connection.rollback()
+                raise StateRepositoryError(
+                    "notification target identity already exists"
+                ) from err
 
         await self._storage._async_writer(write)
 
@@ -3435,6 +3441,55 @@ class NotificationTargetsRepository:
             return None if row is None else self._target_dict(row)
 
         return await self._storage._async_reader(read)
+
+    async def async_update(self, target: NotificationTargetRecord) -> bool:
+        """Replace mutable target configuration without changing stable identity."""
+        capabilities_json = json.dumps(
+            target.capabilities or {},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        adaptive_backoff_json = json.dumps(
+            target.adaptive_backoff or {},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+        def write(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute(
+                """UPDATE notification_targets
+                   SET platform = ?, capabilities_json = ?, friendly_name = ?,
+                       last_resolved_notify_service = ?, shared_device = ?,
+                       lockscreen_visibility = ?, enabled = ?,
+                       minimum_gap_seconds = ?, maximum_notifications_per_hour = ?,
+                       daily_push_budget = ?, adaptive_backoff_json = ?,
+                       updated_at_utc = ?
+                   WHERE target_id = ? AND profile_id = ?
+                     AND device_registry_id = ?""",
+                (
+                    target.platform,
+                    capabilities_json,
+                    target.friendly_name,
+                    target.last_resolved_notify_service,
+                    int(target.shared_device),
+                    target.lockscreen_visibility,
+                    int(target.enabled),
+                    target.minimum_gap_seconds,
+                    target.maximum_notifications_per_hour,
+                    target.daily_push_budget,
+                    adaptive_backoff_json,
+                    target.updated_at_utc,
+                    target.target_id,
+                    target.profile_id,
+                    target.device_registry_id,
+                ),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(write)
 
     async def async_set_last_resolved_service(
         self,

@@ -4,10 +4,12 @@ import { property, state } from "lit/decorators.js";
 import { interactiveAccessibilityStyles } from "./content-renderer";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
 import {
+  createNotificationTarget,
   createProfile,
   createTrack,
   deleteProfile,
   deleteTrack,
+  discoverNotificationTargets,
   integratePackUpdate,
   listPacks,
   listNotificationTargets,
@@ -19,11 +21,13 @@ import {
   removeProfileMember,
   setTrackPlan,
   shareProfile,
+  updateNotificationTarget,
   updateProfile,
   updateTrack,
   type HomeAssistantLike,
   type LearningPlanInput,
   type LoadForecast,
+  type NotificationTargetCandidate,
   type NotificationTargetSummary,
   type PackVersionDiff,
   type PackVersionRecord,
@@ -39,6 +43,16 @@ export type ManagementRoute = "profiles" | "tracks" | "packs" | "settings";
 function asInt(value: FormDataEntryValue | null, fallback: number, min: number): number {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(parsed) && parsed >= min ? parsed : fallback;
+}
+
+function asOptionalInt(
+  value: FormDataEntryValue | null,
+  min: number,
+): number | null {
+  const raw = String(value ?? "").trim();
+  if (raw === "") return null;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= min ? parsed : null;
 }
 
 function asFloat(
@@ -77,6 +91,7 @@ export class LockLearnManagementView extends LitElement {
   @state() private tracks: TrackRecord[] = [];
   @state() private packs: PackVersionRecord[] = [];
   @state() private notificationTargets: NotificationTargetSummary[] = [];
+  @state() private notificationCandidates: NotificationTargetCandidate[] = [];
   @state() private members: ProfileMember[] = [];
   @state() private shareTargets: ShareTarget[] = [];
   @state() private selectedTrackId = "";
@@ -162,6 +177,7 @@ export class LockLearnManagementView extends LitElement {
       this.tracks = [];
       this.packs = [];
       this.notificationTargets = [];
+      this.notificationCandidates = [];
       this.members = [];
       this.shareTargets = [];
       return;
@@ -175,6 +191,9 @@ export class LockLearnManagementView extends LitElement {
       ]);
       this.notificationTargets = this.canEditTrack()
         ? await listNotificationTargets(this.hass, this.profile.profile_id)
+        : [];
+      this.notificationCandidates = this.isOwner() && this.route === "settings"
+        ? await discoverNotificationTargets(this.hass, this.profile.profile_id)
         : [];
       if (!this.tracks.some((item) => item.track_id === this.selectedTrackId)) {
         this.selectedTrackId = this.tracks[0]?.track_id ?? "";
@@ -670,6 +689,127 @@ export class LockLearnManagementView extends LitElement {
     }
   }
 
+  private renderNotificationTargets() {
+    const available = this.notificationCandidates.filter(
+      (candidate) => candidate.configured_target_id === null,
+    );
+    return html`
+      <article class="card">
+        <h2>${this.t("manage.notificationTargetSettings")}</h2>
+        <p class="muted">${this.t("manage.notificationTargetSettingsHelp")}</p>
+        ${available.length === 0 ? html`
+          <p class="muted">${this.t("manage.noAvailableNotificationDevices")}</p>
+        ` : html`
+          <form class="form-grid" @submit=${(event: SubmitEvent) => {
+            event.preventDefault();
+            const data = new FormData(event.currentTarget as HTMLFormElement);
+            const deviceId = String(data.get("device") ?? "");
+            if (!deviceId || this.hass === undefined || this.profile === undefined) return;
+            void this.mutate(
+              () => createNotificationTarget(this.hass!, this.profile!.profile_id, deviceId),
+              this.t("manage.notificationTargetCreated"),
+            );
+          }}>
+            <label>${this.t("manage.availableNotificationDevice")}
+              <select name="device" required>
+                ${available.map((candidate) => html`
+                  <option value=${candidate.device_registry_id}>
+                    ${candidate.friendly_name} · ${candidate.platform}
+                    ${candidate.route_available ? "" : ` · ${this.t("manage.routeUnavailable")}`}
+                  </option>
+                `)}
+              </select>
+            </label>
+            <div class="actions">
+              <button class="primary" type="submit">${this.t("manage.addNotificationTarget")}</button>
+            </div>
+          </form>
+        `}
+        ${this.notificationTargets.length === 0 ? html`
+          <p>${this.t("manage.noNotificationTargets")}</p>
+        ` : this.notificationTargets.map((target) => html`
+          <form class="form-grid" @submit=${(event: SubmitEvent) => {
+            event.preventDefault();
+            const data = new FormData(event.currentTarget as HTMLFormElement);
+            if (this.hass === undefined || this.profile === undefined) return;
+            void this.mutate(
+              () => updateNotificationTarget(
+                this.hass!,
+                this.profile!.profile_id,
+                target.target_id,
+                {
+                  friendly_name: String(data.get("friendlyName") ?? "").trim(),
+                  shared_device: data.get("sharedDevice") === "on",
+                  lockscreen_visibility: String(
+                    data.get("lockscreenVisibility") ?? "private",
+                  ) as "public" | "private" | "secret",
+                  enabled: data.get("enabled") === "on",
+                  minimum_gap_seconds: asOptionalInt(data.get("minimumGap"), 0),
+                  maximum_notifications_per_hour: asOptionalInt(data.get("maxPerHour"), 1),
+                  daily_push_budget: asOptionalInt(data.get("targetBudget"), 0),
+                },
+              ),
+              this.t("manage.notificationTargetUpdated"),
+            );
+          }}>
+            <label>${this.t("manage.name")}
+              <input name="friendlyName" .value=${target.friendly_name} required />
+            </label>
+            <label>${this.t("manage.platform")}
+              <input .value=${target.platform} disabled />
+            </label>
+            <label>${this.t("manage.lockscreenVisibility")}
+              <select name="lockscreenVisibility" .value=${target.lockscreen_visibility}>
+                <option value="public">public</option>
+                <option value="private">private</option>
+                <option value="secret">secret</option>
+              </select>
+            </label>
+            <label>${this.t("manage.minimumGapSeconds")}
+              <input
+                name="minimumGap"
+                type="number"
+                min="0"
+                .value=${target.minimum_gap_seconds === null ? "" : String(target.minimum_gap_seconds)}
+              />
+            </label>
+            <label>${this.t("manage.maximumPerHour")}
+              <input
+                name="maxPerHour"
+                type="number"
+                min="1"
+                .value=${target.maximum_notifications_per_hour === null ? "" : String(target.maximum_notifications_per_hour)}
+              />
+            </label>
+            <label>${this.t("manage.targetPushBudget")}
+              <input
+                name="targetBudget"
+                type="number"
+                min="0"
+                .value=${target.daily_push_budget === null ? "" : String(target.daily_push_budget)}
+              />
+            </label>
+            <label>
+              <input name="enabled" type="checkbox" .checked=${target.enabled} />
+              ${this.t("manage.targetEnabled")}
+            </label>
+            <label>
+              <input name="sharedDevice" type="checkbox" .checked=${target.shared_device} />
+              ${this.t("manage.sharedDevice")}
+            </label>
+            <p class="meta">
+              ${this.t("manage.capabilitiesConservative")}
+              · ${target.device_registry_id}
+            </p>
+            <div class="actions">
+              <button class="primary" type="submit">${this.t("manage.save")}</button>
+            </div>
+          </form>
+        `)}
+      </article>
+    `;
+  }
+
   private renderSettings() {
     if (!this.isOwner()) return html`<div class="card"><p>${this.t("manage.readOnly")}</p></div>`;
     const settings = this.profile?.settings ?? {};
@@ -718,6 +858,7 @@ export class LockLearnManagementView extends LitElement {
           <div class="actions"><button class="primary" type="submit">${this.t("manage.save")}</button></div>
         </form>
       </article>
+      ${this.renderNotificationTargets()}
     `;
   }
 }

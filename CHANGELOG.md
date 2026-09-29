@@ -6,6 +6,16 @@ All notable changes will be documented here.
 
 _No unreleased changes._
 
+## [1.0.0-beta.2] - 2026-09-29
+
+### Fixed
+- Add owner-managed Companion target discovery and configuration through the
+  public WebSocket API and Settings panel, closing the beta.1 field-validation
+  blocker that prevented real notification setup.
+- Keep target identity bound to the Home Assistant Device Registry while
+  preserving conservative per-device capability defaults and existing
+  scheduler/Track target selection.
+
 ## [1.0.0-beta.1] - 2026-09-29
 
 ### Fixed

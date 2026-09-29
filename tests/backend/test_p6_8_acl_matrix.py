@@ -131,6 +131,18 @@ async def test_all_acl_scoped_websocket_endpoints_have_negative_access_coverage(
         {"type": "locklearn/profiles/members", "profile_id": profile_id},
         {"type": "locklearn/profiles/share_targets", "profile_id": profile_id},
         {"type": "locklearn/targets/list", "profile_id": profile_id},
+        {"type": "locklearn/targets/discover", "profile_id": profile_id},
+        {
+            "type": "locklearn/targets/create",
+            "profile_id": profile_id,
+            "device_registry_id": "missing-device",
+        },
+        {
+            "type": "locklearn/targets/update",
+            "profile_id": profile_id,
+            "target_id": "missing-target",
+            "friendly_name": "Denied",
+        },
         {
             "type": "locklearn/tracks/create",
             "profile_id": profile_id,

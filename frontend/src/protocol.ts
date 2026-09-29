@@ -109,12 +109,36 @@ export interface TrackRecord {
 
 export interface NotificationTargetSummary {
   target_id: string;
+  profile_id: string;
+  device_registry_id: string;
   friendly_name: string;
   platform: string;
+  capabilities: Record<string, unknown>;
   shared_device: boolean;
-  lockscreen_visibility: string;
+  lockscreen_visibility: "public" | "private" | "secret";
   enabled: boolean;
+  minimum_gap_seconds: number | null;
+  maximum_notifications_per_hour: number | null;
   daily_push_budget: number | null;
+}
+
+export interface NotificationTargetCandidate {
+  device_registry_id: string;
+  friendly_name: string;
+  platform: string;
+  route_available: boolean;
+  supports_platform_data: boolean;
+  configured_target_id: string | null;
+}
+
+export interface NotificationTargetPatch {
+  friendly_name?: string;
+  shared_device?: boolean;
+  lockscreen_visibility?: "public" | "private" | "secret";
+  enabled?: boolean;
+  minimum_gap_seconds?: number | null;
+  maximum_notifications_per_hour?: number | null;
+  daily_push_budget?: number | null;
 }
 
 export interface PackVersionRecord {
@@ -505,6 +529,41 @@ export async function listNotificationTargets(
 ): Promise<NotificationTargetSummary[]> {
   return listPaged<NotificationTargetSummary>(hass, "locklearn/targets/list", {
     profile_id: profileId,
+  });
+}
+
+export async function discoverNotificationTargets(
+  hass: HomeAssistantLike,
+  profileId: string,
+): Promise<NotificationTargetCandidate[]> {
+  return listPaged<NotificationTargetCandidate>(hass, "locklearn/targets/discover", {
+    profile_id: profileId,
+  });
+}
+
+export async function createNotificationTarget(
+  hass: HomeAssistantLike,
+  profileId: string,
+  deviceRegistryId: string,
+): Promise<NotificationTargetSummary> {
+  return hass.callWS<NotificationTargetSummary>({
+    type: "locklearn/targets/create",
+    profile_id: profileId,
+    device_registry_id: deviceRegistryId,
+  });
+}
+
+export async function updateNotificationTarget(
+  hass: HomeAssistantLike,
+  profileId: string,
+  targetId: string,
+  patch: NotificationTargetPatch,
+): Promise<NotificationTargetSummary> {
+  return hass.callWS<NotificationTargetSummary>({
+    type: "locklearn/targets/update",
+    profile_id: profileId,
+    target_id: targetId,
+    ...patch,
   });
 }
 

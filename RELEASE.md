@@ -10,7 +10,7 @@ published.
 - `custom_components/locklearn/manifest.json` is the Home Assistant/HACS release
   version and is mirrored by `INTEGRATION_VERSION` in
   `custom_components/locklearn/const.py`; CI requires them to match.
-- The current field-validation prerelease is `1.0.0-beta.1`; the stable target remains `1.0.0`.
+- The current field-validation prerelease is `1.0.0-beta.2`; the stable target remains `1.0.0`.
 - `frontend/package.json` is private npm toolchain metadata and is not the LockLearn product version.
   The shipped frontend identity comes from the integration version plus the committed bundle hash.
 - Dataset/package versions are independent of the LockLearn software version.
@@ -22,7 +22,7 @@ the Home Assistant beta field-validation cycle below is explicitly accepted.
 
 ## Beta field-validation sequence
 
-`1.0.0-beta.1` is an installable prerelease, not a development-branch shortcut.
+`1.0.0-beta.2` is the current installable prerelease. `1.0.0-beta.1` remains immutable and is recorded as field-blocked because notification targets could not be configured through a public/user-facing path.
 
 1. start from the qualified P6 exit-gate baseline;
 2. bump only release/version/docs contracts to `1.0.0-beta.1`;
@@ -82,7 +82,7 @@ imports the integration in a fresh subprocess with the repository root absent fr
 checks the compiled frontend and rejects repository-only imports or private-key
 material.
 
-## Supported upgrade path for 1.0.0-beta.1 and 1.0.0
+## Supported upgrade path for 1.0.0-beta.2 and 1.0.0
 
 The latest real published predecessor is `v0.0.2`. It shipped `state.db` schema v1
 and Config Entry schema v1. P6.10 freezes that exact released state schema as an
@@ -91,7 +91,7 @@ upgrade fixture and verifies:
 ```text
 v0.0.2 / state schema v1
         -> sequential v1 -> v2 -> v3 -> v4 -> v5 migrations
-        -> 1.0.0-beta.1 field candidate
+        -> 1.0.0-beta.2 field candidate
         -> future 1.0.0 stable
 ```
 

@@ -1,11 +1,16 @@
-# LockLearn 1.0.0-beta.1 — Home Assistant field validation
+# LockLearn 1.0.0-beta.2 — Home Assistant field validation
 
 This checklist validates the already-qualified V1 package on a real Home
 Assistant test instance before stable `1.0.0`. It is not a new feature phase.
 
+`1.0.0-beta.1` passed installation, sessions, persistence and UI validation
+but was field-blocked because no public/user-facing path existed to configure a
+notification target. Beta.2 closes that gap and must re-run the notification
+portion of field validation.
+
 ## Preconditions
 
-- exact GitHub prerelease: `v1.0.0-beta.1`;
+- exact GitHub prerelease: `v1.0.0-beta.2`;
 - GitHub Release is marked **Pre-release**;
 - release CI is green on the tag target;
 - Home Assistant test instance is on a supported version;
@@ -20,11 +25,11 @@ Record HA Core/Supervisor/OS/frontend versions and the beta commit SHA.
 1. Add `https://github.com/rfrachot/LockLearn` as a HACS custom Integration
    repository if it is not already configured.
 2. Enable/select prerelease versions for LockLearn in HACS.
-3. Install exactly `1.0.0-beta.1`.
+3. Install exactly `1.0.0-beta.2`.
 4. Restart Home Assistant when requested.
 5. Add LockLearn through Settings → Devices & services.
 6. Confirm the sidebar panel loads and reports backend/runtime
-   `1.0.0-beta.1`.
+   `1.0.0-beta.2`.
 
 Do not copy development files over the HACS install.
 

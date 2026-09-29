@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
+from uuid import uuid4
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 
 from ..const import (
     CONF_CREATE_PERSONAL_PROFILE,
@@ -38,10 +40,16 @@ from ..core.sessions import SessionQuestion, SessionValidationError
 from ..core.stats import StatsServiceError
 from ..core.tracks import TrackValidationError
 from ..datasets.manager import DatasetManagerError, DatasetStatus
+from ..notifications.targets import TargetUnavailableError, async_resolve_notify_route
 from ..profile_transfer import ProfileTransferError
 from ..runtime import LockLearnRuntime
 from ..storage.database import SessionNotFoundError, StaleSessionError
-from ..storage.repositories import CardReference, ContentReferenceError, StateRepositoryError
+from ..storage.repositories import (
+    CardReference,
+    ContentReferenceError,
+    NotificationTargetRecord,
+    StateRepositoryError,
+)
 
 ERR_FORBIDDEN = "locklearn/forbidden"
 ERR_NOT_FOUND = "locklearn/not_found"
@@ -53,6 +61,105 @@ ERR_PACK_VERSION_MISMATCH = "locklearn/pack_version_mismatch"
 
 _DEFAULT_PAGE_LIMIT = 50
 _MAX_PAGE_LIMIT = 100
+
+_CAPABILITY_STATE = vol.In(("supported", "unsupported", "unknown"))
+_TARGET_CAPABILITIES_SCHEMA = vol.Schema(
+    {
+        vol.Optional("replace_by_tag"): _CAPABILITY_STATE,
+        vol.Optional("silent_replace"): _CAPABILITY_STATE,
+        vol.Optional("action_data"): _CAPABILITY_STATE,
+        vol.Optional("text_input"): _CAPABILITY_STATE,
+        vol.Optional("clear_event"): _CAPABILITY_STATE,
+        vol.Optional("device_attribution"): _CAPABILITY_STATE,
+        vol.Optional("lockscreen_privacy"): _CAPABILITY_STATE,
+        vol.Optional("visible_actions"): vol.All(int, vol.Range(min=0, max=8)),
+        vol.Optional("expiration"): _CAPABILITY_STATE,
+        vol.Optional("channel_importance"): _CAPABILITY_STATE,
+        vol.Optional("media"): _CAPABILITY_STATE,
+        vol.Optional("tested_app_version"): str,
+        vol.Optional("tested_at_utc"): str,
+    },
+    extra=vol.PREVENT_EXTRA,
+)
+
+
+def _notification_target_payload(target: dict[str, Any]) -> dict[str, Any]:
+    """Serialize target configuration for an authorized Profile editor."""
+    return {
+        "target_id": str(target["target_id"]),
+        "profile_id": str(target["profile_id"]),
+        "device_registry_id": str(target["device_registry_id"]),
+        "platform": str(target["platform"]),
+        "capabilities": dict(target.get("capabilities") or {}),
+        "friendly_name": str(target["friendly_name"]),
+        "shared_device": bool(target["shared_device"]),
+        "lockscreen_visibility": str(target["lockscreen_visibility"]),
+        "enabled": bool(target["enabled"]),
+        "minimum_gap_seconds": target["minimum_gap_seconds"],
+        "maximum_notifications_per_hour": target["maximum_notifications_per_hour"],
+        "daily_push_budget": target["daily_push_budget"],
+    }
+
+
+async def _mobile_app_candidate(
+    hass: HomeAssistant,
+    device_registry_id: str,
+) -> tuple[dict[str, Any], str | None] | None:
+    """Resolve one Device Registry entry to a configurable Companion target."""
+    device = dr.async_get(hass).async_get(device_registry_id)
+    if device is None or device.disabled:
+        return None
+
+    mobile_entry = None
+    for config_entry_id in sorted(device.config_entries):
+        entry = hass.config_entries.async_get_entry(config_entry_id)
+        if entry is not None and entry.domain == "mobile_app":
+            mobile_entry = entry
+            break
+    if mobile_entry is None:
+        return None
+
+    os_name = str(mobile_entry.data.get("os_name") or "").strip().lower()
+    if "android" in os_name:
+        platform = "android"
+    elif "ios" in os_name or "ipados" in os_name:
+        platform = "ios"
+    else:
+        platform = "mobile_app"
+
+    configured_name = mobile_entry.data.get("device_name")
+    friendly_name = (
+        device.name_by_user
+        or device.name
+        or (configured_name if isinstance(configured_name, str) else None)
+        or device_registry_id
+    )
+
+    route_service: str | None = None
+    supports_platform_data = False
+    try:
+        route = await async_resolve_notify_route(
+            hass,
+            device_registry_id,
+            require_platform_data=False,
+        )
+    except TargetUnavailableError:
+        route_available = False
+    else:
+        route_available = True
+        route_service = route.service
+        supports_platform_data = route.supports_platform_data
+
+    return (
+        {
+            "device_registry_id": device_registry_id,
+            "friendly_name": friendly_name,
+            "platform": platform,
+            "route_available": route_available,
+            "supports_platform_data": supports_platform_data,
+        },
+        route_service,
+    )
 
 
 def _runtime(hass: HomeAssistant) -> LockLearnRuntime | None:
@@ -747,6 +854,251 @@ async def ws_tracks_list(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "locklearn/targets/discover",
+        vol.Required("profile_id"): str,
+        vol.Optional("limit", default=_DEFAULT_PAGE_LIMIT): vol.All(
+            int, vol.Range(min=1, max=_MAX_PAGE_LIMIT)
+        ),
+        vol.Optional("cursor"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_targets_discover(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List mobile_app Device Registry candidates without guessing capabilities."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.EDIT_PROFILE,
+    ):
+        return
+
+    configured = await runtime.storage.repositories.notification_targets.async_list_for_profile(
+        profile_id,
+        enabled_only=False,
+    )
+    configured_by_device = {
+        str(target["device_registry_id"]): str(target["target_id"]) for target in configured
+    }
+    candidates: list[dict[str, Any]] = []
+    registry = dr.async_get(hass)
+    for device in registry.devices.values():
+        resolved = await _mobile_app_candidate(hass, device.id)
+        if resolved is None:
+            continue
+        candidate, _service = resolved
+        candidate["configured_target_id"] = configured_by_device.get(device.id)
+        candidates.append(candidate)
+    candidates.sort(
+        key=lambda item: (
+            str(item["friendly_name"]).casefold(),
+            str(item["device_registry_id"]),
+        )
+    )
+    try:
+        result = _paginate(candidates, limit=msg["limit"], cursor=msg.get("cursor"))
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/targets/create",
+        vol.Required("profile_id"): str,
+        vol.Required("device_registry_id"): str,
+        vol.Optional("friendly_name"): str,
+        vol.Optional("capabilities"): _TARGET_CAPABILITIES_SCHEMA,
+        vol.Optional("shared_device", default=False): bool,
+        vol.Optional("lockscreen_visibility", default="private"): vol.In(
+            ("public", "private", "secret")
+        ),
+        vol.Optional("enabled", default=True): bool,
+        vol.Optional("minimum_gap_seconds"): vol.Any(None, vol.All(int, vol.Range(min=0))),
+        vol.Optional("maximum_notifications_per_hour"): vol.Any(
+            None, vol.All(int, vol.Range(min=1))
+        ),
+        vol.Optional("daily_push_budget"): vol.Any(None, vol.All(int, vol.Range(min=0))),
+    }
+)
+@websocket_api.async_response
+async def ws_targets_create(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Create one stable Profile target from a real Companion Device Registry entry."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.EDIT_PROFILE,
+    ):
+        return
+
+    device_registry_id = msg["device_registry_id"].strip()
+    resolved = await _mobile_app_candidate(hass, device_registry_id)
+    if resolved is None:
+        connection.send_error(
+            msg["id"],
+            ERR_INVALID_REQUEST,
+            "Device is not an enabled Home Assistant Companion mobile_app target",
+        )
+        return
+    candidate, resolved_service = resolved
+
+    configured = await runtime.storage.repositories.notification_targets.async_list_for_profile(
+        profile_id,
+        enabled_only=False,
+    )
+    if any(str(target["device_registry_id"]) == device_registry_id for target in configured):
+        connection.send_error(
+            msg["id"],
+            ERR_INVALID_REQUEST,
+            "Companion device is already configured for this Profile",
+        )
+        return
+
+    friendly_name = str(msg.get("friendly_name", candidate["friendly_name"])).strip()
+    if not friendly_name:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, "friendly_name must not be empty")
+        return
+
+    now = datetime.now(UTC).isoformat()
+    target = NotificationTargetRecord(
+        target_id=str(uuid4()),
+        profile_id=profile_id,
+        device_registry_id=device_registry_id,
+        platform=str(candidate["platform"]),
+        friendly_name=friendly_name,
+        capabilities=dict(msg.get("capabilities") or {}),
+        last_resolved_notify_service=resolved_service,
+        shared_device=msg["shared_device"],
+        lockscreen_visibility=msg["lockscreen_visibility"],
+        enabled=msg["enabled"],
+        minimum_gap_seconds=msg.get("minimum_gap_seconds"),
+        maximum_notifications_per_hour=msg.get("maximum_notifications_per_hour"),
+        daily_push_budget=msg.get("daily_push_budget"),
+        created_at_utc=now,
+        updated_at_utc=now,
+    )
+    try:
+        await runtime.storage.repositories.notification_targets.async_insert(target)
+    except StateRepositoryError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+
+    created = await runtime.storage.repositories.notification_targets.async_get(target.target_id)
+    if created is None:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Notification target not found")
+        return
+    await runtime.scheduler_ha.async_refresh()
+    connection.send_result(msg["id"], _notification_target_payload(created))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/targets/update",
+        vol.Required("profile_id"): str,
+        vol.Required("target_id"): str,
+        vol.Optional("friendly_name"): str,
+        vol.Optional("capabilities"): _TARGET_CAPABILITIES_SCHEMA,
+        vol.Optional("shared_device"): bool,
+        vol.Optional("lockscreen_visibility"): vol.In(("public", "private", "secret")),
+        vol.Optional("enabled"): bool,
+        vol.Optional("minimum_gap_seconds"): vol.Any(None, vol.All(int, vol.Range(min=0))),
+        vol.Optional("maximum_notifications_per_hour"): vol.Any(
+            None, vol.All(int, vol.Range(min=1))
+        ),
+        vol.Optional("daily_push_budget"): vol.Any(None, vol.All(int, vol.Range(min=0))),
+    }
+)
+@websocket_api.async_response
+async def ws_targets_update(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Update mutable target configuration while preserving stable device identity."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.EDIT_PROFILE,
+    ):
+        return
+
+    existing = await runtime.storage.repositories.notification_targets.async_get(msg["target_id"])
+    if existing is None or str(existing["profile_id"]) != profile_id:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Notification target not found")
+        return
+
+    friendly_name = (
+        str(msg["friendly_name"]).strip()
+        if "friendly_name" in msg
+        else str(existing["friendly_name"])
+    )
+    if not friendly_name:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, "friendly_name must not be empty")
+        return
+
+    def selected(name: str) -> Any:
+        return msg[name] if name in msg else existing[name]
+
+    updated_record = NotificationTargetRecord(
+        target_id=str(existing["target_id"]),
+        profile_id=profile_id,
+        device_registry_id=str(existing["device_registry_id"]),
+        platform=str(existing["platform"]),
+        friendly_name=friendly_name,
+        capabilities=(
+            dict(msg["capabilities"])
+            if "capabilities" in msg
+            else dict(existing.get("capabilities") or {})
+        ),
+        last_resolved_notify_service=(
+            None
+            if existing["last_resolved_notify_service"] is None
+            else str(existing["last_resolved_notify_service"])
+        ),
+        shared_device=bool(selected("shared_device")),
+        lockscreen_visibility=str(selected("lockscreen_visibility")),
+        enabled=bool(selected("enabled")),
+        minimum_gap_seconds=selected("minimum_gap_seconds"),
+        maximum_notifications_per_hour=selected("maximum_notifications_per_hour"),
+        daily_push_budget=selected("daily_push_budget"),
+        adaptive_backoff=dict(existing.get("adaptive_backoff") or {}),
+        created_at_utc=str(existing["created_at_utc"]),
+        updated_at_utc=datetime.now(UTC).isoformat(),
+    )
+    if not await runtime.storage.repositories.notification_targets.async_update(updated_record):
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Notification target not found")
+        return
+
+    updated = await runtime.storage.repositories.notification_targets.async_get(msg["target_id"])
+    if updated is None:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Notification target not found")
+        return
+    await runtime.scheduler_ha.async_refresh()
+    connection.send_result(msg["id"], _notification_target_payload(updated))
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "locklearn/targets/list",
         vol.Required("profile_id"): str,
         vol.Optional("limit", default=_DEFAULT_PAGE_LIMIT): vol.All(
@@ -775,18 +1127,7 @@ async def ws_targets_list(
     raw_targets = await runtime.storage.repositories.notification_targets.async_list_for_profile(
         profile_id
     )
-    targets = [
-        {
-            "target_id": str(target["target_id"]),
-            "friendly_name": str(target["friendly_name"]),
-            "platform": str(target["platform"]),
-            "shared_device": bool(target["shared_device"]),
-            "lockscreen_visibility": str(target["lockscreen_visibility"]),
-            "enabled": bool(target["enabled"]),
-            "daily_push_budget": target["daily_push_budget"],
-        }
-        for target in raw_targets
-    ]
+    targets = [_notification_target_payload(target) for target in raw_targets]
     try:
         result = _paginate(targets, limit=msg["limit"], cursor=msg.get("cursor"))
     except ValueError as err:
@@ -2559,6 +2900,9 @@ COMMANDS = (
     ws_profiles_members,
     ws_profiles_share_targets,
     ws_tracks_list,
+    ws_targets_discover,
+    ws_targets_create,
+    ws_targets_update,
     ws_targets_list,
     ws_tracks_create,
     ws_tracks_update,
