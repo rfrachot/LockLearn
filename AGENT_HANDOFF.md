@@ -2,49 +2,43 @@
 
 ## Current state
 
-Release UX branch: `release/1.0.0-beta.3`.
+Release UX branch: `release/1.0.0-beta.4`.
 
-P6.1 through P6.11 and the P6 exit gate remain PASS on the qualified V1 feature
-baseline. `v1.0.0-beta.2` is published and validated on the real HA test VM,
-but real-user review identified pre-stable usability issues that should be
-resolved before `v1.0.0`.
+Beta.4 qualification found and fixed a real readiness/start divergence on top of
+`3af7c4a63967c124babb9b6ee808b3ce146c91da`.
 
-Beta.3 starts from the immutable beta.2 tag target
-`48f45839d278f87b82f45a6128239f36aa536715`.
+Root cause: the frontend started Quiz with a hard-coded 10 cards and Learn with
+a hard-coded 20 cards, while `session/availability` resolved
+`profile.settings.session_length_cards`. This produced standard Quiz
+availability=20/start=10 and child Learn availability=10/start=20.
 
-## Beta.3 field-UX scope
+## Fix now on branch
 
-- Track cards separate essential controls, a collapsed advanced-settings
-  section, learning-plan controls and an explicit danger zone.
-- Track deletion is labelled unambiguously and requires confirmation. Removing a
-  shared Profile member also requires confirmation; existing Profile archive/
-  permanent-delete protections remain.
-- Language tags remain canonical internally, but UI labels are human-readable;
-  `ja-Latn` renders as Japanese romaji.
-- Profile Sharing explains viewer/editor/owner meaning.
-- Configured Companion targets have an owner-only **Test notification** action.
-- `locklearn/session/availability` reports available-now counts and next due
-  time without mutating SRS state.
-- Learn explains cooldowns and may explicitly continue safe future `learning`
-  steps after introduction/success. Failed or relearning cards cannot be pulled
-  forward.
-- Quiz explains that it tests introduced cards only when due, shows readiness
-  before start and displays the next scheduled review when none is ready.
+- Learn and Quiz no longer invent a default requested-card count. When the user
+  has not explicitly chosen a size, `session/start` lets the backend resolve
+  the Profile's `session_length_cards`.
+- `locklearn/session/availability` accepts optional selection `settings` and
+  resolves requested cards, content-type filters and leech-only filtering through
+  the same backend selection path as `async_prepare`.
+- Availability continues to be read-only and preserves the narrow safe
+  early-learning override; failed/relearning cooldowns remain authoritative.
+- Regression coverage locks child/standard/intensive profile lengths, explicit
+  requested-card overrides and content-type parity, plus frontend protocol
+  contracts that omit hard-coded default lengths.
+- Generated WebSocket contracts and changelog were updated.
 
-The early-Learn override is deliberately narrow and is covered at both selection
-and LearningSession boundaries. It must never bypass a cooldown after failure.
-
-New WebSocket commands are classified under the existing Profile ACL boundary:
-`locklearn/session/availability` (Profile READ) and
-`locklearn/targets/test` (owner/EDIT_PROFILE).
-
-No stable tag/release and no merge are authorized by this handoff.
+No deployment has been performed for this fix.
 
 ## Next gate
 
-1. build the exact frontend bundle for beta.3;
-2. run the complete release CI matrix on the immutable candidate SHA;
-3. independently review all new UX and safety contracts;
-4. only after green CI, publish immutable `v1.0.0-beta.3` as Pre-release;
-5. upgrade the real HA VM from beta.2 and re-run the field-UX checklist;
-6. stable `v1.0.0` remains forbidden until explicit beta.3 acceptance.
+1. qualify the exact new branch HEAD with Ruff, mypy, full pytest and frontend
+   lint/typecheck/tests/build/E2E;
+2. adversarially reproduce standard Quiz and child Learn availability/start
+   parity, plus an explicit requested-card override;
+3. if and only if all gates pass, deploy that exact SHA to the existing HA test
+   instance;
+4. smoke Learn/Quiz readiness, next-due guidance, safe Continue now and Companion
+   target UX;
+5. only then allow Renaud to begin manual beta.4 UI testing.
+
+Do not start beta.5 and do not publish/merge/tag a stable release during this gate.
