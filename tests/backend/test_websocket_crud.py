@@ -259,6 +259,12 @@ async def test_track_crud_pack_integration_and_catalog_surfaces(
     assert any(
         item["pack_version_id"] == "locklearn:pack-version:v1" for item in packs["result"]["items"]
     )
+    listed_pack = next(
+        item
+        for item in packs["result"]["items"]
+        if item["pack_version_id"] == "locklearn:pack-version:v1"
+    )
+    assert {"source_language": "en", "target_language": "fr"} in listed_pack["directions"]
 
     await client.send_json_auto_id({"type": "locklearn/datasets/list", "limit": 10})
     datasets = await client.receive_json()
