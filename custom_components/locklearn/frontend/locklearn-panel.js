@@ -1,15 +1,15 @@
-const ae = globalThis, $e = ae.ShadowRoot && (ae.ShadyCSS === void 0 || ae.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, _e = /* @__PURE__ */ Symbol(), Ee = /* @__PURE__ */ new WeakMap();
-let it = class {
+const re = globalThis, _e = re.ShadowRoot && (re.ShadyCSS === void 0 || re.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, ke = /* @__PURE__ */ Symbol(), Me = /* @__PURE__ */ new WeakMap();
+let st = class {
   constructor(e, t, i) {
-    if (this._$cssResult$ = !0, i !== _e) throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");
+    if (this._$cssResult$ = !0, i !== ke) throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");
     this.cssText = e, this.t = t;
   }
   get styleSheet() {
     let e = this.o;
     const t = this.t;
-    if ($e && e === void 0) {
+    if (_e && e === void 0) {
       const i = t !== void 0 && t.length === 1;
-      i && (e = Ee.get(t)), e === void 0 && ((this.o = e = new CSSStyleSheet()).replaceSync(this.cssText), i && Ee.set(t, e));
+      i && (e = Me.get(t)), e === void 0 && ((this.o = e = new CSSStyleSheet()).replaceSync(this.cssText), i && Me.set(t, e));
     }
     return e;
   }
@@ -17,28 +17,28 @@ let it = class {
     return this.cssText;
   }
 };
-const ft = (a) => new it(typeof a == "string" ? a : a + "", void 0, _e), M = (a, ...e) => {
+const vt = (a) => new st(typeof a == "string" ? a : a + "", void 0, ke), M = (a, ...e) => {
   const t = a.length === 1 ? a[0] : e.reduce((i, s, n) => i + ((o) => {
     if (o._$cssResult$ === !0) return o.cssText;
     if (typeof o == "number") return o;
     throw Error("Value passed to 'css' function must be a 'css' function result: " + o + ". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.");
   })(s) + a[n + 1], a[0]);
-  return new it(t, a, _e);
-}, vt = (a, e) => {
-  if ($e) a.adoptedStyleSheets = e.map((t) => t instanceof CSSStyleSheet ? t : t.styleSheet);
+  return new st(t, a, ke);
+}, bt = (a, e) => {
+  if (_e) a.adoptedStyleSheets = e.map((t) => t instanceof CSSStyleSheet ? t : t.styleSheet);
   else for (const t of e) {
-    const i = document.createElement("style"), s = ae.litNonce;
+    const i = document.createElement("style"), s = re.litNonce;
     s !== void 0 && i.setAttribute("nonce", s), i.textContent = t.cssText, a.appendChild(i);
   }
-}, Me = $e ? (a) => a : (a) => a instanceof CSSStyleSheet ? ((e) => {
+}, Ce = _e ? (a) => a : (a) => a instanceof CSSStyleSheet ? ((e) => {
   let t = "";
   for (const i of e.cssRules) t += i.cssText;
-  return ft(t);
+  return vt(t);
 })(a) : a;
-const { is: bt, defineProperty: yt, getOwnPropertyDescriptor: $t, getOwnPropertyNames: _t, getOwnPropertySymbols: kt, getPrototypeOf: wt } = Object, ce = globalThis, Ce = ce.trustedTypes, xt = Ce ? Ce.emptyScript : "", St = ce.reactiveElementPolyfillSupport, B = (a, e) => a, re = { toAttribute(a, e) {
+const { is: yt, defineProperty: $t, getOwnPropertyDescriptor: _t, getOwnPropertyNames: kt, getOwnPropertySymbols: wt, getPrototypeOf: xt } = Object, de = globalThis, Re = de.trustedTypes, St = Re ? Re.emptyScript : "", qt = de.reactiveElementPolyfillSupport, B = (a, e) => a, ne = { toAttribute(a, e) {
   switch (e) {
     case Boolean:
-      a = a ? xt : null;
+      a = a ? St : null;
       break;
     case Object:
     case Array:
@@ -63,8 +63,8 @@ const { is: bt, defineProperty: yt, getOwnPropertyDescriptor: $t, getOwnProperty
       }
   }
   return t;
-} }, ke = (a, e) => !bt(a, e), Re = { attribute: !0, type: String, converter: re, reflect: !1, useDefault: !1, hasChanged: ke };
-Symbol.metadata ??= /* @__PURE__ */ Symbol("metadata"), ce.litPropertyMetadata ??= /* @__PURE__ */ new WeakMap();
+} }, we = (a, e) => !yt(a, e), De = { attribute: !0, type: String, converter: ne, reflect: !1, useDefault: !1, hasChanged: we };
+Symbol.metadata ??= /* @__PURE__ */ Symbol("metadata"), de.litPropertyMetadata ??= /* @__PURE__ */ new WeakMap();
 let U = class extends HTMLElement {
   static addInitializer(e) {
     this._$Ei(), (this.l ??= []).push(e);
@@ -72,14 +72,14 @@ let U = class extends HTMLElement {
   static get observedAttributes() {
     return this.finalize(), this._$Eh && [...this._$Eh.keys()];
   }
-  static createProperty(e, t = Re) {
+  static createProperty(e, t = De) {
     if (t.state && (t.attribute = !1), this._$Ei(), this.prototype.hasOwnProperty(e) && ((t = Object.create(t)).wrapped = !0), this.elementProperties.set(e, t), !t.noAccessor) {
       const i = /* @__PURE__ */ Symbol(), s = this.getPropertyDescriptor(e, i, t);
-      s !== void 0 && yt(this.prototype, e, s);
+      s !== void 0 && $t(this.prototype, e, s);
     }
   }
   static getPropertyDescriptor(e, t, i) {
-    const { get: s, set: n } = $t(this.prototype, e) ?? { get() {
+    const { get: s, set: n } = _t(this.prototype, e) ?? { get() {
       return this[t];
     }, set(o) {
       this[t] = o;
@@ -90,17 +90,17 @@ let U = class extends HTMLElement {
     }, configurable: !0, enumerable: !0 };
   }
   static getPropertyOptions(e) {
-    return this.elementProperties.get(e) ?? Re;
+    return this.elementProperties.get(e) ?? De;
   }
   static _$Ei() {
     if (this.hasOwnProperty(B("elementProperties"))) return;
-    const e = wt(this);
+    const e = xt(this);
     e.finalize(), e.l !== void 0 && (this.l = [...e.l]), this.elementProperties = new Map(e.elementProperties);
   }
   static finalize() {
     if (this.hasOwnProperty(B("finalized"))) return;
     if (this.finalized = !0, this._$Ei(), this.hasOwnProperty(B("properties"))) {
-      const t = this.properties, i = [..._t(t), ...kt(t)];
+      const t = this.properties, i = [...kt(t), ...wt(t)];
       for (const s of i) this.createProperty(s, t[s]);
     }
     const e = this[Symbol.metadata];
@@ -119,8 +119,8 @@ let U = class extends HTMLElement {
     const t = [];
     if (Array.isArray(e)) {
       const i = new Set(e.flat(1 / 0).reverse());
-      for (const s of i) t.unshift(Me(s));
-    } else e !== void 0 && t.push(Me(e));
+      for (const s of i) t.unshift(Ce(s));
+    } else e !== void 0 && t.push(Ce(e));
     return t;
   }
   static _$Eu(e, t) {
@@ -146,7 +146,7 @@ let U = class extends HTMLElement {
   }
   createRenderRoot() {
     const e = this.shadowRoot ?? this.attachShadow(this.constructor.shadowRootOptions);
-    return vt(e, this.constructor.elementStyles), e;
+    return bt(e, this.constructor.elementStyles), e;
   }
   connectedCallback() {
     this.renderRoot ??= this.createRenderRoot(), this.enableUpdating(!0), this._$EO?.forEach((e) => e.hostConnected?.());
@@ -162,14 +162,14 @@ let U = class extends HTMLElement {
   _$ET(e, t) {
     const i = this.constructor.elementProperties.get(e), s = this.constructor._$Eu(e, i);
     if (s !== void 0 && i.reflect === !0) {
-      const n = (i.converter?.toAttribute !== void 0 ? i.converter : re).toAttribute(t, i.type);
+      const n = (i.converter?.toAttribute !== void 0 ? i.converter : ne).toAttribute(t, i.type);
       this._$Em = e, n == null ? this.removeAttribute(s) : this.setAttribute(s, n), this._$Em = null;
     }
   }
   _$AK(e, t) {
     const i = this.constructor, s = i._$Eh.get(e);
     if (s !== void 0 && this._$Em !== s) {
-      const n = i.getPropertyOptions(s), o = typeof n.converter == "function" ? { fromAttribute: n.converter } : n.converter?.fromAttribute !== void 0 ? n.converter : re;
+      const n = i.getPropertyOptions(s), o = typeof n.converter == "function" ? { fromAttribute: n.converter } : n.converter?.fromAttribute !== void 0 ? n.converter : ne;
       this._$Em = s;
       const d = o.fromAttribute(t, n.type);
       this[s] = d ?? this._$Ej?.get(s) ?? d, this._$Em = null;
@@ -178,7 +178,7 @@ let U = class extends HTMLElement {
   requestUpdate(e, t, i, s = !1, n) {
     if (e !== void 0) {
       const o = this.constructor;
-      if (s === !1 && (n = this[e]), i ??= o.getPropertyOptions(e), !((i.hasChanged ?? ke)(n, t) || i.useDefault && i.reflect && n === this._$Ej?.get(e) && !this.hasAttribute(o._$Eu(e, i)))) return;
+      if (s === !1 && (n = this[e]), i ??= o.getPropertyOptions(e), !((i.hasChanged ?? we)(n, t) || i.useDefault && i.reflect && n === this._$Ej?.get(e) && !this.hasAttribute(o._$Eu(e, i)))) return;
       this.C(e, t, i);
     }
     this.isUpdatePending === !1 && (this._$ES = this._$EP());
@@ -246,51 +246,51 @@ let U = class extends HTMLElement {
   firstUpdated(e) {
   }
 };
-U.elementStyles = [], U.shadowRootOptions = { mode: "open" }, U[B("elementProperties")] = /* @__PURE__ */ new Map(), U[B("finalized")] = /* @__PURE__ */ new Map(), St?.({ ReactiveElement: U }), (ce.reactiveElementVersions ??= []).push("2.1.2");
-const we = globalThis, Ne = (a) => a, ne = we.trustedTypes, De = ne ? ne.createPolicy("lit-html", { createHTML: (a) => a }) : void 0, st = "$lit$", E = `lit$${Math.random().toFixed(9).slice(2)}$`, at = "?" + E, qt = `<${at}>`, N = document, K = () => N.createComment(""), Q = (a) => a === null || typeof a != "object" && typeof a != "function", xe = Array.isArray, At = (a) => xe(a) || typeof a?.[Symbol.iterator] == "function", he = `[ 	
-\f\r]`, V = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, Ie = /-->/g, Le = />/g, C = RegExp(`>|${he}(?:([^\\s"'>=/]+)(${he}*=${he}*(?:[^ 	
-\f\r"'\`<>=]|("|')|))|$)`, "g"), Ue = /'/g, Oe = /"/g, rt = /^(?:script|style|textarea|title)$/i, Tt = (a) => (e, ...t) => ({ _$litType$: a, strings: e, values: t }), r = Tt(1), O = /* @__PURE__ */ Symbol.for("lit-noChange"), l = /* @__PURE__ */ Symbol.for("lit-nothing"), He = /* @__PURE__ */ new WeakMap(), R = N.createTreeWalker(N, 129);
-function nt(a, e) {
-  if (!xe(a) || !a.hasOwnProperty("raw")) throw Error("invalid template strings array");
-  return De !== void 0 ? De.createHTML(e) : e;
+U.elementStyles = [], U.shadowRootOptions = { mode: "open" }, U[B("elementProperties")] = /* @__PURE__ */ new Map(), U[B("finalized")] = /* @__PURE__ */ new Map(), qt?.({ ReactiveElement: U }), (de.reactiveElementVersions ??= []).push("2.1.2");
+const xe = globalThis, Ne = (a) => a, oe = xe.trustedTypes, Ie = oe ? oe.createPolicy("lit-html", { createHTML: (a) => a }) : void 0, at = "$lit$", E = `lit$${Math.random().toFixed(9).slice(2)}$`, rt = "?" + E, Tt = `<${rt}>`, D = document, K = () => D.createComment(""), Q = (a) => a === null || typeof a != "object" && typeof a != "function", Se = Array.isArray, At = (a) => Se(a) || typeof a?.[Symbol.iterator] == "function", ue = `[ 	
+\f\r]`, V = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, Le = /-->/g, Ue = />/g, C = RegExp(`>|${ue}(?:([^\\s"'>=/]+)(${ue}*=${ue}*(?:[^ 	
+\f\r"'\`<>=]|("|')|))|$)`, "g"), Oe = /'/g, He = /"/g, nt = /^(?:script|style|textarea|title)$/i, Pt = (a) => (e, ...t) => ({ _$litType$: a, strings: e, values: t }), r = Pt(1), O = /* @__PURE__ */ Symbol.for("lit-noChange"), l = /* @__PURE__ */ Symbol.for("lit-nothing"), je = /* @__PURE__ */ new WeakMap(), R = D.createTreeWalker(D, 129);
+function ot(a, e) {
+  if (!Se(a) || !a.hasOwnProperty("raw")) throw Error("invalid template strings array");
+  return Ie !== void 0 ? Ie.createHTML(e) : e;
 }
-const Pt = (a, e) => {
+const zt = (a, e) => {
   const t = a.length - 1, i = [];
   let s, n = e === 2 ? "<svg>" : e === 3 ? "<math>" : "", o = V;
   for (let d = 0; d < t; d++) {
     const h = a[d];
     let u, b, p = -1, P = 0;
-    for (; P < h.length && (o.lastIndex = P, b = o.exec(h), b !== null); ) P = o.lastIndex, o === V ? b[1] === "!--" ? o = Ie : b[1] !== void 0 ? o = Le : b[2] !== void 0 ? (rt.test(b[2]) && (s = RegExp("</" + b[2], "g")), o = C) : b[3] !== void 0 && (o = C) : o === C ? b[0] === ">" ? (o = s ?? V, p = -1) : b[1] === void 0 ? p = -2 : (p = o.lastIndex - b[2].length, u = b[1], o = b[3] === void 0 ? C : b[3] === '"' ? Oe : Ue) : o === Oe || o === Ue ? o = C : o === Ie || o === Le ? o = V : (o = C, s = void 0);
+    for (; P < h.length && (o.lastIndex = P, b = o.exec(h), b !== null); ) P = o.lastIndex, o === V ? b[1] === "!--" ? o = Le : b[1] !== void 0 ? o = Ue : b[2] !== void 0 ? (nt.test(b[2]) && (s = RegExp("</" + b[2], "g")), o = C) : b[3] !== void 0 && (o = C) : o === C ? b[0] === ">" ? (o = s ?? V, p = -1) : b[1] === void 0 ? p = -2 : (p = o.lastIndex - b[2].length, u = b[1], o = b[3] === void 0 ? C : b[3] === '"' ? He : Oe) : o === He || o === Oe ? o = C : o === Le || o === Ue ? o = V : (o = C, s = void 0);
     const z = o === C && a[d + 1].startsWith("/>") ? " " : "";
-    n += o === V ? h + qt : p >= 0 ? (i.push(u), h.slice(0, p) + st + h.slice(p) + E + z) : h + E + (p === -2 ? d : z);
+    n += o === V ? h + Tt : p >= 0 ? (i.push(u), h.slice(0, p) + at + h.slice(p) + E + z) : h + E + (p === -2 ? d : z);
   }
-  return [nt(a, n + (a[t] || "<?>") + (e === 2 ? "</svg>" : e === 3 ? "</math>" : "")), i];
+  return [ot(a, n + (a[t] || "<?>") + (e === 2 ? "</svg>" : e === 3 ? "</math>" : "")), i];
 };
 class G {
   constructor({ strings: e, _$litType$: t }, i) {
     let s;
     this.parts = [];
     let n = 0, o = 0;
-    const d = e.length - 1, h = this.parts, [u, b] = Pt(e, t);
+    const d = e.length - 1, h = this.parts, [u, b] = zt(e, t);
     if (this.el = G.createElement(u, i), R.currentNode = this.el.content, t === 2 || t === 3) {
       const p = this.el.content.firstChild;
       p.replaceWith(...p.childNodes);
     }
     for (; (s = R.nextNode()) !== null && h.length < d; ) {
       if (s.nodeType === 1) {
-        if (s.hasAttributes()) for (const p of s.getAttributeNames()) if (p.endsWith(st)) {
+        if (s.hasAttributes()) for (const p of s.getAttributeNames()) if (p.endsWith(at)) {
           const P = b[o++], z = s.getAttribute(p).split(E), Z = /([.?@])?(.*)/.exec(P);
-          h.push({ type: 1, index: n, name: Z[2], strings: z, ctor: Z[1] === "." ? Et : Z[1] === "?" ? Mt : Z[1] === "@" ? Ct : de }), s.removeAttribute(p);
+          h.push({ type: 1, index: n, name: Z[2], strings: z, ctor: Z[1] === "." ? Mt : Z[1] === "?" ? Ct : Z[1] === "@" ? Rt : he }), s.removeAttribute(p);
         } else p.startsWith(E) && (h.push({ type: 6, index: n }), s.removeAttribute(p));
-        if (rt.test(s.tagName)) {
+        if (nt.test(s.tagName)) {
           const p = s.textContent.split(E), P = p.length - 1;
           if (P > 0) {
-            s.textContent = ne ? ne.emptyScript : "";
+            s.textContent = oe ? oe.emptyScript : "";
             for (let z = 0; z < P; z++) s.append(p[z], K()), R.nextNode(), h.push({ type: 2, index: ++n });
             s.append(p[P], K());
           }
         }
-      } else if (s.nodeType === 8) if (s.data === at) h.push({ type: 2, index: n });
+      } else if (s.nodeType === 8) if (s.data === rt) h.push({ type: 2, index: n });
       else {
         let p = -1;
         for (; (p = s.data.indexOf(E, p + 1)) !== -1; ) h.push({ type: 7, index: n }), p += E.length - 1;
@@ -299,7 +299,7 @@ class G {
     }
   }
   static createElement(e, t) {
-    const i = N.createElement("template");
+    const i = D.createElement("template");
     return i.innerHTML = e, i;
   }
 }
@@ -309,7 +309,7 @@ function H(a, e, t = a, i) {
   const n = Q(e) ? void 0 : e._$litDirective$;
   return s?.constructor !== n && (s?._$AO?.(!1), n === void 0 ? s = void 0 : (s = new n(a), s._$AT(a, t, i)), i !== void 0 ? (t._$Co ??= [])[i] = s : t._$Cl = s), s !== void 0 && (e = H(a, s._$AS(a, e.values), s, i)), e;
 }
-class zt {
+class Et {
   constructor(e, t) {
     this._$AV = [], this._$AN = void 0, this._$AD = e, this._$AM = t;
   }
@@ -320,17 +320,17 @@ class zt {
     return this._$AM._$AU;
   }
   u(e) {
-    const { el: { content: t }, parts: i } = this._$AD, s = (e?.creationScope ?? N).importNode(t, !0);
+    const { el: { content: t }, parts: i } = this._$AD, s = (e?.creationScope ?? D).importNode(t, !0);
     R.currentNode = s;
     let n = R.nextNode(), o = 0, d = 0, h = i[0];
     for (; h !== void 0; ) {
       if (o === h.index) {
         let u;
-        h.type === 2 ? u = new J(n, n.nextSibling, this, e) : h.type === 1 ? u = new h.ctor(n, h.name, h.strings, this, e) : h.type === 6 && (u = new Rt(n, this, e)), this._$AV.push(u), h = i[++d];
+        h.type === 2 ? u = new J(n, n.nextSibling, this, e) : h.type === 1 ? u = new h.ctor(n, h.name, h.strings, this, e) : h.type === 6 && (u = new Dt(n, this, e)), this._$AV.push(u), h = i[++d];
       }
       o !== h?.index && (n = R.nextNode(), o++);
     }
-    return R.currentNode = N, s;
+    return R.currentNode = D, s;
   }
   p(e) {
     let t = 0;
@@ -365,22 +365,22 @@ class J {
     this._$AH !== e && (this._$AR(), this._$AH = this.O(e));
   }
   _(e) {
-    this._$AH !== l && Q(this._$AH) ? this._$AA.nextSibling.data = e : this.T(N.createTextNode(e)), this._$AH = e;
+    this._$AH !== l && Q(this._$AH) ? this._$AA.nextSibling.data = e : this.T(D.createTextNode(e)), this._$AH = e;
   }
   $(e) {
-    const { values: t, _$litType$: i } = e, s = typeof i == "number" ? this._$AC(e) : (i.el === void 0 && (i.el = G.createElement(nt(i.h, i.h[0]), this.options)), i);
+    const { values: t, _$litType$: i } = e, s = typeof i == "number" ? this._$AC(e) : (i.el === void 0 && (i.el = G.createElement(ot(i.h, i.h[0]), this.options)), i);
     if (this._$AH?._$AD === s) this._$AH.p(t);
     else {
-      const n = new zt(s, this), o = n.u(this.options);
+      const n = new Et(s, this), o = n.u(this.options);
       n.p(t), this.T(o), this._$AH = n;
     }
   }
   _$AC(e) {
-    let t = He.get(e.strings);
-    return t === void 0 && He.set(e.strings, t = new G(e)), t;
+    let t = je.get(e.strings);
+    return t === void 0 && je.set(e.strings, t = new G(e)), t;
   }
   k(e) {
-    xe(this._$AH) || (this._$AH = [], this._$AR());
+    Se(this._$AH) || (this._$AH = [], this._$AR());
     const t = this._$AH;
     let i, s = 0;
     for (const n of e) s === t.length ? t.push(i = new J(this.O(K()), this.O(K()), this, this.options)) : i = t[s], i._$AI(n), s++;
@@ -396,7 +396,7 @@ class J {
     this._$AM === void 0 && (this._$Cv = e, this._$AP?.(e));
   }
 }
-class de {
+class he {
   get tagName() {
     return this.element.tagName;
   }
@@ -421,7 +421,7 @@ class de {
     e === l ? this.element.removeAttribute(this.name) : this.element.setAttribute(this.name, e ?? "");
   }
 }
-class Et extends de {
+class Mt extends he {
   constructor() {
     super(...arguments), this.type = 3;
   }
@@ -429,7 +429,7 @@ class Et extends de {
     this.element[this.name] = e === l ? void 0 : e;
   }
 }
-class Mt extends de {
+class Ct extends he {
   constructor() {
     super(...arguments), this.type = 4;
   }
@@ -437,7 +437,7 @@ class Mt extends de {
     this.element.toggleAttribute(this.name, !!e && e !== l);
   }
 }
-class Ct extends de {
+class Rt extends he {
   constructor(e, t, i, s, n) {
     super(e, t, i, s, n), this.type = 5;
   }
@@ -450,7 +450,7 @@ class Ct extends de {
     typeof this._$AH == "function" ? this._$AH.call(this.options?.host ?? this.element, e) : this._$AH.handleEvent(e);
   }
 }
-class Rt {
+class Dt {
   constructor(e, t, i) {
     this.element = e, this.type = 6, this._$AN = void 0, this._$AM = t, this.options = i;
   }
@@ -461,9 +461,9 @@ class Rt {
     H(this, e);
   }
 }
-const Nt = we.litHtmlPolyfillSupport;
-Nt?.(G, J), (we.litHtmlVersions ??= []).push("3.3.3");
-const Dt = (a, e, t) => {
+const Nt = xe.litHtmlPolyfillSupport;
+Nt?.(G, J), (xe.litHtmlVersions ??= []).push("3.3.3");
+const It = (a, e, t) => {
   const i = t?.renderBefore ?? e;
   let s = i._$litPart$;
   if (s === void 0) {
@@ -472,8 +472,8 @@ const Dt = (a, e, t) => {
   }
   return s._$AI(a), s;
 };
-const Se = globalThis;
-class A extends U {
+const qe = globalThis;
+class T extends U {
   constructor() {
     super(...arguments), this.renderOptions = { host: this }, this._$Do = void 0;
   }
@@ -483,7 +483,7 @@ class A extends U {
   }
   update(e) {
     const t = this.render();
-    this.hasUpdated || (this.renderOptions.isConnected = this.isConnected), super.update(e), this._$Do = Dt(t, this.renderRoot, this.renderOptions);
+    this.hasUpdated || (this.renderOptions.isConnected = this.isConnected), super.update(e), this._$Do = It(t, this.renderRoot, this.renderOptions);
   }
   connectedCallback() {
     super.connectedCallback(), this._$Do?.setConnected(!0);
@@ -495,11 +495,11 @@ class A extends U {
     return O;
   }
 }
-A._$litElement$ = !0, A.finalized = !0, Se.litElementHydrateSupport?.({ LitElement: A });
-const It = Se.litElementPolyfillSupport;
-It?.({ LitElement: A });
-(Se.litElementVersions ??= []).push("4.2.2");
-const Lt = { attribute: !0, type: String, converter: re, reflect: !1, hasChanged: ke }, Ut = (a = Lt, e, t) => {
+T._$litElement$ = !0, T.finalized = !0, qe.litElementHydrateSupport?.({ LitElement: T });
+const Lt = qe.litElementPolyfillSupport;
+Lt?.({ LitElement: T });
+(qe.litElementVersions ??= []).push("4.2.2");
+const Ut = { attribute: !0, type: String, converter: ne, reflect: !1, hasChanged: we }, Ot = (a = Ut, e, t) => {
   const { kind: i, metadata: s } = t;
   let n = globalThis.litPropertyMetadata.get(s);
   if (n === void 0 && globalThis.litPropertyMetadata.set(s, n = /* @__PURE__ */ new Map()), i === "setter" && ((a = Object.create(a)).wrapped = !0), n.set(t.name, a), i === "accessor") {
@@ -521,7 +521,7 @@ const Lt = { attribute: !0, type: String, converter: re, reflect: !1, hasChanged
   throw Error("Unsupported decorator location: " + i);
 };
 function y(a) {
-  return (e, t) => typeof t == "object" ? Ut(a, e, t) : ((i, s, n) => {
+  return (e, t) => typeof t == "object" ? Ot(a, e, t) : ((i, s, n) => {
     const o = s.hasOwnProperty(n);
     return s.constructor.createProperty(n, i), o ? Object.getOwnPropertyDescriptor(s, n) : void 0;
   })(a, e, t);
@@ -529,7 +529,7 @@ function y(a) {
 function c(a) {
   return y({ ...a, state: !0, attribute: !1 });
 }
-const ot = M`
+const lt = M`
   .content-block {
     min-width: 0;
     max-width: 100%;
@@ -586,7 +586,7 @@ const ot = M`
     overflow-wrap: anywhere;
   }
 `;
-function Ot(a, e) {
+function Ht(a, e) {
   const t = a.ruby_segments;
   if (!Array.isArray(t) || t.length === 0) return null;
   const i = [];
@@ -600,12 +600,12 @@ function Ot(a, e) {
   }
   return i.map((s) => s.text).join("") !== e ? null : i;
 }
-function Ht(a) {
+function jt(a) {
   return r`${a.map(
     (e) => e.reading === null ? e.text : r`<ruby>${e.text}<rp>(</rp><rt>${e.reading}</rt><rp>)</rp></ruby>`
   )}`;
 }
-function lt(a, e = 0) {
+function ct(a, e = 0) {
   if (e > 16 || typeof a != "object" || a === null) return l;
   const t = a;
   if ((t.type === "text" || t.type === "inline_code") && typeof t.text == "string")
@@ -614,21 +614,21 @@ function lt(a, e = 0) {
   if (t.type === "ruby" && typeof t.text == "string" && t.text !== "" && typeof t.reading == "string" && t.reading !== "")
     return r`<ruby>${t.text}<rp>(</rp><rt>${t.reading}</rt><rp>)</rp></ruby>`;
   if ((t.type === "paragraph" || t.type === "emphasis" || t.type === "strong") && Array.isArray(t.children)) {
-    const i = t.children.map((s) => lt(s, e + 1));
+    const i = t.children.map((s) => ct(s, e + 1));
     return t.type === "paragraph" ? r`<p>${i}</p>` : t.type === "emphasis" ? r`<em>${i}</em>` : r`<strong>${i}</strong>`;
   }
   return l;
 }
-function jt(a) {
+function Wt(a) {
   const e = a.payload.text;
   if (typeof e == "string" && e !== "") {
-    const t = Ot(a.payload, e);
-    return t === null ? e : Ht(t);
+    const t = Ht(a.payload, e);
+    return t === null ? e : jt(t);
   }
-  return a.kind === "rich_text" && a.payload.type === "document" && Array.isArray(a.payload.children) ? r`${a.payload.children.map((t) => lt(t, 1))}` : l;
+  return a.kind === "rich_text" && a.payload.type === "document" && Array.isArray(a.payload.children) ? r`${a.payload.children.map((t) => ct(t, 1))}` : l;
 }
-function ct(a, e = !1) {
-  const t = jt(a);
+function dt(a, e = !1) {
+  const t = Wt(a);
   return t === l ? l : r`
     <div
       class="content-block ${e ? "primary-content" : ""}"
@@ -638,7 +638,7 @@ function ct(a, e = !1) {
     </div>
   `;
 }
-const je = ["en", "fr"], We = {
+const We = ["en", "fr"], Fe = {
   en: {
     "app.title": "LockLearn",
     "state.loading": "Loading LockLearn…",
@@ -779,6 +779,7 @@ const je = ["en", "fr"], We = {
     "manage.deleted": "Deleted permanently.",
     "manage.createTrack": "Create Track",
     "manage.noPacks": "No installed PackVersion is available.",
+    "manage.noPackDirections": "This pack does not expose any usable language direction.",
     "manage.pack": "Pack",
     "manage.sourceLanguage": "Source language",
     "manage.targetLanguage": "Target language",
@@ -1089,6 +1090,7 @@ const je = ["en", "fr"], We = {
     "manage.deleted": "Supprimé définitivement.",
     "manage.createTrack": "Créer un parcours",
     "manage.noPacks": "Aucune PackVersion installée n’est disponible.",
+    "manage.noPackDirections": "Ce pack ne propose aucune direction de langue exploitable.",
     "manage.pack": "Pack",
     "manage.sourceLanguage": "Langue source",
     "manage.targetLanguage": "Langue cible",
@@ -1262,47 +1264,47 @@ const je = ["en", "fr"], We = {
 };
 function W(a) {
   const e = a.trim().toLowerCase().replaceAll("_", "-");
-  if (je.includes(e))
+  if (We.includes(e))
     return e;
   const t = e.split("-", 1)[0];
-  return je.includes(t) ? t : "en";
+  return We.includes(t) ? t : "en";
 }
 function F(a, e) {
-  return We[a][e] ?? We.en[e];
-}
-function Wt(a) {
-  return a?.payload.selection?.progress_state === "new";
+  return Fe[a][e] ?? Fe.en[e];
 }
 function Ft(a) {
+  return a?.payload.selection?.progress_state === "new";
+}
+function Vt(a) {
   const e = a?.payload.available_at_utc;
   if (typeof e != "string") return null;
   const t = Date.parse(e);
   return Number.isNaN(t) ? null : t;
 }
-function Fe(a) {
+function Ve(a) {
   return a !== void 0 && a.role !== "viewer";
 }
-const D = 3;
-class dt extends Error {
+const N = 3;
+class ht extends Error {
   constructor(e, t, i) {
     super(
       `LockLearn frontend protocol ${e} does not match backend protocol ${t}`
     ), this.frontendProtocol = e, this.backendProtocol = t, this.backendVersion = i;
   }
 }
-async function Vt(a) {
+async function Bt(a) {
   const e = await a.callWS({
     type: "locklearn/bootstrap"
   });
-  if (e.frontend_protocol !== D)
-    throw new dt(
-      D,
+  if (e.frontend_protocol !== N)
+    throw new ht(
+      N,
       e.frontend_protocol,
       e.backend_version
     );
   return e;
 }
-async function Ve(a) {
+async function Be(a) {
   const e = [];
   let t = null;
   do {
@@ -1329,7 +1331,7 @@ async function Y(a, e, t = {}) {
   } while (s !== null);
   return i;
 }
-async function Bt(a, e, t, i) {
+async function Kt(a, e, t, i) {
   return a.callWS({
     type: "locklearn/profiles/create",
     name: e,
@@ -1337,14 +1339,14 @@ async function Bt(a, e, t, i) {
     timezone: i
   });
 }
-async function Be(a, e, t) {
+async function Ke(a, e, t) {
   return a.callWS({
     type: "locklearn/profiles/update",
     profile_id: e,
     ...t
   });
 }
-async function Ke(a, e, t, i) {
+async function Qe(a, e, t, i) {
   await a.callWS({
     type: "locklearn/profiles/delete",
     profile_id: e,
@@ -1352,19 +1354,19 @@ async function Ke(a, e, t, i) {
     ...i === void 0 ? {} : { confirmation: i }
   });
 }
-async function Kt(a, e) {
+async function Qt(a, e) {
   return a.callWS({
     type: "locklearn/profiles/members",
     profile_id: e
   });
 }
-async function Qt(a, e) {
+async function Gt(a, e) {
   return a.callWS({
     type: "locklearn/profiles/share_targets",
     profile_id: e
   });
 }
-async function Qe(a, e, t, i) {
+async function Ge(a, e, t, i) {
   await a.callWS({
     type: "locklearn/profiles/share",
     profile_id: e,
@@ -1372,7 +1374,7 @@ async function Qe(a, e, t, i) {
     role: i
   });
 }
-async function Gt(a, e, t) {
+async function Jt(a, e, t) {
   await a.callWS({
     type: "locklearn/profiles/share",
     profile_id: e,
@@ -1380,29 +1382,29 @@ async function Gt(a, e, t) {
     remove: !0
   });
 }
-async function ht(a, e) {
+async function ut(a, e) {
   return Y(a, "locklearn/tracks/list", {
     profile_id: e
   });
 }
-async function Jt(a, e) {
+async function Yt(a, e) {
   return Y(a, "locklearn/targets/list", {
     profile_id: e
   });
 }
-async function Yt(a, e) {
+async function Zt(a, e) {
   return Y(a, "locklearn/targets/discover", {
     profile_id: e
   });
 }
-async function Zt(a, e, t) {
+async function Xt(a, e, t) {
   return a.callWS({
     type: "locklearn/targets/create",
     profile_id: e,
     device_registry_id: t
   });
 }
-async function Xt(a, e, t, i) {
+async function ei(a, e, t, i) {
   return a.callWS({
     type: "locklearn/targets/update",
     profile_id: e,
@@ -1410,7 +1412,7 @@ async function Xt(a, e, t, i) {
     ...i
   });
 }
-async function ei(a, e, t) {
+async function ti(a, e, t) {
   return a.callWS({
     type: "locklearn/stats/get",
     profile_id: e,
@@ -1420,39 +1422,39 @@ async function ei(a, e, t) {
     ...t ? { track_id: t } : {}
   });
 }
-async function ti(a, e, t) {
+async function ii(a, e, t) {
   return (await a.callWS({
     type: "locklearn/difficulties/list",
     profile_id: e,
     ...t ? { track_id: t } : {}
   })).items;
 }
-async function ii(a, e) {
+async function si(a, e) {
   return a.callWS({
     type: "locklearn/tracks/create",
     ...e
   });
 }
-async function si(a, e, t) {
+async function ai(a, e, t) {
   return a.callWS({
     type: "locklearn/tracks/update",
     track_id: e,
     ...t
   });
 }
-async function ai(a, e) {
+async function ri(a, e) {
   await a.callWS({
     type: "locklearn/tracks/delete",
     track_id: e
   });
 }
-async function ri(a) {
+async function ni(a) {
   return Y(a, "locklearn/packs/list");
 }
-async function ni(a) {
+async function oi(a) {
   return Y(a, "locklearn/datasets/list");
 }
-async function Ge(a, e, t, i) {
+async function Je(a, e, t, i) {
   return a.callWS({
     type: "locklearn/datasets/attributions",
     dataset_id: e,
@@ -1461,56 +1463,56 @@ async function Ge(a, e, t, i) {
     ...i ? { cursor: i } : {}
   });
 }
-async function oi(a) {
+async function li(a) {
   return (await a.callWS({
     type: "locklearn/datasets/refresh"
   })).items;
 }
-async function li(a, e, t) {
+async function ci(a, e, t) {
   return a.callWS({
     type: "locklearn/datasets/install",
     dataset_id: e,
     ...t ? { version: t } : {}
   });
 }
-async function ci(a, e, t) {
+async function di(a, e, t) {
   return a.callWS({
     type: "locklearn/tracks/preview_pack_update",
     track_id: e,
     pack_version_id: t
   });
 }
-async function di(a, e, t) {
+async function hi(a, e, t) {
   return a.callWS({
     type: "locklearn/tracks/integrate_pack_update",
     track_id: e,
     pack_version_id: t
   });
 }
-function ut(a, e, t) {
+function pt(a, e, t) {
   return {
     type: a,
     track_id: e,
     ...t
   };
 }
-async function hi(a, e, t) {
-  return a.callWS(
-    ut("locklearn/tracks/plan_preview", e, t)
-  );
-}
 async function ui(a, e, t) {
   return a.callWS(
-    ut("locklearn/tracks/plan_set", e, t)
+    pt("locklearn/tracks/plan_preview", e, t)
   );
 }
-async function pi(a, e) {
+async function pi(a, e, t) {
+  return a.callWS(
+    pt("locklearn/tracks/plan_set", e, t)
+  );
+}
+async function gi(a, e) {
   return a.callWS({
     type: "locklearn/dashboard/get",
     profile_id: e
   });
 }
-async function gi(a, e, t, i = 10, s = "mixed") {
+async function mi(a, e, t, i = 10, s = "mixed") {
   return a.callWS({
     type: "locklearn/session/start",
     profile_id: e,
@@ -1524,7 +1526,7 @@ async function gi(a, e, t, i = 10, s = "mixed") {
     }
   });
 }
-async function ue(a, e, t, i) {
+async function pe(a, e, t, i) {
   return a.callWS({
     type: "locklearn/quiz/answer",
     session_id: e.id,
@@ -1533,7 +1535,7 @@ async function ue(a, e, t, i) {
     answer: i
   });
 }
-async function mi(a, e, t, i) {
+async function fi(a, e, t, i) {
   return a.callWS({
     type: "locklearn/quiz/evaluate",
     session_id: e,
@@ -1541,7 +1543,7 @@ async function mi(a, e, t, i) {
     answer: i
   });
 }
-async function fi(a, e, t, i, s) {
+async function vi(a, e, t, i, s) {
   if (typeof s.submitted_text != "string" || s.grading_policy_kind === void 0 || s.grading_policy_version === void 0 || s.normalization_version === void 0)
     throw new Error("free-text report metadata is incomplete");
   return a.callWS({
@@ -1559,7 +1561,7 @@ async function fi(a, e, t, i, s) {
     normalization_version: s.normalization_version
   });
 }
-async function vi(a, e, t, i = 20) {
+async function bi(a, e, t, i = 20) {
   return a.callWS({
     type: "locklearn/session/start",
     profile_id: e,
@@ -1569,13 +1571,13 @@ async function vi(a, e, t, i = 20) {
     settings: { requested_cards: i }
   });
 }
-async function oe(a, e) {
+async function le(a, e) {
   return a.callWS({
     type: "locklearn/session/get",
     session_id: e
   });
 }
-async function Je(a, e, t, i) {
+async function Ye(a, e, t, i) {
   return a.callWS({
     type: "locklearn/session/answer",
     session_id: e.id,
@@ -1584,14 +1586,14 @@ async function Je(a, e, t, i) {
     answer: i
   });
 }
-async function pt(a, e) {
+async function gt(a, e) {
   return a.callWS({
     type: "locklearn/session/complete",
     session_id: e.id,
     expected_version: e.version
   });
 }
-async function bi(a, e, t, i, s) {
+async function yi(a, e, t, i, s) {
   return a.callWS({
     type: "locklearn/progress/set_user_state",
     profile_id: e,
@@ -1600,7 +1602,7 @@ async function bi(a, e, t, i, s) {
     user_state: s
   });
 }
-async function gt(a, e, t, i, s) {
+async function mt(a, e, t, i, s) {
   return a.callWS({
     type: "locklearn/content/report_question",
     profile_id: e,
@@ -1613,7 +1615,7 @@ async function gt(a, e, t, i, s) {
     ...s === void 0 || s.trim() === "" ? {} : { message: s.trim() }
   });
 }
-async function mt(a, e, t, i) {
+async function ft(a, e, t, i) {
   return a.callWS({
     type: "locklearn/annotations/create",
     profile_id: e,
@@ -1621,7 +1623,7 @@ async function mt(a, e, t, i) {
     note: i.trim()
   });
 }
-async function yi(a, e, t, i) {
+async function $i(a, e, t, i) {
   return a.callWS({
     type: "locklearn/annotations/update",
     profile_id: e,
@@ -1629,7 +1631,7 @@ async function yi(a, e, t, i) {
     note: i.trim()
   });
 }
-async function $i(a, e, t, i) {
+async function _i(a, e, t, i) {
   return a.callWS({
     type: "locklearn/leeches/reactivate",
     profile_id: e,
@@ -1637,7 +1639,7 @@ async function $i(a, e, t, i) {
     card_key: i
   });
 }
-async function _i(a, e, t, i = 20) {
+async function ki(a, e, t, i = 20) {
   return a.callWS({
     type: "locklearn/session/start",
     profile_id: e,
@@ -1650,15 +1652,15 @@ async function _i(a, e, t, i = 20) {
     }
   });
 }
-var ki = Object.defineProperty, $ = (a, e, t, i) => {
+var wi = Object.defineProperty, $ = (a, e, t, i) => {
   for (var s = void 0, n = a.length - 1, o; n >= 0; n--)
     (o = a[n]) && (s = o(e, t, s) || s);
-  return s && ki(e, t, s), s;
+  return s && wi(e, t, s), s;
 };
 function X() {
   return globalThis.performance?.now() ?? Date.now();
 }
-const qe = class qe extends A {
+const Te = class Te extends T {
   constructor() {
     super(...arguments), this.trackId = "", this.loading = !1, this.errorMessage = "", this.notice = "", this.revealed = !1, this.hintUsed = !1, this.pendingIdk = !1, this.mnemonic = "", this.reportMessage = "", this.questionStartedAt = X(), this.questionId = null;
   }
@@ -1701,7 +1703,7 @@ const qe = class qe extends A {
     this.availabilityTimer !== void 0 && (globalThis.clearTimeout(this.availabilityTimer), this.availabilityTimer = void 0);
   }
   scheduleCurrentQuestionAvailability() {
-    const e = Ft(this.session?.current_question);
+    const e = Vt(this.session?.current_question);
     e === null || e <= Date.now() || (this.waitingUntil = new Date(e).toISOString(), this.availabilityTimer = globalThis.setTimeout(() => {
       this.availabilityTimer = void 0, this.waitingUntil = void 0, this.questionStartedAt = X();
     }, e - Date.now()));
@@ -1714,10 +1716,10 @@ const qe = class qe extends A {
     return Math.max(0, Math.round(X() - this.questionStartedAt));
   }
   async start() {
-    if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "" || !Fe(this.profile))) {
+    if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "" || !Ve(this.profile))) {
       this.loading = !0, this.errorMessage = "", this.notice = "";
       try {
-        const e = await vi(
+        const e = await bi(
           this.hass,
           this.profile.profile_id,
           this.trackId
@@ -1735,7 +1737,7 @@ const qe = class qe extends A {
     if (!(this.hass === void 0 || e === null || e === void 0)) {
       this.loading = !0, this.errorMessage = "";
       try {
-        this.applySession(await oe(this.hass, e.session_id));
+        this.applySession(await le(this.hass, e.session_id));
       } catch (t) {
         this.errorMessage = t instanceof Error ? t.message : String(t);
       } finally {
@@ -1746,21 +1748,21 @@ const qe = class qe extends A {
   async recover(e) {
     if (this.hass !== void 0 && this.session !== void 0)
       try {
-        this.applySession(await oe(this.hass, this.session.id)), this.notice = this.t("learn.reloaded");
+        this.applySession(await le(this.hass, this.session.id)), this.notice = this.t("learn.reloaded");
         return;
       } catch {
       }
     this.errorMessage = e instanceof Error ? e.message : String(e);
   }
   async finalizeIfDone(e) {
-    return this.hass !== void 0 && e.status === "active" && e.current_question === null && e.question_count > 0 ? pt(this.hass, e) : e;
+    return this.hass !== void 0 && e.status === "active" && e.current_question === null && e.question_count > 0 ? gt(this.hass, e) : e;
   }
   async learningAction(e, t) {
     const i = this.session?.current_question;
     if (!(this.hass === void 0 || this.session === void 0 || i === null || i === void 0)) {
       this.loading = !0, this.errorMessage = "";
       try {
-        const s = await Je(
+        const s = await Ye(
           this.hass,
           this.session,
           i.question_id,
@@ -1793,14 +1795,14 @@ const qe = class qe extends A {
     if (!(this.hass === void 0 || this.profile === void 0 || this.session === void 0 || t === null || t === void 0 || this.session.track_id === null)) {
       this.loading = !0, this.errorMessage = "";
       try {
-        await bi(
+        await yi(
           this.hass,
           this.profile.profile_id,
           this.session.track_id,
           t.card_key,
           e
         );
-        const i = await Je(
+        const i = await Ye(
           this.hass,
           this.session,
           t.question_id,
@@ -1819,7 +1821,7 @@ const qe = class qe extends A {
     if (!(this.hass === void 0 || this.profile === void 0 || this.session?.track_id === null || this.session === void 0 || e === null || e === void 0)) {
       this.loading = !0, this.errorMessage = "";
       try {
-        await gt(
+        await mt(
           this.hass,
           this.profile.profile_id,
           this.session.track_id,
@@ -1838,7 +1840,7 @@ const qe = class qe extends A {
     if (!(this.hass === void 0 || this.profile === void 0 || e === null || e === void 0 || this.mnemonic.trim() === "")) {
       this.loading = !0, this.errorMessage = "";
       try {
-        await mt(
+        await ft(
           this.hass,
           this.profile.profile_id,
           e.card_key,
@@ -1853,7 +1855,7 @@ const qe = class qe extends A {
   }
   render() {
     if (this.profile === void 0) return l;
-    if (!Fe(this.profile))
+    if (!Ve(this.profile))
       return r`<section class="learn-card"><p>${this.t("learn.readOnly")}</p></section>`;
     const e = this.tracks();
     if (e.length === 0)
@@ -1902,7 +1904,7 @@ const qe = class qe extends A {
             ${this.t("learn.newSession")}
           </button>
         </section>
-      ` : this.waitingUntil !== void 0 ? this.renderWaiting(this.session.current_question) : Wt(this.session.current_question) ? this.renderIntroduction(this.session.current_question) : this.renderRetrieval(this.session.current_question);
+      ` : this.waitingUntil !== void 0 ? this.renderWaiting(this.session.current_question) : Ft(this.session.current_question) ? this.renderIntroduction(this.session.current_question) : this.renderRetrieval(this.session.current_question);
   }
   renderWaiting(e) {
     const t = this.waitingUntil;
@@ -2087,11 +2089,11 @@ const qe = class qe extends A {
     `;
   }
   renderBlock(e, t) {
-    return ct(e, t);
+    return dt(e, t);
   }
 };
-qe.styles = M`
-    ${ot}
+Te.styles = M`
+    ${lt}
     ${j}
 
     :host {
@@ -2281,79 +2283,79 @@ qe.styles = M`
       }
     }
   `;
-let m = qe;
+let f = Te;
 $([
   y({ attribute: !1 })
-], m.prototype, "hass");
+], f.prototype, "hass");
 $([
   y({ attribute: !1 })
-], m.prototype, "profile");
+], f.prototype, "profile");
 $([
   y({ attribute: !1 })
-], m.prototype, "dashboard");
+], f.prototype, "dashboard");
 $([
   y({ attribute: !1 })
-], m.prototype, "externalSession");
+], f.prototype, "externalSession");
 $([
   c()
-], m.prototype, "trackId");
+], f.prototype, "trackId");
 $([
   c()
-], m.prototype, "session");
+], f.prototype, "session");
 $([
   c()
-], m.prototype, "loading");
+], f.prototype, "loading");
 $([
   c()
-], m.prototype, "errorMessage");
+], f.prototype, "errorMessage");
 $([
   c()
-], m.prototype, "notice");
+], f.prototype, "notice");
 $([
   c()
-], m.prototype, "revealed");
+], f.prototype, "revealed");
 $([
   c()
-], m.prototype, "hintUsed");
+], f.prototype, "hintUsed");
 $([
   c()
-], m.prototype, "pendingIdk");
+], f.prototype, "pendingIdk");
 $([
   c()
-], m.prototype, "pendingIdkLatency");
+], f.prototype, "pendingIdkLatency");
 $([
   c()
-], m.prototype, "mnemonic");
+], f.prototype, "mnemonic");
 $([
   c()
-], m.prototype, "reportMessage");
+], f.prototype, "reportMessage");
 $([
   c()
-], m.prototype, "waitingUntil");
-globalThis.customElements !== void 0 && customElements.get("locklearn-learn-view") === void 0 && customElements.define("locklearn-learn-view", m);
-function Ye(a) {
+], f.prototype, "waitingUntil");
+globalThis.customElements !== void 0 && customElements.get("locklearn-learn-view") === void 0 && customElements.define("locklearn-learn-view", f);
+function Ze(a) {
   return a !== void 0 && a.role !== "viewer";
 }
-function wi(a) {
+function xi(a) {
   return a?.payload.quiz;
 }
-function xi(a) {
+function Si(a) {
   return a?.format === "mcq" || a?.format === "cloze_mcq";
 }
-function Ze(a) {
+function Xe(a) {
   return a?.format === "free_text" && a.result === "wrong" && a.reportable && typeof a.submitted_text == "string" && a.grading_policy_kind !== void 0 && a.grading_policy_version !== void 0 && a.normalization_version !== void 0;
 }
-var Si = Object.defineProperty, w = (a, e, t, i) => {
+var qi = Object.defineProperty, w = (a, e, t, i) => {
   for (var s = void 0, n = a.length - 1, o; n >= 0; n--)
     (o = a[n]) && (s = o(e, t, s) || s);
-  return s && Si(e, t, s), s;
+  return s && qi(e, t, s), s;
 };
-function pe() {
+function ge() {
   return globalThis.performance?.now() ?? Date.now();
 }
-const Ae = class Ae extends A {
+const Ae = class Ae extends T {
   constructor() {
-    super(...arguments), this.trackId = "", this.format = "mixed", this.loading = !1, this.errorMessage = "", this.notice = "", this.freeText = "", this.hintUsed = !1, this.questionStartedAt = pe(), this.questionId = null;
+    super(...arguments), this.trackId = "", this.format = "mixed", this.loading = !1, this.errorMessage = "", this.notice = "", this.freeText = "", this.hintUsed = !1, this.questionStartedAt = ge(), this.questionId = null;
   }
   updated(e) {
     if (e.has("profile") || e.has("dashboard")) {
@@ -2383,21 +2385,21 @@ const Ae = class Ae extends A {
     t instanceof HTMLSelectElement && (this.format = t.value, this.session = void 0, this.errorMessage = "", this.resetQuestionUi());
   }
   resetQuestionUi() {
-    this.feedback = void 0, this.pendingAnswer = void 0, this.pendingSession = void 0, this.freeText = "", this.hintUsed = !1, this.notice = "", this.questionStartedAt = pe(), this.questionId = this.session?.current_question?.question_id ?? null;
+    this.feedback = void 0, this.pendingAnswer = void 0, this.pendingSession = void 0, this.freeText = "", this.hintUsed = !1, this.notice = "", this.questionStartedAt = ge(), this.questionId = this.session?.current_question?.question_id ?? null;
   }
   applySession(e) {
     const i = (e.current_question?.question_id ?? null) !== this.questionId;
     this.session = e, i && this.resetQuestionUi();
   }
   elapsedMs() {
-    return Math.max(0, Math.round(pe() - this.questionStartedAt));
+    return Math.max(0, Math.round(ge() - this.questionStartedAt));
   }
   async start() {
-    if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "" || !Ye(this.profile))) {
+    if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "" || !Ze(this.profile))) {
       this.loading = !0, this.errorMessage = "";
       try {
         this.applySession(
-          await gi(
+          await mi(
             this.hass,
             this.profile.profile_id,
             this.trackId,
@@ -2417,7 +2419,7 @@ const Ae = class Ae extends A {
     if (!(this.hass === void 0 || e === null || e === void 0 || e.session_type !== "quiz")) {
       this.loading = !0, this.errorMessage = "";
       try {
-        this.applySession(await oe(this.hass, e.session_id));
+        this.applySession(await le(this.hass, e.session_id));
       } catch (t) {
         this.errorMessage = t instanceof Error ? t.message : String(t);
       } finally {
@@ -2428,7 +2430,7 @@ const Ae = class Ae extends A {
   async recover(e) {
     if (this.hass !== void 0 && this.session !== void 0)
       try {
-        this.applySession(await oe(this.hass, this.session.id)), this.notice = this.t("quiz.reloaded");
+        this.applySession(await le(this.hass, this.session.id)), this.notice = this.t("quiz.reloaded");
         return;
       } catch {
       }
@@ -2448,7 +2450,7 @@ const Ae = class Ae extends A {
     const i = this.enrichAnswer(e);
     this.loading = !0, this.errorMessage = "";
     try {
-      this.feedback = await mi(
+      this.feedback = await fi(
         this.hass,
         this.session.id,
         t.question_id,
@@ -2466,7 +2468,7 @@ const Ae = class Ae extends A {
     const i = this.enrichAnswer(e);
     this.loading = !0, this.errorMessage = "";
     try {
-      const s = await ue(
+      const s = await pe(
         this.hass,
         this.session,
         t.question_id,
@@ -2484,7 +2486,7 @@ const Ae = class Ae extends A {
     if (!(this.hass === void 0 || this.session === void 0 || e === null || e === void 0 || this.pendingAnswer === void 0)) {
       this.loading = !0, this.errorMessage = "";
       try {
-        const t = await ue(
+        const t = await pe(
           this.hass,
           this.session,
           e.question_id,
@@ -2504,7 +2506,7 @@ const Ae = class Ae extends A {
   }
   async advanceSession(e) {
     let t = e;
-    this.hass !== void 0 && t.status === "active" && t.current_question === null && t.question_count > 0 && (t = await pt(this.hass, t)), this.applySession(t);
+    this.hass !== void 0 && t.status === "active" && t.current_question === null && t.question_count > 0 && (t = await gt(this.hass, t)), this.applySession(t);
   }
   async advanceCommitted() {
     if (this.pendingSession !== void 0) {
@@ -2520,10 +2522,10 @@ const Ae = class Ae extends A {
   }
   async acceptReportedFreeText() {
     const e = this.session?.current_question;
-    if (!(this.hass === void 0 || this.profile === void 0 || this.session === void 0 || this.session.track_id === null || e === null || e === void 0 || this.feedback === void 0 || this.pendingAnswer === void 0 || !Ze(this.feedback))) {
+    if (!(this.hass === void 0 || this.profile === void 0 || this.session === void 0 || this.session.track_id === null || e === null || e === void 0 || this.feedback === void 0 || this.pendingAnswer === void 0 || !Xe(this.feedback))) {
       this.loading = !0, this.errorMessage = "";
       try {
-        if ((await fi(
+        if ((await vi(
           this.hass,
           this.profile.profile_id,
           this.session.track_id,
@@ -2534,7 +2536,7 @@ const Ae = class Ae extends A {
         const i = {
           ...this.pendingAnswer,
           should_be_accepted: !0
-        }, s = await ue(
+        }, s = await pe(
           this.hass,
           this.session,
           e.question_id,
@@ -2553,7 +2555,7 @@ const Ae = class Ae extends A {
     if (!(this.hass === void 0 || this.profile === void 0 || this.session === void 0 || this.session.track_id === null || e === null || e === void 0)) {
       this.loading = !0, this.errorMessage = "";
       try {
-        await gt(
+        await mt(
           this.hass,
           this.profile.profile_id,
           this.session.track_id,
@@ -2571,7 +2573,7 @@ const Ae = class Ae extends A {
   }
   render() {
     if (this.profile === void 0) return l;
-    if (!Ye(this.profile))
+    if (!Ze(this.profile))
       return r`<section class="quiz-card"><p>${this.t("quiz.readOnly")}</p></section>`;
     const e = this.tracks();
     if (e.length === 0)
@@ -2635,7 +2637,7 @@ const Ae = class Ae extends A {
           </button>
         </section>
       `;
-    const e = wi(this.session.current_question);
+    const e = xi(this.session.current_question);
     return e === void 0 ? r`<section class="quiz-card"><p>${this.t("quiz.invalidQuestion")}</p></section>` : this.renderQuestion(this.session.current_question, e);
   }
   renderQuestion(e, t) {
@@ -2670,7 +2672,7 @@ const Ae = class Ae extends A {
     `;
   }
   renderInput(e) {
-    return xi(e) ? r`
+    return Si(e) ? r`
         <div class="options" aria-label=${this.t("quiz.answers")}>
           ${e.options.map(
       (t, i) => r`
@@ -2765,7 +2767,7 @@ const Ae = class Ae extends A {
               >
                 ${t.result === "wrong" ? this.t("quiz.showCorrection") : this.t("quiz.continue")}
               </button>`}
-          ${Ze(t) ? r`<button
+          ${Xe(t) ? r`<button
                 @click=${() => {
       this.acceptReportedFreeText();
     }}
@@ -2784,11 +2786,11 @@ const Ae = class Ae extends A {
     return e === "correct" ? this.t("quiz.correct") : e === "wrong" ? this.t("quiz.wrong") : e === "idk" ? this.t("quiz.idkFeedback") : this.t("quiz.unrecognized");
   }
   renderBlock(e) {
-    return ct(e);
+    return dt(e);
   }
 };
 Ae.styles = M`
-    ${ot}
+    ${lt}
     ${j}
 
     :host {
@@ -3029,16 +3031,16 @@ w([
   c()
 ], v.prototype, "hintUsed");
 globalThis.customElements !== void 0 && customElements.get("locklearn-quiz-view") === void 0 && customElements.define("locklearn-quiz-view", v);
-var qi = Object.defineProperty, f = (a, e, t, i) => {
+var Ti = Object.defineProperty, m = (a, e, t, i) => {
   for (var s = void 0, n = a.length - 1, o; n >= 0; n--)
     (o = a[n]) && (s = o(e, t, s) || s);
-  return s && qi(e, t, s), s;
+  return s && Ti(e, t, s), s;
 };
 function q(a, e, t) {
   const i = Number.parseInt(String(a ?? ""), 10);
   return Number.isFinite(i) && i >= t ? i : e;
 }
-function ge(a, e) {
+function me(a, e) {
   const t = String(a ?? "").trim();
   if (t === "") return null;
   const i = Number.parseInt(t, 10);
@@ -3048,19 +3050,34 @@ function L(a, e, t, i) {
   const s = Number.parseFloat(String(a ?? ""));
   return Number.isFinite(s) && s >= t && s <= i ? s : e;
 }
-function ee(a, e) {
+function ee(a) {
+  if (a instanceof Error && a.message) return a.message;
+  if (typeof a == "string") return a;
+  if (typeof a == "object" && a !== null) {
+    const e = a;
+    if (typeof e.message == "string" && e.message) return e.message;
+    if (typeof e.code == "string" && e.code) return e.code;
+    try {
+      return JSON.stringify(e);
+    } catch {
+      return "Unknown error";
+    }
+  }
+  return String(a);
+}
+function te(a, e) {
   const t = a?.[e];
   return typeof t == "object" && t !== null ? t : {};
 }
 function Ai(a) {
   return a === "owner";
 }
-function Ti(a) {
+function Pi(a) {
   return a === "owner" || a === "editor";
 }
-const Te = class Te extends A {
+const Pe = class Pe extends T {
   constructor() {
-    super(...arguments), this.route = "profiles", this.tracks = [], this.packs = [], this.notificationTargets = [], this.notificationCandidates = [], this.members = [], this.shareTargets = [], this.selectedTrackId = "", this.packDiffTrack = "", this.packDiffTarget = "", this.loading = !1, this.errorMessage = "", this.notice = "";
+    super(...arguments), this.route = "profiles", this.tracks = [], this.packs = [], this.notificationTargets = [], this.notificationCandidates = [], this.members = [], this.shareTargets = [], this.selectedTrackId = "", this.createTrackPackId = "", this.createTrackSource = "", this.packDiffTrack = "", this.packDiffTarget = "", this.loading = !1, this.errorMessage = "", this.notice = "";
   }
   updated(e) {
     (e.has("profile") || e.has("route")) && this.load();
@@ -3077,7 +3094,7 @@ const Te = class Te extends A {
     return Ai(this.profile?.role);
   }
   canEditTrack() {
-    return Ti(this.profile?.role);
+    return Pi(this.profile?.role);
   }
   async load() {
     if (this.hass !== void 0) {
@@ -3088,14 +3105,14 @@ const Te = class Te extends A {
       this.loading = !0, this.errorMessage = "";
       try {
         [this.tracks, this.packs] = await Promise.all([
-          ht(this.hass, this.profile.profile_id),
-          ri(this.hass)
-        ]), this.notificationTargets = this.canEditTrack() ? await Jt(this.hass, this.profile.profile_id) : [], this.notificationCandidates = this.isOwner() && this.route === "settings" ? await Yt(this.hass, this.profile.profile_id) : [], this.tracks.some((e) => e.track_id === this.selectedTrackId) || (this.selectedTrackId = this.tracks[0]?.track_id ?? ""), this.isOwner() && this.route === "profiles" ? [this.members, this.shareTargets] = await Promise.all([
-          Kt(this.hass, this.profile.profile_id),
-          Qt(this.hass, this.profile.profile_id)
+          ut(this.hass, this.profile.profile_id),
+          ni(this.hass)
+        ]), this.notificationTargets = this.canEditTrack() ? await Yt(this.hass, this.profile.profile_id) : [], this.notificationCandidates = this.isOwner() && this.route === "settings" ? await Zt(this.hass, this.profile.profile_id) : [], this.tracks.some((e) => e.track_id === this.selectedTrackId) || (this.selectedTrackId = this.tracks[0]?.track_id ?? ""), this.packs.some((e) => e.pack_version_id === this.createTrackPackId) || (this.createTrackPackId = this.packs[0]?.pack_version_id ?? "", this.createTrackSource = ""), this.isOwner() && this.route === "profiles" ? [this.members, this.shareTargets] = await Promise.all([
+          Qt(this.hass, this.profile.profile_id),
+          Gt(this.hass, this.profile.profile_id)
         ]) : (this.members = [], this.shareTargets = []);
       } catch (e) {
-        this.errorMessage = e instanceof Error ? e.message : String(e);
+        this.errorMessage = ee(e);
       } finally {
         this.loading = !1;
       }
@@ -3106,7 +3123,7 @@ const Te = class Te extends A {
     try {
       await e(), await this.load(), this.notice = t, this.dispatchEvent(new CustomEvent("locklearn-refresh", { bubbles: !0, composed: !0 }));
     } catch (i) {
-      this.errorMessage = i instanceof Error ? i.message : String(i);
+      this.errorMessage = ee(i);
     } finally {
       this.loading = !1;
     }
@@ -3153,7 +3170,7 @@ const Te = class Te extends A {
       e.preventDefault();
       const t = new FormData(e.currentTarget);
       this.hass === void 0 || this.profile === void 0 || this.mutate(
-        () => Be(this.hass, this.profile.profile_id, {
+        () => Ke(this.hass, this.profile.profile_id, {
           name: String(t.get("name") ?? "").trim(),
           timezone: String(t.get("timezone") ?? "").trim(),
           status: String(t.get("status") ?? "active")
@@ -3222,20 +3239,20 @@ const Te = class Te extends A {
     `;
   }
   async addMember(e, t) {
-    !e || this.hass === void 0 || this.profile === void 0 || await this.mutate(() => Qe(this.hass, this.profile.profile_id, e, t), this.t("manage.saved"));
+    !e || this.hass === void 0 || this.profile === void 0 || await this.mutate(() => Ge(this.hass, this.profile.profile_id, e, t), this.t("manage.saved"));
   }
   async removeMember(e) {
-    this.hass === void 0 || this.profile === void 0 || await this.mutate(() => Gt(this.hass, this.profile.profile_id, e), this.t("manage.saved"));
+    this.hass === void 0 || this.profile === void 0 || await this.mutate(() => Jt(this.hass, this.profile.profile_id, e), this.t("manage.saved"));
   }
   async changeMemberRole(e, t) {
     this.hass === void 0 || this.profile === void 0 || await this.mutate(
-      () => Qe(this.hass, this.profile.profile_id, e, t),
+      () => Ge(this.hass, this.profile.profile_id, e, t),
       this.t("manage.saved")
     );
   }
   async archiveProfile() {
     this.hass === void 0 || this.profile === void 0 || globalThis.confirm?.(this.t("manage.confirmArchiveProfile")) && await this.mutate(
-      () => Ke(this.hass, this.profile.profile_id, "archive"),
+      () => Qe(this.hass, this.profile.profile_id, "archive"),
       this.t("manage.archivedNotice")
     );
   }
@@ -3245,7 +3262,7 @@ const Te = class Te extends A {
       `${this.t("manage.confirmDeletePermanently")} ${e}`
     );
     t === e && await this.mutate(
-      () => Ke(
+      () => Qe(
         this.hass,
         this.profile.profile_id,
         "delete_permanently",
@@ -3262,7 +3279,7 @@ const Te = class Te extends A {
       e.preventDefault();
       const t = new FormData(e.currentTarget);
       this.hass !== void 0 && this.mutate(
-        () => Bt(
+        () => Kt(
           this.hass,
           String(t.get("name") ?? "").trim(),
           String(t.get("preset") ?? "standard"),
@@ -3289,8 +3306,21 @@ const Te = class Te extends A {
       ${this.canEditTrack() ? this.renderCreateTrack() : r`<div class="card"><p>${this.t("manage.readOnly")}</p></div>`}
     `;
   }
+  packDirections(e) {
+    return this.packs.find((t) => t.pack_version_id === e)?.directions ?? [];
+  }
+  sourceLanguages(e) {
+    return [...new Set(
+      this.packDirections(e).map((t) => t.source_language)
+    )].sort((t, i) => t.localeCompare(i));
+  }
+  targetLanguages(e, t) {
+    return [...new Set(
+      this.packDirections(e).filter((i) => i.source_language === t).map((i) => i.target_language)
+    )].sort((i, s) => i.localeCompare(s));
+  }
   renderTrack(e) {
-    const t = ee(e.settings, "scheduler"), i = Array.isArray(t.target_ids) ? t.target_ids.map(String) : [], s = e.content_weights ?? {};
+    const t = te(e.settings, "scheduler"), i = Array.isArray(t.target_ids) ? t.target_ids.map(String) : [], s = e.content_weights ?? {};
     return r`
       <article class="card">
         <h2>${e.name}</h2>
@@ -3307,7 +3337,7 @@ const Te = class Te extends A {
         grammar: L(o.get("weightGrammar"), Number(s.grammar ?? 1), 0, 100),
         expression: L(o.get("weightExpression"), Number(s.expression ?? 1), 0, 100)
       };
-      this.mutate(() => si(this.hass, e.track_id, {
+      this.mutate(() => ai(this.hass, e.track_id, {
         name: String(o.get("name") ?? e.name),
         source_language: String(o.get("source") ?? e.source_language ?? "").trim(),
         target_language: String(o.get("target") ?? e.target_language ?? "").trim(),
@@ -3327,8 +3357,23 @@ const Te = class Te extends A {
               <option value="paused">${this.t("manage.paused")}</option>
               <option value="archived">${this.t("manage.archived")}</option>
             </select></label>
-            <label>${this.t("manage.sourceLanguage")}<input name="source" .value=${e.source_language ?? ""} required /></label>
-            <label>${this.t("manage.targetLanguage")}<input name="target" .value=${e.target_language ?? ""} required /></label>
+            <label>${this.t("manage.sourceLanguage")}
+              <select name="source" .value=${e.source_language ?? ""} required>
+                ${this.sourceLanguages(e.pack_version_id ?? "").map((n) => r`
+                  <option value=${n}>${n}</option>
+                `)}
+              </select>
+            </label>
+            <label>${this.t("manage.targetLanguage")}
+              <select name="target" .value=${e.target_language ?? ""} required>
+                ${this.targetLanguages(
+      e.pack_version_id ?? "",
+      e.source_language ?? ""
+    ).map((n) => r`
+                  <option value=${n}>${n}</option>
+                `)}
+              </select>
+            </label>
             <label>${this.t("manage.priority")}<input name="priority" type="number" min="1" .value=${String(e.priority)} /></label>
             <label>${this.t("manage.weightVocabulary")}<input name="weightVocabulary" type="number" min="0" step=".1" .value=${String(s.vocabulary ?? 1)} /></label>
             <label>${this.t("manage.weightKanji")}<input name="weightKanji" type="number" min="0" step=".1" .value=${String(s.kanji ?? 1)} /></label>
@@ -3359,36 +3404,76 @@ const Te = class Te extends A {
     `;
   }
   renderCreateTrack() {
+    const e = this.createTrackPackId || this.packs[0]?.pack_version_id || "", t = this.sourceLanguages(e), i = t.includes(this.createTrackSource) ? this.createTrackSource : t[0] ?? "", s = this.targetLanguages(e, i);
     return r`
       <article class="card">
         <h2>${this.t("manage.createTrack")}</h2>
         ${this.packs.length === 0 ? r`<p>${this.t("manage.noPacks")}</p>` : r`
-          <form class="form-grid" @submit=${(e) => {
-      e.preventDefault();
-      const t = new FormData(e.currentTarget);
-      this.hass === void 0 || this.profile === void 0 || this.mutate(() => ii(this.hass, {
+          <form class="form-grid" @submit=${(n) => {
+      n.preventDefault();
+      const o = new FormData(n.currentTarget);
+      this.hass === void 0 || this.profile === void 0 || this.mutate(() => si(this.hass, {
         profile_id: this.profile.profile_id,
-        name: String(t.get("name") ?? "").trim(),
-        pack_version_id: String(t.get("pack") ?? ""),
-        source_language: String(t.get("source") ?? "").trim(),
-        target_language: String(t.get("target") ?? "").trim(),
-        priority: q(t.get("priority"), 1, 1)
+        name: String(o.get("name") ?? "").trim(),
+        pack_version_id: String(o.get("pack") ?? ""),
+        source_language: String(o.get("source") ?? "").trim(),
+        target_language: String(o.get("target") ?? "").trim(),
+        priority: q(o.get("priority"), 1, 1)
       }), this.t("manage.created"));
     }}>
             <label>${this.t("manage.name")}<input name="name" required /></label>
-            <label>${this.t("manage.pack")}<select name="pack">
-              ${this.packs.map((e) => r`<option value=${e.pack_version_id}>${e.name} · ${e.version}</option>`)}
-            </select></label>
-            <label>${this.t("manage.sourceLanguage")}<input name="source" placeholder="ja" required /></label>
-            <label>${this.t("manage.targetLanguage")}<input name="target" placeholder="fr" required /></label>
+            <label>${this.t("manage.pack")}
+              <select
+                name="pack"
+                .value=${e}
+                @change=${(n) => {
+      const o = n.currentTarget;
+      o instanceof HTMLSelectElement && (this.createTrackPackId = o.value, this.createTrackSource = "");
+    }}
+              >
+                ${this.packs.map((n) => r`
+                  <option value=${n.pack_version_id}>${n.name} · ${n.version}</option>
+                `)}
+              </select>
+            </label>
+            ${t.length === 0 ? r`
+              <p class="warning">${this.t("manage.noPackDirections")}</p>
+            ` : r`
+              <label>${this.t("manage.sourceLanguage")}
+                <select
+                  name="source"
+                  .value=${i}
+                  required
+                  @change=${(n) => {
+      const o = n.currentTarget;
+      o instanceof HTMLSelectElement && (this.createTrackSource = o.value);
+    }}
+                >
+                  ${t.map((n) => r`
+                    <option value=${n}>${n}</option>
+                  `)}
+                </select>
+              </label>
+              <label>${this.t("manage.targetLanguage")}
+                <select name="target" required>
+                  ${s.map((n) => r`
+                    <option value=${n}>${n}</option>
+                  `)}
+                </select>
+              </label>
+            `}
             <label>${this.t("manage.priority")}<input name="priority" type="number" min="1" value="1" /></label>
-            <div class="actions"><button class="primary" type="submit">${this.t("manage.create")}</button></div>
+            <div class="actions">
+              <button class="primary" type="submit" ?disabled=${t.length === 0 || s.length === 0}>
+                ${this.t("manage.create")}
+              </button>
+            </div>
           </form>`}
       </article>
     `;
   }
   async removeTrack(e) {
-    this.hass !== void 0 && await this.mutate(() => ai(this.hass, e), this.t("manage.deleted"));
+    this.hass !== void 0 && await this.mutate(() => ri(this.hass, e), this.t("manage.deleted"));
   }
   planFrom(e) {
     const t = new FormData(e);
@@ -3402,17 +3487,17 @@ const Te = class Te extends A {
     };
   }
   renderPlan(e) {
-    const t = ee(e.settings, "learning_plan"), i = Number(this.profile?.settings?.max_new_per_day_cards ?? 8);
+    const t = te(e.settings, "learning_plan"), i = Number(this.profile?.settings?.max_new_per_day_cards ?? 8);
     return r`
       <div class="stack">
         <h3>${this.t("manage.plan")}</h3>
         <form class="form-grid" @submit=${(s) => {
       if (s.preventDefault(), this.hass === void 0) return;
       const n = this.planFrom(s.currentTarget);
-      this.loading = !0, hi(this.hass, e.track_id, n).then((o) => {
+      this.loading = !0, ui(this.hass, e.track_id, n).then((o) => {
         this.forecast = o, this.forecastPlan = n;
       }).catch((o) => {
-        this.errorMessage = o instanceof Error ? o.message : String(o);
+        this.errorMessage = ee(o);
       }).finally(() => {
         this.loading = !1;
       });
@@ -3450,7 +3535,7 @@ const Te = class Te extends A {
     `;
   }
   async applyPlan(e) {
-    this.hass === void 0 || this.forecastPlan === void 0 || await this.mutate(() => ui(this.hass, e.track_id, this.forecastPlan), this.t("manage.saved"));
+    this.hass === void 0 || this.forecastPlan === void 0 || await this.mutate(() => pi(this.hass, e.track_id, this.forecastPlan), this.t("manage.saved"));
   }
   renderPacks() {
     return r`
@@ -3488,9 +3573,9 @@ const Te = class Te extends A {
     if (this.hass !== void 0) {
       this.loading = !0;
       try {
-        this.packDiff = await ci(this.hass, e.track_id, t.pack_version_id), this.packDiffTrack = e.track_id, this.packDiffTarget = t.pack_version_id;
+        this.packDiff = await di(this.hass, e.track_id, t.pack_version_id), this.packDiffTrack = e.track_id, this.packDiffTarget = t.pack_version_id;
       } catch (i) {
-        this.errorMessage = i instanceof Error ? i.message : String(i);
+        this.errorMessage = ee(i);
       } finally {
         this.loading = !1;
       }
@@ -3500,7 +3585,7 @@ const Te = class Te extends A {
     if (this.hass === void 0 || !this.packDiffTrack || !this.packDiffTarget) return;
     const e = this.packDiffTrack, t = this.packDiffTarget;
     await this.mutate(
-      () => di(this.hass, e, t),
+      () => hi(this.hass, e, t),
       this.t("manage.packIntegrated")
     ), this.errorMessage === "" && (this.packDiff = void 0, this.packDiffTrack = "", this.packDiffTarget = "");
   }
@@ -3519,7 +3604,7 @@ const Te = class Te extends A {
       t.preventDefault();
       const i = new FormData(t.currentTarget), s = String(i.get("device") ?? "");
       !s || this.hass === void 0 || this.profile === void 0 || this.mutate(
-        () => Zt(this.hass, this.profile.profile_id, s),
+        () => Xt(this.hass, this.profile.profile_id, s),
         this.t("manage.notificationTargetCreated")
       );
     }}>
@@ -3545,7 +3630,7 @@ const Te = class Te extends A {
       i.preventDefault();
       const s = new FormData(i.currentTarget);
       this.hass === void 0 || this.profile === void 0 || this.mutate(
-        () => Xt(
+        () => ei(
           this.hass,
           this.profile.profile_id,
           t.target_id,
@@ -3556,9 +3641,9 @@ const Te = class Te extends A {
               s.get("lockscreenVisibility") ?? "private"
             ),
             enabled: s.get("enabled") === "on",
-            minimum_gap_seconds: ge(s.get("minimumGap"), 0),
-            maximum_notifications_per_hour: ge(s.get("maxPerHour"), 1),
-            daily_push_budget: ge(s.get("targetBudget"), 0)
+            minimum_gap_seconds: me(s.get("minimumGap"), 0),
+            maximum_notifications_per_hour: me(s.get("maxPerHour"), 1),
+            daily_push_budget: me(s.get("targetBudget"), 0)
           }
         ),
         this.t("manage.notificationTargetUpdated")
@@ -3623,7 +3708,7 @@ const Te = class Te extends A {
   }
   renderSettings() {
     if (!this.isOwner()) return r`<div class="card"><p>${this.t("manage.readOnly")}</p></div>`;
-    const e = this.profile?.settings ?? {}, t = ee(e, "quiet_hours"), i = ee(e, "scheduler"), s = Array.isArray(i.active_windows) ? i.active_windows : [], n = typeof s[0] == "object" && s[0] !== null ? s[0] : {};
+    const e = this.profile?.settings ?? {}, t = te(e, "quiet_hours"), i = te(e, "scheduler"), s = Array.isArray(i.active_windows) ? i.active_windows : [], n = typeof s[0] == "object" && s[0] !== null ? s[0] : {};
     return r`
       <article class="card">
         <h2>${this.t("manage.profileSettings")}</h2>
@@ -3631,7 +3716,7 @@ const Te = class Te extends A {
         <form class="form-grid" @submit=${(o) => {
       o.preventDefault();
       const d = new FormData(o.currentTarget);
-      this.hass === void 0 || this.profile === void 0 || this.mutate(() => Be(this.hass, this.profile.profile_id, {
+      this.hass === void 0 || this.profile === void 0 || this.mutate(() => Ke(this.hass, this.profile.profile_id, {
         settings_patch: {
           session_length_cards: q(d.get("session"), 20, 1),
           max_new_per_day_cards: q(d.get("new"), 8, 0),
@@ -3664,7 +3749,7 @@ const Te = class Te extends A {
     `;
   }
 };
-Te.styles = M`
+Pe.styles = M`
     ${j}
     :host, .stack, .grid, .card, .form-grid, .actions, label, input, select, button {
       box-sizing: border-box;
@@ -3708,68 +3793,74 @@ Te.styles = M`
       button { width: 100%; }
     }
   `;
-let g = Te;
-f([
+let g = Pe;
+m([
   y({ attribute: !1 })
 ], g.prototype, "hass");
-f([
+m([
   y({ attribute: !1 })
 ], g.prototype, "profile");
-f([
+m([
   y({ attribute: !1 })
 ], g.prototype, "route");
-f([
+m([
   c()
 ], g.prototype, "tracks");
-f([
+m([
   c()
 ], g.prototype, "packs");
-f([
+m([
   c()
 ], g.prototype, "notificationTargets");
-f([
+m([
   c()
 ], g.prototype, "notificationCandidates");
-f([
+m([
   c()
 ], g.prototype, "members");
-f([
+m([
   c()
 ], g.prototype, "shareTargets");
-f([
+m([
   c()
 ], g.prototype, "selectedTrackId");
-f([
+m([
+  c()
+], g.prototype, "createTrackPackId");
+m([
+  c()
+], g.prototype, "createTrackSource");
+m([
   c()
 ], g.prototype, "forecast");
-f([
+m([
   c()
 ], g.prototype, "forecastPlan");
-f([
+m([
   c()
 ], g.prototype, "packDiff");
-f([
+m([
   c()
 ], g.prototype, "packDiffTrack");
-f([
+m([
   c()
 ], g.prototype, "packDiffTarget");
-f([
+m([
   c()
 ], g.prototype, "loading");
-f([
+m([
   c()
 ], g.prototype, "errorMessage");
-f([
+m([
   c()
 ], g.prototype, "notice");
 globalThis.customElements !== void 0 && customElements.get("locklearn-management-view") === void 0 && customElements.define("locklearn-management-view", g);
-var Pi = Object.defineProperty, I = (a, e, t, i) => {
+var zi = Object.defineProperty, I = (a, e, t, i) => {
   for (var s = void 0, n = a.length - 1, o; n >= 0; n--)
     (o = a[n]) && (s = o(e, t, s) || s);
-  return s && Pi(e, t, s), s;
+  return s && zi(e, t, s), s;
 };
-function te(a) {
+function ie(a) {
   if (a === null) return null;
   try {
     const e = new URL(a);
@@ -3778,7 +3869,7 @@ function te(a) {
     return null;
   }
 }
-function zi(a) {
+function Ei(a) {
   if (a < 1024) return `${a} B`;
   const e = ["KiB", "MiB", "GiB"];
   let t = a / 1024, i = 0;
@@ -3786,7 +3877,7 @@ function zi(a) {
     t /= 1024, i += 1;
   return `${t.toFixed(t >= 10 ? 1 : 2)} ${e[i]}`;
 }
-const Pe = class Pe extends A {
+const ze = class ze extends T {
   constructor() {
     super(...arguments), this.admin = !1, this.datasets = [], this.loading = !1, this.errorMessage = "", this.notice = "", this.attributionPages = {};
   }
@@ -3808,7 +3899,7 @@ const Pe = class Pe extends A {
     if (this.hass !== void 0) {
       this.loading = !0, this.errorMessage = "";
       try {
-        this.datasets = await ni(this.hass);
+        this.datasets = await oi(this.hass);
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
       } finally {
@@ -3820,7 +3911,7 @@ const Pe = class Pe extends A {
     if (!(this.hass === void 0 || !this.admin)) {
       this.loading = !0, this.errorMessage = "", this.notice = "";
       try {
-        this.datasets = await oi(this.hass), this.notice = this.t("datasets.refreshed");
+        this.datasets = await li(this.hass), this.notice = this.t("datasets.refreshed");
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
       } finally {
@@ -3832,7 +3923,7 @@ const Pe = class Pe extends A {
     if (!(this.hass === void 0 || !this.admin)) {
       this.loading = !0, this.errorMessage = "", this.notice = "";
       try {
-        const t = await li(this.hass, e.dataset_id, e.available_version);
+        const t = await ci(this.hass, e.dataset_id, e.available_version);
         this.datasets = t.statuses, this.notice = this.t("datasets.installed"), this.dispatchEvent(new CustomEvent("locklearn-refresh", { bubbles: !0, composed: !0 }));
       } catch (t) {
         this.errorMessage = t instanceof Error ? t.message : String(t);
@@ -3859,7 +3950,7 @@ const Pe = class Pe extends A {
       [i]: { items: [], cursor: null, expanded: !0, loading: !0 }
     };
     try {
-      const n = await Ge(this.hass, e, t);
+      const n = await Je(this.hass, e, t);
       this.attributionPages = {
         ...this.attributionPages,
         [i]: { ...n, expanded: !0, loading: !1 }
@@ -3880,7 +3971,7 @@ const Pe = class Pe extends A {
         [i]: { ...s, loading: !0 }
       };
       try {
-        const n = await Ge(
+        const n = await Je(
           this.hass,
           e,
           t,
@@ -3924,7 +4015,7 @@ const Pe = class Pe extends A {
     `;
   }
   renderDataset(e) {
-    const t = e.error !== null || e.stale_sources.length > 0, i = te(e.release_url);
+    const t = e.error !== null || e.stale_sources.length > 0, i = ie(e.release_url);
     return r`
       <article class="card">
         <h2>${e.name}</h2>
@@ -3934,7 +4025,7 @@ const Pe = class Pe extends A {
           <dt>${this.t("datasets.availableVersion")}</dt><dd>${e.available_version ?? "—"}</dd>
           <dt>${this.t("datasets.sourceAge")}</dt>
           <dd>${e.source_age_days === null ? "—" : `${e.source_age_days} ${this.t("datasets.days")}`}</dd>
-          <dt>${this.t("datasets.disk")}</dt><dd>${zi(e.cache_bytes)}</dd>
+          <dt>${this.t("datasets.disk")}</dt><dd>${Ei(e.cache_bytes)}</dd>
           <dt>${this.t("datasets.builtAt")}</dt><dd>${e.built_at_utc ?? "—"}</dd>
         </dl>
         ${t ? r`<div class="warning" role="status">
@@ -3952,7 +4043,7 @@ const Pe = class Pe extends A {
             </div>` : l}
         <h3>${this.t("datasets.sources")}</h3>
         ${e.sources.length === 0 ? r`<p class="muted">${this.t("datasets.noSources")}</p>` : r`<ul>${e.sources.map((s) => {
-      const n = te(s.homepage), o = this.attributionKey(e.dataset_id, s.source_id), d = this.attributionPages[o];
+      const n = ie(s.homepage), o = this.attributionKey(e.dataset_id, s.source_id), d = this.attributionPages[o];
       return r`
                 <li>
                   <strong>${s.name}</strong> — ${s.provider}
@@ -4015,14 +4106,14 @@ const Pe = class Pe extends A {
                   · ${s.commercial_use_allowed ? this.t("datasets.commercialAllowed") : this.t("datasets.commercialBlocked")}
                   ${s.share_alike ? r` · ${this.t("datasets.shareAlike")}` : l}
                 </div>
-                ${te(s.source_url) ? r`<a href=${te(s.source_url)} target="_blank" rel="noopener noreferrer">${this.t("datasets.licensePage")}</a>` : l}
+                ${ie(s.source_url) ? r`<a href=${ie(s.source_url)} target="_blank" rel="noopener noreferrer">${this.t("datasets.licensePage")}</a>` : l}
               </li>
             `)}</ul>`}
       </article>
     `;
   }
 };
-Pe.styles = M`
+ze.styles = M`
     ${j}
     :host, .stack, .grid, .card, .actions, button, a { box-sizing: border-box; min-width: 0; max-width: 100%; }
     :host { display: block; }
@@ -4051,38 +4142,38 @@ Pe.styles = M`
       button { width: 100%; }
     }
   `;
-let T = Pe;
+let A = ze;
 I([
   y({ attribute: !1 })
-], T.prototype, "hass");
+], A.prototype, "hass");
 I([
   y({ type: Boolean })
-], T.prototype, "admin");
+], A.prototype, "admin");
 I([
   c()
-], T.prototype, "datasets");
+], A.prototype, "datasets");
 I([
   c()
-], T.prototype, "loading");
+], A.prototype, "loading");
 I([
   c()
-], T.prototype, "errorMessage");
+], A.prototype, "errorMessage");
 I([
   c()
-], T.prototype, "notice");
+], A.prototype, "notice");
 I([
   c()
-], T.prototype, "attributionPages");
-globalThis.customElements !== void 0 && customElements.get("locklearn-dataset-view") === void 0 && customElements.define("locklearn-dataset-view", T);
-var Ei = Object.defineProperty, x = (a, e, t, i) => {
+], A.prototype, "attributionPages");
+globalThis.customElements !== void 0 && customElements.get("locklearn-dataset-view") === void 0 && customElements.define("locklearn-dataset-view", A);
+var Mi = Object.defineProperty, x = (a, e, t, i) => {
   for (var s = void 0, n = a.length - 1, o; n >= 0; n--)
     (o = a[n]) && (s = o(e, t, s) || s);
-  return s && Ei(e, t, s), s;
+  return s && Mi(e, t, s), s;
 };
-function me(a) {
+function fe(a) {
   return a === null ? "—" : `${Math.round(a * 100)}%`;
 }
-function Mi(a, e = 14) {
+function Ci(a, e = 14) {
   if (e <= 0) return [];
   const t = /* @__PURE__ */ new Map();
   for (const i of a) {
@@ -4095,16 +4186,16 @@ function Mi(a, e = 14) {
   }
   return [...t.values()].sort((i, s) => i.local_date.localeCompare(s.local_date)).slice(-e).reverse();
 }
-function Ci(a) {
+function Ri(a) {
   return {
     exposures: a.reduce((e, t) => e + t.learning_exposures, 0),
     verifiedRetrievals: a.reduce((e, t) => e + t.verified_retrievals, 0)
   };
 }
-function ie(a) {
+function se(a) {
   return a?.role === "owner" || a?.role === "editor";
 }
-const ze = class ze extends A {
+const Ee = class Ee extends T {
   constructor() {
     super(...arguments), this.difficulties = [], this.tracks = [], this.selectedTrackId = "", this.loading = !1, this.errorMessage = "", this.notice = "", this.mnemonicEdits = {}, this.busyCardKey = null, this.loadGeneration = 0;
   }
@@ -4127,11 +4218,11 @@ const ze = class ze extends A {
     const e = ++this.loadGeneration, t = this.hass, i = this.profile.profile_id;
     this.loading = !0, this.errorMessage = "";
     try {
-      const s = (await ht(t, i)).filter(
+      const s = (await ut(t, i)).filter(
         (u) => u.status === "active"
       ), n = this.selectedTrackId && s.some((u) => u.track_id === this.selectedTrackId) ? this.selectedTrackId : "", [o, d] = await Promise.all([
-        ei(t, i, n || null),
-        ti(t, i, n || null)
+        ti(t, i, n || null),
+        ii(t, i, n || null)
       ]);
       if (e !== this.loadGeneration) return;
       this.tracks = s, this.selectedTrackId = n, this.stats = o, this.difficulties = d;
@@ -4154,13 +4245,13 @@ const ze = class ze extends A {
     i instanceof HTMLTextAreaElement && (this.mnemonicEdits = { ...this.mnemonicEdits, [e]: i.value });
   }
   async saveMnemonic(e) {
-    if (this.hass === void 0 || this.profile === void 0 || !ie(this.profile)) return;
+    if (this.hass === void 0 || this.profile === void 0 || !se(this.profile)) return;
     const t = (this.mnemonicEdits[e.card_key] ?? "").trim();
     if (t) {
       this.busyCardKey = e.card_key, this.errorMessage = "", this.notice = "";
       try {
         const i = e.annotations[0];
-        i === void 0 ? await mt(this.hass, this.profile.profile_id, e.card_key, t) : await yi(
+        i === void 0 ? await ft(this.hass, this.profile.profile_id, e.card_key, t) : await $i(
           this.hass,
           this.profile.profile_id,
           i.annotation_id,
@@ -4174,10 +4265,10 @@ const ze = class ze extends A {
     }
   }
   async startTargetedSession(e) {
-    if (!(this.hass === void 0 || this.profile === void 0 || !ie(this.profile))) {
+    if (!(this.hass === void 0 || this.profile === void 0 || !se(this.profile))) {
       this.busyCardKey = e.card_key, this.errorMessage = "", this.notice = "";
       try {
-        const t = await _i(
+        const t = await ki(
           this.hass,
           this.profile.profile_id,
           e.track_id,
@@ -4198,10 +4289,10 @@ const ze = class ze extends A {
     }
   }
   async reactivate(e) {
-    if (!(this.hass === void 0 || this.profile === void 0 || !ie(this.profile) || !(globalThis.confirm?.(this.t("stats.reactivateConfirm")) ?? !0))) {
+    if (!(this.hass === void 0 || this.profile === void 0 || !se(this.profile) || !(globalThis.confirm?.(this.t("stats.reactivateConfirm")) ?? !0))) {
       this.busyCardKey = e.card_key, this.errorMessage = "", this.notice = "";
       try {
-        await $i(
+        await _i(
           this.hass,
           this.profile.profile_id,
           e.track_id,
@@ -4240,7 +4331,7 @@ const ze = class ze extends A {
     `;
   }
   renderStats(e) {
-    const t = e.recent_verified_accuracy, i = e.calibration, s = Mi(e.daily), n = Ci(s);
+    const t = e.recent_verified_accuracy, i = e.calibration, s = Ci(e.daily), n = Ri(s);
     return r`
       <section class="grid" aria-label=${this.t("stats.verifiedGroup")}>
         <article class="card metric verified">
@@ -4249,7 +4340,7 @@ const ze = class ze extends A {
         </article>
         <article class="card metric verified">
           <span>${this.t("stats.verifiedAccuracy")}</span>
-          <strong>${me(t.accuracy)}</strong>
+          <strong>${fe(t.accuracy)}</strong>
           <div class="meta">${t.correct}/${t.total} · ${this.t("stats.verifiedOnly")}</div>
         </article>
         <article class="card metric verified">
@@ -4302,7 +4393,7 @@ const ze = class ze extends A {
           ${this.stateMetric("stats.awaitingVerification", i.awaiting_verified_followup)}
           <div class="metric">
             <span>${this.t("stats.calibrationAccuracy")}</span>
-            <strong>${me(i.later_verified_accuracy)}</strong>
+            <strong>${fe(i.later_verified_accuracy)}</strong>
           </div>
         </div>
       </article>
@@ -4310,7 +4401,7 @@ const ze = class ze extends A {
       <article class="card secondary">
         <h2>${this.t("stats.mastery")}</h2>
         <div class="metric">
-          <strong>${me(e.mastery.value)}</strong>
+          <strong>${fe(e.mastery.value)}</strong>
           <div class="meta">${e.mastery.card_count} ${this.t("stats.cards")}</div>
         </div>
         <p>${this.t("stats.masteryExplain")}</p>
@@ -4335,7 +4426,7 @@ const ze = class ze extends A {
       ).join(", ")}
                         </div>`}
                     ${o.annotations[0]?.note ? r`<p>${o.annotations[0].note}</p>` : l}
-                    ${ie(this.profile) ? r`
+                    ${se(this.profile) ? r`
                           <label>
                             <span>${this.t("stats.personalMnemonic")}</span>
                             <textarea
@@ -4435,7 +4526,7 @@ const ze = class ze extends A {
     return r`<div class="metric"><span>${this.t(e)}</span><strong>${t}</strong></div>`;
   }
 };
-ze.styles = M`
+Ee.styles = M`
     ${j}
     :host, section, article, div, select { box-sizing: border-box; min-width: 0; max-width: 100%; }
     :host { display: block; }
@@ -4474,7 +4565,7 @@ ze.styles = M`
       .toolbar, label, select { width: 100%; }
     }
   `;
-let _ = ze;
+let _ = Ee;
 x([
   y({ attribute: !1 })
 ], _.prototype, "hass");
@@ -4509,7 +4600,7 @@ x([
   c()
 ], _.prototype, "busyCardKey");
 globalThis.customElements !== void 0 && customElements.get("locklearn-stats-view") === void 0 && customElements.define("locklearn-stats-view", _);
-const Xe = [
+const et = [
   { route: "home", labelKey: "nav.home" },
   { route: "learn", labelKey: "nav.learn" },
   { route: "quiz", labelKey: "nav.quiz" },
@@ -4519,14 +4610,14 @@ const Xe = [
   { route: "tracks", labelKey: "nav.tracks" },
   { route: "packs", labelKey: "nav.packs" },
   { route: "sources", labelKey: "nav.sources" }
-], Ri = [
+], Di = [
   { route: "settings", labelKey: "nav.settings" }
 ];
-function ye(a) {
-  return a.length === 0 ? [] : new Set(a.map((t) => t.role)).has("owner") ? [...Xe, ...Ri] : Xe;
+function $e(a) {
+  return a.length === 0 ? [] : new Set(a.map((t) => t.role)).has("owner") ? [...et, ...Di] : et;
 }
-function se(a, e) {
-  return ye(e).some((t) => t.route === a);
+function ae(a, e) {
+  return $e(e).some((t) => t.route === a);
 }
 function Ni(a) {
   return {
@@ -4534,26 +4625,26 @@ function Ni(a) {
     shared: a.filter((e) => e.role !== "owner")
   };
 }
-function et(a, e) {
+function tt(a, e) {
   const t = e.personal_profile?.profile_id;
   if (t !== void 0 && a.some((s) => s.profile_id === t))
     return t;
   const i = a.find((s) => s.role === "owner");
   return i !== void 0 ? i.profile_id : a[0]?.profile_id ?? null;
 }
-function Di(a) {
+function Ii(a) {
   if (a === void 0) return { kind: "define" };
   const e = typeof a.locklearnFrontendProtocol == "number" ? a.locklearnFrontendProtocol : null;
-  return e === D ? { kind: "reuse" } : {
+  return e === N ? { kind: "reuse" } : {
     kind: "reload",
     existingProtocol: e,
-    frontendProtocol: D
+    frontendProtocol: N
   };
 }
-function Ii(a, e, t) {
+function Li(a, e, t) {
   return !a && e && t;
 }
-const Li = [
+const Ui = [
   "home",
   "learn",
   "quiz",
@@ -4564,30 +4655,30 @@ const Li = [
   "packs",
   "sources",
   "settings"
-], Ui = "home";
-function fe(a) {
+], Oi = "home";
+function ve(a) {
   const t = a.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean), i = t[0] === "locklearn" ? t[1] : t[0];
-  return Li.includes(i) ? i : Ui;
+  return Ui.includes(i) ? i : Oi;
 }
-function Oi(a) {
+function Hi(a) {
   return a === "home" ? "/locklearn" : `/locklearn/${a}`;
 }
-function ve(a) {
-  const e = Oi(a);
+function be(a) {
+  const e = Hi(a);
   globalThis.location?.pathname !== e && (globalThis.history?.pushState({}, "", e), globalThis.dispatchEvent?.(new PopStateEvent("popstate")));
 }
-var Hi = Object.defineProperty, S = (a, e, t, i) => {
+var ji = Object.defineProperty, S = (a, e, t, i) => {
   for (var s = void 0, n = a.length - 1, o; n >= 0; n--)
     (o = a[n]) && (s = o(e, t, s) || s);
-  return s && Hi(e, t, s), s;
+  return s && ji(e, t, s), s;
 };
-const tt = "locklearn-hard-reload-required", le = class le extends A {
+const it = "locklearn-hard-reload-required", ce = class ce extends T {
   constructor() {
-    super(...arguments), this.status = "loading", this.activeRoute = fe(
+    super(...arguments), this.status = "loading", this.activeRoute = ve(
       globalThis.location?.pathname ?? "/locklearn"
     ), this.profiles = [], this.selectedProfileId = null, this.dashboardLoading = !1, this.dashboardError = "", this.errorMessage = "", this.loadGeneration = 0, this.dashboardGeneration = 0, this.initialLoadStarted = !1, this.handlePopState = () => {
-      const e = fe(globalThis.location?.pathname ?? "/locklearn");
-      this.activeRoute = se(e, this.profiles) ? e : "home";
+      const e = ve(globalThis.location?.pathname ?? "/locklearn");
+      this.activeRoute = ae(e, this.profiles) ? e : "home";
     };
   }
   connectedCallback() {
@@ -4597,7 +4688,7 @@ const tt = "locklearn-hard-reload-required", le = class le extends A {
     globalThis.removeEventListener?.("popstate", this.handlePopState), super.disconnectedCallback();
   }
   updated(e) {
-    Ii(
+    Li(
       this.initialLoadStarted,
       e.has("hass"),
       this.hass !== void 0
@@ -4615,14 +4706,14 @@ const tt = "locklearn-hard-reload-required", le = class le extends A {
     const e = ++this.loadGeneration;
     this.status = "loading", this.errorMessage = "";
     try {
-      const t = await Vt(this.hass), i = await Ve(this.hass);
+      const t = await Bt(this.hass), i = await Be(this.hass);
       if (e !== this.loadGeneration) return;
-      this.bootstrapState = t, this.profiles = i, this.selectedProfileId = et(i, t);
-      const s = fe(globalThis.location?.pathname ?? t.panel_path);
-      this.activeRoute = se(s, i) ? s : "home", this.status = "ready", this.loadDashboard();
+      this.bootstrapState = t, this.profiles = i, this.selectedProfileId = tt(i, t);
+      const s = ve(globalThis.location?.pathname ?? t.panel_path);
+      this.activeRoute = ae(s, i) ? s : "home", this.status = "ready", this.loadDashboard();
     } catch (t) {
       if (e !== this.loadGeneration) return;
-      if (t instanceof dt) {
+      if (t instanceof ht) {
         this.bootstrapState = {
           frontend_protocol: t.backendProtocol,
           backend_version: t.backendVersion,
@@ -4637,7 +4728,7 @@ const tt = "locklearn-hard-reload-required", le = class le extends A {
     }
   }
   selectRoute(e) {
-    se(e, this.profiles) && (this.activeRoute = e, ve(e));
+    ae(e, this.profiles) && (this.activeRoute = e, be(e));
   }
   selectProfile(e) {
     const t = e.currentTarget;
@@ -4647,7 +4738,7 @@ const tt = "locklearn-hard-reload-required", le = class le extends A {
   }
   openTargetedSession(e) {
     const t = e.detail?.session;
-    t === void 0 || this.selectedProfileId === null || t.profile_id !== this.selectedProfileId || (this.handoffSession = t, this.activeRoute = "learn", ve("learn"));
+    t === void 0 || this.selectedProfileId === null || t.profile_id !== this.selectedProfileId || (this.handoffSession = t, this.activeRoute = "learn", be("learn"));
   }
   clearSessionHandoff() {
     this.handoffSession = void 0;
@@ -4656,8 +4747,8 @@ const tt = "locklearn-hard-reload-required", le = class le extends A {
     if (this.hass === void 0) return;
     const e = this.selectedProfileId;
     try {
-      const t = await Ve(this.hass);
-      this.profiles = t, this.selectedProfileId = e !== null && t.some((i) => i.profile_id === e) ? e : this.bootstrapState === void 0 ? t[0]?.profile_id ?? null : et(t, this.bootstrapState), se(this.activeRoute, t) || (this.activeRoute = "home", ve("home")), await this.loadDashboard();
+      const t = await Be(this.hass);
+      this.profiles = t, this.selectedProfileId = e !== null && t.some((i) => i.profile_id === e) ? e : this.bootstrapState === void 0 ? t[0]?.profile_id ?? null : tt(t, this.bootstrapState), ae(this.activeRoute, t) || (this.activeRoute = "home", be("home")), await this.loadDashboard();
     } catch (t) {
       this.errorMessage = t instanceof Error ? t.message : String(t);
     }
@@ -4670,7 +4761,7 @@ const tt = "locklearn-hard-reload-required", le = class le extends A {
     const e = ++this.dashboardGeneration;
     this.dashboardLoading = !0, this.dashboardError = "";
     try {
-      const t = await pi(this.hass, this.selectedProfileId);
+      const t = await gi(this.hass, this.selectedProfileId);
       if (e !== this.dashboardGeneration) return;
       this.dashboard = t;
     } catch (t) {
@@ -4696,7 +4787,7 @@ const tt = "locklearn-hard-reload-required", le = class le extends A {
               ${this.t("state.protocol.reload")}
             </button>
             <div class="meta">
-              frontend protocol ${D} · backend protocol
+              frontend protocol ${N} · backend protocol
               ${this.bootstrapState?.frontend_protocol ?? "?"} · backend
               ${this.bootstrapState?.backend_version ?? "?"}
             </div>
@@ -4717,7 +4808,7 @@ const tt = "locklearn-hard-reload-required", le = class le extends A {
           </section>
         </main>
       `;
-    const e = ye(this.profiles), t = Ni(this.profiles);
+    const e = $e(this.profiles), t = Ni(this.profiles);
     return r`
       <div class="shell">
         <header>
@@ -4891,11 +4982,11 @@ const tt = "locklearn-hard-reload-required", le = class le extends A {
     return r`<main><section class="state-card"><p>${e}</p></section></main>`;
   }
   routeLabel(e) {
-    const t = ye(this.profiles).find((i) => i.route === e);
+    const t = $e(this.profiles).find((i) => i.route === e);
     return t === void 0 ? this.t("nav.home") : this.t(t.labelKey);
   }
 };
-le.locklearnFrontendProtocol = D, le.styles = M`
+ce.locklearnFrontendProtocol = N, ce.styles = M`
     ${j}
     :host {
       display: block;
@@ -5133,7 +5224,7 @@ le.locklearnFrontendProtocol = D, le.styles = M`
       }
     }
   `;
-let k = le;
+let k = ce;
 S([
   y({ attribute: !1 })
 ], k.prototype, "hass");
@@ -5167,10 +5258,10 @@ S([
 S([
   c()
 ], k.prototype, "handoffSession");
-function ji(a) {
-  if (typeof document > "u" || document.getElementById(tt) !== null) return;
+function Wi(a) {
+  if (typeof document > "u" || document.getElementById(it) !== null) return;
   const e = document.createElement("div");
-  e.id = tt, e.setAttribute("role", "alert"), e.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;padding:24px;background:var(--primary-background-color,#fff);color:var(--primary-text-color,#111);font-family:system-ui,sans-serif";
+  e.id = it, e.setAttribute("role", "alert"), e.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;padding:24px;background:var(--primary-background-color,#fff);color:var(--primary-text-color,#111);font-family:system-ui,sans-serif";
   const t = document.createElement("div");
   t.style.cssText = "max-width:680px;padding:24px;border:1px solid var(--divider-color,#ddd);border-radius:12px;background:var(--card-background-color,#fff)";
   const i = document.createElement("h1");
@@ -5178,14 +5269,14 @@ function ji(a) {
   const s = document.createElement("p");
   s.textContent = "An older LockLearn panel is still loaded in this browser. Perform a full browser reload before continuing.";
   const n = document.createElement("p");
-  n.textContent = `loaded protocol ${a ?? "unknown"} · current protocol ${D}`;
+  n.textContent = `loaded protocol ${a ?? "unknown"} · current protocol ${N}`;
   const o = document.createElement("button");
   o.textContent = "Reload now", o.addEventListener("click", () => globalThis.location?.reload()), t.append(i, s, n, o), e.append(t), document.body.append(e);
 }
-const Wi = customElements.get(
+const Fi = customElements.get(
   "locklearn-panel"
-), be = Di(Wi);
-be.kind === "define" ? customElements.define("locklearn-panel", k) : be.kind === "reload" && ji(be.existingProtocol);
+), ye = Ii(Fi);
+ye.kind === "define" ? customElements.define("locklearn-panel", k) : ye.kind === "reload" && Wi(ye.existingProtocol);
 export {
   k as LockLearnPanel
 };
