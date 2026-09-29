@@ -40,6 +40,7 @@ PROFILE_GUARDED_COMMANDS = frozenset(
         "locklearn/targets/discover",
         "locklearn/targets/create",
         "locklearn/targets/update",
+        "locklearn/targets/test",
         "locklearn/targets/list",
         "locklearn/tracks/create",
         "locklearn/content/report",
@@ -58,6 +59,7 @@ PROFILE_GUARDED_COMMANDS = frozenset(
         "locklearn/progress/undo_last",
         "locklearn/notifications/unrecorded_responses",
         "locklearn/scheduler/preview",
+        "locklearn/session/availability",
         "locklearn/session/start",
     }
 )
