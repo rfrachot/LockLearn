@@ -379,7 +379,7 @@ export class LockLearnQuizView extends LitElement {
           this.hass,
           this.profile.profile_id,
           this.trackId,
-          10,
+          undefined,
           this.format,
         ),
       );
