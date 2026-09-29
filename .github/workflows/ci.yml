@@ -44,6 +44,7 @@ jobs:
           python -m pytest -q --tb=short
           tests/backend/test_p6_11_acceptance_contracts.py
           tests/backend/test_p6_11_v1_acceptance.py
+          tests/backend/test_session_selection.py::test_twenty_card_session_fills_with_due_reviews_in_final_quarter
       - name: P6.8 release contracts
         run: >-
           python -m pytest -q --tb=short

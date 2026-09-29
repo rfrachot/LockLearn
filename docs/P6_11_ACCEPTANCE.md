@@ -116,7 +116,7 @@ P6.10 release readiness is qualified on rewritten privacy-safe baseline
 | A-06 | receives notifications | REAL-HA P0 + notification delivery |
 | A-07 | answers 👍/👎 and quizzes | AUTO notification actions + quiz |
 | A-08 | opens dashboard | frontend E2E + dashboard backend |
-| A-09 | chains a 20-card session | E2E starter selects 20 + session policy tests |
+| A-09 | chains a 20-card session | AUTO 20-card mixed new/review selector; fresh E2E verifies §53.1 final-quarter reserve |
 | A-10 | resumes same session from another client | E2E starter + session lifecycle |
 | A-11 | sees basic statistics | E2E starter + stats tests |
 | A-12 | sees dataset provenance/licence | E2E catalogue + provenance tests |
@@ -158,6 +158,11 @@ The following remain explicitly outside the 1.0 blocking path unless the normati
 spec is changed: Exam mode, advanced HA sensors, full image/audio renderers,
 enriched statistics, advanced morphology/cloze generation, speech/handwriting/OCR,
 FSRS optimization, cloud/sync, native apps, LLM tutoring and complex gamification.
+
+The fresh-install E2E deliberately requests 20 cards and receives 15 new cards:
+§53.1 forbids introducing new cards in the final 25% of a bounded session. The
+separate 20-card selector acceptance uses 15 new cards followed by five due
+reviews, proving A-09 without violating that fatigue invariant.
 
 P6.11 qualification must fail on a missing V1 capability or resilience scenario;
 it must **not** fail merely because one of these deferred features is absent.

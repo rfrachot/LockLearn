@@ -23,6 +23,7 @@ CRITICAL_NODEIDS = (
     "tests/backend/test_profiles.py::test_child_profile_needs_no_dedicated_ha_account_and_supports_multiple_owners",
     "tests/backend/test_websocket_crud.py::test_track_crud_pack_integration_and_catalog_surfaces",
     "tests/backend/test_websocket_sessions.py::test_session_start_pause_resume_complete_and_cross_client_get",
+    "tests/backend/test_session_selection.py::test_twenty_card_session_fills_with_due_reviews_in_final_quarter",
     "tests/backend/test_persistent_sessions.py::test_exactly_one_same_version_answer_wins",
     "tests/backend/test_notification_action_processing.py::test_duplicate_quiz_interaction_applies_and_emits_exactly_once",
     "tests/backend/test_notification_renderers.py::test_channels_shared_profile_label_and_profile_target_identity_stay_distinct",
@@ -103,4 +104,4 @@ def test_real_ha_acceptance_evidence_remains_committed() -> None:
     assert "HACS install" in evidence
     assert "physical receipt" in evidence
     assert "PASS" in evidence
-    assert "REAL HA PASS" in p5_plan
+    assert "**Real-HA qualification — PASS" in p5_plan

@@ -20,7 +20,10 @@ independent qualification. No 1.0 tag or GitHub Release has been created.
   to permanent AUTO/E2E/REAL-HA/CI evidence.
 - `tests/backend/test_p6_11_v1_acceptance.py` exercises a fresh real bundled
   starter through public WebSocket APIs: Profile, scheduler window, Pack/Dataset,
-  Track, 20-card Learn session, cross-client resume, dashboard and stats.
+  Track, a 20-card request respecting the §53.1 15-new-card final-quarter reserve,
+  cross-client resume, dashboard and stats.
+- `tests/backend/test_session_selection.py` contains the complementary 20-card
+  acceptance with 15 new cards plus five due reviews, preserving §53.1.
 - `tests/backend/test_p6_11_acceptance_contracts.py` gates the evidence IDs,
   critical test nodeids, real-HA evidence and explicit V1.1/V2 non-blockers.
 - CI has a dedicated `P6.11 V1 acceptance` backend-quality step; the normal full

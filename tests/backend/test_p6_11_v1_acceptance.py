@@ -17,7 +17,7 @@ async def test_fresh_starter_public_api_acceptance(
     hass: HomeAssistant,
     hass_ws_client: Any,
 ) -> None:
-    """Exercise first-run starter -> Profile -> Track -> 20-card resumable session."""
+    """Exercise a fresh starter while preserving the final-quarter new-card reserve."""
     entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, data={})
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -44,9 +44,7 @@ async def test_fresh_starter_public_api_acceptance(
                 "max_new_per_day_cards": 20,
                 "session_length_cards": 20,
                 "scheduler": {
-                    "active_windows": [
-                        {"start": "08:00", "end": "20:00"},
-                    ]
+                    "active_windows": [{"start": "08:00", "end": "20:00"}],
                 },
             },
         }
@@ -117,8 +115,14 @@ async def test_fresh_starter_public_api_acceptance(
     assert session["profile_id"] == profile_id
     assert session["track_id"] == track_id
     assert session["type"] == "learn"
-    assert session["question_count"] == 20
-    assert len(session["items"]) == 20
+    # §53.1 reserves the final 25% of a bounded session from new-card
+    # introductions. A fresh all-new 20-card request therefore prepares 15.
+    assert session["question_count"] == 15
+    assert len(session["items"]) == 15
+    assert all(
+        item["payload"]["selection"]["progress_state"] == "new"
+        for item in session["items"]
+    )
     assert session["current_question"] is not None
 
     other_client = await hass_ws_client(hass)
@@ -132,7 +136,7 @@ async def test_fresh_starter_public_api_acceptance(
     assert resumed["success"] is True
     assert resumed["result"]["id"] == session["id"]
     assert resumed["result"]["version"] == session["version"]
-    assert resumed["result"]["question_count"] == 20
+    assert resumed["result"]["question_count"] == 15
     assert resumed["result"]["current_question"] == session["current_question"]
 
     await owner.send_json_auto_id(

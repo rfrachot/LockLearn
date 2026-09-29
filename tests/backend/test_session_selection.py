@@ -263,6 +263,37 @@ async def test_selection_prioritizes_short_steps_and_reserves_final_quarter() ->
 
 
 @pytest.mark.asyncio
+async def test_twenty_card_session_fills_with_due_reviews_in_final_quarter() -> None:
+    due = "2026-09-23T10:00:00+00:00"
+    candidates = (
+        *(
+            _candidate(index, state="new", content_type="vocabulary")
+            for index in range(1, 16)
+        ),
+        *(
+            _candidate(index, state="review", content_type="vocabulary", due=due)
+            for index in range(16, 21)
+        ),
+    )
+    service = _service(
+        candidates,
+        profiles=_Profiles(max_new=20, session_length=20),
+    )
+
+    selected = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="bounded",
+        settings={"requested_cards": 20},
+    )
+
+    assert len(selected) == 20
+    states = tuple(item.payload["selection"]["progress_state"] for item in selected)
+    assert states[:15] == ("new",) * 15
+    assert states[15:] == ("review",) * 5
+
+
+@pytest.mark.asyncio
 async def test_new_card_quota_is_counted_in_cards_for_profile_local_date() -> None:
     candidates = tuple(
         _candidate(index, state="new", content_type="vocabulary") for index in range(1, 6)
