@@ -50,6 +50,7 @@ describes the additional LockLearn authorization boundary enforced by the backen
 | `locklearn/quiz/evaluate` | `ws_quiz_evaluate` | session-via-profile-acl | `session_id`, `question_id`, `answer` | — | `ERR_INVALID_REQUEST` |
 | `locklearn/scheduler/preview` | `ws_scheduler_preview` | profile-acl | `profile_id` | `local_date` | `ERR_INVALID_REQUEST` |
 | `locklearn/session/answer` | `ws_session_answer` | session-via-profile-acl | `session_id`, `expected_version`, `question_id`, `answer` | — | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
+| `locklearn/session/availability` | `ws_session_availability` | profile-acl | `profile_id`, `track_id`, `session_type` | — | `ERR_INVALID_REQUEST` |
 | `locklearn/session/complete` | `ws_session_complete` | session-via-profile-acl | `session_id`, `expected_version` | — | `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
 | `locklearn/session/get` | `ws_session_get` | session-via-profile-acl | `session_id` | — | — |
 | `locklearn/session/pause` | `ws_session_pause` | session-via-profile-acl | `session_id`, `expected_version` | — | `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
@@ -60,6 +61,7 @@ describes the additional LockLearn authorization boundary enforced by the backen
 | `locklearn/targets/create` | `ws_targets_create` | profile-acl | `profile_id`, `device_registry_id` | `friendly_name`, `capabilities`, `minimum_gap_seconds`, `maximum_notifications_per_hour`, `daily_push_budget` | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND` |
 | `locklearn/targets/discover` | `ws_targets_discover` | profile-acl | `profile_id` | `cursor` | `ERR_INVALID_REQUEST` |
 | `locklearn/targets/list` | `ws_targets_list` | profile-acl | `profile_id` | `cursor` | `ERR_INVALID_REQUEST` |
+| `locklearn/targets/test` | `ws_targets_test` | profile-acl | `profile_id`, `target_id` | — | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND` |
 | `locklearn/targets/update` | `ws_targets_update` | profile-acl | `profile_id`, `target_id` | `friendly_name`, `capabilities`, `shared_device`, `lockscreen_visibility`, `enabled`, `minimum_gap_seconds`, `maximum_notifications_per_hour`, `daily_push_budget` | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND` |
 | `locklearn/tracks/create` | `ws_tracks_create` | profile-acl | `profile_id`, `name`, `pack_version_id`, `source_language`, `target_language` | `content_weights`, `explicit_card_keys`, `scheduler_settings` | `ERR_DATASET_UNAVAILABLE`, `ERR_INVALID_REQUEST` |
 | `locklearn/tracks/delete` | `ws_tracks_delete` | track-via-profile-acl | `track_id` | — | `ERR_NOT_FOUND` |
