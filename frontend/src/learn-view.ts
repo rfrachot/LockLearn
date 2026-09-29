@@ -381,9 +381,9 @@ export class LockLearnLearnView extends LitElement {
         "learn",
       );
       if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
-      const nextDue = this.availability.next_due_at_utc;
-      if (nextDue !== null) {
-        const delay = Date.parse(nextDue) - Date.now();
+      const nextAvailable = this.availability.next_available_at_utc;
+      if (nextAvailable !== null) {
+        const delay = Date.parse(nextAvailable) - Date.now();
         if (delay > 0 && delay < 2_147_000_000) {
           this.nextDueTimer = globalThis.setTimeout(() => {
             this.nextDueTimer = undefined;
@@ -504,6 +504,7 @@ export class LockLearnLearnView extends LitElement {
         },
       );
       this.applySession(await this.finalizeIfDone(answered));
+      await this.refreshAvailability();
     } catch (error) {
       await this.recover(error);
     } finally {
@@ -552,6 +553,7 @@ export class LockLearnLearnView extends LitElement {
         { kind: "user_state", action: userState },
       );
       this.applySession(await this.finalizeIfDone(advanced));
+      await this.refreshAvailability();
     } catch (error) {
       await this.recover(error);
     } finally {
