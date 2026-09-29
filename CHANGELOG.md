@@ -10,6 +10,11 @@ All notable changes will be documented here.
   standard or intensive Profile defaults with hard-coded 20/10-card values.
 - Let `locklearn/session/availability` evaluate the same selection settings as
   `session/start`, including explicit requested-card and content-type filters.
+- Show the real next Learn availability after progress mutations and session
+  completion, including the next spaced step or the local new-card quota reset.
+- Base Quiz readiness copy on persisted Track progress rather than only the
+  currently selectable candidate pool, and refresh Quiz automatically when its
+  next scheduled card becomes due.
 
 ## [1.0.0-beta.3] - 2026-09-29
 
