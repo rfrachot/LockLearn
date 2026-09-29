@@ -893,9 +893,7 @@ async def ws_targets_discover(
     # whose iteration yields IDs, while newer releases type it as a collection
     # of DeviceEntry objects. Normalize both supported shapes at this boundary.
     for raw_device in cast(Any, registry.devices):
-        device_registry_id = (
-            raw_device if isinstance(raw_device, str) else raw_device.id
-        )
+        device_registry_id = raw_device if isinstance(raw_device, str) else raw_device.id
         resolved = await _mobile_app_candidate(hass, device_registry_id)
         if resolved is None:
             continue
