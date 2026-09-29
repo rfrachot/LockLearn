@@ -6,6 +6,29 @@ All notable changes will be documented here.
 
 _No unreleased changes._
 
+## [1.0.0-beta.3] - 2026-09-29
+
+### Changed
+- Restructure Track management around essential settings, a collapsed
+  **Advanced Track settings** section, separate learning-plan controls and an
+  explicit danger zone.
+- Display human language names in Track direction selectors, including
+  `ja-Latn` as Japanese romaji while preserving the canonical BCP-47 value.
+- Explain Profile sharing roles directly in the UI.
+- Expose Learn/Quiz availability and next-due timing so an empty session is
+  explained before and after launch rather than surfacing an opaque no-card
+  state.
+- Add an explicit **Continue now** path for safe post-introduction learning
+  steps while preserving mandatory cooldowns after failed/relearning attempts.
+
+### Fixed
+- Require confirmation before Track deletion and Profile-member removal, with
+  Track deletion isolated from nearby notification controls.
+- Add a Profile-owner **Test notification** action for configured Companion
+  targets.
+- Keep early-learning overrides fail-closed: review/relearning and any failed
+  learning step cannot be pulled forward before its scheduled due time.
+
 ## [1.0.0-beta.2] - 2026-09-29
 
 ### Fixed
