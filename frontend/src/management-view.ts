@@ -21,6 +21,7 @@ import {
   removeProfileMember,
   setTrackPlan,
   shareProfile,
+  testNotificationTarget,
   updateNotificationTarget,
   updateProfile,
   updateTrack,
@@ -79,6 +80,19 @@ export function errorMessage(error: unknown): string {
     }
   }
   return String(error);
+}
+
+export function languageDisplayName(code: string, locale: UiLanguage): string {
+  if (code === "ja-Latn") {
+    return locale === "fr" ? "Japonais (rōmaji)" : "Japanese (romaji)";
+  }
+  try {
+    const base = code.split("-", 1)[0] ?? code;
+    const display = new Intl.DisplayNames([locale], { type: "language" }).of(base);
+    return display ?? code;
+  } catch {
+    return code;
+  }
 }
 
 function objectSetting(
@@ -152,6 +166,31 @@ export class LockLearnManagementView extends LitElement {
     button.primary { border-color: var(--primary-color); color: var(--text-primary-color,white); background: var(--primary-color); }
     button:disabled { cursor: not-allowed; opacity: .55; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    details {
+      margin-top: 14px;
+      border-top: 1px solid var(--divider-color);
+      padding-top: 12px;
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 650;
+      color: var(--primary-text-color);
+    }
+    .track-summary {
+      display: grid;
+      gap: 4px;
+      margin-bottom: 14px;
+    }
+    .danger-zone {
+      margin-top: 18px;
+      padding: 14px;
+      border: 1px solid var(--error-color,var(--divider-color));
+      border-radius: 9px;
+      background: var(--secondary-background-color);
+    }
+    .danger-zone button {
+      border-color: var(--error-color,var(--divider-color));
+    }
     .muted, .meta { color: var(--secondary-text-color); }
     .meta { font-size: .82rem; overflow-wrap: anywhere; }
     .notice, .error, .warning { padding: 12px; border-radius: 9px; background: var(--secondary-background-color); line-height: 1.45; }
@@ -338,6 +377,7 @@ export class LockLearnManagementView extends LitElement {
     return html`
       <article class="card">
         <h2>${this.t("manage.sharing")}</h2>
+        <p class="muted">${this.t("manage.sharingHelp")}</p>
         ${this.members.length === 0 ? html`<p>${this.t("manage.none")}</p>` : html`
           <ul>${this.members.map((member) => html`<li>
             ${member.name}
@@ -487,11 +527,15 @@ export class LockLearnManagementView extends LitElement {
       ? scheduler.target_ids.map(String)
       : [];
     const weights = track.content_weights ?? {};
+    const sourceLabel = languageDisplayName(track.source_language ?? "", this.locale());
+    const targetLabel = languageDisplayName(track.target_language ?? "", this.locale());
     return html`
       <article class="card">
-        <h2>${track.name}</h2>
-        <p class="meta">${track.source_language} → ${track.target_language} · ${track.status}</p>
-        <p class="meta">${this.t("manage.packVersion")}: ${track.pack_version_id ?? "—"}</p>
+        <div class="track-summary">
+          <h2>${track.name}</h2>
+          <p class="meta">${sourceLabel} → ${targetLabel} · ${this.t(`manage.status.${track.status}` as Parameters<typeof translate>[1])}</p>
+          <p class="meta">${this.t("manage.packVersion")}: ${track.pack_version_id ?? "—"}</p>
+        </div>
         ${this.canEditTrack() ? html`
           <form class="form-grid" @submit=${(event: SubmitEvent) => {
             event.preventDefault();
@@ -519,15 +563,17 @@ export class LockLearnManagementView extends LitElement {
             }), this.t("manage.saved"));
           }}>
             <label>${this.t("manage.name")}<input name="name" .value=${track.name} /></label>
-            <label>${this.t("manage.status")}<select name="status" .value=${track.status}>
-              <option value="active">${this.t("manage.active")}</option>
-              <option value="paused">${this.t("manage.paused")}</option>
-              <option value="archived">${this.t("manage.archived")}</option>
-            </select></label>
+            <label>${this.t("manage.status")}
+              <select name="status" .value=${track.status}>
+                <option value="active">${this.t("manage.active")}</option>
+                <option value="paused">${this.t("manage.paused")}</option>
+                <option value="archived">${this.t("manage.archived")}</option>
+              </select>
+            </label>
             <label>${this.t("manage.sourceLanguage")}
               <select name="source" .value=${track.source_language ?? ""} required>
                 ${this.sourceLanguages(track.pack_version_id ?? "").map((language) => html`
-                  <option value=${language}>${language}</option>
+                  <option value=${language}>${languageDisplayName(language, this.locale())}</option>
                 `)}
               </select>
             </label>
@@ -537,39 +583,54 @@ export class LockLearnManagementView extends LitElement {
                   track.pack_version_id ?? "",
                   track.source_language ?? "",
                 ).map((language) => html`
-                  <option value=${language}>${language}</option>
+                  <option value=${language}>${languageDisplayName(language, this.locale())}</option>
                 `)}
               </select>
             </label>
-            <label>${this.t("manage.priority")}<input name="priority" type="number" min="1" .value=${String(track.priority)} /></label>
-            <label>${this.t("manage.weightVocabulary")}<input name="weightVocabulary" type="number" min="0" step=".1" .value=${String(weights.vocabulary ?? 1)} /></label>
-            <label>${this.t("manage.weightKanji")}<input name="weightKanji" type="number" min="0" step=".1" .value=${String(weights.kanji ?? 1)} /></label>
-            <label>${this.t("manage.weightGrammar")}<input name="weightGrammar" type="number" min="0" step=".1" .value=${String(weights.grammar ?? 1)} /></label>
-            <label>${this.t("manage.weightExpression")}<input name="weightExpression" type="number" min="0" step=".1" .value=${String(weights.expression ?? 1)} /></label>
-            <label>${this.t("manage.learningNotifications")}<input name="learningCount" type="number" min="0" .value=${String(scheduler.learning_count ?? 0)} /></label>
-            <label>${this.t("manage.quizNotifications")}<input name="quizCount" type="number" min="0" .value=${String(scheduler.quiz_count ?? 0)} /></label>
-            <label>${this.t("manage.notificationTargets")}
-              <select name="notificationTarget" multiple size=${Math.min(4, Math.max(2, this.notificationTargets.length))}>
-                ${this.notificationTargets.map((target) => html`
-                  <option value=${target.target_id} ?selected=${targetIds.includes(target.target_id)}>
-                    ${target.friendly_name} · ${target.platform}
-                  </option>`)}
-              </select>
-              <span class="meta">${this.notificationTargets.length === 0
-                ? this.t("manage.noNotificationTargets")
-                : this.t("manage.notificationTargetsHelp")}</span>
-            </label>
             <div class="actions">
-              <button type="submit">${this.t("manage.save")}</button>
+              <button class="primary" type="submit">${this.t("manage.save")}</button>
               <button type="button" @click=${() => {
                 this.selectedTrackId = track.track_id;
                 this.forecast = undefined;
                 this.forecastPlan = undefined;
               }}>${this.t("manage.plan")}</button>
-              <button type="button" @click=${() => this.removeTrack(track.track_id)}>${this.t("manage.delete")}</button>
             </div>
+
+            <details>
+              <summary>${this.t("manage.advancedTrackSettings")}</summary>
+              <p class="muted">${this.t("manage.advancedTrackSettingsHelp")}</p>
+              <div class="form-grid">
+                <label>${this.t("manage.priority")}<input name="priority" type="number" min="1" .value=${String(track.priority)} /></label>
+                <label>${this.t("manage.weightVocabulary")}<input name="weightVocabulary" type="number" min="0" step=".1" .value=${String(weights.vocabulary ?? 1)} /></label>
+                <label>${this.t("manage.weightKanji")}<input name="weightKanji" type="number" min="0" step=".1" .value=${String(weights.kanji ?? 1)} /></label>
+                <label>${this.t("manage.weightGrammar")}<input name="weightGrammar" type="number" min="0" step=".1" .value=${String(weights.grammar ?? 1)} /></label>
+                <label>${this.t("manage.weightExpression")}<input name="weightExpression" type="number" min="0" step=".1" .value=${String(weights.expression ?? 1)} /></label>
+                <label>${this.t("manage.learningNotifications")}<input name="learningCount" type="number" min="0" .value=${String(scheduler.learning_count ?? 0)} /></label>
+                <label>${this.t("manage.quizNotifications")}<input name="quizCount" type="number" min="0" .value=${String(scheduler.quiz_count ?? 0)} /></label>
+                <label>${this.t("manage.notificationTargets")}
+                  <select name="notificationTarget" multiple size=${Math.min(4, Math.max(2, this.notificationTargets.length))}>
+                    ${this.notificationTargets.map((target) => html`
+                      <option value=${target.target_id} ?selected=${targetIds.includes(target.target_id)}>
+                        ${target.friendly_name} · ${target.platform}
+                      </option>`)}
+                  </select>
+                  <span class="meta">${this.notificationTargets.length === 0
+                    ? this.t("manage.noNotificationTargets")
+                    : this.t("manage.notificationTargetsHelp")}</span>
+                </label>
+              </div>
+            </details>
           </form>
+
           ${this.selectedTrackId === track.track_id ? this.renderPlan(track) : nothing}
+
+          <div class="danger-zone">
+            <strong>${this.t("manage.dangerZone")}</strong>
+            <p class="muted">${this.t("manage.deleteTrackHelp")}</p>
+            <button type="button" @click=${() => this.removeTrack(track.track_id, track.name)}>
+              ${this.t("manage.deleteTrack")}
+            </button>
+          </div>
         ` : nothing}
       </article>
     `;
@@ -632,14 +693,14 @@ export class LockLearnManagementView extends LitElement {
                   }}
                 >
                   ${sources.map((language) => html`
-                    <option value=${language}>${language}</option>
+                    <option value=${language}>${languageDisplayName(language, this.locale())}</option>
                   `)}
                 </select>
               </label>
               <label>${this.t("manage.targetLanguage")}
                 <select name="target" required>
                   ${targets.map((language) => html`
-                    <option value=${language}>${language}</option>
+                    <option value=${language}>${languageDisplayName(language, this.locale())}</option>
                   `)}
                 </select>
               </label>
@@ -655,9 +716,10 @@ export class LockLearnManagementView extends LitElement {
     `;
   }
 
-  private async removeTrack(trackId: string): Promise<void> {
+  private async removeTrack(trackId: string, trackName: string): Promise<void> {
     if (this.hass === undefined) return;
-    await this.mutate(() => deleteTrack(this.hass!, trackId), this.t("manage.deleted"));
+    if (!globalThis.confirm?.(`${this.t("manage.confirmDeleteTrack")} "${trackName}"?`)) return;
+    await this.mutate(() => deleteTrack(this.hass!, trackId), this.t("manage.trackDeleted"));
   }
 
   private planFrom(form: HTMLFormElement): LearningPlanInput {
@@ -907,6 +969,22 @@ export class LockLearnManagementView extends LitElement {
             </p>
             <div class="actions">
               <button class="primary" type="submit">${this.t("manage.save")}</button>
+              <button
+                type="button"
+                @click=${() => {
+                  if (this.hass === undefined || this.profile === undefined) return;
+                  void this.mutate(
+                    () => testNotificationTarget(
+                      this.hass!,
+                      this.profile!.profile_id,
+                      target.target_id,
+                    ),
+                    this.t("manage.notificationTestSent"),
+                  );
+                }}
+              >
+                ${this.t("manage.testNotification")}
+              </button>
             </div>
           </form>
         `)}
