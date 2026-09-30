@@ -292,11 +292,13 @@ class StatsService:
         for event in events:
             mode = str(event["mode"])
             result = str(event["result"])
-            if mode == "known_already":
-                pass
-            elif mode == "self_assessment_after_retrieval" and result in _SELF_KNOWN_RESULTS:
-                pass
-            else:
+            if not (
+                mode == "known_already"
+                or (
+                    mode == "self_assessment_after_retrieval"
+                    and result in _SELF_KNOWN_RESULTS
+                )
+            ):
                 continue
             moment = self._parse_time(str(event["created_at_utc"]))
             if moment < start_utc:

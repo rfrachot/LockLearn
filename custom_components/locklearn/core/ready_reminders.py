@@ -16,7 +16,7 @@ from ..notifications.renderers import (
     RenderedNotification,
 )
 from .clock import Clock, SystemClock
-from .session_selection import SessionSelectionService, SessionSelectionError
+from .session_selection import SessionSelectionError, SessionSelectionService
 
 _LOGGER = logging.getLogger(__name__)
 _KEY_PREFIX = "ready_reminder:"
@@ -273,7 +273,7 @@ class ReadyReminderService:
         shared = bool(target.get("shared_device"))
         title = f"LockLearn · {profile_name}" if shared else "LockLearn"
         message = (
-            "Une session d’apprentissage est prête." if mode == "learn" else "Un quiz est prêt."
+            "Une session d'apprentissage est prête." if mode == "learn" else "Un quiz est prêt."
         )
         return RenderedNotification(
             profile_id=str(profile["profile_id"]),

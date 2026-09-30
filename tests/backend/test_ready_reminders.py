@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import pytest
 
@@ -48,7 +48,7 @@ class _Profiles:
 
 
 class _Targets:
-    target = {
+    target: ClassVar[dict[str, Any]] = {
         "target_id": "target-1",
         "profile_id": "profile-1",
         "enabled": True,
