@@ -14,6 +14,7 @@ from .selection import SelectionConstraintError, SelectionDecision
 FATIGUE_WINDOW_SIZE = 10
 DEFAULT_FATIGUE_ACCURACY_THRESHOLD = 0.6
 _NEW_SESSION_TYPES = frozenset({"learn", "learning", "bounded"})
+_CALIBRATION_SESSION_TYPES = frozenset({"calibration"})
 
 
 class SessionSelectionError(ValueError):
@@ -172,8 +173,14 @@ class SessionSelectionService:
         if profile is None:
             raise SessionSelectionError("profile does not exist")
 
-        requested_cards = self._requested_cards(settings, profile)
-        allowed_types = self._allowed_content_types(settings)
+        normalized_type = session_type.strip().lower()
+        effective_settings = dict(settings)
+        if normalized_type in _CALIBRATION_SESSION_TYPES and "requested_cards" not in effective_settings:
+            effective_settings["requested_cards"] = 20
+        requested_cards = self._requested_cards(effective_settings, profile)
+        if normalized_type in _CALIBRATION_SESSION_TYPES and not 20 <= requested_cards <= 40:
+            raise SessionSelectionError("calibration requested_cards must be within [20, 40]")
+        allowed_types = self._allowed_content_types(effective_settings)
         leeches_only = bool(settings.get("leeches_only", False))
         allow_early_learning = bool(settings.get("allow_early_learning", False))
         weights = await self._tracks.async_get_content_weights(track_id)
@@ -186,11 +193,13 @@ class SessionSelectionService:
             now=now,
             allowed_types=allowed_types,
             leeches_only=leeches_only,
+            session_type=session_type,
         )
         candidates = [
             candidate
             for candidate in candidate_pool
-            if self._state_available(
+            if (normalized_type not in _CALIBRATION_SESSION_TYPES or candidate.state == "new")
+            and self._state_available(
                 candidate,
                 now=now,
                 session_type=session_type,
@@ -200,6 +209,27 @@ class SessionSelectionService:
 
         if not candidates:
             return ()
+
+        if normalized_type in _CALIBRATION_SESSION_TYPES:
+            ordered = self._calibration_sequence(candidates, requested_cards=requested_cards)
+            return tuple(
+                PreparedSessionSelection(
+                    card_key=c.card_key,
+                    learning_item_id=c.learning_item_id,
+                    prompt_facet_id=c.prompt_facet_id,
+                    answer_facet_id=c.answer_facet_id,
+                    payload={
+                        "selection": {
+                            "content_type": c.content_type,
+                            "progress_state": c.state,
+                            "reason": "calibration",
+                            "pack_position": c.pack_position,
+                            "content_weight": self._weight(c.content_type, weights),
+                        }
+                    },
+                )
+                for c in ordered
+            )
 
         new_quota = await self._remaining_new_quota(
             profile=profile,
@@ -252,8 +282,8 @@ class SessionSelectionService:
         session_type: str,
         settings: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Describe availability for the same prospective request used by session/start."""
-        settings = {} if settings is None else settings
+        """Describe effective selectability using the same gates as session/start."""
+        settings = {} if settings is None else dict(settings)
         self.validate_session_settings(settings)
         track = await self._tracks.async_get(track_id)
         if track is None or str(track["profile_id"]) != profile_id:
@@ -262,41 +292,40 @@ class SessionSelectionService:
         if profile is None:
             raise SessionSelectionError("profile does not exist")
 
+        normalized_type = session_type.strip().lower()
+        effective_settings = dict(settings)
+        if normalized_type in _CALIBRATION_SESSION_TYPES and "requested_cards" not in effective_settings:
+            effective_settings["requested_cards"] = 20
+        requested_cards = self._requested_cards(effective_settings, profile)
+        if normalized_type in _CALIBRATION_SESSION_TYPES and not 20 <= requested_cards <= 40:
+            raise SessionSelectionError("calibration requested_cards must be within [20, 40]")
+        allowed_types = self._allowed_content_types(effective_settings)
+        leeches_only = bool(effective_settings.get("leeches_only", False))
+        allow_early_learning = bool(effective_settings.get("allow_early_learning", False))
         weights = await self._tracks.async_get_content_weights(track_id)
         now = self._clock.now()
-        normalized_type = session_type.strip().lower()
-        requested_cards = self._requested_cards(settings, profile)
-        allowed_types = self._allowed_content_types(settings)
-        leeches_only = bool(settings.get("leeches_only", False))
-        allow_early_learning = bool(settings.get("allow_early_learning", False))
-        candidate_pool = await self._async_candidate_pool(
+
+        raw_rows = await self._tracks.async_session_candidates(
             profile_id=profile_id,
             track_id=track_id,
-            track=track,
-            weights=weights,
-            now=now,
-            allowed_types=allowed_types,
-            leeches_only=leeches_only,
         )
+        raw_candidates = [
+            _Candidate.from_row(row)
+            for row in raw_rows
+            if (not leeches_only or str(row["state"]) == "leech")
+            and (allowed_types is None or str(row["content_type"]) in allowed_types)
+            and self._weight(str(row["content_type"]), weights) > 0
+        ]
 
-        introduced = sum(candidate.state != "new" for candidate in candidate_pool)
-        new_cards = sum(candidate.state == "new" for candidate in candidate_pool)
         planning_snapshot = getattr(self._tracks, "async_planning_snapshot", None)
+        selected_cards = len(raw_candidates)
+        introduced = sum(candidate.state != "new" for candidate in raw_candidates)
+        new_cards = sum(candidate.state == "new" for candidate in raw_candidates)
         if callable(planning_snapshot):
             snapshot = await planning_snapshot(track_id=track_id, now_utc=now.isoformat())
+            selected_cards = int(snapshot.get("selected_cards", selected_cards))
             introduced = int(snapshot.get("introduced_cards", introduced))
-            selected_cards = int(snapshot.get("selected_cards", introduced + new_cards))
             new_cards = max(0, selected_cards - introduced)
-
-        next_due: datetime | None = None
-        for candidate in candidate_pool:
-            if candidate.state == "new" or candidate.next_due_at_utc is None:
-                continue
-            due = datetime.fromisoformat(candidate.next_due_at_utc)
-            if due.tzinfo is None:
-                raise SessionSelectionError("candidate due timestamp must be timezone-aware")
-            if due > now and (next_due is None or due < next_due):
-                next_due = due
 
         remaining_new_quota = await self._remaining_new_quota(
             profile=profile,
@@ -305,80 +334,273 @@ class SessionSelectionService:
             track_id=track_id,
             session_type=session_type,
         )
+        timezone = ZoneInfo(str(profile["timezone"]))
+        local_now = now.astimezone(timezone)
+        quota_reset = datetime.combine(
+            local_now.date() + timedelta(days=1),
+            time.min,
+            tzinfo=timezone,
+        )
 
-        next_available = next_due
-        next_available_reason: str | None = "scheduled_step" if next_due is not None else None
-        if (
-            normalized_type in _NEW_SESSION_TYPES
-            and any(candidate.state == "new" for candidate in candidate_pool)
-            and remaining_new_quota == 0
-        ):
-            timezone = ZoneInfo(str(profile["timezone"]))
-            local_now = now.astimezone(timezone)
-            next_local_day = local_now.date() + timedelta(days=1)
-            quota_reset = datetime.combine(next_local_day, time.min, tzinfo=timezone)
-            if next_available is None or quota_reset < next_available:
-                next_available = quota_reset
-                next_available_reason = "new_quota_reset"
+        blocker_cards: dict[str, set[str]] = {}
+        blocker_until: dict[str, datetime | None] = {}
+        blocker_forceable: dict[str, bool] = {}
+        temporary_cards: set[str] = set()
+        prerequisite_cards: set[str] = set()
+        future_opportunities: list[tuple[datetime, str]] = []
+        due_now_total = 0
 
-        normal_candidates = [
+        def add_blocker(
+            code: str,
+            candidate: _Candidate,
+            *,
+            until: datetime | None = None,
+            forceable: bool = False,
+        ) -> None:
+            blocker_cards.setdefault(code, set()).add(candidate.card_key)
+            blocker_forceable[code] = blocker_forceable.get(code, False) or forceable
+            if until is not None:
+                temporary_cards.add(candidate.card_key)
+                current = blocker_until.get(code)
+                blocker_until[code] = until if current is None else min(current, until)
+            elif code not in blocker_until:
+                blocker_until[code] = None
+            if code == "prerequisite":
+                prerequisite_cards.add(candidate.card_key)
+
+        constraints_required = True
+        probe = getattr(self._tracks, "async_has_selection_constraints", None)
+        pack_version_id = track.get("pack_version_id")
+        if callable(probe) and isinstance(pack_version_id, str) and pack_version_id:
+            constraints_required = bool(await probe(pack_version_id))
+
+        for candidate in raw_candidates:
+            due: datetime | None = None
+            if candidate.next_due_at_utc is not None:
+                due = datetime.fromisoformat(candidate.next_due_at_utc)
+                if due.tzinfo is None:
+                    raise SessionSelectionError("candidate due timestamp must be timezone-aware")
+                if candidate.state != "new" and due <= now:
+                    due_now_total += 1
+
+            effective = now
+            permanent = False
+            if candidate.user_state == "suspended":
+                add_blocker("suspended", candidate)
+                permanent = True
+            elif candidate.user_state == "buried":
+                if candidate.suspend_until_utc is None:
+                    add_blocker("buried", candidate)
+                    permanent = True
+                else:
+                    buried_until = datetime.fromisoformat(candidate.suspend_until_utc)
+                    if buried_until.tzinfo is None:
+                        raise SessionSelectionError(
+                            "candidate suspend timestamp must be timezone-aware"
+                        )
+                    if buried_until > now:
+                        add_blocker("buried", candidate, until=buried_until)
+                        effective = max(effective, buried_until)
+            elif candidate.user_state == "known_already":
+                if due is not None and due > now:
+                    add_blocker("known_already_verification", candidate, until=due)
+                elif due is None:
+                    add_blocker("known_already_verification", candidate)
+                if normalized_type != "quiz":
+                    permanent = True
+                elif due is not None:
+                    effective = max(effective, due)
+
+            if constraints_required and not permanent:
+                try:
+                    decision = await self._constraints.async_evaluate(
+                        profile_id=profile_id,
+                        track_id=track_id,
+                        card_key=candidate.card_key,
+                        learning_item_id=candidate.learning_item_id,
+                        state=candidate.state,
+                    )
+                except SelectionConstraintError as err:
+                    raise SessionSelectionError(str(err)) from err
+                if not decision.eligible:
+                    blocked_until = (
+                        None
+                        if decision.blocked_until_utc is None
+                        else datetime.fromisoformat(decision.blocked_until_utc)
+                    )
+                    for reason in decision.reasons:
+                        if reason.startswith("prerequisite_"):
+                            add_blocker("prerequisite", candidate)
+                            permanent = True
+                        elif reason.startswith("sibling_buried:"):
+                            add_blocker("sibling_gap", candidate, until=blocked_until)
+                            if blocked_until is not None:
+                                effective = max(effective, blocked_until)
+                        elif reason.startswith("confusable_intro_gap:"):
+                            add_blocker("confusable_gap", candidate, until=blocked_until)
+                            if blocked_until is not None:
+                                effective = max(effective, blocked_until)
+                        else:
+                            permanent = True
+
+            if candidate.state == "new":
+                if normalized_type in _CALIBRATION_SESSION_TYPES:
+                    pass
+                elif normalized_type in _NEW_SESSION_TYPES:
+                    if remaining_new_quota <= 0:
+                        add_blocker("new_quota", candidate, until=quota_reset, forceable=True)
+                        effective = max(effective, quota_reset)
+                else:
+                    permanent = True
+            elif due is None:
+                permanent = True
+            elif candidate.user_state != "known_already" and due > now:
+                forceable = (
+                    normalized_type in _NEW_SESSION_TYPES
+                    and candidate.state == "learning"
+                    and candidate.last_result != "wrong"
+                )
+                add_blocker("scheduled_step", candidate, until=due, forceable=forceable)
+                effective = max(effective, due)
+
+            if not permanent and effective > now:
+                reason = (
+                    "known_already_verification"
+                    if candidate.user_state == "known_already"
+                    else "new_quota"
+                    if candidate.state == "new" and remaining_new_quota <= 0
+                    else "scheduled_step"
+                )
+                future_opportunities.append((effective, reason))
+
+        candidate_pool = await self._async_candidate_pool(
+            profile_id=profile_id,
+            track_id=track_id,
+            track=track,
+            weights=weights,
+            now=now,
+            allowed_types=allowed_types,
+            leeches_only=leeches_only,
+            session_type=session_type,
+        )
+        candidates = [
             candidate
             for candidate in candidate_pool
-            if self._state_available(
+            if (normalized_type not in _CALIBRATION_SESSION_TYPES or candidate.state == "new")
+            and self._state_available(
                 candidate,
                 now=now,
                 session_type=session_type,
                 allow_early_learning=allow_early_learning,
             )
         ]
-        normal_new_quota = remaining_new_quota
-        if allow_early_learning and normalized_type in _NEW_SESSION_TYPES:
-            normal_new_quota = max(normal_new_quota, requested_cards)
-        normal_selected = self._build_sequence(
-            normal_candidates,
-            requested_cards=requested_cards,
-            new_quota=normal_new_quota,
-            weights=weights,
-        )
-
-        forced_candidates = [
-            candidate
-            for candidate in candidate_pool
-            if self._state_available(
-                candidate,
-                now=now,
-                session_type=session_type,
-                allow_early_learning=True,
+        if normalized_type in _CALIBRATION_SESSION_TYPES:
+            normal_selected = self._calibration_sequence(
+                candidates,
+                requested_cards=requested_cards,
             )
-        ]
-        forced_new_quota = remaining_new_quota
-        if normalized_type in _NEW_SESSION_TYPES:
-            forced_new_quota = max(forced_new_quota, requested_cards)
-        forced_selected = self._build_sequence(
-            forced_candidates,
-            requested_cards=requested_cards,
-            new_quota=forced_new_quota,
-            weights=weights,
-        )
+            forced_selected = normal_selected
+        else:
+            normal_new_quota = remaining_new_quota
+            if allow_early_learning and normalized_type in _NEW_SESSION_TYPES:
+                normal_new_quota = max(normal_new_quota, requested_cards)
+            normal_selected = self._build_sequence(
+                candidates,
+                requested_cards=requested_cards,
+                new_quota=normal_new_quota,
+                weights=weights,
+            )
+            forced_candidates = [
+                candidate
+                for candidate in candidate_pool
+                if self._state_available(
+                    candidate,
+                    now=now,
+                    session_type=session_type,
+                    allow_early_learning=True,
+                )
+            ]
+            forced_new_quota = remaining_new_quota
+            if normalized_type in _NEW_SESSION_TYPES:
+                forced_new_quota = max(forced_new_quota, requested_cards)
+            forced_selected = self._build_sequence(
+                forced_candidates,
+                requested_cards=requested_cards,
+                new_quota=forced_new_quota,
+                weights=weights,
+            )
 
         normal_new = sum(candidate.state == "new" for candidate in normal_selected)
         forced_new = sum(candidate.state == "new" for candidate in forced_selected)
+        next_available: datetime | None = None
+        next_available_reason: str | None = None
+        if not normal_selected and future_opportunities:
+            next_available, next_available_reason = min(
+                future_opportunities,
+                key=lambda value: (value[0], value[1]),
+            )
+
+        blocker_order = (
+            "scheduled_step",
+            "known_already_verification",
+            "new_quota",
+            "sibling_gap",
+            "confusable_gap",
+            "buried",
+            "prerequisite",
+            "suspended",
+        )
+        blockers = [
+            {
+                "code": code,
+                "count": len(blocker_cards[code]),
+                "until_utc": (
+                    None
+                    if blocker_until.get(code) is None
+                    else blocker_until[code].isoformat()
+                ),
+                "forceable": bool(blocker_forceable.get(code, False)),
+            }
+            for code in blocker_order
+            if blocker_cards.get(code)
+        ]
+        known_count = sum(
+            candidate.user_state == "known_already" for candidate in raw_candidates
+        )
+        suspended_count = sum(
+            candidate.user_state == "suspended" for candidate in raw_candidates
+        )
+        buried_count = sum(candidate.user_state == "buried" for candidate in raw_candidates)
 
         return {
             "profile_id": profile_id,
             "track_id": track_id,
             "session_type": session_type,
             "available_now": len(normal_selected),
+            "selected_cards": selected_cards,
             "introduced_cards": introduced,
             "new_cards": new_cards,
+            "due_now_total": due_now_total,
+            "known_already_cards": known_count,
+            "known_already_pending_verification": known_count,
+            "suspended_cards": suspended_count,
+            "buried_cards": buried_count,
+            "temporarily_blocked_cards": len(temporary_cards),
+            "prerequisite_blocked_cards": len(prerequisite_cards),
+            "session_capacity": requested_cards,
             "remaining_new_quota": remaining_new_quota,
             "forceable_new": max(0, forced_new - normal_new),
             "forceable_early": max(0, len(forced_selected) - len(normal_selected)),
-            "next_due_at_utc": None if next_due is None else next_due.isoformat(),
+            "next_due_at_utc": (
+                None
+                if not future_opportunities
+                else min(value[0] for value in future_opportunities).isoformat()
+            ),
             "next_available_at_utc": (
                 None if next_available is None else next_available.isoformat()
             ),
             "next_available_reason": next_available_reason,
+            "blockers": blockers,
         }
 
     async def async_fatigue_advice(
@@ -427,6 +649,7 @@ class SessionSelectionService:
         now: datetime,
         allowed_types: frozenset[str] | None = None,
         leeches_only: bool = False,
+        session_type: str = "learn",
     ) -> list[_Candidate]:
         """Build the shared per-card eligibility pool for start and availability."""
         raw_candidates = await self._tracks.async_session_candidates(
@@ -442,7 +665,11 @@ class SessionSelectionService:
         candidates: list[_Candidate] = []
         for row in raw_candidates:
             candidate = _Candidate.from_row(row)
-            if not self._user_state_available(candidate, now=now):
+            if not self._user_state_available(
+                candidate,
+                now=now,
+                session_type=session_type,
+            ):
                 continue
             if leeches_only and candidate.state != "leech":
                 continue
@@ -494,6 +721,21 @@ class SessionSelectionService:
             local_date=local_date,
         )
         return max(0, max_new - introduced)
+
+    @staticmethod
+    def _calibration_sequence(
+        candidates: list[_Candidate],
+        *,
+        requested_cards: int,
+    ) -> list[_Candidate]:
+        """Return a deterministic spread of new cards for the quick calibration."""
+        ordered = sorted(candidates, key=lambda c: (c.pack_position, c.card_key))
+        if len(ordered) <= requested_cards:
+            return ordered
+        return [
+            ordered[((2 * index + 1) * len(ordered)) // (2 * requested_cards)]
+            for index in range(requested_cards)
+        ]
 
     def _build_sequence(
         self,
@@ -653,9 +895,21 @@ class SessionSelectionService:
         )
 
     @staticmethod
-    def _user_state_available(candidate: _Candidate, *, now: datetime) -> bool:
+    def _user_state_available(
+        candidate: _Candidate,
+        *,
+        now: datetime,
+        session_type: str,
+    ) -> bool:
         if candidate.user_state == "active":
             return True
+        if candidate.user_state == "known_already":
+            if session_type.strip().lower() != "quiz" or candidate.next_due_at_utc is None:
+                return False
+            due = datetime.fromisoformat(candidate.next_due_at_utc)
+            if due.tzinfo is None:
+                raise SessionSelectionError("candidate due timestamp must be timezone-aware")
+            return due <= now
         if candidate.user_state != "buried" or candidate.suspend_until_utc is None:
             return False
         until = datetime.fromisoformat(candidate.suspend_until_utc)
@@ -672,7 +926,8 @@ class SessionSelectionService:
         allow_early_learning: bool = False,
     ) -> bool:
         if candidate.state == "new":
-            return session_type.strip().lower() in _NEW_SESSION_TYPES
+            normalized = session_type.strip().lower()
+            return normalized in _NEW_SESSION_TYPES or normalized in _CALIBRATION_SESSION_TYPES
         if candidate.state not in {"learning", "review", "relearning", "leech"}:
             return False
         if candidate.next_due_at_utc is None:

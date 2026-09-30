@@ -2055,7 +2055,7 @@ class ReviewEventsRepository:
             question_type = str(row[9])
             pre = json.loads(str(row[10]))
             post = json.loads(str(row[11]))
-            if mode == "introduction":
+            if mode in {"introduction", "known_already"}:
                 item["learning_exposures"] += 1
                 item["new_cards"].add(str(post["card_key"]))
             trusted_verified = (
@@ -2076,13 +2076,13 @@ class ReviewEventsRepository:
                     item["verified_correct"] += 1
                 else:
                     item["verified_wrong"] += 1
-            if mode == "self_assessment_after_retrieval" and result in {
-                "correct",
-                "known",
-                "knew",
-                "easy",
-                "hard",
-            }:
+            if (
+                mode == "known_already"
+                or (
+                    mode == "self_assessment_after_retrieval"
+                    and result in {"correct", "known", "knew", "easy", "hard"}
+                )
+            ):
                 item["self_known"] += 1
             if question_type in {"mcq", "cloze", "cloze_mcq"}:
                 item["quiz_total"] += 1

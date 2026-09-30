@@ -266,7 +266,12 @@ class QuizSessionService:
             track_id=track_id,
             card_key=meta.card_key,
         )
-        if pre is None or str(pre.get("state")) == "new":
+        calibration = str(session.get("type")) == "calibration"
+        if pre is None:
+            if not calibration:
+                raise QuizSessionError("quiz requires an introduced card")
+            pre = self._new_snapshot(profile_id, track_id, meta)
+        elif str(pre.get("state")) == "new" and not calibration:
             raise QuizSessionError("quiz requires an introduced card")
         pre = dict(pre)
         pre["dataset_generation"] = pre.get("dataset_generation") or self._dataset_generation()
@@ -288,11 +293,25 @@ class QuizSessionService:
             retrieval_occurred=True,
             hint_used=hint_used,
         )
-        post, scheduled_interval, elapsed_days = self._apply_signal(
-            pre,
-            decision=decision,
-            hint_used=hint_used,
-        )
+        if calibration:
+            post, scheduled_interval, elapsed_days = self._apply_calibration_signal(
+                pre,
+                decision=decision,
+                result=result,
+                hint_used=hint_used,
+            )
+        elif str(pre.get("user_state", "active")) == "known_already":
+            post, scheduled_interval, elapsed_days = self._apply_known_already_signal(
+                pre,
+                decision=decision,
+                hint_used=hint_used,
+            )
+        else:
+            post, scheduled_interval, elapsed_days = self._apply_signal(
+                pre,
+                decision=decision,
+                hint_used=hint_used,
+            )
 
         event = await self._reviews.async_record(
             profile_id=profile_id,
@@ -347,8 +366,8 @@ class QuizSessionService:
         question_id: str,
         answer: object,
     ) -> dict[str, Any]:
-        if str(session.get("type")) != "quiz":
-            raise QuizSessionError("session is not a quiz session")
+        if str(session.get("type")) not in {"quiz", "calibration"}:
+            raise QuizSessionError("session is not a quiz/calibration session")
         current = session.get("current_question")
         if not isinstance(current, dict) or current.get("question_id") != question_id:
             raise QuizSessionError("question is no longer current")
@@ -482,6 +501,121 @@ class QuizSessionService:
             "normalization_version": grade.normalization_version,
             "grading_reason": grade.reason,
         }
+
+    def _new_snapshot(
+        self,
+        profile_id: str,
+        track_id: str,
+        meta: _QuizCardMeta,
+    ) -> dict[str, Any]:
+        now = self._clock.now().isoformat()
+        return {
+            "profile_id": profile_id,
+            "track_id": track_id,
+            "card_key": meta.card_key,
+            "learning_item_id": meta.learning_item_id,
+            "prompt_facet_id": meta.prompt_facet_id,
+            "answer_facet_id": meta.answer_facet_id,
+            "state": "new",
+            "mastery": 0.0,
+            "box": 0,
+            "seen_count": 0,
+            "verified_correct_count": 0,
+            "verified_wrong_count": 0,
+            "self_known_count": 0,
+            "self_review_count": 0,
+            "first_seen_at_utc": None,
+            "last_seen_at_utc": None,
+            "last_result": None,
+            "next_due_at_utc": None,
+            "streak_correct": 0,
+            "leech_score": 0.0,
+            "difficulty_factor": 1.0,
+            "last_verified_at_utc": None,
+            "verified_success_since_box": 0,
+            "user_state": "active",
+            "suspend_until_utc": None,
+            "example_rotation_index": 0,
+            "content_status": "active",
+            "policy_version": self._review_policy.policy_version,
+            "dataset_generation": self._dataset_generation(),
+            "normalization_version": meta.canonical_answer.normalization_version,
+            "updated_at_utc": now,
+        }
+
+    def _apply_calibration_signal(
+        self,
+        pre: dict[str, Any],
+        *,
+        decision: Any,
+        result: str,
+        hint_used: bool,
+    ) -> tuple[dict[str, Any], float | None, float | None]:
+        """Apply a verified pre-test without treating unknown material as relearning."""
+        if decision.outcome is SignalOutcome.NEUTRAL:
+            return dict(pre), None, None
+        now = self._clock.now()
+        if decision.outcome is SignalOutcome.POSITIVE:
+            seed = dict(pre)
+            seed.update({"state": "review", "box": 1, "user_state": "active"})
+            transition = self._review_policy.review_success(
+                seed,
+                hint_used=hint_used,
+                promote_box=False,
+                verified=True,
+                reward_difficulty=not hint_used,
+            )
+            post = dict(transition.post_state)
+            post["user_state"] = "active"
+            return post, transition.scheduled_interval_days, transition.elapsed_days
+
+        post = dict(pre)
+        post.update(
+            {
+                "state": "new",
+                "box": 0,
+                "seen_count": int(pre.get("seen_count", 0)) + 1,
+                "verified_wrong_count": int(pre.get("verified_wrong_count", 0)) + 1,
+                "first_seen_at_utc": pre.get("first_seen_at_utc") or now.isoformat(),
+                "last_seen_at_utc": now.isoformat(),
+                "last_verified_at_utc": now.isoformat(),
+                "last_result": result,
+                "next_due_at_utc": None,
+                "user_state": "active",
+                "streak_correct": 0,
+                "updated_at_utc": now.isoformat(),
+            }
+        )
+        return post, None, None
+
+    def _apply_known_already_signal(
+        self,
+        pre: dict[str, Any],
+        *,
+        decision: Any,
+        hint_used: bool,
+    ) -> tuple[dict[str, Any], float | None, float | None]:
+        """Resolve calibration-pending prior knowledge only from verified retrieval."""
+        if decision.outcome is SignalOutcome.NEUTRAL:
+            return dict(pre), None, None
+        if decision.outcome is SignalOutcome.POSITIVE:
+            transition = self._review_policy.review_success(
+                pre,
+                hint_used=hint_used,
+                promote_box=False,
+                verified=True,
+                reward_difficulty=not hint_used,
+            )
+        else:
+            transition = self._review_policy.review_failure(
+                pre,
+                verified=True,
+                demote=False,
+            )
+        post = dict(transition.post_state)
+        post["user_state"] = "active"
+        post["suspend_until_utc"] = None
+        return post, transition.scheduled_interval_days, transition.elapsed_days
 
     def _apply_signal(
         self,

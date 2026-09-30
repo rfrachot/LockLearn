@@ -2475,7 +2475,7 @@ async def ws_session_start(
                 session_type=msg["session_type"],
                 settings=msg["settings"],
             )
-            if msg["session_type"] == "quiz":
+            if msg["session_type"] in {"quiz", "calibration"}:
                 prepared_questions = await runtime.quiz_sessions.async_prepare_questions(
                     track_id=track_id,
                     selected=selected,
