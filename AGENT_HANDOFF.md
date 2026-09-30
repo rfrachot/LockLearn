@@ -2,87 +2,72 @@
 
 ## Current state
 
-Beta.4 UX follow-up implemented on `fix/beta4-ux-readiness`, based on
-`release/1.0.0-beta.4` at `e9a47cd45270d0fc90a3bd6879116012478e74f9`.
+Beta.4 UX follow-up is integrated and deployed from
+`release/1.0.0-beta.4`.
 
-The follow-up keeps one contextual action visible after a Learn/Quiz session
-is opened, shows concrete Learn readiness counts before starting, and shows
-Quiz started/ready counts when no review is due. The E2E readiness fixture now
-includes the complete availability timing contract. The existing planning
-snapshot fix remains in place and zero-card forecasts are rejected by the
-backend rather than displayed as a useful estimate.
+- UX branch initial SHA: `7d6e23c70402940ebb7b0b24dc5962fb6daa2b89`.
+- Functional deployed SHA: `c94cf72c7616f002fcd5eb896fb88a1027b3f8e7`.
+- Documentation head after this handoff: recorded below; this documentation
+  commit must not be redeployed.
+- CI run `36675810188`: PASS for backend-quality, frontend, frontend-e2e,
+  dataset-contracts, home-assistant-validation, HA minimum 2025.2.5, HA
+  current-harness 2026.9.3 and HA latest stable 2026.9.4.
+- Bundle SHA-256: `2c37e0818214e51a8ed0a666ed40c9710dcdb5b790f2e40f59ee794ff58d70bb`.
+- HA target: `2026.7.4`.
 
-The follow-up bundle was regenerated from source. Its current local SHA-256 is
-`2c37e0818214e51a8ed0a666ed40c9710dcdb5b790f2e40f59ee794ff58d70bb`.
+The UX commits were pushed on `fix/beta4-ux-readiness`, then cherry-picked into
+the release branch. The second frontend build was reproducible and left the
+worktree clean before deployment.
 
-The previously committed frontend bundle was regenerated from source and pushed in:
+## Deployment qualification
 
-- `8a89677c510c231ba3f889ce587dd31c0f90d372` —
-  `build(beta4): regenerate field-feedback frontend bundle`;
-- bundle SHA-256:
-  `21e279603274fa10ff07e79e42629b90c3bcc676229e68bd2672bfda3700013f`.
+HACS `hacs/repository/download` was called for repository `1371828774` with
+`release/1.0.0-beta.4`. Home Assistant returned after the resulting restart.
 
-The second Vite build was reproducible and left the worktree clean before
-qualification. GitHub CI run `36626168374` passed all jobs: backend-quality,
-frontend, frontend-e2e, dataset-contracts, home-assistant-validation, HA
-minimum 2025.2.5, current harness 2026.9.3 and latest stable 2026.9.4.
+- Config Entry: `loaded`.
+- Frontend protocol: `3`.
+- HACS installed version: `release/1.0.0-beta.4`.
+- Served bundle: HTTP 200, 232694 bytes, SHA-256 exactly matching local.
+- Storage: integrity `ok`, foreign keys `0`, schema `5`, WAL, reader off the
+  event loop, writer initialized.
+- LockLearn warning/error/critical records after restart: `0`.
+- No Profile or Track was created, deleted, applied, or answered during this
+  qualification.
 
-Local verification passed:
+## Real Track field test
 
-- targeted session-selection tests: 27 passed;
-- frontend targeted tests: 57 passed;
-- full backend suite: 506 passed, one non-blocking duplicate-ZIP-name warning;
-- Ruff format/lint, mypy, generated docs, resource and schema contracts;
-- frontend lint, typecheck, tests, no-polling, bundle budget and E2E: 7 passed.
-- follow-up frontend source/tests/build and backend full checks: backend 506
-  passed; frontend 57 passed; E2E 7 passed; Ruff, mypy, resource validation,
-  no-polling and bundle budget passed.
+Existing Track: `Japanese Starter b37891dc`.
 
-Real HA 2026.7.4 qualification:
+Read-only backend snapshot:
 
-- HACS `hacs/repository/download` used for repository `1371828774`, branch
-  `release/1.0.0-beta.4`, then HA was restarted;
-- LockLearn Config Entry is `loaded`, frontend protocol is `3`, panel module
-  URL contains bundle digest `21e279603274`;
-- served bundle SHA-256 matches the local bundle exactly;
-- storage status: integrity `ok`, foreign keys `0`, schema `5`, WAL,
-  writer initialized and reader off the event loop;
-- system log query has no LockLearn warning/error/critical entries;
-- existing qualification Profile/Track was reused; no Profile was created or
-  deleted by this qualification.
+- Plan preview with new/day `8`, reviews/day `50`, teasers/day `2`, target
+  date `2026-10-30`, coverage `1.0`, retention `0.9`:
+  `selected_cards=100`, `introduced_cards=32`, `remaining_target_cards=68`,
+  `required_new_per_day=3`, `planned_new_per_day=8`, `due_now=0`, reviews/day
+  `7` at 3 weeks and `0` at 3 months, notifications/day `6` at 3 weeks and
+  `0` at 3 months, feasible, warnings empty.
+- Learn: `introduced_cards=32`, `new_cards=68`, `available_now=16`.
+- Quiz: `introduced_cards=32`, `available_now=16`; no false first-learning
+  message.
+- Stats: learning `19`, review `0`, relearning `0`, new `81`.
+- Preview did not persist a plan: `learning_plan=None` after the field test.
 
-Observed real Track readiness:
+## UX results
 
-- Learn: `introduced_cards=32`, `new_cards=68`, `available_now=15`,
-  `forceable_early=1`, `next_available_reason=scheduled_step`, and the next
-  due/available timestamp is `2026-09-29T20:44:05.309081+00:00`;
-- Quiz: `introduced_cards=32`, `available_now=15`, same scheduled-step
-  timestamp, so the UI does not use the first-learning message;
-- Stats: `learning=19`, `review=0`, confirming that completion of a short
-  learning-step session does not imply review graduation.
+- Learn: existing empty session initially shows only `Resume session`; after
+  resume it shows the new-session explanation and only `Start learning`, never
+  `Learning pause` while cards are available.
+- Quiz: existing empty session initially shows only `Resume quiz`; after resume
+  it shows the new-quiz explanation and only `Start quiz`, with `16 cards ready
+  now`.
+- Plan: real preview displays the 100/32/68 snapshot in context, workload
+  explanations, and the too-close target-date warning. Preview was not Apply.
+- Stats: plain-language explanations for spaced repetition, Learning, Review,
+  Relearning, and verified retrieval evidence are visible.
+- Mobile: 390 px viewport, no horizontal overflow (`0` px).
 
-The source/test contract covers persisted Track readiness copy, scheduled
-learning steps, local new-card quota reset, availability/start parity, safe
-early learning, and non-bypassable failed/relearning cooldowns.
+## Status
 
-Real HA read-only qualification was completed on the existing qualification
-Track `Japanese Starter b37891dc` without creating or changing any Profile or
-Track. The direct `locklearn/tracks/plan_preview` response used
-`max_new_per_day_cards=8`, `max_reviews_per_day_cards=50`,
-`max_notification_new_teasers=2`, target date `2026-10-30`, coverage `1.0`
-and retention `0.9`, and returned:
+`PASS — RENAUD PEUT RETESTER BETA.4`
 
-- `selected_cards=100`, `introduced_cards=32`, `target_cards=100`,
-  `remaining_target_cards=68`;
-- `required_new_per_day=3`, `planned_new_per_day=8`, `due_now=0`;
-- `reviews_per_day_in_3_weeks=7`, `reviews_per_day_in_3_months=0`;
-- `notification_deliverable_in_3_weeks=6`,
-  `notification_deliverable_in_3_months=0`;
-- all feasibility flags true and `warnings=[]`.
-
-The same real Track reported `introduced_cards=32`, `new_cards=68` and
-`available_now=16` for both Learn and Quiz at qualification time; no future
-availability timestamp was needed. The deployed instance reported backend
-version `1.0.0-beta.3` and frontend protocol `3`. The local UX follow-up is
-committed but not pushed or deployed; deployment still requires the normal
-authorized release/development deployment path.
+Do not start beta.5, merge main, tag stable, or delete user data.
