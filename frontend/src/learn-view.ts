@@ -830,7 +830,7 @@ export class LockLearnLearnView extends LitElement {
                     : html`
                         <div>
                           <strong>${this.t(
-                            this.availability.next_available_reason === "new_quota_reset"
+                            this.availability.next_available_reason === "new_quota"
                               ? "learn.quotaReset"
                               : "learn.nextAvailable",
                           )}:</strong>
@@ -951,7 +951,7 @@ export class LockLearnLearnView extends LitElement {
             : html`
                 <p>
                   <strong>${this.t(
-                    nextReason === "new_quota_reset" ? "learn.quotaReset" : "learn.nextAvailable",
+                    nextReason === "new_quota" ? "learn.quotaReset" : "learn.nextAvailable",
                   )}:</strong>
                   ${this.dueLabel(nextAvailable)}
                 </p>
@@ -980,7 +980,7 @@ export class LockLearnLearnView extends LitElement {
           ${nextAvailable === null ? nothing : html`
             <p>
               <strong>${this.t(
-                nextReason === "new_quota_reset" ? "learn.quotaReset" : "learn.nextAvailable",
+                nextReason === "new_quota" ? "learn.quotaReset" : "learn.nextAvailable",
               )}:</strong>
               ${this.dueLabel(nextAvailable)}
             </p>
