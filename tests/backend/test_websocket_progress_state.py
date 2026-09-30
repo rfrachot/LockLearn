@@ -96,9 +96,8 @@ async def test_progress_state_and_calibration_enforce_manage_progress_acl(
         }
     )
     known = await owner.receive_json()
-    assert known["success"] is True
-    assert known["result"]["user_state"] == "known_already"
-    assert known["result"]["seen_count"] == 0
+    assert known["success"] is False
+    assert known["error"]["code"] == "invalid_format"
 
     viewer = await hass_ws_client(hass, hass_read_only_access_token)
     await owner.send_json_auto_id(
