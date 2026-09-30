@@ -931,8 +931,7 @@ def test_targeted_leech_setting_must_be_boolean() -> None:
 @pytest.mark.asyncio
 async def test_calibration_samples_new_cards_without_consuming_daily_new_quota() -> None:
     candidates = tuple(
-        _candidate(index, state="new", content_type="vocabulary")
-        for index in range(1, 31)
+        _candidate(index, state="new", content_type="vocabulary") for index in range(1, 31)
     )
     service = _service(
         candidates,
@@ -1042,4 +1041,3 @@ async def test_prerequisite_blocker_never_invents_next_available_time() -> None:
     assert availability["prerequisite_blocked_cards"] == 1
     assert availability["blockers"][0]["code"] == "prerequisite"
     assert availability["blockers"][0]["until_utc"] is None
-
