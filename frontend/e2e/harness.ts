@@ -275,29 +275,74 @@ const hass = {
               track_id: String(message.track_id),
               session_type: "quiz",
               available_now: 1,
+              selected_cards: 5,
               introduced_cards: 2,
               new_cards: 3,
+              due_now_total: 1,
+              known_already_cards: 0,
+              known_already_pending_verification: 0,
+              suspended_cards: 0,
+              buried_cards: 0,
+              temporarily_blocked_cards: 1,
+              prerequisite_blocked_cards: 0,
+              session_capacity: 10,
               remaining_new_quota: 0,
               forceable_new: 0,
               forceable_early: 0,
               next_due_at_utc: "2026-09-27T02:10:00+00:00",
               next_available_at_utc: "2026-09-27T02:10:00+00:00",
               next_available_reason: "scheduled_step",
+              blockers: [
+                { code: "scheduled_step", count: 1, until_utc: "2026-09-27T02:10:00+00:00", forceable: false },
+              ],
             }
           : {
               profile_id: profile.profile_id,
               track_id: String(message.track_id),
               session_type: "learn",
               available_now: 0,
+              selected_cards: 5,
               introduced_cards: 2,
               new_cards: 3,
+              due_now_total: 0,
+              known_already_cards: 0,
+              known_already_pending_verification: 0,
+              suspended_cards: 0,
+              buried_cards: 0,
+              temporarily_blocked_cards: 2,
+              prerequisite_blocked_cards: 0,
+              session_capacity: 10,
               remaining_new_quota: 0,
               forceable_new: 3,
               forceable_early: 3,
               next_due_at_utc: "2026-09-27T02:10:00+00:00",
               next_available_at_utc: "2026-09-27T02:10:00+00:00",
               next_available_reason: "scheduled_step",
+              blockers: [
+                { code: "scheduled_step", count: 2, until_utc: "2026-09-27T02:10:00+00:00", forceable: true },
+              ],
             };
+      case "locklearn/reminders/ready/status":
+        return {
+          active: false,
+          mode: String(message.mode),
+          scheduled_for_utc: null,
+          target_available: true,
+        };
+      case "locklearn/reminders/ready/arm":
+        return {
+          active: true,
+          mode: String(message.mode),
+          scheduled_for_utc: "2026-09-27T02:10:00+00:00",
+          target_available: true,
+        };
+      case "locklearn/reminders/ready/cancel":
+        return {
+          active: false,
+          mode: String(message.mode),
+          scheduled_for_utc: null,
+          target_available: true,
+        };
       case "locklearn/session/start":
         return session(message.session_type === "quiz" ? "quiz" : "learn");
       case "locklearn/session/get":
