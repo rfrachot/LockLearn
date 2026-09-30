@@ -416,7 +416,7 @@ export class LockLearnQuizView extends LitElement {
         "quiz",
       );
       if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
-      const nextDue = this.availability.next_due_at_utc;
+      const nextDue = this.availability.next_available_at_utc;
       if (nextDue !== null) {
         const delay = Date.parse(nextDue) - Date.now();
         if (delay > 0 && delay < 2_147_000_000) {
@@ -764,6 +764,13 @@ export class LockLearnQuizView extends LitElement {
     this.hintUsed = true;
   }
 
+  private renderReminderButton() {
+    if (this.availability?.available_now !== 0 || this.availability.next_available_at_utc === null) return nothing;
+    return this.reminder?.active
+      ? html`<button @click=${() => void this.cancelReminder()} ?disabled=${this.loading}>${this.t("quiz.cancelReminder")}</button>`
+      : html`<button @click=${() => void this.armReminder()} ?disabled=${this.loading}>${this.t("quiz.remindMe")}</button>`;
+  }
+
   protected render() {
     if (this.profile === undefined) return nothing;
     if (!canQuizProfile(this.profile)) {
@@ -840,8 +847,15 @@ export class LockLearnQuizView extends LitElement {
                         `}
                   `}
             <div class="muted">${this.t("quiz.whyDueOnly")}</div>
+            ${this.renderReminderButton()}
           </div>
         ` : nothing}
+        ${this.submissionSlow
+          ? html`<div class="notice" role="status" aria-live="polite">
+              <strong>${this.t("quiz.answerUnconfirmed")}</strong>
+              <button @click=${() => void this.verifySubmission()}>${this.t("quiz.verify")}</button>
+            </div>`
+          : nothing}
         ${this.errorMessage
           ? html`<div class="error" role="alert">
               <strong>${this.t("quiz.error")}</strong>
@@ -860,7 +874,7 @@ export class LockLearnQuizView extends LitElement {
     if (this.session === undefined) return nothing;
     if (this.session.question_count === 0) {
       const introduced = this.availability?.introduced_cards ?? 0;
-      const nextDue = this.availability?.next_due_at_utc ?? null;
+      const nextDue = this.availability?.next_available_at_utc ?? null;
       const readyNow = this.availability?.available_now ?? 0;
       if (readyNow > 0) {
         return html`
@@ -891,14 +905,15 @@ export class LockLearnQuizView extends LitElement {
                 <p><strong>${this.t("quiz.nextAvailable")}:</strong> ${this.dueLabel(nextDue)}</p>
               `}
           <p class="muted">${this.t("quiz.whyDueOnly")}</p>
+          ${this.renderReminderButton()}
         </section>
       `;
     }
     if (this.session.current_question === null || this.session.status === "completed") {
       return html`
         <section class="quiz-card">
-          <h2>${this.t("quiz.completed")}</h2>
-          <p>${this.t("quiz.completedBody")}</p>
+          <h2>${this.session.type === "calibration" ? this.t("quiz.calibrationCompleted") : this.t("quiz.completed")}</h2>
+          <p>${this.session.type === "calibration" ? this.t("quiz.calibrationCompletedBody") : this.t("quiz.completedBody")}</p>
           <button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
             ${this.t("quiz.newSession")}
           </button>
