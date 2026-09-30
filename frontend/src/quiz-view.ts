@@ -14,8 +14,11 @@ import {
   quizPayload,
 } from "./quiz-model";
 import {
+  armReadyReminder,
+  cancelReadyReminder,
   completeSession,
   evaluateQuizAnswer,
+  getReadyReminderStatus,
   getSession,
   getSessionAvailability,
   reportFreeTextShouldBeAccepted,
@@ -28,6 +31,7 @@ import {
   type QuizFeedback,
   type QuizFormat,
   type QuizQuestionPayload,
+  type ReadyReminderStatus,
   type SessionAvailability,
   type SessionQuestion,
   type SessionState,
@@ -42,6 +46,7 @@ export class LockLearnQuizView extends LitElement {
   @property({ attribute: false }) hass?: HomeAssistantLike;
   @property({ attribute: false }) profile?: VisibleProfile;
   @property({ attribute: false }) dashboard?: DashboardResponse;
+  @property({ attribute: false }) externalSession?: SessionState;
 
   @state() private trackId = "";
   @state() private format: QuizFormat = "mixed";
@@ -55,10 +60,16 @@ export class LockLearnQuizView extends LitElement {
   @state() private freeText = "";
   @state() private hintUsed = false;
   @state() private availability?: SessionAvailability;
+  @state() private reminder?: ReadyReminderStatus;
+  @state() private submissionSlow = false;
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
   private nextDueTimer?: ReturnType<typeof globalThis.setTimeout>;
+  private submissionTimer?: ReturnType<typeof globalThis.setTimeout>;
+  private readonly refreshOnReturn = () => {
+    if (document.visibilityState === "visible") void this.refreshAvailability();
+  };
 
   static styles = css`
     ${contentRendererStyles}
@@ -275,8 +286,21 @@ export class LockLearnQuizView extends LitElement {
     }
   `;
 
+  connectedCallback(): void {
+    super.connectedCallback();
+    globalThis.addEventListener("focus", this.refreshOnReturn);
+    globalThis.addEventListener("online", this.refreshOnReturn);
+    globalThis.addEventListener("pageshow", this.refreshOnReturn);
+    document.addEventListener("visibilitychange", this.refreshOnReturn);
+  }
+
   disconnectedCallback(): void {
     if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
+    if (this.submissionTimer !== undefined) globalThis.clearTimeout(this.submissionTimer);
+    globalThis.removeEventListener("focus", this.refreshOnReturn);
+    globalThis.removeEventListener("online", this.refreshOnReturn);
+    globalThis.removeEventListener("pageshow", this.refreshOnReturn);
+    document.removeEventListener("visibilitychange", this.refreshOnReturn);
     super.disconnectedCallback();
   }
 
@@ -363,6 +387,12 @@ export class LockLearnQuizView extends LitElement {
     }
     try {
       this.availability = await getSessionAvailability(
+        this.hass,
+        this.profile.profile_id,
+        this.trackId,
+        "quiz",
+      );
+      this.reminder = await getReadyReminderStatus(
         this.hass,
         this.profile.profile_id,
         this.trackId,
