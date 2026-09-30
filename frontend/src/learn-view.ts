@@ -1009,7 +1009,7 @@ export class LockLearnLearnView extends LitElement {
             ${this.t("learn.continue")}
           </button>
         </div>
-        ${this.renderSecondaryActions(question)}
+        ${this.renderSecondaryActions(question, true)}
       </article>
     `;
   }
@@ -1107,15 +1107,17 @@ export class LockLearnLearnView extends LitElement {
     `;
   }
 
-  private renderSecondaryActions(question: SessionQuestion) {
+  private renderSecondaryActions(question: SessionQuestion, allowKnownAlready = false) {
     return html`
       <div class="secondary-actions">
-        <button
-          @click=${() => void this.setUserState("known_already")}
-          ?disabled=${this.loading}
-        >
-          ${this.t("learn.knownAlready")}
-        </button>
+        ${allowKnownAlready
+          ? html`<button
+              @click=${() => void this.markKnownAlready(question)}
+              ?disabled=${this.loading}
+            >
+              ${this.t("learn.knownAlready")}
+            </button>`
+          : nothing}
         <button
           @click=${() => void this.setUserState("suspended")}
           ?disabled=${this.loading}
