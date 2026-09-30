@@ -4,6 +4,15 @@ All notable changes will be documented here.
 
 ## [Unreleased]
 
+### Added
+- Adopt the validated UX no-dead-end v0.3 contract for beta.5: verified quick calibration, effective availability blockers, one-shot readiness reminders, safe known-already verification/reversal, cross-track alternatives and retry-safe answer UX.
+- Add M1–M12 / D1–D2 implementation wireframes and ADRs for known-already semantics, effective selectability and waiting return mechanisms.
+
+### Changed
+- Treat `known_already` as calibration-pending rather than a permanent selection exclusion; only verified retrieval can settle it into normal review/relearning.
+- Define `session/availability` as an explainable projection of actual selector eligibility rather than a raw next-due timestamp.
+
+
 ### Fixed
 - Make Learn and Quiz actions mutually exclusive when an unfinished session exists, with plain-language explanations of Resume vs Start.\n- Keep readiness visible even when an older empty session object is still present, including concrete counts and explicit timing/eligibility explanations.\n- Rename and explain the Track workload planner, surface the current Track snapshot in previews, translate forecast warnings, and reject misleading zero-card forecasts.\n- Explain spaced-repetition states in the Stats view without assuming SRS terminology.\n- Keep Learn/Quiz readiness counts and actual session starts on the same
   profile-defined session length; the frontend no longer overrides child,
