@@ -177,7 +177,7 @@ async def test_reminder_moves_with_effective_availability_and_can_cancel() -> No
         service.close()
         clock.current = datetime(2026, 9, 30, 20, 10, tzinfo=UTC)
         assert await service.async_fire_due(reminder_key) == "rescheduled"
-        assert next(iter(settings.values))["scheduled_for_utc"] == "2026-09-30T20:30:00+00:00"
+        assert next(iter(settings.values.values()))["scheduled_for_utc"] == "2026-09-30T20:30:00+00:00"
         assert delivery.rendered == []
 
         result = await service.async_cancel(

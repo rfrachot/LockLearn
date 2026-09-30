@@ -104,6 +104,7 @@ async def test_known_already_requires_the_introduction_flow(tmp_path: Path) -> N
     finally:
         await storage.async_close()
 
+
 async def test_calibration_is_read_only_and_timed_burial_expires_logically(
     tmp_path: Path,
 ) -> None:

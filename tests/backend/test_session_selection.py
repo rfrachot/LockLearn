@@ -928,6 +928,8 @@ def test_targeted_leech_setting_must_be_boolean() -> None:
 
     with pytest.raises(SessionSelectionError, match="leeches_only"):
         service.validate_session_settings({"leeches_only": "yes"})
+
+
 @pytest.mark.asyncio
 async def test_calibration_samples_new_cards_without_consuming_daily_new_quota() -> None:
     candidates = tuple(
