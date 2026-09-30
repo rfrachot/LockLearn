@@ -230,9 +230,7 @@ class LearningSessionService:
     ) -> Any:
         """Record calibration-pending prior knowledge without verified evidence."""
         now = self._clock.now()
-        seed = (
-            f"{identity['profile_id']}|{identity['track_id']}|{identity['card_key']}"
-        ).encode()
+        seed = (f"{identity['profile_id']}|{identity['track_id']}|{identity['card_key']}").encode()
         jitter_seconds = int.from_bytes(hashlib.sha256(seed).digest()[:4], "big") % 1201
         due = now + timedelta(minutes=10, seconds=jitter_seconds)
         post = dict(pre)
