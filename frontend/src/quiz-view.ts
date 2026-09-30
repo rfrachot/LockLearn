@@ -316,6 +316,23 @@ export class LockLearnQuizView extends LitElement {
       }
       void this.refreshAvailability();
     }
+    if (
+      changed.has("externalSession") &&
+      this.externalSession !== undefined &&
+      this.profile !== undefined &&
+      this.externalSession.profile_id === this.profile.profile_id &&
+      ["quiz", "calibration"].includes(this.externalSession.type)
+    ) {
+      this.trackId = this.externalSession.track_id ?? this.trackId;
+      this.applySession(this.externalSession);
+      this.notice = this.externalSession.type === "calibration"
+        ? this.t("quiz.calibrationStarted")
+        : this.t("quiz.reloaded");
+      this.dispatchEvent(new CustomEvent("locklearn-session-handoff-consumed", {
+        bubbles: true,
+        composed: true,
+      }));
+    }
   }
 
   private locale(): UiLanguage {
@@ -427,6 +444,66 @@ export class LockLearnQuizView extends LitElement {
     return Math.max(0, Math.round(nowMs() - this.questionStartedAt));
   }
 
+  private beginSubmissionWatch(): void {
+    this.submissionSlow = false;
+    if (this.submissionTimer !== undefined) globalThis.clearTimeout(this.submissionTimer);
+    this.submissionTimer = globalThis.setTimeout(() => {
+      this.submissionTimer = undefined;
+      this.submissionSlow = true;
+    }, 8000);
+  }
+
+  private endSubmissionWatch(): void {
+    if (this.submissionTimer !== undefined) globalThis.clearTimeout(this.submissionTimer);
+    this.submissionTimer = undefined;
+    this.submissionSlow = false;
+  }
+
+  private async verifySubmission(): Promise<void> {
+    if (this.hass === undefined || this.session === undefined) return;
+    try {
+      const canonical = await getSession(this.hass, this.session.id);
+      const advanced =
+        canonical.version !== this.session.version ||
+        canonical.current_question?.question_id !== this.session.current_question?.question_id;
+      this.applySession(canonical);
+      if (advanced) {
+        this.loading = false;
+        this.endSubmissionWatch();
+        this.notice = this.t("quiz.answerApplied");
+      } else {
+        this.loading = false;
+        this.notice = this.t("quiz.answerNotConfirmed");
+      }
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  private async armReminder(): Promise<void> {
+    if (this.hass === undefined || this.profile === undefined || this.trackId === "") return;
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      this.reminder = await armReadyReminder(this.hass, this.profile.profile_id, this.trackId, "quiz");
+      this.notice = this.t("quiz.reminderArmed");
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private async cancelReminder(): Promise<void> {
+    if (this.hass === undefined || this.profile === undefined || this.trackId === "") return;
+    this.loading = true;
+    try {
+      this.reminder = await cancelReadyReminder(this.hass, this.profile.profile_id, this.trackId, "quiz");
+      this.notice = this.t("quiz.reminderCancelled");
+    } finally {
+      this.loading = false;
+    }
+  }
   private async start(): Promise<void> {
     if (
       this.hass === undefined ||
