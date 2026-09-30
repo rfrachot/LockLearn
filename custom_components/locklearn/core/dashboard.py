@@ -93,6 +93,7 @@ class DashboardService:
                 {
                     "track_id": track_id,
                     "name": str(track["name"]),
+                    "priority": int(track["priority"]),
                     "source_language": str(track["source_language"]),
                     "target_language": str(track["target_language"]),
                     "due_today": int(stats["due_today"]),

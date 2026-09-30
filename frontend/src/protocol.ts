@@ -794,6 +794,7 @@ export interface DashboardNotification {
 export interface DashboardTrack {
   track_id: string;
   name: string;
+  priority: number;
   source_language: string;
   target_language: string;
   due_today: number;
