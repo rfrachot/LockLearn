@@ -610,6 +610,7 @@ export class LockLearnQuizView extends LitElement {
     const enriched = this.enrichAnswer(answer);
     this.loading = true;
     this.errorMessage = "";
+    this.beginSubmissionWatch();
     try {
       const result = await submitQuizAnswer(
         this.hass,
@@ -624,6 +625,7 @@ export class LockLearnQuizView extends LitElement {
       await this.recover(error);
     } finally {
       this.loading = false;
+      this.endSubmissionWatch();
     }
   }
 
@@ -638,6 +640,7 @@ export class LockLearnQuizView extends LitElement {
     ) return;
     this.loading = true;
     this.errorMessage = "";
+    this.beginSubmissionWatch();
     try {
       const result = await submitQuizAnswer(
         this.hass,
@@ -655,6 +658,7 @@ export class LockLearnQuizView extends LitElement {
       await this.recover(error);
     } finally {
       this.loading = false;
+      this.endSubmissionWatch();
     }
   }
 
