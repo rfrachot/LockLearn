@@ -6,9 +6,9 @@ Beta.4 UX follow-up is integrated and deployed from
 `release/1.0.0-beta.4`.
 
 - UX branch initial SHA: `7d6e23c70402940ebb7b0b24dc5962fb6daa2b89`.
-- Functional deployed SHA: `c94cf72c7616f002fcd5eb896fb88a1027b3f8e7`.
-- Documentation head after this handoff: recorded below; this documentation
-  commit must not be redeployed.
+- `deployed_sha`: `c94cf72c7616f002fcd5eb896fb88a1027b3f8e7`.
+- `documentation_head`: this doc-only handoff commit after the deployed SHA;
+  it must not be redeployed.
 - CI run `36675810188`: PASS for backend-quality, frontend, frontend-e2e,
   dataset-contracts, home-assistant-validation, HA minimum 2025.2.5, HA
   current-harness 2026.9.3 and HA latest stable 2026.9.4.
