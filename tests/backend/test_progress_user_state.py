@@ -82,45 +82,27 @@ async def _setup(
     return storage, service, clock, "profile-p3-10", "track-p3-10"
 
 
-async def test_known_already_materializes_no_fake_review_and_reactivates(tmp_path: Path) -> None:
+async def test_known_already_requires_the_introduction_flow(tmp_path: Path) -> None:
     storage, service, _clock, profile_id, track_id = await _setup(tmp_path)
     card_key = card_identity(ITEM_A)[1]
     try:
-        result = await service.async_set_user_state(
-            actor_user_id="owner",
-            profile_id=profile_id,
-            track_id=track_id,
-            card_key=card_key,
-            user_state="known_already",
-        )
-        assert result["user_state"] == "known_already"
-        assert result["effective_user_state"] == "known_already"
-        assert result["state"] == "new"
-        assert result["seen_count"] == 0
-        assert result["verified_correct_count"] == 0
-        assert result["verified_wrong_count"] == 0
-        assert result["next_due_at_utc"] is None
-
+        with pytest.raises(
+            ProgressUserStateError,
+            match="must be recorded from a new-card introduction",
+        ):
+            await service.async_set_user_state(
+                actor_user_id="owner",
+                profile_id=profile_id,
+                track_id=track_id,
+                card_key=card_key,
+                user_state="known_already",
+            )
         with sqlite3.connect(storage.paths.state_db) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM progress").fetchone() == (0,)
             assert connection.execute("SELECT COUNT(*) FROM review_events").fetchone() == (0,)
-            assert connection.execute(
-                """SELECT event_type FROM audit_events
-                   WHERE profile_id = ? ORDER BY id""",
-                (profile_id,),
-            ).fetchall() == [("progress_user_state",)]
-
-        active = await service.async_set_user_state(
-            actor_user_id="owner",
-            profile_id=profile_id,
-            track_id=track_id,
-            card_key=card_key,
-            user_state="active",
-        )
-        assert active["user_state"] == "active"
-        assert active["seen_count"] == 0
+            assert connection.execute("SELECT COUNT(*) FROM audit_events").fetchone() == (0,)
     finally:
         await storage.async_close()
-
 
 async def test_calibration_is_read_only_and_timed_burial_expires_logically(
     tmp_path: Path,
