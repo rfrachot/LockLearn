@@ -44,7 +44,7 @@ class _Profiles:
     async def async_get(self, profile_id: str) -> dict[str, Any] | None:
         if profile_id != "profile-1":
             return None
-        return {"profile_id": profile_id, "name": "Renaud"}
+        return {"profile_id": profile_id, "name": "Learner"}
 
 
 class _Targets:
@@ -135,7 +135,7 @@ async def test_reminder_scope_is_idempotent_and_fires_only_after_revalidation() 
         assert second["active"] is True
         assert len(settings.values) == 1
 
-        key = next(iter(settings.values))
+        key = next(iter(settings.values.values()))
         reminder_key = f"ready_reminder:{key['reminder_id']}"
         service.close()
         clock.current = datetime(2026, 9, 30, 20, 10, tzinfo=UTC)
@@ -172,7 +172,7 @@ async def test_reminder_moves_with_effective_availability_and_can_cancel() -> No
             track_id="track-1",
             mode="learn",
         )
-        stored = next(iter(settings.values))
+        stored = next(iter(settings.values.values()))
         reminder_key = f"ready_reminder:{stored['reminder_id']}"
         service.close()
         clock.current = datetime(2026, 9, 30, 20, 10, tzinfo=UTC)
