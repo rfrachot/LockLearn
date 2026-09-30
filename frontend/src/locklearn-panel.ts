@@ -405,8 +405,9 @@ export class LockLearnPanel extends LitElement {
       return;
     }
     this.handoffSession = session;
-    this.activeRoute = "learn";
-    navigateToRoute("learn");
+    const route = ["quiz", "calibration"].includes(session.type) ? "quiz" : "learn";
+    this.activeRoute = route;
+    navigateToRoute(route);
   }
 
   private clearSessionHandoff(): void {
@@ -564,6 +565,7 @@ export class LockLearnPanel extends LitElement {
                     .dashboard=${this.dashboard}
                     .externalSession=${this.handoffSession}
                     @locklearn-session-handoff-consumed=${this.clearSessionHandoff}
+                    @locklearn-open-session=${this.openTargetedSession}
                   ></locklearn-learn-view>`
                 : this.activeRoute === "quiz"
                   ? html`<locklearn-quiz-view
@@ -572,6 +574,8 @@ export class LockLearnPanel extends LitElement {
                         (profile) => profile.profile_id === this.selectedProfileId,
                       )}
                       .dashboard=${this.dashboard}
+                      .externalSession=${this.handoffSession}
+                      @locklearn-session-handoff-consumed=${this.clearSessionHandoff}
                     ></locklearn-quiz-view>`
                   : this.activeRoute === "stats"
                     ? html`<locklearn-stats-view
