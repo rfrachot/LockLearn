@@ -534,7 +534,7 @@ class SessionSelectionService:
         forced_new = sum(candidate.state == "new" for candidate in forced_selected)
         next_available: datetime | None = None
         next_available_reason: str | None = None
-        if not normal_selected and future_opportunities:
+        if future_opportunities:
             next_available, next_available_reason = min(
                 future_opportunities,
                 key=lambda value: (value[0], value[1]),
