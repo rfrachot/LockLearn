@@ -909,26 +909,53 @@ export interface SessionState {
 }
 
 
+export type AvailabilityBlockerCode =
+  | "scheduled_step"
+  | "known_already_verification"
+  | "new_quota"
+  | "sibling_gap"
+  | "confusable_gap"
+  | "buried"
+  | "prerequisite"
+  | "suspended";
+
+export interface AvailabilityBlocker {
+  code: AvailabilityBlockerCode;
+  count: number;
+  until_utc: string | null;
+  forceable: boolean;
+}
+
 export interface SessionAvailability {
   profile_id: string;
   track_id: string;
   session_type: string;
   available_now: number;
+  selected_cards: number;
   introduced_cards: number;
   new_cards: number;
+  due_now_total: number;
+  known_already_cards: number;
+  known_already_pending_verification: number;
+  suspended_cards: number;
+  buried_cards: number;
+  temporarily_blocked_cards: number;
+  prerequisite_blocked_cards: number;
+  session_capacity: number;
   remaining_new_quota: number;
   forceable_new: number;
   forceable_early: number;
   next_due_at_utc: string | null;
   next_available_at_utc: string | null;
-  next_available_reason: "scheduled_step" | "new_quota_reset" | null;
+  next_available_reason: "scheduled_step" | "known_already_verification" | "new_quota" | null;
+  blockers: AvailabilityBlocker[];
 }
 
 export async function getSessionAvailability(
   hass: HomeAssistantLike,
   profileId: string,
   trackId: string,
-  sessionType: "learn" | "quiz",
+  sessionType: "learn" | "quiz" | "calibration",
   settings: Record<string, unknown> = {},
 ): Promise<SessionAvailability> {
   return hass.callWS<SessionAvailability>({
@@ -1126,7 +1153,7 @@ export async function setCardUserState(
   profileId: string,
   trackId: string,
   cardKey: string,
-  userState: "known_already" | "suspended",
+  userState: "active" | "suspended" | "buried",
 ): Promise<Record<string, unknown>> {
   return hass.callWS<Record<string, unknown>>({
     type: "locklearn/progress/set_user_state",
