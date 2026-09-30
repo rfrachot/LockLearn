@@ -1027,6 +1027,26 @@ export async function startQuizSession(
 }
 
 
+export async function startCalibrationSession(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  requestedCards = 20,
+): Promise<SessionState> {
+  return hass.callWS<SessionState>({
+    type: "locklearn/session/start",
+    profile_id: profileId,
+    track_id: trackId,
+    session_type: "calibration",
+    strategy: "calibration",
+    settings: {
+      requested_cards: requestedCards,
+      quiz_format: "mixed",
+      option_count: 4,
+    },
+  });
+}
+
 export interface QuizAnswerResponse {
   feedback: QuizFeedback;
   session: SessionState;
@@ -1161,6 +1181,45 @@ export async function setCardUserState(
     track_id: trackId,
     card_key: cardKey,
     user_state: userState,
+  });
+}
+
+export interface ReadyReminderStatus {
+  active: boolean;
+  mode: "learn" | "quiz";
+  scheduled_for_utc: string | null;
+  target_available: boolean;
+}
+
+export async function getReadyReminderStatus(
+  hass: HomeAssistantLike, profileId: string, trackId: string, mode: "learn" | "quiz",
+): Promise<ReadyReminderStatus> {
+  return hass.callWS<ReadyReminderStatus>({
+    type: "locklearn/reminders/ready/status", profile_id: profileId, track_id: trackId, mode,
+  });
+}
+
+export async function armReadyReminder(
+  hass: HomeAssistantLike, profileId: string, trackId: string, mode: "learn" | "quiz",
+): Promise<ReadyReminderStatus> {
+  return hass.callWS<ReadyReminderStatus>({
+    type: "locklearn/reminders/ready/arm", profile_id: profileId, track_id: trackId, mode,
+  });
+}
+
+export async function cancelReadyReminder(
+  hass: HomeAssistantLike, profileId: string, trackId: string, mode: "learn" | "quiz",
+): Promise<ReadyReminderStatus> {
+  return hass.callWS<ReadyReminderStatus>({
+    type: "locklearn/reminders/ready/cancel", profile_id: profileId, track_id: trackId, mode,
+  });
+}
+
+export async function undoLastProgress(
+  hass: HomeAssistantLike, profileId: string, trackId: string, cardKey: string,
+): Promise<Record<string, unknown>> {
+  return hass.callWS<Record<string, unknown>>({
+    type: "locklearn/progress/undo_last", profile_id: profileId, track_id: trackId, card_key: cardKey,
   });
 }
 
