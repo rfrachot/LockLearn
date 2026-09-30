@@ -464,6 +464,108 @@ export class LockLearnLearnView extends LitElement {
     return Math.max(0, Math.round(nowMs() - this.questionStartedAt));
   }
 
+  private beginSubmissionWatch(): void {
+    this.submissionSlow = false;
+    if (this.submissionTimer !== undefined) globalThis.clearTimeout(this.submissionTimer);
+    this.submissionTimer = globalThis.setTimeout(() => {
+      this.submissionTimer = undefined;
+      this.submissionSlow = true;
+    }, 8000);
+  }
+
+  private endSubmissionWatch(): void {
+    if (this.submissionTimer !== undefined) globalThis.clearTimeout(this.submissionTimer);
+    this.submissionTimer = undefined;
+    this.submissionSlow = false;
+  }
+
+  private async verifySubmission(): Promise<void> {
+    if (this.hass === undefined || this.session === undefined) return;
+    try {
+      const canonical = await getSession(this.hass, this.session.id);
+      const advanced =
+        canonical.version !== this.session.version ||
+        canonical.current_question?.question_id !== this.session.current_question?.question_id;
+      this.applySession(canonical);
+      if (advanced) {
+        this.loading = false;
+        this.endSubmissionWatch();
+        this.notice = this.t("learn.answerApplied");
+      } else {
+        this.loading = false;
+        this.notice = this.t("learn.answerNotConfirmed");
+      }
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  private async armReminder(): Promise<void> {
+    if (this.hass === undefined || this.profile === undefined || this.trackId === "") return;
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      this.reminder = await armReadyReminder(this.hass, this.profile.profile_id, this.trackId, "learn");
+      this.notice = this.t("learn.reminderArmed");
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private async cancelReminder(): Promise<void> {
+    if (this.hass === undefined || this.profile === undefined || this.trackId === "") return;
+    this.loading = true;
+    try {
+      this.reminder = await cancelReadyReminder(this.hass, this.profile.profile_id, this.trackId, "learn");
+      this.notice = this.t("learn.reminderCancelled");
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private async startCalibration(): Promise<void> {
+    if (this.hass === undefined || this.profile === undefined || this.trackId === "") return;
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      const session = await startCalibrationSession(this.hass, this.profile.profile_id, this.trackId, 20);
+      this.dispatchEvent(new CustomEvent("locklearn-open-session", {
+        detail: { session },
+        bubbles: true,
+        composed: true,
+      }));
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private async markKnownAlready(question: SessionQuestion): Promise<void> {
+    this.lastKnownCardKey = question.card_key;
+    await this.learningAction("known_already");
+    if (this.lastKnownCardKey === question.card_key) this.notice = this.t("learn.knownPending");
+  }
+
+  private async undoKnownAlready(): Promise<void> {
+    if (
+      this.hass === undefined || this.profile === undefined || this.session === undefined ||
+      this.session.track_id === null || this.lastKnownCardKey === undefined
+    ) return;
+    this.loading = true;
+    try {
+      await undoLastProgress(this.hass, this.profile.profile_id, this.session.track_id, this.lastKnownCardKey);
+      this.lastKnownCardKey = undefined;
+      this.notice = this.t("learn.knownUndone");
+      await this.refreshAvailability();
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.loading = false;
+    }
+  }
   private async start(allowEarlyLearning = false): Promise<void> {
     if (
       this.hass === undefined ||
@@ -532,13 +634,14 @@ export class LockLearnLearnView extends LitElement {
   }
 
   private async learningAction(
-    action: "introduce" | "known" | "review" | "idk",
+    action: "introduce" | "known_already" | "known" | "review" | "idk",
     latency?: number,
   ): Promise<void> {
     const question = this.session?.current_question;
     if (this.hass === undefined || this.session === undefined || question === null || question === undefined) return;
     this.loading = true;
     this.errorMessage = "";
+    this.beginSubmissionWatch();
     try {
       const answered = await answerSession(
         this.hass,
@@ -558,6 +661,7 @@ export class LockLearnLearnView extends LitElement {
       await this.recover(error);
     } finally {
       this.loading = false;
+      this.endSubmissionWatch();
     }
   }
 
@@ -575,7 +679,7 @@ export class LockLearnLearnView extends LitElement {
     this.hintUsed = true;
   }
 
-  private async setUserState(userState: "known_already" | "suspended"): Promise<void> {
+  private async setUserState(userState: "suspended"): Promise<void> {
     const question = this.session?.current_question;
     if (
       this.hass === undefined ||
