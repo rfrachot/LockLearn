@@ -239,9 +239,7 @@ class ReadyReminderService:
         await self._settings.async_delete(key)
         return "cancelled"
 
-    async def _resolve_target(
-        self, profile_id: str, target_id: str | None
-    ) -> dict[str, Any]:
+    async def _resolve_target(self, profile_id: str, target_id: str | None) -> dict[str, Any]:
         if target_id is not None:
             target = await self._targets.async_get(target_id)
             if (
@@ -275,9 +273,7 @@ class ReadyReminderService:
         shared = bool(target.get("shared_device"))
         title = f"LockLearn · {profile_name}" if shared else "LockLearn"
         message = (
-            "Une session d’apprentissage est prête."
-            if mode == "learn"
-            else "Un quiz est prêt."
+            "Une session d’apprentissage est prête." if mode == "learn" else "Un quiz est prêt."
         )
         return RenderedNotification(
             profile_id=str(profile["profile_id"]),
