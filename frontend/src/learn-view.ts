@@ -14,17 +14,23 @@ import {
 } from "./learn-model";
 import {
   answerSession,
+  armReadyReminder,
+  cancelReadyReminder,
   completeSession,
   createCardAnnotation,
+  getReadyReminderStatus,
   getSession,
   getSessionAvailability,
   reportQuestion,
   setCardUserState,
+  startCalibrationSession,
   startLearnSession,
+  undoLastProgress,
   type DashboardResponse,
   type DashboardTrack,
   type HomeAssistantLike,
   type LearnContentBlock,
+  type ReadyReminderStatus,
   type SessionAvailability,
   type SessionQuestion,
   type SessionState,
@@ -55,11 +61,18 @@ export class LockLearnLearnView extends LitElement {
   @state() private waitingUntil?: string;
   @state() private availability?: SessionAvailability;
   @state() private forceEarlyCurrent = false;
+  @state() private reminder?: ReadyReminderStatus;
+  @state() private submissionSlow = false;
+  @state() private lastKnownCardKey?: string;
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
   private availabilityTimer?: ReturnType<typeof globalThis.setTimeout>;
   private nextDueTimer?: ReturnType<typeof globalThis.setTimeout>;
+  private submissionTimer?: ReturnType<typeof globalThis.setTimeout>;
+  private readonly refreshOnReturn = () => {
+    if (document.visibilityState === "visible") void this.refreshAvailability();
+  };
 
   static styles = css`
     ${contentRendererStyles}
@@ -269,9 +282,22 @@ export class LockLearnLearnView extends LitElement {
     }
   `;
 
+  connectedCallback(): void {
+    super.connectedCallback();
+    globalThis.addEventListener("focus", this.refreshOnReturn);
+    globalThis.addEventListener("online", this.refreshOnReturn);
+    globalThis.addEventListener("pageshow", this.refreshOnReturn);
+    document.addEventListener("visibilitychange", this.refreshOnReturn);
+  }
+
   disconnectedCallback(): void {
     this.clearAvailabilityTimer();
     if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
+    if (this.submissionTimer !== undefined) globalThis.clearTimeout(this.submissionTimer);
+    globalThis.removeEventListener("focus", this.refreshOnReturn);
+    globalThis.removeEventListener("online", this.refreshOnReturn);
+    globalThis.removeEventListener("pageshow", this.refreshOnReturn);
+    document.removeEventListener("visibilitychange", this.refreshOnReturn);
     super.disconnectedCallback();
   }
 
@@ -391,6 +417,12 @@ export class LockLearnLearnView extends LitElement {
     }
     try {
       this.availability = await getSessionAvailability(
+        this.hass,
+        this.profile.profile_id,
+        this.trackId,
+        "learn",
+      );
+      this.reminder = await getReadyReminderStatus(
         this.hass,
         this.profile.profile_id,
         this.trackId,
