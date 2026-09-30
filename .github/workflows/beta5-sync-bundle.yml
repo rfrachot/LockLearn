@@ -1,0 +1,37 @@
+name: Beta5 bundle sync
+
+on:
+  push:
+    branches:
+      - feat/beta5-no-dead-end-v03
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/beta5-no-dead-end-v03
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci
+      - working-directory: frontend
+        run: npm run build
+      - name: Commit generated panel
+        run: |
+          if git diff --quiet -- custom_components/locklearn/frontend/locklearn-panel.js; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components/locklearn/frontend/locklearn-panel.js
+          git commit -m "build(beta5): refresh frontend bundle"
+          git push origin HEAD:feat/beta5-no-dead-end-v03
