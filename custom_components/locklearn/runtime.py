@@ -28,6 +28,7 @@ from .core.profiles import ProfileService
 from .core.progress_state import ProgressUserStateService
 from .core.quiz import QuizEngine
 from .core.quiz_sessions import QuizSessionService
+from .core.ready_reminders import ReadyReminderService
 from .core.review_policy import ReviewPolicyV1
 from .core.reviews import ReviewEventService
 from .core.scheduler import SchedulerService, SchedulerValidationError
@@ -88,6 +89,7 @@ class LockLearnRuntime:
     notification_ha: NotificationHomeAssistantBridge
     notification_interactions: NotificationInteractionService
     notification_warnings: NotificationWarningService
+    ready_reminders: ReadyReminderService
     scheduler: SchedulerService
     scheduler_ha: SchedulerHomeAssistantBridge
     datasets: DatasetManager
@@ -272,6 +274,19 @@ class LockLearnRuntime:
                 notification_actions,
                 scheduler,
             )
+            notification_delivery = NotificationDeliveryService(
+                hass,
+                storage.repositories.notification_targets,
+                issue_callback=report_issue,
+                issue_clear_callback=clear_issue,
+            )
+            ready_reminders = ReadyReminderService(
+                storage.repositories.settings,
+                storage.repositories.profiles,
+                storage.repositories.notification_targets,
+                session_selection,
+                notification_delivery,
+            )
             runtime = cls(
                 storage=storage,
                 sessions=sessions,
@@ -327,17 +342,13 @@ class LockLearnRuntime:
                 stats=stats,
                 reviews=reviews,
                 notification_actions=notification_actions,
-                notification_delivery=NotificationDeliveryService(
-                    hass,
-                    storage.repositories.notification_targets,
-                    issue_callback=report_issue,
-                    issue_clear_callback=clear_issue,
-                ),
+                notification_delivery=notification_delivery,
                 notification_ha=notification_ha,
                 notification_interactions=notification_interactions,
                 notification_warnings=NotificationWarningService(
                     storage.repositories.notification_warnings,
                 ),
+                ready_reminders=ready_reminders,
                 scheduler=scheduler,
                 scheduler_ha=scheduler_ha,
                 datasets=datasets,
@@ -346,6 +357,7 @@ class LockLearnRuntime:
             await runtime.scheduler.async_reconcile(reason="startup")
             await runtime.scheduler_ha.async_start()
             await runtime.notification_ha.async_start()
+            await runtime.ready_reminders.async_start()
             return runtime
         except Exception:
             await transfer_store.async_close()
@@ -355,6 +367,7 @@ class LockLearnRuntime:
     async def async_close(self) -> None:
         """Cancel callbacks/operations, then drain and close SQLite."""
         self.notification_ha.close()
+        self.ready_reminders.close()
         self.scheduler_ha.close()
         self.sessions.close()
         await self.operations.async_close()

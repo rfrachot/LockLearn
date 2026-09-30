@@ -34,6 +34,7 @@ from ..core.presentation import PresentationError
 from ..core.profiles import ProfileValidationError
 from ..core.progress_state import ProgressUserStateError
 from ..core.quiz_sessions import QuizSessionError
+from ..core.ready_reminders import ReadyReminderError
 from ..core.scheduler import SchedulerValidationError
 from ..core.session_selection import SessionSelectionError
 from ..core.sessions import SessionQuestion, SessionValidationError
@@ -1836,7 +1837,7 @@ async def ws_content_report_question(
         vol.Required("profile_id"): str,
         vol.Required("track_id"): str,
         vol.Required("card_key"): str,
-        vol.Required("user_state"): vol.In(("active", "known_already", "suspended", "buried")),
+        vol.Required("user_state"): vol.In(("active", "suspended", "buried")),
         vol.Optional("suspend_until_utc"): vol.Any(str, None),
     }
 )
@@ -2987,6 +2988,100 @@ async def ws_scheduler_preview(
     connection.send_result(msg["id"], preview)
 
 
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/reminders/ready/status",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("mode"): vol.In(("learn", "quiz")),
+    }
+)
+@websocket_api.async_response
+async def ws_ready_reminder_status(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return the current one-shot readiness reminder state."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], msg["profile_id"], ProfilePermission.READ
+    ):
+        return
+    try:
+        result = await runtime.ready_reminders.async_status(
+            profile_id=msg["profile_id"],
+            track_id=msg["track_id"],
+            mode=msg["mode"],
+        )
+    except ReadyReminderError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/reminders/ready/arm",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("mode"): vol.In(("learn", "quiz")),
+        vol.Optional("target_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_ready_reminder_arm(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Arm one idempotent readiness reminder for profile+track+mode."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], msg["profile_id"], ProfilePermission.ANSWER
+    ):
+        return
+    try:
+        result = await runtime.ready_reminders.async_arm(
+            profile_id=msg["profile_id"],
+            track_id=msg["track_id"],
+            mode=msg["mode"],
+            target_id=msg.get("target_id"),
+        )
+    except (ReadyReminderError, SessionSelectionError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/reminders/ready/cancel",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("mode"): vol.In(("learn", "quiz")),
+    }
+)
+@websocket_api.async_response
+async def ws_ready_reminder_cancel(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Cancel the one-shot readiness reminder for profile+track+mode."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], msg["profile_id"], ProfilePermission.ANSWER
+    ):
+        return
+    result = await runtime.ready_reminders.async_cancel(
+        profile_id=msg["profile_id"],
+        track_id=msg["track_id"],
+        mode=msg["mode"],
+    )
+    connection.send_result(msg["id"], result)
+
 COMMANDS = (
     ws_bootstrap,
     ws_profiles_list,
@@ -3036,6 +3131,9 @@ COMMANDS = (
     ws_admin_recompute_progress,
     ws_admin_storage_status,
     ws_notification_unrecorded_responses,
+    ws_ready_reminder_status,
+    ws_ready_reminder_arm,
+    ws_ready_reminder_cancel,
     ws_scheduler_preview,
     ws_session_availability,
     ws_session_start,

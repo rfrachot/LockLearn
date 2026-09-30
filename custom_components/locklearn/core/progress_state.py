@@ -105,6 +105,10 @@ class ProgressUserStateService:
             resolved_state = CardUserState(user_state)
         except ValueError as err:
             raise ProgressUserStateError("unsupported user_state") from err
+        if resolved_state is CardUserState.KNOWN_ALREADY:
+            raise ProgressUserStateError(
+                "known_already must be recorded from a new-card introduction"
+            )
 
         now = self._clock.now()
         normalized_until = self._validate_suspend_until(

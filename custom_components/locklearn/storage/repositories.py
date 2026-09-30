@@ -4790,6 +4790,31 @@ class SettingsRepository:
 
         return await self._storage._async_reader(read)
 
+    async def async_delete(self, key: str) -> bool:
+        """Delete one setting key."""
+
+        def delete_value(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute("DELETE FROM settings WHERE key = ?", (key,))
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(delete_value)
+
+    async def async_list_prefix(self, prefix: str) -> dict[str, Any]:
+        """Return JSON settings whose keys share one internal namespace."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any]:
+            rows = connection.execute(
+                """SELECT key, value_json
+                   FROM settings
+                   WHERE key LIKE ?
+                   ORDER BY key""",
+                (f"{prefix}%",),
+            ).fetchall()
+            return {str(key): json.loads(str(value)) for key, value in rows}
+
+        return await self._storage._async_reader(read)
+
 
 @dataclass(frozen=True, slots=True)
 class StateRepositories:
