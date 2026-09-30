@@ -850,6 +850,7 @@ export class LockLearnLearnView extends LitElement {
                 `}
           </div>
         ` : nothing}
+        ${this.session === undefined ? this.renderNoDeadEndActions() : nothing}
         ${this.loading && this.session === undefined
           ? html`<div class="notice" role="status">${this.t("learn.loading")}</div>`
           : nothing}
@@ -859,14 +860,65 @@ export class LockLearnLearnView extends LitElement {
               <div>${this.errorMessage}</div>
             </div>`
           : nothing}
+        ${this.submissionSlow
+          ? html`<div class="notice" role="status" aria-live="polite">
+              <strong>${this.t("learn.answerUnconfirmed")}</strong>
+              <button @click=${() => void this.verifySubmission()}>${this.t("learn.verify")}</button>
+            </div>`
+          : nothing}
         ${this.notice
-          ? html`<div class="notice" role="status" aria-live="polite">${this.notice}</div>`
+          ? html`<div class="notice" role="status" aria-live="polite">
+              ${this.notice}
+              ${this.lastKnownCardKey === undefined
+                ? nothing
+                : html`<button @click=${() => void this.undoKnownAlready()}>${this.t("learn.undo")}</button>`}
+            </div>`
           : nothing}
         ${this.renderSession()}
       </section>
     `;
   }
 
+  private renderNoDeadEndActions() {
+    const availability = this.availability;
+    if (availability === undefined) return nothing;
+    const canRemind =
+      availability.available_now === 0 && availability.next_available_at_utc !== null;
+    return html`
+      <div class="actions">
+        ${availability.new_cards > 0
+          ? html`<button @click=${() => void this.startCalibration()} ?disabled=${this.loading}>
+              ${this.t("learn.quickCalibration")}
+            </button>`
+          : nothing}
+        ${canRemind
+          ? this.reminder?.active
+            ? html`<button @click=${() => void this.cancelReminder()} ?disabled=${this.loading}>
+                ${this.t("learn.cancelReminder")}
+              </button>`
+            : html`<button @click=${() => void this.armReminder()} ?disabled=${this.loading}>
+                ${this.t("learn.remindMe")}
+              </button>`
+          : nothing}
+      </div>
+      ${availability.blockers.length > 0
+        ? html`<details>
+            <summary>${this.t("learn.conditionsTitle")}</summary>
+            <dl>
+              ${availability.blockers.map(
+                (blocker) => html`
+                  <dt>${blocker.code}</dt>
+                  <dd>
+                    ${blocker.count}
+                    ${blocker.until_utc === null ? nothing : html` · ${this.dueLabel(blocker.until_utc)}`}
+                  </dd>
+                `,
+              )}
+            </dl>
+          </details>`
+        : nothing}
+    `;
+  }
   private renderSession() {
     if (this.session === undefined) return nothing;
     if (this.session.question_count === 0) {
