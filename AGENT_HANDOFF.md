@@ -65,10 +65,24 @@ The source/test contract covers persisted Track readiness copy, scheduled
 learning steps, local new-card quota reset, availability/start parity, safe
 early learning, and non-bypassable failed/relearning cooldowns.
 
-The real `locklearn/tracks/plan_preview` call was not repeatable from this
-workspace because `.env` is only the empty template and no `LOCKLEARN_HA_*`
-environment variables are available. No real Profile or Track was created,
-changed or deleted. Next action is to run the read-only preview against the
-existing qualification Track once the existing HA connection environment is
-available, capture all forecast fields, then qualify/deploy the regenerated
-bundle if the values are non-zero and coherent.
+Real HA read-only qualification was completed on the existing qualification
+Track `Japanese Starter b37891dc` without creating or changing any Profile or
+Track. The direct `locklearn/tracks/plan_preview` response used
+`max_new_per_day_cards=8`, `max_reviews_per_day_cards=50`,
+`max_notification_new_teasers=2`, target date `2026-10-30`, coverage `1.0`
+and retention `0.9`, and returned:
+
+- `selected_cards=100`, `introduced_cards=32`, `target_cards=100`,
+  `remaining_target_cards=68`;
+- `required_new_per_day=3`, `planned_new_per_day=8`, `due_now=0`;
+- `reviews_per_day_in_3_weeks=7`, `reviews_per_day_in_3_months=0`;
+- `notification_deliverable_in_3_weeks=6`,
+  `notification_deliverable_in_3_months=0`;
+- all feasibility flags true and `warnings=[]`.
+
+The same real Track reported `introduced_cards=32`, `new_cards=68` and
+`available_now=16` for both Learn and Quiz at qualification time; no future
+availability timestamp was needed. The deployed instance reported backend
+version `1.0.0-beta.3` and frontend protocol `3`. The local UX follow-up is
+committed but not pushed or deployed; deployment still requires the normal
+authorized release/development deployment path.
