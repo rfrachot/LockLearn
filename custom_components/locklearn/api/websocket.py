@@ -2988,7 +2988,6 @@ async def ws_scheduler_preview(
     connection.send_result(msg["id"], preview)
 
 
-
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "locklearn/reminders/ready/status",
@@ -3081,6 +3080,7 @@ async def ws_ready_reminder_cancel(
         mode=msg["mode"],
     )
     connection.send_result(msg["id"], result)
+
 
 COMMANDS = (
     ws_bootstrap,
