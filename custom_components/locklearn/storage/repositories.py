@@ -2076,12 +2076,9 @@ class ReviewEventsRepository:
                     item["verified_correct"] += 1
                 else:
                     item["verified_wrong"] += 1
-            if (
-                mode == "known_already"
-                or (
-                    mode == "self_assessment_after_retrieval"
-                    and result in {"correct", "known", "knew", "easy", "hard"}
-                )
+            if mode == "known_already" or (
+                mode == "self_assessment_after_retrieval"
+                and result in {"correct", "known", "knew", "easy", "hard"}
             ):
                 item["self_known"] += 1
             if question_type in {"mcq", "cloze", "cloze_mcq"}:
