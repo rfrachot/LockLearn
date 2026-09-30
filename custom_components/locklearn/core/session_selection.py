@@ -175,7 +175,10 @@ class SessionSelectionService:
 
         normalized_type = session_type.strip().lower()
         effective_settings = dict(settings)
-        if normalized_type in _CALIBRATION_SESSION_TYPES and "requested_cards" not in effective_settings:
+        if (
+            normalized_type in _CALIBRATION_SESSION_TYPES
+            and "requested_cards" not in effective_settings
+        ):
             effective_settings["requested_cards"] = 20
         requested_cards = self._requested_cards(effective_settings, profile)
         if normalized_type in _CALIBRATION_SESSION_TYPES and not 20 <= requested_cards <= 40:
@@ -294,7 +297,10 @@ class SessionSelectionService:
 
         normalized_type = session_type.strip().lower()
         effective_settings = dict(settings)
-        if normalized_type in _CALIBRATION_SESSION_TYPES and "requested_cards" not in effective_settings:
+        if (
+            normalized_type in _CALIBRATION_SESSION_TYPES
+            and "requested_cards" not in effective_settings
+        ):
             effective_settings["requested_cards"] = 20
         requested_cards = self._requested_cards(effective_settings, profile)
         if normalized_type in _CALIBRATION_SESSION_TYPES and not 20 <= requested_cards <= 40:
@@ -555,21 +561,15 @@ class SessionSelectionService:
                 "code": code,
                 "count": len(blocker_cards[code]),
                 "until_utc": (
-                    None
-                    if blocker_until.get(code) is None
-                    else blocker_until[code].isoformat()
+                    None if blocker_until.get(code) is None else blocker_until[code].isoformat()
                 ),
                 "forceable": bool(blocker_forceable.get(code, False)),
             }
             for code in blocker_order
             if blocker_cards.get(code)
         ]
-        known_count = sum(
-            candidate.user_state == "known_already" for candidate in raw_candidates
-        )
-        suspended_count = sum(
-            candidate.user_state == "suspended" for candidate in raw_candidates
-        )
+        known_count = sum(candidate.user_state == "known_already" for candidate in raw_candidates)
+        suspended_count = sum(candidate.user_state == "suspended" for candidate in raw_candidates)
         buried_count = sum(candidate.user_state == "buried" for candidate in raw_candidates)
 
         return {
