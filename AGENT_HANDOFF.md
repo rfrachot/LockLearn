@@ -68,6 +68,6 @@ Read-only backend snapshot:
 
 ## Status
 
-`PASS — RENAUD PEUT RETESTER BETA.4`
+`PASS — BETA.4 READY FOR RETEST`
 
 Do not start beta.5, merge main, tag stable, or delete user data.
