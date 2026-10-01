@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { findReadyAlternative } from "./next-action";
 import type { DashboardResponse, HomeAssistantLike } from "./protocol";
@@ -51,10 +51,10 @@ const dashboard: DashboardResponse = {
 
 function hass(counts: Record<string, number>): HomeAssistantLike {
   return {
-    callWS: vi.fn(async <T>(message: Record<string, unknown>): Promise<T> => {
+    async callWS<T>(message: Record<string, unknown>): Promise<T> {
       const key = String(message.track_id) + ":" + String(message.session_type);
       return { available_now: counts[key] ?? 0 } as T;
-    }),
+    },
   };
 }
 
