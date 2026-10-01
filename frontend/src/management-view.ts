@@ -756,7 +756,6 @@ export class LockLearnManagementView extends LitElement {
       : [];
     const weights = track.content_weights ?? {};
     const detailsScope = this.scopeKey(track.track_id, "details");
-    const planScope = this.scopeKey(track.track_id, "plan");
     const sourceLabel = languageDisplayName(track.source_language ?? "", this.locale());
     const targetLabel = languageDisplayName(track.target_language ?? "", this.locale());
     return html`
