@@ -1879,6 +1879,186 @@ async def ws_progress_set_user_state(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "locklearn/cards/concerned/list",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("filter"): vol.In(
+            (
+                "known_pending",
+                "suspended",
+                "buried",
+                "prerequisite_support",
+                "current_waiting_context",
+            )
+        ),
+        vol.Optional("mode", default="learn"): vol.In(("learn", "quiz")),
+    }
+)
+@websocket_api.async_response
+async def ws_cards_concerned_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return a bounded prompt-only view of cards relevant to the current wait."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    track_id = msg["track_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.READ,
+    ):
+        return
+    track = await runtime.storage.repositories.tracks.async_get(track_id)
+    if track is None or str(track["profile_id"]) != profile_id:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Track not found")
+        return
+
+    rows = await runtime.storage.repositories.tracks.async_session_candidates(
+        profile_id=profile_id,
+        track_id=track_id,
+    )
+    selected_keys: set[str] = set()
+    filter_name = msg["filter"]
+    if filter_name == "known_pending":
+        selected_keys = {
+            str(row["card_key"])
+            for row in rows
+            if str(row.get("user_state", "active")) == "known_already"
+        }
+    elif filter_name == "suspended":
+        selected_keys = {
+            str(row["card_key"])
+            for row in rows
+            if str(row.get("user_state", "active")) == "suspended"
+        }
+    elif filter_name == "buried":
+        selected_keys = {
+            str(row["card_key"])
+            for row in rows
+            if str(row.get("user_state", "active")) == "buried"
+        }
+    else:
+        prerequisite_keys: set[str] = set()
+        blocked_keys: set[str] = set()
+        now = runtime.session_selection._clock.now()
+        for row in rows:
+            card_key = str(row["card_key"])
+            user_state = str(row.get("user_state", "active"))
+            next_due = row.get("next_due_at_utc")
+            if user_state in {"known_already", "suspended", "buried"}:
+                blocked_keys.add(card_key)
+            if isinstance(next_due, str):
+                due_at = datetime.fromisoformat(next_due)
+                if due_at.tzinfo is not None and due_at > now:
+                    blocked_keys.add(card_key)
+            try:
+                decision = await runtime.selection.async_evaluate(
+                    profile_id=profile_id,
+                    track_id=track_id,
+                    card_key=card_key,
+                    learning_item_id=str(row["learning_item_id"]),
+                    state=str(row["state"]),
+                )
+            except SelectionConstraintError:
+                continue
+            if decision.eligible:
+                continue
+            blocked_keys.add(card_key)
+            for reason in decision.reasons:
+                if reason.startswith("prerequisite_"):
+                    parts = reason.split(":")
+                    if len(parts) >= 2:
+                        prerequisite_keys.add(parts[1])
+        selected_keys = (
+            prerequisite_keys if filter_name == "prerequisite_support" else blocked_keys
+        )
+
+    payload: list[dict[str, Any]] = []
+    for row in rows:
+        card_key = str(row["card_key"])
+        if card_key not in selected_keys:
+            continue
+        try:
+            presentation = await runtime.presentation.async_for_card(
+                track_id=track_id,
+                card_key=card_key,
+            )
+        except PresentationError:
+            continue
+        user_state = str(row.get("user_state", "active"))
+        action: str | None = None
+        if user_state == "known_already":
+            action = "learn_instead"
+        elif user_state in {"suspended", "buried"}:
+            action = "reactivate"
+        horizon = row.get("next_due_at_utc")
+        if user_state == "buried" and row.get("suspend_until_utc") is not None:
+            horizon = row.get("suspend_until_utc")
+        payload.append(
+            {
+                "card_key": card_key,
+                "prompt": presentation["prompt"],
+                "state": str(row["state"]),
+                "user_state": user_state,
+                "horizon_utc": horizon,
+                "action": action,
+            }
+        )
+        if len(payload) >= 200:
+            break
+    connection.send_result(
+        msg["id"],
+        {
+            "profile_id": profile_id,
+            "track_id": track_id,
+            "filter": filter_name,
+            "cards": payload,
+        },
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/cards/learn_instead",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("card_key"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_cards_learn_instead(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return one pending-known card to the new-card learning path."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        msg["profile_id"],
+        ProfilePermission.MANAGE_PROGRESS,
+    ):
+        return
+    try:
+        result = await runtime.progress_state.async_learn_instead(
+            profile_id=msg["profile_id"],
+            track_id=msg["track_id"],
+            card_key=msg["card_key"],
+        )
+    except ProgressUserStateError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "locklearn/calibration/sample",
         vol.Required("profile_id"): str,
         vol.Required("track_id"): str,
@@ -3115,6 +3295,8 @@ COMMANDS = (
     ws_content_report,
     ws_content_report_question,
     ws_progress_set_user_state,
+    ws_cards_concerned_list,
+    ws_cards_learn_instead,
     ws_calibration_sample,
     ws_stats_get,
     ws_dashboard_get,
