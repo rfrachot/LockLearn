@@ -78,7 +78,7 @@ class ProgressUserStateService:
         self,
         tracks: UserStateTracksRepository,
         progress: UserStateProgressRepository,
-        reviews: UserStateReviewService,
+        reviews: UserStateReviewService | None = None,
         *,
         dataset_generation: Callable[[], str],
         clock: Clock | None = None,
@@ -190,6 +190,8 @@ class ProgressUserStateService:
                 "updated_at_utc": now.isoformat(),
             }
         )
+        if self._reviews is None:
+            raise RuntimeError("canonical review service is required for known revert")
         await self._reviews.async_record(
             profile_id=profile_id,
             track_id=track_id,
