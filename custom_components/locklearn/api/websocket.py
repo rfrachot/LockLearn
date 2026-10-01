@@ -1938,9 +1938,7 @@ async def ws_cards_concerned_list(
         }
     elif filter_name == "buried":
         selected_keys = {
-            str(row["card_key"])
-            for row in rows
-            if str(row.get("user_state", "active")) == "buried"
+            str(row["card_key"]) for row in rows if str(row.get("user_state", "active")) == "buried"
         }
     else:
         prerequisite_keys: set[str] = set()
@@ -1974,9 +1972,7 @@ async def ws_cards_concerned_list(
                     parts = reason.split(":")
                     if len(parts) >= 2:
                         prerequisite_keys.add(parts[1])
-        selected_keys = (
-            prerequisite_keys if filter_name == "prerequisite_support" else blocked_keys
-        )
+        selected_keys = prerequisite_keys if filter_name == "prerequisite_support" else blocked_keys
 
     payload: list[dict[str, Any]] = []
     for row in rows:
