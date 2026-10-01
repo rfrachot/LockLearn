@@ -1185,6 +1185,59 @@ export async function setCardUserState(
   });
 }
 
+export type ConcernedCardsFilter =
+  | "known_pending"
+  | "suspended"
+  | "buried"
+  | "prerequisite_support"
+  | "current_waiting_context";
+
+export interface ConcernedCard {
+  card_key: string;
+  prompt: LearnFacetPresentation;
+  state: string;
+  user_state: string;
+  horizon_utc: string | null;
+  action: "learn_instead" | "reactivate" | null;
+}
+
+export interface ConcernedCardsResponse {
+  profile_id: string;
+  track_id: string;
+  filter: ConcernedCardsFilter;
+  cards: ConcernedCard[];
+}
+
+export async function getConcernedCards(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  filter: ConcernedCardsFilter,
+  mode: "learn" | "quiz",
+): Promise<ConcernedCardsResponse> {
+  return hass.callWS<ConcernedCardsResponse>({
+    type: "locklearn/cards/concerned/list",
+    profile_id: profileId,
+    track_id: trackId,
+    filter,
+    mode,
+  });
+}
+
+export async function learnCardInstead(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  cardKey: string,
+): Promise<Record<string, unknown>> {
+  return hass.callWS<Record<string, unknown>>({
+    type: "locklearn/cards/learn_instead",
+    profile_id: profileId,
+    track_id: trackId,
+    card_key: cardKey,
+  });
+}
+
 export interface ReadyReminderStatus {
   active: boolean;
   mode: "learn" | "quiz";
