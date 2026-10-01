@@ -51,9 +51,9 @@ const dashboard: DashboardResponse = {
 
 function hass(counts: Record<string, number>): HomeAssistantLike {
   return {
-    callWS: vi.fn(async (message: Record<string, unknown>) => {
+    callWS: vi.fn(async <T>(message: Record<string, unknown>): Promise<T> => {
       const key = String(message.track_id) + ":" + String(message.session_type);
-      return { available_now: counts[key] ?? 0 };
+      return { available_now: counts[key] ?? 0 } as T;
     }),
   };
 }
