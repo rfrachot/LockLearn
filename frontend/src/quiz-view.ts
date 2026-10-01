@@ -1,6 +1,8 @@
 import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 
+import "./concerned-cards";
+
 import {
   contentRendererStyles,
   interactiveAccessibilityStyles,
@@ -25,6 +27,7 @@ import {
   reportQuestion,
   startQuizSession,
   submitQuizAnswer,
+  type ConcernedCardsFilter,
   type DashboardResponse,
   type DashboardTrack,
   type HomeAssistantLike,
@@ -62,6 +65,7 @@ export class LockLearnQuizView extends LitElement {
   @state() private availability?: SessionAvailability;
   @state() private reminder?: ReadyReminderStatus;
   @state() private submissionSlow = false;
+  @state() private concernedFilter?: ConcernedCardsFilter;
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
@@ -764,6 +768,22 @@ export class LockLearnQuizView extends LitElement {
     this.hintUsed = true;
   }
 
+  private blockerFilter(code: string): ConcernedCardsFilter {
+    if (code === "known_already_verification") return "known_pending";
+    if (code === "suspended") return "suspended";
+    if (code === "buried") return "buried";
+    if (code === "prerequisite") return "prerequisite_support";
+    return "current_waiting_context";
+  }
+
+  private openConcerned(filter: ConcernedCardsFilter = "current_waiting_context"): void {
+    this.concernedFilter = filter;
+  }
+
+  private closeConcerned(): void {
+    this.concernedFilter = undefined;
+  }
+
   private renderReminderButton() {
     if (this.availability?.available_now !== 0 || this.availability.next_available_at_utc === null) return nothing;
     return this.reminder?.active
@@ -837,16 +857,24 @@ export class LockLearnQuizView extends LitElement {
                       <dt>${this.t("quiz.startedCards")}</dt><dd>${this.availability.introduced_cards}</dd>
                       <dt>${this.t("quiz.readyCards")}</dt><dd>${this.availability.available_now}</dd>
                     </dl>
-                    ${this.availability.next_due_at_utc === null
+                    ${this.availability.next_available_at_utc === null
                       ? html`<div class="muted">${this.t("quiz.noExactTime")}</div>`
                       : html`
                           <div>
                             <strong>${this.t("quiz.nextAvailable")}:</strong>
-                            ${this.dueLabel(this.availability.next_due_at_utc)}
+                            ${this.dueLabel(this.availability.next_available_at_utc)}
                           </div>
                         `}
                   `}
             <div class="muted">${this.t("quiz.whyDueOnly")}</div>
+            ${this.availability.blockers.length > 0
+              ? html`<button
+                  @click=${() => this.openConcerned(
+                    this.blockerFilter(this.availability?.blockers[0]?.code ?? ""),
+                  )}
+                  ?disabled=${this.loading}
+                >${this.t("quiz.viewCards")}</button>`
+              : nothing}
             ${this.renderReminderButton()}
           </div>
         ` : nothing}
@@ -866,6 +894,18 @@ export class LockLearnQuizView extends LitElement {
           ? html`<div class="notice" role="status" aria-live="polite">${this.notice}</div>`
           : nothing}
         ${this.renderSession()}
+        ${this.concernedFilter === undefined
+          ? nothing
+          : html`<locklearn-concerned-cards
+              .hass=${this.hass}
+              .profileId=${this.profile.profile_id}
+              .trackId=${this.trackId}
+              .filter=${this.concernedFilter}
+              .mode=${"quiz"}
+              .language=${this.locale()}
+              @locklearn-concerned-cards-close=${this.closeConcerned}
+              @locklearn-concerned-cards-changed=${() => void this.refreshAvailability()}
+            ></locklearn-concerned-cards>`}
       </section>
     `;
   }
@@ -905,6 +945,14 @@ export class LockLearnQuizView extends LitElement {
                 <p><strong>${this.t("quiz.nextAvailable")}:</strong> ${this.dueLabel(nextDue)}</p>
               `}
           <p class="muted">${this.t("quiz.whyDueOnly")}</p>
+          ${(this.availability?.blockers.length ?? 0) > 0
+            ? html`<button
+                @click=${() => this.openConcerned(
+                  this.blockerFilter(this.availability?.blockers[0]?.code ?? ""),
+                )}
+                ?disabled=${this.loading}
+              >${this.t("quiz.viewCards")}</button>`
+            : nothing}
           ${this.renderReminderButton()}
         </section>
       `;
