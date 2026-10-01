@@ -561,7 +561,9 @@ class SessionSelectionService:
                 "code": code,
                 "count": len(blocker_cards[code]),
                 "until_utc": (
-                    None if blocker_until.get(code) is None else blocker_until[code].isoformat()
+                    None
+                    if (until := blocker_until.get(code)) is None
+                    else until.isoformat()
                 ),
                 "forceable": bool(blocker_forceable.get(code, False)),
             }
