@@ -31,6 +31,7 @@ import { shouldStartInitialLoad } from "./panel-lifecycle";
 import {
   navigateToRoute,
   parseRoute,
+  routePath,
   type RouteName,
 } from "./router";
 
@@ -333,10 +334,12 @@ export class LockLearnPanel extends LitElement {
   connectedCallback(): void {
     super.connectedCallback();
     globalThis.addEventListener?.("popstate", this.handlePopState);
+    globalThis.addEventListener?.("beforeunload", this.handleBeforeUnload);
   }
 
   disconnectedCallback(): void {
     globalThis.removeEventListener?.("popstate", this.handlePopState);
+    globalThis.removeEventListener?.("beforeunload", this.handleBeforeUnload);
     super.disconnectedCallback();
   }
 
@@ -354,8 +357,21 @@ export class LockLearnPanel extends LitElement {
   }
 
   private readonly handlePopState = (): void => {
-    const next = parseRoute(globalThis.location?.pathname ?? "/locklearn");
-    this.activeRoute = isRouteVisible(next, this.profiles) ? next : "home";
+    const parsed = parseRoute(globalThis.location?.pathname ?? "/locklearn");
+    const next = isRouteVisible(parsed, this.profiles) ? parsed : "home";
+    if (this.managementDirty && next !== this.activeRoute) {
+      this.pendingNavigation = { kind: "route", route: next };
+      globalThis.history?.replaceState({}, "", routePath(this.activeRoute));
+      this.requestUpdate();
+      return;
+    }
+    this.activeRoute = next;
+  };
+
+  private readonly handleBeforeUnload = (event: BeforeUnloadEvent): void => {
+    if (!this.managementDirty) return;
+    event.preventDefault();
+    event.returnValue = "";
   };
 
   private locale(): UiLanguage {
