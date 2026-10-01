@@ -420,6 +420,88 @@ export class LockLearnManagementView extends LitElement {
     }
   }
 
+  private async saveTrackDetails(track: TrackRecord, form: HTMLFormElement): Promise<boolean> {
+    if (this.hass === undefined || !this.validateScope(form)) return false;
+    const data = new FormData(form);
+    const scheduler = objectSetting(track.settings, "scheduler");
+    const weights = track.content_weights ?? {};
+    const selectedTargets = data.getAll("notificationTarget").map(String);
+    const contentWeights = {
+      vocabulary: asFloat(data.get("weightVocabulary"), Number(weights.vocabulary ?? 1), 0, 100),
+      kanji: asFloat(data.get("weightKanji"), Number(weights.kanji ?? 1), 0, 100),
+      grammar: asFloat(data.get("weightGrammar"), Number(weights.grammar ?? 1), 0, 100),
+      expression: asFloat(data.get("weightExpression"), Number(weights.expression ?? 1), 0, 100),
+    };
+    const key = this.scopeKey(track.track_id, "details");
+    await this.mutateScope(
+      key,
+      () => updateTrack(this.hass!, track.track_id, {
+        name: String(data.get("name") ?? track.name),
+        source_language: String(data.get("source") ?? track.source_language ?? "").trim(),
+        target_language: String(data.get("target") ?? track.target_language ?? "").trim(),
+        status: String(data.get("status") ?? track.status),
+        priority: asInt(data.get("priority"), track.priority, 1),
+        content_weights: contentWeights,
+        scheduler_settings: {
+          learning_count: asInt(data.get("learningCount"), Number(scheduler.learning_count ?? 0), 0),
+          quiz_count: asInt(data.get("quizCount"), Number(scheduler.quiz_count ?? 0), 0),
+          ...(selectedTargets.length === 0 ? {} : { target_ids: selectedTargets }),
+        },
+      }),
+      this.t("manage.saved"),
+    );
+    return !this.isScopeDirty(key);
+  }
+
+  private async savePlanScope(track: TrackRecord, form: HTMLFormElement): Promise<boolean> {
+    if (this.hass === undefined || !this.validateScope(form)) return false;
+    const key = this.scopeKey(track.track_id, "plan");
+    const plan = this.planFrom(form);
+    await this.mutateScope(
+      key,
+      () => setTrackPlan(this.hass!, track.track_id, plan),
+      this.t("manage.saved"),
+    );
+    return !this.isScopeDirty(key);
+  }
+
+  async saveDirtyScopes(): Promise<boolean> {
+    const keys = [...this.dirtyScopes];
+    for (const key of keys) {
+      const split = key.lastIndexOf(":");
+      if (split < 1) continue;
+      const trackId = key.slice(0, split);
+      const kind = key.slice(split + 1);
+      const track = this.tracks.find((item) => item.track_id === trackId);
+      const form = this.renderRoot.querySelector<HTMLFormElement>(
+        `form[data-save-scope="${key}"]`,
+      );
+      if (track === undefined || form === null) return false;
+      const saved =
+        kind === "details"
+          ? await this.saveTrackDetails(track, form)
+          : kind === "plan"
+            ? await this.savePlanScope(track, form)
+            : false;
+      if (!saved) return false;
+    }
+    return this.dirtyScopes.size === 0;
+  }
+
+  discardDirtyScopes(): void {
+    for (const key of [...this.dirtyScopes]) {
+      const form = this.renderRoot.querySelector<HTMLFormElement>(
+        `form[data-save-scope="${key}"]`,
+      );
+      form?.reset();
+    }
+    this.dirtyScopes = new Set();
+    this.forecasts = {};
+    this.forecastPlans = {};
+    this.emitDirtyState();
+    this.requestUpdate();
+  }
+
   private async mutate(action: () => Promise<unknown>, message: string): Promise<void> {
     this.loading = true;
     this.errorMessage = "";
@@ -693,35 +775,13 @@ export class LockLearnManagementView extends LitElement {
         ${this.canEditTrack() ? html`
           <form
             class="track-form"
+            data-save-scope=${detailsScope}
             @input=${() => this.markScopeDirty(detailsScope)}
             @change=${() => this.markScopeDirty(detailsScope)}
             @submit=${(event: SubmitEvent) => {
-            event.preventDefault();
-            const form = event.currentTarget as HTMLFormElement;
-            if (!this.validateScope(form)) return;
-            const data = new FormData(form);
-            if (this.hass === undefined) return;
-            const selectedTargets = data.getAll("notificationTarget").map(String);
-            const contentWeights = {
-              vocabulary: asFloat(data.get("weightVocabulary"), Number(weights.vocabulary ?? 1), 0, 100),
-              kanji: asFloat(data.get("weightKanji"), Number(weights.kanji ?? 1), 0, 100),
-              grammar: asFloat(data.get("weightGrammar"), Number(weights.grammar ?? 1), 0, 100),
-              expression: asFloat(data.get("weightExpression"), Number(weights.expression ?? 1), 0, 100),
-            };
-            void this.mutateScope(detailsScope, () => updateTrack(this.hass!, track.track_id, {
-              name: String(data.get("name") ?? track.name),
-              source_language: String(data.get("source") ?? track.source_language ?? "").trim(),
-              target_language: String(data.get("target") ?? track.target_language ?? "").trim(),
-              status: String(data.get("status") ?? track.status),
-              priority: asInt(data.get("priority"), track.priority, 1),
-              content_weights: contentWeights,
-              scheduler_settings: {
-                learning_count: asInt(data.get("learningCount"), Number(scheduler.learning_count ?? 0), 0),
-                quiz_count: asInt(data.get("quizCount"), Number(scheduler.quiz_count ?? 0), 0),
-                ...(selectedTargets.length === 0 ? {} : { target_ids: selectedTargets }),
-              },
-            }), this.t("manage.saved"));
-          }}>
+              event.preventDefault();
+              void this.saveTrackDetails(track, event.currentTarget as HTMLFormElement);
+            }}>
             <div class="form-grid">
               <label>${this.t("manage.name")}<input name="name" .value=${track.name} /></label>
               <label>${this.t("manage.status")}
@@ -926,6 +986,7 @@ export class LockLearnManagementView extends LitElement {
         <p class="muted">${this.t("manage.planHelp")}</p>
         <form
           class="stack"
+          data-save-scope=${planScope}
           @input=${() => this.markScopeDirty(planScope)}
           @change=${() => this.markScopeDirty(planScope)}
           @submit=${(event: SubmitEvent) => {
@@ -994,8 +1055,11 @@ export class LockLearnManagementView extends LitElement {
             <button
               class="primary"
               type="button"
-              @click=${() => void this.applyPlan(track)}
-              ?disabled=${!this.isScopeDirty(planScope) || this.forecastPlans[track.track_id] === undefined || this.submittingScope === planScope}
+              @click=${(event: Event) => {
+                const form = (event.currentTarget as HTMLElement).closest("form");
+                if (form instanceof HTMLFormElement) void this.savePlanScope(track, form);
+              }}
+              ?disabled=${!this.isScopeDirty(planScope) || this.submittingScope === planScope}
             >
               ${this.submittingScope === planScope ? this.t("form.saving") : this.t("form.save")}
             </button>
