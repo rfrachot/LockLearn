@@ -46,6 +46,8 @@ PROFILE_GUARDED_COMMANDS = frozenset(
         "locklearn/content/report",
         "locklearn/content/report_question",
         "locklearn/progress/set_user_state",
+        "locklearn/cards/concerned/list",
+        "locklearn/cards/learn_instead",
         "locklearn/calibration/sample",
         "locklearn/stats/get",
         "locklearn/dashboard/get",
