@@ -36,6 +36,7 @@ from ..core.progress_state import ProgressUserStateError
 from ..core.quiz_sessions import QuizSessionError
 from ..core.ready_reminders import ReadyReminderError
 from ..core.scheduler import SchedulerValidationError
+from ..core.selection import SelectionConstraintError
 from ..core.session_selection import SessionSelectionError
 from ..core.sessions import SessionQuestion, SessionValidationError
 from ..core.stats import StatsServiceError
@@ -1944,7 +1945,7 @@ async def ws_cards_concerned_list(
     else:
         prerequisite_keys: set[str] = set()
         blocked_keys: set[str] = set()
-        now = runtime.session_selection._clock.now()
+        now = datetime.now(UTC)
         for row in rows:
             card_key = str(row["card_key"])
             user_state = str(row.get("user_state", "active"))
