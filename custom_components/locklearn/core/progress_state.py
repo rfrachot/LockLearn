@@ -169,9 +169,10 @@ class ProgressUserStateService:
         )
         if pre is None or str(pre.get("user_state")) != CardUserState.KNOWN_ALREADY.value:
             raise ProgressUserStateError("card is not pending known verification")
-        if int(pre.get("verified_correct_count", 0)) > 0 or int(
-            pre.get("verified_wrong_count", 0)
-        ) > 0:
+        if (
+            int(pre.get("verified_correct_count", 0)) > 0
+            or int(pre.get("verified_wrong_count", 0)) > 0
+        ):
             raise ProgressUserStateError("card already has verified evidence")
 
         now = self._clock.now()
