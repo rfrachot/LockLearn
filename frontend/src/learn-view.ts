@@ -1,6 +1,8 @@
 import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 
+import "./concerned-cards";
+
 import {
   contentRendererStyles,
   interactiveAccessibilityStyles,
@@ -26,6 +28,7 @@ import {
   startCalibrationSession,
   startLearnSession,
   undoLastProgress,
+  type ConcernedCardsFilter,
   type DashboardResponse,
   type DashboardTrack,
   type HomeAssistantLike,
@@ -64,6 +67,7 @@ export class LockLearnLearnView extends LitElement {
   @state() private reminder?: ReadyReminderStatus;
   @state() private submissionSlow = false;
   @state() private lastKnownCardKey?: string;
+  @state() private concernedFilter?: ConcernedCardsFilter;
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
@@ -875,8 +879,36 @@ export class LockLearnLearnView extends LitElement {
             </div>`
           : nothing}
         ${this.renderSession()}
+        ${this.concernedFilter === undefined
+          ? nothing
+          : html`<locklearn-concerned-cards
+              .hass=${this.hass}
+              .profileId=${this.profile.profile_id}
+              .trackId=${this.trackId}
+              .filter=${this.concernedFilter}
+              .mode=${"learn"}
+              .language=${this.locale()}
+              @locklearn-concerned-cards-close=${this.closeConcerned}
+              @locklearn-concerned-cards-changed=${() => void this.refreshAvailability()}
+            ></locklearn-concerned-cards>`}
       </section>
     `;
+  }
+
+  private blockerFilter(code: string): ConcernedCardsFilter {
+    if (code === "known_already_verification") return "known_pending";
+    if (code === "suspended") return "suspended";
+    if (code === "buried") return "buried";
+    if (code === "prerequisite") return "prerequisite_support";
+    return "current_waiting_context";
+  }
+
+  private openConcerned(filter: ConcernedCardsFilter): void {
+    this.concernedFilter = filter;
+  }
+
+  private closeConcerned(): void {
+    this.concernedFilter = undefined;
   }
 
   private renderNoDeadEndActions() {
@@ -911,6 +943,12 @@ export class LockLearnLearnView extends LitElement {
                   <dd>
                     ${blocker.count}
                     ${blocker.until_utc === null ? nothing : html` · ${this.dueLabel(blocker.until_utc)}`}
+                    <button
+                      @click=${() => this.openConcerned(this.blockerFilter(blocker.code))}
+                      ?disabled=${this.loading}
+                    >
+                      ${this.t("learn.viewCards")}
+                    </button>
                   </dd>
                 `,
               )}
