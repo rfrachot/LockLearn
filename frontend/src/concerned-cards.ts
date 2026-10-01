@@ -10,7 +10,7 @@ import {
   type ConcernedCardsFilter,
   type HomeAssistantLike,
 } from "./protocol";
-import { translate as t, type UiLanguage } from "./i18n";
+import { translate as t, type TranslationKey, type UiLanguage } from "./i18n";
 
 @customElement("locklearn-concerned-cards")
 export class LockLearnConcernedCards extends LitElement {
@@ -136,7 +136,7 @@ export class LockLearnConcernedCards extends LitElement {
     }
   }
 
-  private tr(key: string): string {
+  private tr(key: TranslationKey): string {
     return t(this.language, key);
   }
 
