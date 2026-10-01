@@ -306,6 +306,7 @@ class LockLearnRuntime:
                 progress_state=ProgressUserStateService(
                     storage.repositories.tracks,
                     storage.repositories.progress,
+                    reviews,
                     dataset_generation=lambda: (
                         storage.content_generations.active_metadata.generation_id
                     ),
