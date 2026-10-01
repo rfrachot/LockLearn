@@ -8,7 +8,7 @@ import "./quiz-view";
 import "./management-view";
 import "./dataset-view";
 import "./stats-view";
-import type { ManagementRoute } from "./management-view";
+import type { LockLearnManagementView, ManagementRoute } from "./management-view";
 import { isRouteVisible, visibleNavigation } from "./navigation";
 import { defaultProfileId, groupProfiles } from "./profile-switcher";
 import {
@@ -35,6 +35,9 @@ import {
 } from "./router";
 
 type ShellStatus = "loading" | "ready" | "error" | "protocol-mismatch";
+type PendingNavigation =
+  | { kind: "route"; route: RouteName }
+  | { kind: "profile"; profileId: string };
 
 const HARD_RELOAD_OVERLAY_ID = "locklearn-hard-reload-required";
 
@@ -57,6 +60,9 @@ export class LockLearnPanel extends LitElement {
   @state() private dashboardError = "";
   @state() private errorMessage = "";
   @state() private handoffSession?: SessionState;
+  @state() private managementDirty = false;
+  @state() private pendingNavigation?: PendingNavigation;
+  @state() private navigationSaving = false;
 
   private loadGeneration = 0;
   private dashboardGeneration = 0;
@@ -169,6 +175,29 @@ export class LockLearnPanel extends LitElement {
       max-width: 680px;
       margin: 48px auto 0;
     }
+
+    .guard-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: color-mix(in srgb, var(--primary-text-color) 30%, transparent);
+    }
+
+    .guard-dialog {
+      width: min(520px, 100%);
+      padding: 20px;
+      border-radius: 14px;
+      background: var(--card-background-color, var(--primary-background-color));
+      color: var(--primary-text-color);
+      box-shadow: var(--ha-card-box-shadow, 0 12px 36px rgb(0 0 0 / 24%));
+    }
+
+    .guard-dialog h2 { margin-top: 0; }
+    .guard-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .guard-actions button { min-height: 44px; padding: 9px 12px; }
 
     .home-header {
       display: flex;
@@ -380,19 +409,81 @@ export class LockLearnPanel extends LitElement {
   }
 
   private selectRoute(route: RouteName): void {
-    if (!isRouteVisible(route, this.profiles)) return;
-    this.activeRoute = route;
-    navigateToRoute(route);
+    if (!isRouteVisible(route, this.profiles) || route === this.activeRoute) return;
+    if (this.managementDirty) {
+      this.pendingNavigation = { kind: "route", route };
+      return;
+    }
+    this.applyNavigation({ kind: "route", route });
   }
 
   private selectProfile(event: Event): void {
     const target = event.currentTarget;
     if (!(target instanceof HTMLSelectElement)) return;
     const profileId = target.value;
-    if (!this.profiles.some((profile) => profile.profile_id === profileId)) return;
-    this.selectedProfileId = profileId;
+    if (
+      !this.profiles.some((profile) => profile.profile_id === profileId) ||
+      profileId === this.selectedProfileId
+    ) {
+      return;
+    }
+    if (this.managementDirty) {
+      this.pendingNavigation = { kind: "profile", profileId };
+      this.requestUpdate();
+      return;
+    }
+    this.applyNavigation({ kind: "profile", profileId });
+  }
+
+  private applyNavigation(pending: PendingNavigation): void {
+    if (pending.kind === "route") {
+      this.activeRoute = pending.route;
+      navigateToRoute(pending.route);
+      return;
+    }
+    this.selectedProfileId = pending.profileId;
     this.handoffSession = undefined;
     void this.loadDashboard();
+  }
+
+  private handleManagementDirty(event: CustomEvent<{ dirty: boolean }>): void {
+    this.managementDirty = Boolean(event.detail?.dirty);
+  }
+
+  private managementView(): LockLearnManagementView | null {
+    return this.renderRoot.querySelector<LockLearnManagementView>(
+      "locklearn-management-view",
+    );
+  }
+
+  private async saveAndNavigate(): Promise<void> {
+    const pending = this.pendingNavigation;
+    const management = this.managementView();
+    if (pending === undefined || management === null) return;
+    this.navigationSaving = true;
+    try {
+      const saved = await management.saveDirtyScopes();
+      if (!saved) return;
+      this.managementDirty = false;
+      this.pendingNavigation = undefined;
+      this.applyNavigation(pending);
+    } finally {
+      this.navigationSaving = false;
+    }
+  }
+
+  private discardAndNavigate(): void {
+    const pending = this.pendingNavigation;
+    if (pending === undefined) return;
+    this.managementView()?.discardDirtyScopes();
+    this.managementDirty = false;
+    this.pendingNavigation = undefined;
+    this.applyNavigation(pending);
+  }
+
+  private stayOnDirtyForm(): void {
+    this.pendingNavigation = undefined;
+    this.requestUpdate();
   }
 
   private openTargetedSession(event: CustomEvent<{ session: SessionState }>): void {
@@ -599,12 +690,49 @@ export class LockLearnPanel extends LitElement {
                         )}
                         .route=${this.activeRoute as ManagementRoute}
                         @locklearn-refresh=${() => void this.refreshManagement()}
+                        @locklearn-dirty-state-changed=${this.handleManagementDirty}
                       ></locklearn-management-view>`
                     : html`<section class="page">
                     <h1>${this.routeLabel(this.activeRoute)}</h1>
                     <p>${this.t("route.placeholder")}</p>
                   </section>`}
         </main>
+        ${this.pendingNavigation === undefined
+          ? nothing
+          : html`<div class="guard-backdrop">
+              <section
+                class="guard-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="unsaved-title"
+              >
+                <h2 id="unsaved-title">${this.t("form.navigationTitle")}</h2>
+                <p>${this.t("form.navigationBody")}</p>
+                <div class="guard-actions">
+                  <button
+                    class="primary-button"
+                    @click=${() => void this.saveAndNavigate()}
+                    ?disabled=${this.navigationSaving}
+                  >
+                    ${this.navigationSaving
+                      ? this.t("form.saving")
+                      : this.t("form.saveAndLeave")}
+                  </button>
+                  <button
+                    @click=${this.discardAndNavigate}
+                    ?disabled=${this.navigationSaving}
+                  >
+                    ${this.t("form.leaveWithoutSaving")}
+                  </button>
+                  <button
+                    @click=${this.stayOnDirtyForm}
+                    ?disabled=${this.navigationSaving}
+                  >
+                    ${this.t("form.stay")}
+                  </button>
+                </div>
+              </section>
+            </div>`}
       </div>
     `;
   }
