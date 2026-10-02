@@ -2799,8 +2799,12 @@ async def ws_quiz_answer(
     )
     if state is None:
         return
-    if str(state.get("type")) != "quiz":
-        connection.send_error(msg["id"], ERR_INVALID_REQUEST, "Session is not a quiz")
+    if str(state.get("type")) not in {"quiz", "calibration"}:
+        connection.send_error(
+            msg["id"],
+            ERR_INVALID_REQUEST,
+            "Session is not a quiz/calibration session",
+        )
         return
     try:
         result = await runtime.quiz_sessions.async_answer(
