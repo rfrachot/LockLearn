@@ -303,6 +303,12 @@ async def _with_fatigue_advice(
         active=str(state.get("status")) == "active",
     )
     enriched["fatigue_advice"] = advice.as_dict()
+    if str(state.get("type")) == "calibration":
+        enriched[
+            "calibration_summary"
+        ] = await runtime.storage.repositories.review_events.async_session_verified_result_counts(
+            str(state["id"])
+        )
     return enriched
 
 
