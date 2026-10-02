@@ -7,6 +7,10 @@ export const CATALOG = {
     "state.loading": "Loading LockLearn…",
     "state.error": "LockLearn could not be loaded.",
     "state.retry": "Retry",
+    "state.home": "Home",
+    "state.copyDiagnostic": "Copy diagnostic",
+    "state.diagnosticCopied": "Diagnostic copied.",
+    "state.offline": "Connection lost. LockLearn will refresh when connectivity returns.",
     "state.protocol.title": "LockLearn was updated",
     "state.protocol.body":
       "The frontend and backend versions no longer match. Perform a full browser reload to load the current panel.",
@@ -442,6 +446,10 @@ export const CATALOG = {
     "state.loading": "Chargement de LockLearn…",
     "state.error": "Impossible de charger LockLearn.",
     "state.retry": "Réessayer",
+    "state.home": "Accueil",
+    "state.copyDiagnostic": "Copier le diagnostic",
+    "state.diagnosticCopied": "Diagnostic copié.",
+    "state.offline": "Connexion perdue. LockLearn se rafraîchira au retour de la connexion.",
     "state.protocol.title": "LockLearn a été mis à jour",
     "state.protocol.body":
       "Les versions du frontend et du backend ne correspondent plus. Effectuez un rechargement complet du navigateur pour charger le panneau actuel.",
