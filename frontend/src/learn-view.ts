@@ -69,6 +69,7 @@ export class LockLearnLearnView extends LitElement {
   @state() private reminder?: ReadyReminderStatus;
   @state() private submissionSlow = false;
   @state() private lastKnownCardKey?: string;
+  @state() private knownNoticeVisible = false;
   @state() private concernedFilter?: ConcernedCardsFilter;
   @state() private readyAlternative?: ReadyAlternative;
   @state() private calibrationSetup = false;
@@ -79,6 +80,7 @@ export class LockLearnLearnView extends LitElement {
   private availabilityTimer?: ReturnType<typeof globalThis.setTimeout>;
   private nextDueTimer?: ReturnType<typeof globalThis.setTimeout>;
   private submissionTimer?: ReturnType<typeof globalThis.setTimeout>;
+  private knownUndoTimer?: ReturnType<typeof globalThis.setTimeout>;
   private readonly refreshOnReturn = () => {
     if (document.visibilityState === "visible") void this.refreshAvailability();
   };
@@ -262,6 +264,24 @@ export class LockLearnLearnView extends LitElement {
       background: transparent;
     }
 
+    .known-snackbar {
+      position: fixed;
+      z-index: 1100;
+      inset-inline: 16px;
+      bottom: max(16px, env(safe-area-inset-bottom));
+      width: min(560px, calc(100% - 32px));
+      margin-inline: auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--card-background-color, var(--primary-background-color));
+      color: var(--primary-text-color);
+      box-shadow: var(--ha-card-box-shadow, 0 8px 28px rgb(0 0 0 / 24%));
+    }
+
     @media (max-width: 600px) {
       .toolbar,
       .actions,
@@ -303,6 +323,7 @@ export class LockLearnLearnView extends LitElement {
     this.clearAvailabilityTimer();
     if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
     if (this.submissionTimer !== undefined) globalThis.clearTimeout(this.submissionTimer);
+    if (this.knownUndoTimer !== undefined) globalThis.clearTimeout(this.knownUndoTimer);
     globalThis.removeEventListener("focus", this.refreshOnReturn);
     globalThis.removeEventListener("online", this.refreshOnReturn);
     globalThis.removeEventListener("pageshow", this.refreshOnReturn);
@@ -619,7 +640,15 @@ export class LockLearnLearnView extends LitElement {
   private async markKnownAlready(question: SessionQuestion): Promise<void> {
     this.lastKnownCardKey = question.card_key;
     await this.learningAction("known_already");
-    if (this.lastKnownCardKey === question.card_key) this.notice = this.t("learn.knownPending");
+    if (this.lastKnownCardKey !== question.card_key) return;
+    this.notice = "";
+    this.knownNoticeVisible = true;
+    if (this.knownUndoTimer !== undefined) globalThis.clearTimeout(this.knownUndoTimer);
+    this.knownUndoTimer = globalThis.setTimeout(() => {
+      this.knownUndoTimer = undefined;
+      this.knownNoticeVisible = false;
+      this.lastKnownCardKey = undefined;
+    }, 8000);
   }
 
   private async undoKnownAlready(): Promise<void> {
@@ -631,6 +660,9 @@ export class LockLearnLearnView extends LitElement {
     try {
       await undoLastProgress(this.hass, this.profile.profile_id, this.session.track_id, this.lastKnownCardKey);
       this.lastKnownCardKey = undefined;
+      this.knownNoticeVisible = false;
+      if (this.knownUndoTimer !== undefined) globalThis.clearTimeout(this.knownUndoTimer);
+      this.knownUndoTimer = undefined;
       this.notice = this.t("learn.knownUndone");
       await this.refreshAvailability();
     } catch (error) {
@@ -964,14 +996,17 @@ export class LockLearnLearnView extends LitElement {
             </div>`
           : nothing}
         ${this.notice
-          ? html`<div class="notice" role="status" aria-live="polite">
-              ${this.notice}
-              ${this.lastKnownCardKey === undefined
-                ? nothing
-                : html`<button @click=${() => void this.undoKnownAlready()}>${this.t("learn.undo")}</button>`}
-            </div>`
+          ? html`<div class="notice" role="status" aria-live="polite">${this.notice}</div>`
           : nothing}
         ${this.renderSession()}
+        ${this.knownNoticeVisible && this.lastKnownCardKey !== undefined
+          ? html`<div class="known-snackbar" role="status" aria-live="polite">
+              <span>${this.t("learn.knownPending")}</span>
+              <button @click=${() => void this.undoKnownAlready()} ?disabled=${this.loading}>
+                ${this.t("learn.undo")}
+              </button>
+            </div>`
+          : nothing}
         ${this.concernedFilter === undefined
           ? nothing
           : html`<locklearn-concerned-cards
