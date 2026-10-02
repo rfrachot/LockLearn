@@ -40,7 +40,9 @@ These are behavior-first wireframes. They deliberately avoid visual-polish decis
 - Fixed snackbar, no layout shift, visible for 8 seconds.
 - Copy: **Marquée comme déjà connue. Vérification plus tard.**
 - Action: **Annuler**; keyboard reachable and screen-reader announced politely.
-- Bulk-guard sheet appears at most once per session according to the v0.3 thresholds.
+- Bulk-guard sheet appears at most once per session when either threshold is first crossed: **3 consecutive** `known_already` actions, or **5 total** `known_already` actions in the same session.
+- Rationale: 3 consecutive self-known cards is an early strong signal of prior knowledge; 5 total catches a broader mismatch without interrupting occasional isolated known cards.
+- The sheet recommends Quick calibration but always offers **Continue this session**; it does not reinterpret prior self-assessments as verified retrieval.
 
 ## M6 — Learn waiting inside an active session
 
