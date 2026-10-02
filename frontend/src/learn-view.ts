@@ -71,6 +71,8 @@ export class LockLearnLearnView extends LitElement {
   @state() private lastKnownCardKey?: string;
   @state() private concernedFilter?: ConcernedCardsFilter;
   @state() private readyAlternative?: ReadyAlternative;
+  @state() private calibrationSetup = false;
+  @state() private calibrationSize = 20;
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
@@ -575,12 +577,33 @@ export class LockLearnLearnView extends LitElement {
     }
   }
 
+  private openCalibrationSetup(): void {
+    this.calibrationSetup = true;
+  }
+
+  private closeCalibrationSetup(): void {
+    this.calibrationSetup = false;
+  }
+
+  private setCalibrationSize(event: Event): void {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLSelectElement)) return;
+    const value = Number.parseInt(target.value, 10);
+    if ([20, 30, 40].includes(value)) this.calibrationSize = value;
+  }
+
   private async startCalibration(): Promise<void> {
     if (this.hass === undefined || this.profile === undefined || this.trackId === "") return;
     this.loading = true;
     this.errorMessage = "";
     try {
-      const session = await startCalibrationSession(this.hass, this.profile.profile_id, this.trackId, 20);
+      const session = await startCalibrationSession(
+        this.hass,
+        this.profile.profile_id,
+        this.trackId,
+        this.calibrationSize,
+      );
+      this.calibrationSetup = false;
       this.dispatchEvent(new CustomEvent("locklearn-open-session", {
         detail: { session },
         bubbles: true,
@@ -901,6 +924,30 @@ export class LockLearnLearnView extends LitElement {
           </div>
         ` : nothing}
         ${this.session === undefined ? this.renderNoDeadEndActions() : nothing}
+        ${this.session === undefined && this.calibrationSetup
+          ? html`
+              <section class="learn-card" role="dialog" aria-labelledby="calibration-title">
+                <h2 id="calibration-title">${this.t("learn.calibrationTitle")}</h2>
+                <p>${this.t("learn.calibrationHelp")}</p>
+                <label>
+                  <span>${this.t("learn.calibrationSize")}</span>
+                  <select .value=${String(this.calibrationSize)} @change=${this.setCalibrationSize}>
+                    <option value="20">20</option>
+                    <option value="30">30</option>
+                    <option value="40">40</option>
+                  </select>
+                </label>
+                <div class="actions">
+                  <button class="primary" @click=${() => void this.startCalibration()} ?disabled=${this.loading}>
+                    ${this.t("learn.calibrationStart")}
+                  </button>
+                  <button @click=${this.closeCalibrationSetup} ?disabled=${this.loading}>
+                    ${this.t("common.close")}
+                  </button>
+                </div>
+              </section>
+            `
+          : nothing}
         ${this.loading && this.session === undefined
           ? html`<div class="notice" role="status">${this.t("learn.loading")}</div>`
           : nothing}
@@ -965,7 +1012,7 @@ export class LockLearnLearnView extends LitElement {
     return html`
       <div class="actions">
         ${availability.new_cards > 0
-          ? html`<button @click=${() => void this.startCalibration()} ?disabled=${this.loading}>
+          ? html`<button @click=${this.openCalibrationSetup} ?disabled=${this.loading}>
               ${this.t("learn.quickCalibration")}
             </button>`
           : nothing}
