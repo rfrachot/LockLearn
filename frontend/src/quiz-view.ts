@@ -10,6 +10,7 @@ import {
 } from "./content-renderer";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
 import { findReadyAlternative, type ReadyAlternative } from "./next-action";
+import { navigateToRoute } from "./router";
 import {
   canQuizProfile,
   canReportFreeText,
@@ -24,6 +25,7 @@ import {
   getReadyReminderStatus,
   getSession,
   getSessionAvailability,
+  listNotificationTargets,
   reportFreeTextShouldBeAccepted,
   reportQuestion,
   startLearnSession,
@@ -74,6 +76,7 @@ export class LockLearnQuizView extends LitElement {
   };
   @state() private concernedFilter?: ConcernedCardsFilter;
   @state() private readyAlternative?: ReadyAlternative;
+  @state() private hasNotificationTarget = false;
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
@@ -430,6 +433,9 @@ export class LockLearnQuizView extends LitElement {
         this.trackId,
         "quiz",
       );
+      this.hasNotificationTarget = (
+        await listNotificationTargets(this.hass, this.profile.profile_id)
+      ).some((target) => target.enabled);
       if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
       const nextDue = this.availability.next_available_at_utc;
       if (nextDue !== null) {
@@ -919,6 +925,9 @@ export class LockLearnQuizView extends LitElement {
 
   private renderReminderButton() {
     if (this.availability?.available_now !== 0 || this.availability.next_available_at_utc === null) return nothing;
+    if (!this.hasNotificationTarget) {
+      return html`<button @click=${() => navigateToRoute("settings")}>${this.t("quiz.configureNotifications")}</button>`;
+    }
     return this.reminder?.active
       ? html`<button @click=${() => void this.cancelReminder()} ?disabled=${this.loading}>${this.t("quiz.cancelReminder")}</button>`
       : html`<button @click=${() => void this.armReminder()} ?disabled=${this.loading}>${this.t("quiz.remindMe")}</button>`;
