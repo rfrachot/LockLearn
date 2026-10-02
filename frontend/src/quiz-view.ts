@@ -15,6 +15,7 @@ import {
   canQuizProfile,
   canReportFreeText,
   isChoiceQuiz,
+  isResumableQuizSession,
   quizPayload,
 } from "./quiz-model";
 import {
@@ -634,12 +635,7 @@ export class LockLearnQuizView extends LitElement {
 
   private async resume(): Promise<void> {
     const last = this.selectedTrack()?.last_session;
-    if (
-      this.hass === undefined ||
-      last === null ||
-      last === undefined ||
-      last.session_type !== "quiz"
-    ) return;
+    if (this.hass === undefined || !isResumableQuizSession(last)) return;
     this.loading = true;
     this.errorMessage = "";
     try {
@@ -943,9 +939,8 @@ export class LockLearnQuizView extends LitElement {
       return html`<section class="quiz-card"><p>${this.t("quiz.noTracks")}</p></section>`;
     }
     const selected = this.selectedTrack();
-    const resumable =
-      selected?.last_session?.session_type === "quiz" &&
-      ["active", "paused"].includes(selected.last_session.status);
+    const resumable = isResumableQuizSession(selected?.last_session);
+    const calibrationToResume = resumable && selected?.last_session?.session_type === "calibration";
 
     return html`
       <section class="quiz-shell">
@@ -976,14 +971,16 @@ export class LockLearnQuizView extends LitElement {
           <div class="actions">
             ${this.session === undefined && resumable
               ? html`<button class="primary" @click=${this.resume} ?disabled=${this.loading}>
-                  ${this.t("quiz.resume")}
+                  ${this.t(calibrationToResume ? "quiz.resumeCalibration" : "quiz.resume")}
                 </button>`
               : this.session === undefined ? html`<button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
                   ${this.t("quiz.start")}
                 </button>` : nothing}
           </div>
           ${this.session === undefined ? html`<p class="muted">
-            ${resumable ? this.t("quiz.resumeHelp") : this.t("quiz.startHelp")}
+            ${resumable
+              ? this.t(calibrationToResume ? "quiz.resumeCalibrationHelp" : "quiz.resumeHelp")
+              : this.t("quiz.startHelp")}
           </p>` : nothing}
         </div>
         ${this.session === undefined && this.availability !== undefined ? html`

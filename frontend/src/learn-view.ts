@@ -14,6 +14,7 @@ import { navigateToRoute } from "./router";
 import {
   canAnswerProfile,
   isIntroductionQuestion,
+  isResumableLearnSession,
   questionAvailableAtMs,
   shouldShowKnownAlreadyBulkGuard,
 } from "./learn-model";
@@ -792,7 +793,7 @@ export class LockLearnLearnView extends LitElement {
 
   private async resume(): Promise<void> {
     const last = this.selectedTrack()?.last_session;
-    if (this.hass === undefined || last === null || last === undefined) return;
+    if (this.hass === undefined || !isResumableLearnSession(last)) return;
     this.loading = true;
     this.errorMessage = "";
     try {
@@ -985,10 +986,7 @@ export class LockLearnLearnView extends LitElement {
       return html`<section class="learn-card"><p>${this.t("learn.noTracks")}</p></section>`;
     }
     const selected = this.selectedTrack();
-    const resumable =
-      selected?.last_session !== null &&
-      selected?.last_session !== undefined &&
-      ["active", "paused"].includes(selected.last_session.status);
+    const resumable = isResumableLearnSession(selected?.last_session);
 
     return html`
       <section class="learn-shell">

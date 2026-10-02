@@ -3,13 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   canAnswerProfile,
   isIntroductionQuestion,
+  isResumableLearnSession,
   KNOWN_ALREADY_STREAK_GUARD,
   KNOWN_ALREADY_TOTAL_GUARD,
   knownAlreadyBulkGuardTriggerIndex,
   questionAvailableAtMs,
   shouldShowKnownAlreadyBulkGuard,
 } from "./learn-model";
-import type { SessionQuestion, SessionState, VisibleProfile } from "./protocol";
+import type { DashboardSession, SessionQuestion, SessionState, VisibleProfile } from "./protocol";
 
 function profile(role: VisibleProfile["role"]): VisibleProfile {
   return {
@@ -23,6 +24,21 @@ function profile(role: VisibleProfile["role"]): VisibleProfile {
 }
 
 describe("Learn UI semantics", () => {
+  it("does not take over an unfinished calibration after reload", () => {
+    const last = {
+      session_id: "session-1",
+      session_type: "calibration",
+      status: "active",
+      question_count: 20,
+      answered_count: 1,
+      started_at_utc: "2026-10-02T12:00:00+00:00",
+      last_activity_at_utc: "2026-10-02T12:01:00+00:00",
+      completed_at_utc: null,
+    } satisfies DashboardSession;
+    expect(isResumableLearnSession(last)).toBe(false);
+    expect(isResumableLearnSession({ ...last, session_type: "learn" })).toBe(true);
+  });
+
   it("keeps viewer profiles read-only in the UI boundary", () => {
     expect(canAnswerProfile(profile("owner"))).toBe(true);
     expect(canAnswerProfile(profile("editor"))).toBe(true);

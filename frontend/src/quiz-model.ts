@@ -1,9 +1,18 @@
 import type {
+  DashboardSession,
   QuizFeedback,
   QuizQuestionPayload,
   SessionQuestion,
   VisibleProfile,
 } from "./protocol";
+
+export function isResumableQuizSession(
+  last: DashboardSession | null | undefined,
+): last is DashboardSession {
+  return last !== null && last !== undefined &&
+    ["quiz", "calibration"].includes(last.session_type) &&
+    ["active", "paused"].includes(last.status);
+}
 
 export function canQuizProfile(profile: VisibleProfile | undefined): boolean {
   return profile !== undefined && profile.role !== "viewer";

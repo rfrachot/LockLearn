@@ -1,4 +1,12 @@
-import type { SessionQuestion, SessionState, VisibleProfile } from "./protocol";
+import type { DashboardSession, SessionQuestion, SessionState, VisibleProfile } from "./protocol";
+
+export function isResumableLearnSession(
+  last: DashboardSession | null | undefined,
+): last is DashboardSession {
+  return last !== null && last !== undefined &&
+    ["learn", "learning", "bounded"].includes(last.session_type) &&
+    ["active", "paused"].includes(last.status);
+}
 
 export function isIntroductionQuestion(
   question: SessionQuestion | null | undefined,

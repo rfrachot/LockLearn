@@ -2963,7 +2963,7 @@ async def ws_session_complete(
     except StaleSessionError:
         connection.send_error(msg["id"], ERR_STALE_SESSION, "The session changed on another client")
         return
-    connection.send_result(msg["id"], state)
+    connection.send_result(msg["id"], await _with_fatigue_advice(runtime, state))
 
 
 @websocket_api.websocket_command(

@@ -4,10 +4,12 @@ import {
   canQuizProfile,
   canReportFreeText,
   isChoiceQuiz,
+  isResumableQuizSession,
   quizPayload,
 } from "./quiz-model";
 import type {
   QuizFeedback,
+  DashboardSession,
   QuizQuestionPayload,
   SessionQuestion,
   VisibleProfile,
@@ -41,6 +43,22 @@ const choice: QuizQuestionPayload = {
 };
 
 describe("Quiz UI semantics", () => {
+  it("resumes an unfinished calibration on the quiz route", () => {
+    const last = {
+      session_id: "session-1",
+      session_type: "calibration",
+      status: "active",
+      question_count: 20,
+      answered_count: 1,
+      started_at_utc: "2026-10-02T12:00:00+00:00",
+      last_activity_at_utc: "2026-10-02T12:01:00+00:00",
+      completed_at_utc: null,
+    } satisfies DashboardSession;
+    expect(isResumableQuizSession(last)).toBe(true);
+    expect(isResumableQuizSession({ ...last, status: "completed" })).toBe(false);
+    expect(isResumableQuizSession({ ...last, session_type: "learn" })).toBe(false);
+  });
+
   it("keeps viewer profiles read-only", () => {
     expect(canQuizProfile(profile("owner"))).toBe(true);
     expect(canQuizProfile(profile("editor"))).toBe(true);

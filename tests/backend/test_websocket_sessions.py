@@ -100,6 +100,32 @@ async def test_session_start_pause_resume_complete_and_cross_client_get(
     assert completed["result"]["version"] == 4
     assert completed["result"]["completed_at_utc"] is not None
 
+    await owner.send_json_auto_id(
+        {
+            "type": "locklearn/session/start",
+            "profile_id": profile_id,
+            "session_type": "calibration",
+            "strategy": "calibration",
+            "settings": {"requested_cards": 20},
+        }
+    )
+    calibration = await owner.receive_json()
+    assert calibration["success"] is True
+    await owner.send_json_auto_id(
+        {
+            "type": "locklearn/session/complete",
+            "session_id": calibration["result"]["id"],
+            "expected_version": 1,
+        }
+    )
+    calibration_completed = await owner.receive_json()
+    assert calibration_completed["success"] is True
+    assert calibration_completed["result"]["calibration_summary"] == {
+        "known": 0,
+        "needs_learning": 0,
+        "answered": 0,
+    }
+
     await other_client.send_json_auto_id(
         {
             "type": "locklearn/session/pause",
