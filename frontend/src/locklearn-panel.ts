@@ -42,6 +42,23 @@ type PendingNavigation =
 
 const HARD_RELOAD_OVERLAY_ID = "locklearn-hard-reload-required";
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = globalThis.setTimeout(
+          () => reject(new Error("LockLearn initial load timed out")),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) globalThis.clearTimeout(timer);
+  }
+}
+
 export class LockLearnPanel extends LitElement {
   static readonly locklearnFrontendProtocol = FRONTEND_PROTOCOL_VERSION;
 
@@ -64,6 +81,9 @@ export class LockLearnPanel extends LitElement {
   @state() private managementDirty = false;
   @state() private pendingNavigation?: PendingNavigation;
   @state() private navigationSaving = false;
+  @state() private loadFailures = 0;
+  @state() private diagnosticNotice = "";
+  @state() private online = globalThis.navigator?.onLine ?? true;
 
   private loadGeneration = 0;
   private dashboardGeneration = 0;
@@ -197,6 +217,16 @@ export class LockLearnPanel extends LitElement {
     }
 
     .guard-dialog h2 { margin-top: 0; }
+
+    .connection-banner {
+      position: sticky;
+      top: 64px;
+      z-index: 2;
+      padding: 8px 16px;
+      text-align: center;
+      background: var(--warning-color, var(--secondary-background-color));
+      color: var(--primary-text-color);
+    }
     .guard-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
     .guard-actions button { min-height: 44px; padding: 9px 12px; }
 
@@ -335,11 +365,15 @@ export class LockLearnPanel extends LitElement {
     super.connectedCallback();
     globalThis.addEventListener?.("popstate", this.handlePopState);
     globalThis.addEventListener?.("beforeunload", this.handleBeforeUnload);
+    globalThis.addEventListener?.("online", this.handleConnectivity);
+    globalThis.addEventListener?.("offline", this.handleConnectivity);
   }
 
   disconnectedCallback(): void {
     globalThis.removeEventListener?.("popstate", this.handlePopState);
     globalThis.removeEventListener?.("beforeunload", this.handleBeforeUnload);
+    globalThis.removeEventListener?.("online", this.handleConnectivity);
+    globalThis.removeEventListener?.("offline", this.handleConnectivity);
     super.disconnectedCallback();
   }
 
@@ -374,6 +408,10 @@ export class LockLearnPanel extends LitElement {
     event.returnValue = "";
   };
 
+  private readonly handleConnectivity = (): void => {
+    this.online = globalThis.navigator?.onLine ?? true;
+  };
+
   private locale(): UiLanguage {
     const locale =
       this.hass?.locale?.language ??
@@ -394,8 +432,11 @@ export class LockLearnPanel extends LitElement {
     this.errorMessage = "";
 
     try {
-      const bootstrapState = await bootstrap(this.hass);
-      const profiles = await listVisibleProfiles(this.hass);
+      const { bootstrapState, profiles } = await withTimeout((async () => {
+        const bootstrapState = await bootstrap(this.hass!);
+        const profiles = await listVisibleProfiles(this.hass!);
+        return { bootstrapState, profiles };
+      })(), 10_000);
       if (generation !== this.loadGeneration) return;
 
       this.bootstrapState = bootstrapState;
@@ -404,6 +445,8 @@ export class LockLearnPanel extends LitElement {
       const requested = parseRoute(globalThis.location?.pathname ?? bootstrapState.panel_path);
       this.activeRoute = isRouteVisible(requested, profiles) ? requested : "home";
       this.status = "ready";
+      this.loadFailures = 0;
+      this.diagnosticNotice = "";
       void this.loadDashboard();
     } catch (error) {
       if (generation !== this.loadGeneration) return;
@@ -420,6 +463,7 @@ export class LockLearnPanel extends LitElement {
         return;
       }
       this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.loadFailures += 1;
       this.status = "error";
     }
   }
@@ -567,6 +611,26 @@ export class LockLearnPanel extends LitElement {
     }
   }
 
+  private async copyDiagnostic(): Promise<void> {
+    const diagnostic = [
+      `LockLearn frontend protocol: ${FRONTEND_PROTOCOL_VERSION}`,
+      `route: ${this.activeRoute}`,
+      `online: ${this.online}`,
+      `failures: ${this.loadFailures}`,
+      `error: ${this.errorMessage}`,
+    ].join("\n");
+    try {
+      await globalThis.navigator?.clipboard?.writeText(diagnostic);
+      this.diagnosticNotice = this.t("state.diagnosticCopied");
+    } catch {
+      this.diagnosticNotice = diagnostic;
+    }
+  }
+
+  private goHome(): void {
+    globalThis.location?.assign("/");
+  }
+
   private hardReload(): void {
     globalThis.location?.reload();
   }
@@ -599,9 +663,20 @@ export class LockLearnPanel extends LitElement {
           <section class="state-card" role="alert">
             <h1>${this.t("state.error")}</h1>
             <p>${this.errorMessage}</p>
-            <button class="primary-button" @click=${() => void this.load()}>
-              ${this.t("state.retry")}
-            </button>
+            <div class="guard-actions">
+              <button class="primary-button" @click=${() => void this.load()}>
+                ${this.t("state.retry")}
+              </button>
+              <button @click=${this.goHome}>${this.t("state.home")}</button>
+              ${this.loadFailures >= 3
+                ? html`<button @click=${() => void this.copyDiagnostic()}>
+                    ${this.t("state.copyDiagnostic")}
+                  </button>`
+                : nothing}
+            </div>
+            ${this.diagnosticNotice
+              ? html`<p class="meta" role="status">${this.diagnosticNotice}</p>`
+              : nothing}
           </section>
         </main>
       `;
@@ -653,6 +728,9 @@ export class LockLearnPanel extends LitElement {
             )}
           </nav>
         </header>
+        ${this.online
+          ? nothing
+          : html`<div class="connection-banner" role="status">${this.t("state.offline")}</div>`}
         <main>
           ${this.profiles.length === 0
             ? html`<locklearn-management-view
