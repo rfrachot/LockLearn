@@ -54,6 +54,8 @@ Le seuil consécutif détecte rapidement un niveau initial manifestement trop ba
 
 La calibration rapide est une surface V1 obligatoire pour les apprenants ayant déjà des bases. Elle teste par défaut 20 cartes, configurable de 20 à 40, avec un prompt qui ne révèle pas la réponse avant la tentative. Les cartes correctement récupérées entrent dans le SRS à partir d'un signal vérifié ; les cartes non reconnues restent à apprendre. Elle ne doit pas être implémentée comme une succession de déclarations `known_already`.
 
+Comme il s'agit d'un pré-test et non d'une introduction ordonnée, la sélection de calibration ne doit pas être vidée par les contraintes pédagogiques d'ordre d'introduction (prérequis, sibling/confusable spacing). Elle reste limitée aux CardDefinitions du Track réellement actives et aux types de contenu activés ; les contraintes normales reprennent effet lorsqu'une carte entre ensuite dans Learn/Quiz.
+
 ### Disponibilité effective
 
 `locklearn/session/availability` calcule la disponibilité à partir des mêmes règles que `session/start`. `next_available_at_utc` est le premier instant où au moins une carte pourra réellement être sélectionnée, après composition des échéances SRS, vérification `known_already`, quota de nouvelles cartes, sibling gap, confusable gap, burial et contraintes temporisées. Un prérequis bloqué sans date ne produit jamais de faux horaire.
