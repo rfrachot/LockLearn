@@ -9,6 +9,7 @@ from enum import StrEnum
 from typing import Any, Protocol
 
 from .clock import Clock, SystemClock
+from .reviews import ReviewEventService
 
 
 class ProgressUserStateError(ValueError):
@@ -30,10 +31,6 @@ class UserStateTracksRepository(Protocol):
     async def async_session_candidates(
         self, *, profile_id: str, track_id: str
     ) -> tuple[dict[str, Any], ...]: ...
-
-
-class UserStateReviewService(Protocol):
-    async def async_record(self, **kwargs: Any) -> Any: ...
 
 
 class UserStateProgressRepository(Protocol):
@@ -78,7 +75,7 @@ class ProgressUserStateService:
         self,
         tracks: UserStateTracksRepository,
         progress: UserStateProgressRepository,
-        reviews: UserStateReviewService | None = None,
+        reviews: ReviewEventService | None = None,
         *,
         dataset_generation: Callable[[], str],
         clock: Clock | None = None,
