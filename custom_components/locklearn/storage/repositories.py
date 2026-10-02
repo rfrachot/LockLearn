@@ -2298,6 +2298,40 @@ class ReviewEventsRepository:
 
         return await self._storage._async_reader(read)
 
+    async def async_session_verified_result_counts(
+        self,
+        session_id: str,
+    ) -> dict[str, int]:
+        """Return verified calibration outcome counts for one session."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, int]:
+            rows = connection.execute(
+                """SELECT result, COUNT(*)
+                   FROM review_events
+                   WHERE session_id = ?
+                     AND retrieval_occurred = 1
+                     AND mode IN (
+                         'verified_mcq',
+                         'verified_free_text',
+                         'verified_cloze'
+                     )
+                   GROUP BY result""",
+                (session_id,),
+            ).fetchall()
+            counts = {str(row[0]): int(row[1]) for row in rows}
+            known = counts.get("correct", 0)
+            needs_learning = sum(
+                counts.get(result, 0)
+                for result in ("wrong", "idk", "unrecognized")
+            )
+            return {
+                "known": known,
+                "needs_learning": needs_learning,
+                "answered": known + needs_learning,
+            }
+
+        return await self._storage._async_reader(read)
+
     async def async_recent_verified_card_events(
         self,
         *,
