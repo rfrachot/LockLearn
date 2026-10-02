@@ -7,6 +7,7 @@ All notable changes will be documented here.
 ### Added
 - Adopt the validated UX no-dead-end v0.3 contract for beta.5: verified quick calibration, effective availability blockers, one-shot readiness reminders, safe known-already verification/reversal, cross-track alternatives and retry-safe answer UX.
 - Add M1–M12 / D1–D2 implementation wireframes and ADRs for known-already semantics, effective selectability and waiting return mechanisms.
+- Add a one-shot `known_already` bulk guard at 3 consecutive or 5 total self-known actions in one session, steering experienced learners toward verified quick calibration without changing SRS evidence.
 
 ### Changed
 - Treat `known_already` as calibration-pending rather than a permanent selection exclusion; only verified retrieval can settle it into normal review/relearning.
