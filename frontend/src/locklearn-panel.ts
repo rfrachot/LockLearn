@@ -683,6 +683,7 @@ export class LockLearnPanel extends LitElement {
                       .dashboard=${this.dashboard}
                       .externalSession=${this.handoffSession}
                       @locklearn-session-handoff-consumed=${this.clearSessionHandoff}
+                      @locklearn-open-session=${this.openTargetedSession}
                     ></locklearn-quiz-view>`
                   : this.activeRoute === "stats"
                     ? html`<locklearn-stats-view
