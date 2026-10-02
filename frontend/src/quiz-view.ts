@@ -725,6 +725,34 @@ export class LockLearnQuizView extends LitElement {
       next = await completeSession(this.hass, next);
     }
     this.applySession(next);
+    await this.refreshAvailability();
+  }
+
+  private async startLearningAfterCalibration(): Promise<void> {
+    if (
+      this.hass === undefined ||
+      this.profile === undefined ||
+      this.session?.track_id === null ||
+      this.session?.track_id === undefined
+    ) return;
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      const session = await startLearnSession(
+        this.hass,
+        this.profile.profile_id,
+        this.session.track_id,
+      );
+      this.dispatchEvent(new CustomEvent("locklearn-open-session", {
+        detail: { session },
+        bubbles: true,
+        composed: true,
+      }));
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.loading = false;
+    }
   }
 
   private async advanceCommitted(): Promise<void> {
@@ -1024,13 +1052,34 @@ export class LockLearnQuizView extends LitElement {
       `;
     }
     if (this.session.current_question === null || this.session.status === "completed") {
+      const calibration = this.session.type === "calibration";
+      const summary = this.session.calibration_summary;
       return html`
         <section class="quiz-card">
-          <h2>${this.session.type === "calibration" ? this.t("quiz.calibrationCompleted") : this.t("quiz.completed")}</h2>
-          <p>${this.session.type === "calibration" ? this.t("quiz.calibrationCompletedBody") : this.t("quiz.completedBody")}</p>
-          <button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
-            ${this.t("quiz.newSession")}
-          </button>
+          <h2>${calibration ? this.t("quiz.calibrationCompleted") : this.t("quiz.completed")}</h2>
+          <p>${calibration ? this.t("quiz.calibrationCompletedBody") : this.t("quiz.completedBody")}</p>
+          ${calibration && summary !== undefined
+            ? html`<dl>
+                <dt>${this.t("quiz.calibrationKnown")}</dt><dd>${summary.known}</dd>
+                <dt>${this.t("quiz.calibrationNeedsLearning")}</dt><dd>${summary.needs_learning}</dd>
+              </dl>`
+            : nothing}
+          <div class="actions">
+            ${calibration && (summary?.needs_learning ?? 0) > 0
+              ? html`<button class="primary" @click=${() => void this.startLearningAfterCalibration()} ?disabled=${this.loading}>
+                  ${this.t("quiz.learnRemaining")}
+                </button>`
+              : nothing}
+            ${calibration && (this.availability?.available_now ?? 0) > 0
+              ? html`<button @click=${() => void this.start()} ?disabled=${this.loading}>
+                  ${this.t("quiz.start")}
+                </button>`
+              : !calibration
+                ? html`<button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
+                    ${this.t("quiz.newSession")}
+                  </button>`
+                : nothing}
+          </div>
         </section>
       `;
     }
