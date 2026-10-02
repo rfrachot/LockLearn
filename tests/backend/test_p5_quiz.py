@@ -22,7 +22,7 @@ from custom_components.locklearn.core.quiz_sessions import (
 )
 from custom_components.locklearn.core.review_policy import ReviewPolicyV1
 from custom_components.locklearn.core.session_selection import PreparedSessionSelection
-from custom_components.locklearn.core.signals import SignalPolicy
+from custom_components.locklearn.core.signals import SignalMode, SignalPolicy
 from tests.backend.content_db_helpers import (
     CONCEPT_ID,
     DATASET_ID,
@@ -286,6 +286,39 @@ async def test_calibration_prepares_new_cards_without_enabling_them_in_quiz() ->
     assert calibration[0].payload["selection"]["progress_state"] == "new"
     assert "correct_answer" not in calibration[0].payload["quiz"]
     assert "correct_index" not in calibration[0].payload["quiz"]
+
+
+@pytest.mark.parametrize(
+    ("result", "expected_state", "counter"),
+    [
+        ("correct", "review", "verified_correct_count"),
+        ("wrong", "relearning", "verified_wrong_count"),
+    ],
+)
+def test_legacy_short_step_known_already_accepts_verified_quiz_result(
+    result: str,
+    expected_state: str,
+    counter: str,
+) -> None:
+    service = _service()
+    pre = service._new_snapshot("profile-1", "track-1", _meta(1))
+    pre.update({"state": "learning", "box": 0, "user_state": "known_already"})
+    decision = service._signal_policy.evaluate(
+        mode=SignalMode.VERIFIED_MCQ,
+        result=result,
+        retrieval_occurred=True,
+    )
+
+    post, _, _ = service._apply_known_already_signal(
+        pre,
+        decision=decision,
+        hint_used=False,
+    )
+
+    assert pre["state"] == "learning"
+    assert post["state"] == expected_state
+    assert post["user_state"] == "active"
+    assert post[counter] == 1
 
 
 @pytest.mark.asyncio

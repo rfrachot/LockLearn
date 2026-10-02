@@ -599,9 +599,14 @@ class QuizSessionService:
         """Resolve calibration-pending prior knowledge only from verified retrieval."""
         if decision.outcome is SignalOutcome.NEUTRAL:
             return dict(pre), None, None
+        review_seed = dict(pre)
+        if str(pre.get("state")) not in {"review", "leech"}:
+            # Earlier known-already records can still be in a short-step state.
+            # Their verified Quiz result must use the pending-review policy.
+            review_seed.update({"state": "review", "box": 1})
         if decision.outcome is SignalOutcome.POSITIVE:
             transition = self._review_policy.review_success(
-                pre,
+                review_seed,
                 hint_used=hint_used,
                 promote_box=False,
                 verified=True,
@@ -609,7 +614,7 @@ class QuizSessionService:
             )
         else:
             transition = self._review_policy.review_failure(
-                pre,
+                review_seed,
                 verified=True,
                 demote=False,
             )

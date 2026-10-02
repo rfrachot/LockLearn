@@ -78,6 +78,9 @@ minimum/current HA matrix is also reproducible through `.github/workflows/ci.yml
   `/config/custom_components/locklearn/`. Stage and rename on the same
   filesystem when the available access method permits it; never deploy only the
   frontend bundle or otherwise leave frontend/backend versions mixed.
+- Keep rollback copies outside `/config/custom_components/`. Home Assistant may
+  discover a hidden copy containing `manifest.json` as another integration and
+  fail to import LockLearn during startup.
 - HACS is the release path only. It installs published tags/releases and is not
   a development-branch deployment mechanism.
 - Verify the deployed backend schema marker and frontend bundle SHA-256 before
