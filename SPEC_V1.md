@@ -41,6 +41,15 @@ Un simple bouton Home ou une explication textuelle ne suffit pas à rendre une i
 
 Cette transition doit rester auditable et reconstructible depuis l'historique canonique.
 
+### Garde-fou d'auto-évaluation en série
+
+Pour éviter qu'un apprenant ayant déjà des bases ne doive cliquer « Je la connais déjà » carte après carte sans aide, le panel affiche au plus une fois par session une proposition de calibration rapide lorsque le premier des seuils suivants est franchi :
+
+- 3 actions `known_already` consécutives ;
+- 5 actions `known_already` au total dans la session, même non consécutives.
+
+Le seuil consécutif détecte rapidement un niveau initial manifestement trop bas ; le seuil total détecte un décalage plus diffus sans interrompre quelques cartes isolées déjà connues. Ce garde-fou est uniquement UX : il ne modifie aucune preuve pédagogique, n'effectue aucune promotion SRS et propose toujours de continuer la session courante.
+
 ### Calibration rapide
 
 La calibration rapide est une surface V1 obligatoire pour les apprenants ayant déjà des bases. Elle teste par défaut 20 cartes, configurable de 20 à 40, avec un prompt qui ne révèle pas la réponse avant la tentative. Les cartes correctement récupérées entrent dans le SRS à partir d'un signal vérifié ; les cartes non reconnues restent à apprendre. Elle ne doit pas être implémentée comme une succession de déclarations `known_already`.
