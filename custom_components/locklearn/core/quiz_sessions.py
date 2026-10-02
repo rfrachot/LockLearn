@@ -108,6 +108,7 @@ class QuizSessionService:
         track_id: str,
         selected: tuple[PreparedSessionSelection, ...],
         settings: dict[str, Any],
+        session_type: str = "quiz",
     ) -> tuple[SessionQuestion, ...]:
         """Build safe client payloads without exposing accepted answers."""
         requested_format = self._quiz_format(settings)
@@ -117,7 +118,7 @@ class QuizSessionService:
 
         for selection in selected:
             state = str(selection.payload.get("selection", {}).get("progress_state", ""))
-            if state == "new":
+            if state == "new" and session_type != "calibration":
                 continue
             meta = catalog.get(selection.card_key)
             if meta is None or not meta.answer_terms:

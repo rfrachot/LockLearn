@@ -249,6 +249,46 @@ async def test_quiz_preparation_keeps_correct_marker_backend_only() -> None:
 
 
 @pytest.mark.asyncio
+async def test_calibration_prepares_new_cards_without_enabling_them_in_quiz() -> None:
+    service = _service(presentation=_Presentation())
+    catalog = {f"card-{index}": _meta(index) for index in range(1, 7)}
+
+    async def load_catalog(track_id: str) -> dict[str, _QuizCardMeta]:
+        assert track_id == "track-1"
+        return catalog
+
+    service._load_catalog = load_catalog  # type: ignore[method-assign]
+    selected = (
+        PreparedSessionSelection(
+            card_key="card-1",
+            learning_item_id="item-1",
+            prompt_facet_id="prompt-1",
+            answer_facet_id="answer-1",
+            payload={"selection": {"content_type": "vocabulary", "progress_state": "new"}},
+        ),
+    )
+
+    calibration = await service.async_prepare_questions(
+        track_id="track-1",
+        selected=selected,
+        settings={"quiz_format": "mcq", "option_count": 4},
+        session_type="calibration",
+    )
+    quiz = await service.async_prepare_questions(
+        track_id="track-1",
+        selected=selected,
+        settings={"quiz_format": "mcq", "option_count": 4},
+        session_type="quiz",
+    )
+
+    assert len(calibration) == 1
+    assert quiz == ()
+    assert calibration[0].payload["selection"]["progress_state"] == "new"
+    assert "correct_answer" not in calibration[0].payload["quiz"]
+    assert "correct_index" not in calibration[0].payload["quiz"]
+
+
+@pytest.mark.asyncio
 async def test_free_text_wrong_can_be_recovered_as_unrecognized() -> None:
     meta = _meta(1)
     question = {

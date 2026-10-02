@@ -2664,6 +2664,7 @@ async def ws_session_start(
                     track_id=track_id,
                     selected=selected,
                     settings=msg["settings"],
+                    session_type=msg["session_type"],
                 )
             else:
                 prepared: list[SessionQuestion] = []
