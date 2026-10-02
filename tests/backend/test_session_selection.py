@@ -980,10 +980,24 @@ async def test_calibration_bypasses_learning_order_constraints_without_mutating_
         session_type="learn",
         settings={"requested_cards": 20},
     )
+    calibration_availability = await service.async_availability(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="calibration",
+        settings={"requested_cards": 20},
+    )
+    learn_availability = await service.async_availability(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="learn",
+        settings={"requested_cards": 20},
+    )
 
     assert len(calibration) == 20
     assert {item.payload["selection"]["reason"] for item in calibration} == {"calibration"}
+    assert calibration_availability["available_now"] == len(calibration)
     assert learn == ()
+    assert learn_availability["available_now"] == 0
 
 
 @pytest.mark.asyncio

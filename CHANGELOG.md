@@ -15,6 +15,9 @@ All notable changes will be documented here.
 
 
 ### Fixed
+- Keep calibration session starts aligned with their available sample: the shared
+  selector now bypasses introduction-order constraints for the calibration
+  pre-test while Learn and Quiz continue to enforce them.
 - Make Learn and Quiz actions mutually exclusive when an unfinished session exists, with plain-language explanations of Resume vs Start.\n- Keep readiness visible even when an older empty session object is still present, including concrete counts and explicit timing/eligibility explanations.\n- Rename and explain the Track workload planner, surface the current Track snapshot in previews, translate forecast warnings, and reject misleading zero-card forecasts.\n- Explain spaced-repetition states in the Stats view without assuming SRS terminology.\n- Keep Learn/Quiz readiness counts and actual session starts on the same
   profile-defined session length; the frontend no longer overrides child,
   standard or intensive Profile defaults with hard-coded 20/10-card values.

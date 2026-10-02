@@ -1,73 +1,17 @@
 # AGENT_HANDOFF.md
 
-## Current state
+## Current mission
 
-Beta.4 UX follow-up is integrated and deployed from
-`release/1.0.0-beta.4`.
+Qualify beta.5 calibration fix on `feat/beta5-no-dead-end-v03`.
+Initial remote HEAD: `277374ddaf55f0f6c36f8e00166d793e29597cb0`.
+The old CI run `36995062368` belongs to `9d8e175cc7bc7119205818274bb05791a1c17d52` and does not qualify this branch.
 
-- UX branch initial SHA: `7d6e23c70402940ebb7b0b24dc5962fb6daa2b89`.
-- `deployed_sha`: `c94cf72c7616f002fcd5eb896fb88a1027b3f8e7`.
-- `documentation_head`: this doc-only handoff commit after the deployed SHA;
-  it must not be redeployed.
-- CI run `36675810188`: PASS for backend-quality, frontend, frontend-e2e,
-  dataset-contracts, home-assistant-validation, HA minimum 2025.2.5, HA
-  current-harness 2026.9.3 and HA latest stable 2026.9.4.
-- Bundle SHA-256: `2c37e0818214e51a8ed0a666ed40c9710dcdb5b790f2e40f59ee794ff58d70bb`.
-- HA target: `2026.7.4`.
+## Verified local state
 
-The UX commits were pushed on `fix/beta4-ux-readiness`, then cherry-picked into
-the release branch. The second frontend build was reproducible and left the
-worktree clean before deployment.
+The new regression test failed at the initial HEAD: calibration selected zero cards while Learn also selected zero. The previous fix only bypassed introduction-order constraints in availability; `session/start` still enforced them in `_async_candidate_pool`. That path now bypasses those constraints for calibration only. The test also checks that availability matches selection and Learn remains blocked.
 
-## Deployment qualification
+Targeted selection tests: 31 passed. Full pytest after the final test assertion: 513 passed, 1 expected duplicate ZIP warning. Ruff format/lint, mypy, resource validation, frontend lint/typecheck, 64 Vitest tests, build, 7 Playwright E2E, generated docs contracts, and bundle budget passed.
 
-HACS `hacs/repository/download` was called for repository `1371828774` with
-`release/1.0.0-beta.4`. Home Assistant returned after the resulting restart.
+## Next action
 
-- Config Entry: `loaded`.
-- Frontend protocol: `3`.
-- HACS installed version: `release/1.0.0-beta.4`.
-- Served bundle: HTTP 200, 232694 bytes, SHA-256 exactly matching local.
-- Storage: integrity `ok`, foreign keys `0`, schema `5`, WAL, reader off the
-  event loop, writer initialized.
-- LockLearn warning/error/critical records after restart: `0`.
-- No Profile or Track was created, deleted, applied, or answered during this
-  qualification.
-
-## Real Track field test
-
-Existing Track: `Japanese Starter b37891dc`.
-
-Read-only backend snapshot:
-
-- Plan preview with new/day `8`, reviews/day `50`, teasers/day `2`, target
-  date `2026-10-30`, coverage `1.0`, retention `0.9`:
-  `selected_cards=100`, `introduced_cards=32`, `remaining_target_cards=68`,
-  `required_new_per_day=3`, `planned_new_per_day=8`, `due_now=0`, reviews/day
-  `7` at 3 weeks and `0` at 3 months, notifications/day `6` at 3 weeks and
-  `0` at 3 months, feasible, warnings empty.
-- Learn: `introduced_cards=32`, `new_cards=68`, `available_now=16`.
-- Quiz: `introduced_cards=32`, `available_now=16`; no false first-learning
-  message.
-- Stats: learning `19`, review `0`, relearning `0`, new `81`.
-- Preview did not persist a plan: `learning_plan=None` after the field test.
-
-## UX results
-
-- Learn: existing empty session initially shows only `Resume session`; after
-  resume it shows the new-session explanation and only `Start learning`, never
-  `Learning pause` while cards are available.
-- Quiz: existing empty session initially shows only `Resume quiz`; after resume
-  it shows the new-quiz explanation and only `Start quiz`, with `16 cards ready
-  now`.
-- Plan: real preview displays the 100/32/68 snapshot in context, workload
-  explanations, and the too-close target-date warning. Preview was not Apply.
-- Stats: plain-language explanations for spaced repetition, Learning, Review,
-  Relearning, and verified retrieval evidence are visible.
-- Mobile: 390 px viewport, no horizontal overflow (`0` px).
-
-## Status
-
-`PASS — BETA.4 READY FOR RETEST`
-
-Do not start beta.5, merge main, tag stable, or delete user data.
+Commit this narrow fix, updated regression test, changelog, and handoff. Push the branch, dispatch CI on its exact candidate SHA, and verify all eight jobs. Do not deploy until CI is green. Then back up the HAOS test instance, deploy the complete integration tree using the qualified direct-copy procedure, verify deployed and served hashes, and perform the requested real-HA field checks. Preserve the existing state database.
