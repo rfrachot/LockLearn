@@ -374,10 +374,16 @@ class SessionSelectionService:
             if code == "prerequisite":
                 prerequisite_cards.add(candidate.card_key)
 
-        constraints_required = True
+        normalized_type = session_type.strip().lower()
+        constraints_required = normalized_type not in _CALIBRATION_SESSION_TYPES
         probe = getattr(self._tracks, "async_has_selection_constraints", None)
         pack_version_id = track.get("pack_version_id")
-        if callable(probe) and isinstance(pack_version_id, str) and pack_version_id:
+        if (
+            constraints_required
+            and callable(probe)
+            and isinstance(pack_version_id, str)
+            and pack_version_id
+        ):
             constraints_required = bool(await probe(pack_version_id))
 
         for candidate in raw_candidates:
