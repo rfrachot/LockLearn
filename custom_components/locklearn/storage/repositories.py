@@ -2321,8 +2321,7 @@ class ReviewEventsRepository:
             counts = {str(row[0]): int(row[1]) for row in rows}
             known = counts.get("correct", 0)
             needs_learning = sum(
-                counts.get(result, 0)
-                for result in ("wrong", "idk", "unrecognized")
+                counts.get(result, 0) for result in ("wrong", "idk", "unrecognized")
             )
             return {
                 "known": known,
