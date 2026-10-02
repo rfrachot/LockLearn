@@ -8,7 +8,7 @@ import "./quiz-view";
 import "./management-view";
 import "./dataset-view";
 import "./stats-view";
-import type { ManagementRoute } from "./management-view";
+import type { LockLearnManagementView, ManagementRoute } from "./management-view";
 import { isRouteVisible, visibleNavigation } from "./navigation";
 import { defaultProfileId, groupProfiles } from "./profile-switcher";
 import {
@@ -31,12 +31,33 @@ import { shouldStartInitialLoad } from "./panel-lifecycle";
 import {
   navigateToRoute,
   parseRoute,
+  routePath,
   type RouteName,
 } from "./router";
 
 type ShellStatus = "loading" | "ready" | "error" | "protocol-mismatch";
+type PendingNavigation =
+  | { kind: "route"; route: RouteName }
+  | { kind: "profile"; profileId: string };
 
 const HARD_RELOAD_OVERLAY_ID = "locklearn-hard-reload-required";
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = globalThis.setTimeout(
+          () => reject(new Error("LockLearn initial load timed out")),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) globalThis.clearTimeout(timer);
+  }
+}
 
 export class LockLearnPanel extends LitElement {
   static readonly locklearnFrontendProtocol = FRONTEND_PROTOCOL_VERSION;
@@ -57,6 +78,12 @@ export class LockLearnPanel extends LitElement {
   @state() private dashboardError = "";
   @state() private errorMessage = "";
   @state() private handoffSession?: SessionState;
+  @state() private managementDirty = false;
+  @state() private pendingNavigation?: PendingNavigation;
+  @state() private navigationSaving = false;
+  @state() private loadFailures = 0;
+  @state() private diagnosticNotice = "";
+  @state() private online = globalThis.navigator?.onLine ?? true;
 
   private loadGeneration = 0;
   private dashboardGeneration = 0;
@@ -169,6 +196,39 @@ export class LockLearnPanel extends LitElement {
       max-width: 680px;
       margin: 48px auto 0;
     }
+
+    .guard-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: color-mix(in srgb, var(--primary-text-color) 30%, transparent);
+    }
+
+    .guard-dialog {
+      width: min(520px, 100%);
+      padding: 20px;
+      border-radius: 14px;
+      background: var(--card-background-color, var(--primary-background-color));
+      color: var(--primary-text-color);
+      box-shadow: var(--ha-card-box-shadow, 0 12px 36px rgb(0 0 0 / 24%));
+    }
+
+    .guard-dialog h2 { margin-top: 0; }
+
+    .connection-banner {
+      position: sticky;
+      top: 64px;
+      z-index: 2;
+      padding: 8px 16px;
+      text-align: center;
+      background: var(--warning-color, var(--secondary-background-color));
+      color: var(--primary-text-color);
+    }
+    .guard-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .guard-actions button { min-height: 44px; padding: 9px 12px; }
 
     .home-header {
       display: flex;
@@ -304,10 +364,16 @@ export class LockLearnPanel extends LitElement {
   connectedCallback(): void {
     super.connectedCallback();
     globalThis.addEventListener?.("popstate", this.handlePopState);
+    globalThis.addEventListener?.("beforeunload", this.handleBeforeUnload);
+    globalThis.addEventListener?.("online", this.handleConnectivity);
+    globalThis.addEventListener?.("offline", this.handleConnectivity);
   }
 
   disconnectedCallback(): void {
     globalThis.removeEventListener?.("popstate", this.handlePopState);
+    globalThis.removeEventListener?.("beforeunload", this.handleBeforeUnload);
+    globalThis.removeEventListener?.("online", this.handleConnectivity);
+    globalThis.removeEventListener?.("offline", this.handleConnectivity);
     super.disconnectedCallback();
   }
 
@@ -325,8 +391,25 @@ export class LockLearnPanel extends LitElement {
   }
 
   private readonly handlePopState = (): void => {
-    const next = parseRoute(globalThis.location?.pathname ?? "/locklearn");
-    this.activeRoute = isRouteVisible(next, this.profiles) ? next : "home";
+    const parsed = parseRoute(globalThis.location?.pathname ?? "/locklearn");
+    const next = isRouteVisible(parsed, this.profiles) ? parsed : "home";
+    if (this.managementDirty && next !== this.activeRoute) {
+      this.pendingNavigation = { kind: "route", route: next };
+      globalThis.history?.replaceState({}, "", routePath(this.activeRoute));
+      this.requestUpdate();
+      return;
+    }
+    this.activeRoute = next;
+  };
+
+  private readonly handleBeforeUnload = (event: BeforeUnloadEvent): void => {
+    if (!this.managementDirty) return;
+    event.preventDefault();
+    event.returnValue = "";
+  };
+
+  private readonly handleConnectivity = (): void => {
+    this.online = globalThis.navigator?.onLine ?? true;
   };
 
   private locale(): UiLanguage {
@@ -349,8 +432,11 @@ export class LockLearnPanel extends LitElement {
     this.errorMessage = "";
 
     try {
-      const bootstrapState = await bootstrap(this.hass);
-      const profiles = await listVisibleProfiles(this.hass);
+      const { bootstrapState, profiles } = await withTimeout((async () => {
+        const bootstrapState = await bootstrap(this.hass!);
+        const profiles = await listVisibleProfiles(this.hass!);
+        return { bootstrapState, profiles };
+      })(), 10_000);
       if (generation !== this.loadGeneration) return;
 
       this.bootstrapState = bootstrapState;
@@ -359,6 +445,8 @@ export class LockLearnPanel extends LitElement {
       const requested = parseRoute(globalThis.location?.pathname ?? bootstrapState.panel_path);
       this.activeRoute = isRouteVisible(requested, profiles) ? requested : "home";
       this.status = "ready";
+      this.loadFailures = 0;
+      this.diagnosticNotice = "";
       void this.loadDashboard();
     } catch (error) {
       if (generation !== this.loadGeneration) return;
@@ -375,24 +463,87 @@ export class LockLearnPanel extends LitElement {
         return;
       }
       this.errorMessage = error instanceof Error ? error.message : String(error);
+      this.loadFailures += 1;
       this.status = "error";
     }
   }
 
   private selectRoute(route: RouteName): void {
-    if (!isRouteVisible(route, this.profiles)) return;
-    this.activeRoute = route;
-    navigateToRoute(route);
+    if (!isRouteVisible(route, this.profiles) || route === this.activeRoute) return;
+    if (this.managementDirty) {
+      this.pendingNavigation = { kind: "route", route };
+      return;
+    }
+    this.applyNavigation({ kind: "route", route });
   }
 
   private selectProfile(event: Event): void {
     const target = event.currentTarget;
     if (!(target instanceof HTMLSelectElement)) return;
     const profileId = target.value;
-    if (!this.profiles.some((profile) => profile.profile_id === profileId)) return;
-    this.selectedProfileId = profileId;
+    if (
+      !this.profiles.some((profile) => profile.profile_id === profileId) ||
+      profileId === this.selectedProfileId
+    ) {
+      return;
+    }
+    if (this.managementDirty) {
+      this.pendingNavigation = { kind: "profile", profileId };
+      this.requestUpdate();
+      return;
+    }
+    this.applyNavigation({ kind: "profile", profileId });
+  }
+
+  private applyNavigation(pending: PendingNavigation): void {
+    if (pending.kind === "route") {
+      this.activeRoute = pending.route;
+      navigateToRoute(pending.route);
+      return;
+    }
+    this.selectedProfileId = pending.profileId;
     this.handoffSession = undefined;
     void this.loadDashboard();
+  }
+
+  private handleManagementDirty(event: CustomEvent<{ dirty: boolean }>): void {
+    this.managementDirty = Boolean(event.detail?.dirty);
+  }
+
+  private managementView(): LockLearnManagementView | null {
+    return this.renderRoot.querySelector<LockLearnManagementView>(
+      "locklearn-management-view",
+    );
+  }
+
+  private async saveAndNavigate(): Promise<void> {
+    const pending = this.pendingNavigation;
+    const management = this.managementView();
+    if (pending === undefined || management === null) return;
+    this.navigationSaving = true;
+    try {
+      const saved = await management.saveDirtyScopes();
+      if (!saved) return;
+      this.managementDirty = false;
+      this.pendingNavigation = undefined;
+      this.applyNavigation(pending);
+    } finally {
+      this.navigationSaving = false;
+    }
+  }
+
+  private discardAndNavigate(): void {
+    const pending = this.pendingNavigation;
+    if (pending === undefined) return;
+    this.managementView()?.discardDirtyScopes();
+    this.managementDirty = false;
+    this.pendingNavigation = undefined;
+    this.applyNavigation(pending);
+  }
+
+  private stayOnDirtyForm(): void {
+    this.pendingNavigation = undefined;
+    this.requestUpdate();
   }
 
   private openTargetedSession(event: CustomEvent<{ session: SessionState }>): void {
@@ -405,8 +556,9 @@ export class LockLearnPanel extends LitElement {
       return;
     }
     this.handoffSession = session;
-    this.activeRoute = "learn";
-    navigateToRoute("learn");
+    const route = ["quiz", "calibration"].includes(session.type) ? "quiz" : "learn";
+    this.activeRoute = route;
+    navigateToRoute(route);
   }
 
   private clearSessionHandoff(): void {
@@ -459,6 +611,26 @@ export class LockLearnPanel extends LitElement {
     }
   }
 
+  private async copyDiagnostic(): Promise<void> {
+    const diagnostic = [
+      `LockLearn frontend protocol: ${FRONTEND_PROTOCOL_VERSION}`,
+      `route: ${this.activeRoute}`,
+      `online: ${this.online}`,
+      `failures: ${this.loadFailures}`,
+      `error: ${this.errorMessage}`,
+    ].join("\n");
+    try {
+      await globalThis.navigator?.clipboard?.writeText(diagnostic);
+      this.diagnosticNotice = this.t("state.diagnosticCopied");
+    } catch {
+      this.diagnosticNotice = diagnostic;
+    }
+  }
+
+  private goHome(): void {
+    globalThis.location?.assign("/");
+  }
+
   private hardReload(): void {
     globalThis.location?.reload();
   }
@@ -491,9 +663,20 @@ export class LockLearnPanel extends LitElement {
           <section class="state-card" role="alert">
             <h1>${this.t("state.error")}</h1>
             <p>${this.errorMessage}</p>
-            <button class="primary-button" @click=${() => void this.load()}>
-              ${this.t("state.retry")}
-            </button>
+            <div class="guard-actions">
+              <button class="primary-button" @click=${() => void this.load()}>
+                ${this.t("state.retry")}
+              </button>
+              <button @click=${this.goHome}>${this.t("state.home")}</button>
+              ${this.loadFailures >= 3
+                ? html`<button @click=${() => void this.copyDiagnostic()}>
+                    ${this.t("state.copyDiagnostic")}
+                  </button>`
+                : nothing}
+            </div>
+            ${this.diagnosticNotice
+              ? html`<p class="meta" role="status">${this.diagnosticNotice}</p>`
+              : nothing}
           </section>
         </main>
       `;
@@ -545,6 +728,9 @@ export class LockLearnPanel extends LitElement {
             )}
           </nav>
         </header>
+        ${this.online
+          ? nothing
+          : html`<div class="connection-banner" role="status">${this.t("state.offline")}</div>`}
         <main>
           ${this.profiles.length === 0
             ? html`<locklearn-management-view
@@ -564,6 +750,7 @@ export class LockLearnPanel extends LitElement {
                     .dashboard=${this.dashboard}
                     .externalSession=${this.handoffSession}
                     @locklearn-session-handoff-consumed=${this.clearSessionHandoff}
+                    @locklearn-open-session=${this.openTargetedSession}
                   ></locklearn-learn-view>`
                 : this.activeRoute === "quiz"
                   ? html`<locklearn-quiz-view
@@ -572,6 +759,9 @@ export class LockLearnPanel extends LitElement {
                         (profile) => profile.profile_id === this.selectedProfileId,
                       )}
                       .dashboard=${this.dashboard}
+                      .externalSession=${this.handoffSession}
+                      @locklearn-session-handoff-consumed=${this.clearSessionHandoff}
+                      @locklearn-open-session=${this.openTargetedSession}
                     ></locklearn-quiz-view>`
                   : this.activeRoute === "stats"
                     ? html`<locklearn-stats-view
@@ -595,12 +785,49 @@ export class LockLearnPanel extends LitElement {
                         )}
                         .route=${this.activeRoute as ManagementRoute}
                         @locklearn-refresh=${() => void this.refreshManagement()}
+                        @locklearn-dirty-state-changed=${this.handleManagementDirty}
                       ></locklearn-management-view>`
                     : html`<section class="page">
                     <h1>${this.routeLabel(this.activeRoute)}</h1>
                     <p>${this.t("route.placeholder")}</p>
                   </section>`}
         </main>
+        ${this.pendingNavigation === undefined
+          ? nothing
+          : html`<div class="guard-backdrop">
+              <section
+                class="guard-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="unsaved-title"
+              >
+                <h2 id="unsaved-title">${this.t("form.navigationTitle")}</h2>
+                <p>${this.t("form.navigationBody")}</p>
+                <div class="guard-actions">
+                  <button
+                    class="primary-button"
+                    @click=${() => void this.saveAndNavigate()}
+                    ?disabled=${this.navigationSaving}
+                  >
+                    ${this.navigationSaving
+                      ? this.t("form.saving")
+                      : this.t("form.saveAndLeave")}
+                  </button>
+                  <button
+                    @click=${this.discardAndNavigate}
+                    ?disabled=${this.navigationSaving}
+                  >
+                    ${this.t("form.leaveWithoutSaving")}
+                  </button>
+                  <button
+                    @click=${this.stayOnDirtyForm}
+                    ?disabled=${this.navigationSaving}
+                  >
+                    ${this.t("form.stay")}
+                  </button>
+                </div>
+              </section>
+            </div>`}
       </div>
     `;
   }

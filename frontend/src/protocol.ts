@@ -794,6 +794,7 @@ export interface DashboardNotification {
 export interface DashboardTrack {
   track_id: string;
   name: string;
+  priority: number;
   source_language: string;
   target_language: string;
   due_today: number;
@@ -906,29 +907,61 @@ export interface SessionState {
   }>;
   current_question: SessionQuestion | null;
   fatigue_advice?: Record<string, unknown>;
+  calibration_summary?: {
+    known: number;
+    needs_learning: number;
+    answered: number;
+  };
 }
 
+
+export type AvailabilityBlockerCode =
+  | "scheduled_step"
+  | "known_already_verification"
+  | "new_quota"
+  | "sibling_gap"
+  | "confusable_gap"
+  | "buried"
+  | "prerequisite"
+  | "suspended";
+
+export interface AvailabilityBlocker {
+  code: AvailabilityBlockerCode;
+  count: number;
+  until_utc: string | null;
+  forceable: boolean;
+}
 
 export interface SessionAvailability {
   profile_id: string;
   track_id: string;
   session_type: string;
   available_now: number;
+  selected_cards: number;
   introduced_cards: number;
   new_cards: number;
+  due_now_total: number;
+  known_already_cards: number;
+  known_already_pending_verification: number;
+  suspended_cards: number;
+  buried_cards: number;
+  temporarily_blocked_cards: number;
+  prerequisite_blocked_cards: number;
+  session_capacity: number;
   remaining_new_quota: number;
   forceable_new: number;
   forceable_early: number;
   next_due_at_utc: string | null;
   next_available_at_utc: string | null;
-  next_available_reason: "scheduled_step" | "new_quota_reset" | null;
+  next_available_reason: "scheduled_step" | "known_already_verification" | "new_quota" | null;
+  blockers: AvailabilityBlocker[];
 }
 
 export async function getSessionAvailability(
   hass: HomeAssistantLike,
   profileId: string,
   trackId: string,
-  sessionType: "learn" | "quiz",
+  sessionType: "learn" | "quiz" | "calibration",
   settings: Record<string, unknown> = {},
 ): Promise<SessionAvailability> {
   return hass.callWS<SessionAvailability>({
@@ -999,6 +1032,26 @@ export async function startQuizSession(
   });
 }
 
+
+export async function startCalibrationSession(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  requestedCards = 20,
+): Promise<SessionState> {
+  return hass.callWS<SessionState>({
+    type: "locklearn/session/start",
+    profile_id: profileId,
+    track_id: trackId,
+    session_type: "calibration",
+    strategy: "calibration",
+    settings: {
+      requested_cards: requestedCards,
+      quiz_format: "mixed",
+      option_count: 4,
+    },
+  });
+}
 
 export interface QuizAnswerResponse {
   feedback: QuizFeedback;
@@ -1126,7 +1179,7 @@ export async function setCardUserState(
   profileId: string,
   trackId: string,
   cardKey: string,
-  userState: "known_already" | "suspended",
+  userState: "active" | "suspended" | "buried",
 ): Promise<Record<string, unknown>> {
   return hass.callWS<Record<string, unknown>>({
     type: "locklearn/progress/set_user_state",
@@ -1134,6 +1187,98 @@ export async function setCardUserState(
     track_id: trackId,
     card_key: cardKey,
     user_state: userState,
+  });
+}
+
+export type ConcernedCardsFilter =
+  | "known_pending"
+  | "suspended"
+  | "buried"
+  | "prerequisite_support"
+  | "current_waiting_context";
+
+export interface ConcernedCard {
+  card_key: string;
+  prompt: LearnFacetPresentation;
+  state: string;
+  user_state: string;
+  horizon_utc: string | null;
+  action: "learn_instead" | "reactivate" | null;
+}
+
+export interface ConcernedCardsResponse {
+  profile_id: string;
+  track_id: string;
+  filter: ConcernedCardsFilter;
+  cards: ConcernedCard[];
+}
+
+export async function getConcernedCards(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  filter: ConcernedCardsFilter,
+  mode: "learn" | "quiz",
+): Promise<ConcernedCardsResponse> {
+  return hass.callWS<ConcernedCardsResponse>({
+    type: "locklearn/cards/concerned/list",
+    profile_id: profileId,
+    track_id: trackId,
+    filter,
+    mode,
+  });
+}
+
+export async function learnCardInstead(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  cardKey: string,
+): Promise<Record<string, unknown>> {
+  return hass.callWS<Record<string, unknown>>({
+    type: "locklearn/cards/learn_instead",
+    profile_id: profileId,
+    track_id: trackId,
+    card_key: cardKey,
+  });
+}
+
+export interface ReadyReminderStatus {
+  active: boolean;
+  mode: "learn" | "quiz";
+  scheduled_for_utc: string | null;
+  target_available: boolean;
+}
+
+export async function getReadyReminderStatus(
+  hass: HomeAssistantLike, profileId: string, trackId: string, mode: "learn" | "quiz",
+): Promise<ReadyReminderStatus> {
+  return hass.callWS<ReadyReminderStatus>({
+    type: "locklearn/reminders/ready/status", profile_id: profileId, track_id: trackId, mode,
+  });
+}
+
+export async function armReadyReminder(
+  hass: HomeAssistantLike, profileId: string, trackId: string, mode: "learn" | "quiz",
+): Promise<ReadyReminderStatus> {
+  return hass.callWS<ReadyReminderStatus>({
+    type: "locklearn/reminders/ready/arm", profile_id: profileId, track_id: trackId, mode,
+  });
+}
+
+export async function cancelReadyReminder(
+  hass: HomeAssistantLike, profileId: string, trackId: string, mode: "learn" | "quiz",
+): Promise<ReadyReminderStatus> {
+  return hass.callWS<ReadyReminderStatus>({
+    type: "locklearn/reminders/ready/cancel", profile_id: profileId, track_id: trackId, mode,
+  });
+}
+
+export async function undoLastProgress(
+  hass: HomeAssistantLike, profileId: string, trackId: string, cardKey: string,
+): Promise<Record<string, unknown>> {
+  return hass.callWS<Record<string, unknown>>({
+    type: "locklearn/progress/undo_last", profile_id: profileId, track_id: trackId, card_key: cardKey,
   });
 }
 

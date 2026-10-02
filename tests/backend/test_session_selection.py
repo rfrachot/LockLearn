@@ -763,7 +763,7 @@ async def test_availability_exposes_next_local_quota_reset_when_new_cards_remain
     assert availability["available_now"] == 0
     assert availability["remaining_new_quota"] == 0
     assert availability["next_available_at_utc"] == "2026-09-24T00:00:00+02:00"
-    assert availability["next_available_reason"] == "new_quota_reset"
+    assert availability["next_available_reason"] == "new_quota"
 
 
 @pytest.mark.asyncio
@@ -928,3 +928,118 @@ def test_targeted_leech_setting_must_be_boolean() -> None:
 
     with pytest.raises(SessionSelectionError, match="leeches_only"):
         service.validate_session_settings({"leeches_only": "yes"})
+
+
+@pytest.mark.asyncio
+async def test_calibration_samples_new_cards_without_consuming_daily_new_quota() -> None:
+    candidates = tuple(
+        _candidate(index, state="new", content_type="vocabulary") for index in range(1, 31)
+    )
+    service = _service(
+        candidates,
+        reviews=_Reviews(introductions=99),
+        profiles=_Profiles(max_new=0, session_length=10),
+    )
+
+    selected = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="calibration",
+        settings={},
+    )
+
+    assert len(selected) == 20
+    assert {item.payload["selection"]["progress_state"] for item in selected} == {"new"}
+    assert {item.payload["selection"]["reason"] for item in selected} == {"calibration"}
+
+
+@pytest.mark.asyncio
+async def test_known_already_is_learn_hidden_until_verified_quiz_due() -> None:
+    candidate = _candidate(
+        1,
+        state="review",
+        content_type="vocabulary",
+        due="2026-09-23T12:10:00+00:00",
+        user_state="known_already",
+    )
+    before = _service((candidate,))
+
+    learn_before = await before.async_prepare(
+        profile_id="profile-1", track_id="track-1", session_type="learn", settings={}
+    )
+    quiz_before = await before.async_prepare(
+        profile_id="profile-1", track_id="track-1", session_type="quiz", settings={}
+    )
+    availability = await before.async_availability(
+        profile_id="profile-1", track_id="track-1", session_type="quiz"
+    )
+
+    assert learn_before == ()
+    assert quiz_before == ()
+    assert availability["known_already_pending_verification"] == 1
+    assert availability["next_available_at_utc"] == "2026-09-23T12:10:00+00:00"
+    assert availability["blockers"] == [
+        {
+            "code": "known_already_verification",
+            "count": 1,
+            "until_utc": "2026-09-23T12:10:00+00:00",
+            "forceable": False,
+        }
+    ]
+
+    after = SessionSelectionService(
+        _Tracks((candidate,)),
+        _Profiles(),
+        _Reviews(),
+        _Constraints(),
+        clock=_FixedClock(datetime(2026, 9, 23, 12, 11, tzinfo=UTC)),
+    )
+    quiz_after = await after.async_prepare(
+        profile_id="profile-1", track_id="track-1", session_type="quiz", settings={}
+    )
+    assert [item.card_key for item in quiz_after] == ["card-1"]
+
+
+class _PrerequisiteConstraint(_Constraints):
+    async def async_evaluate(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        card_key: str,
+        learning_item_id: str,
+        state: str,
+    ) -> SelectionDecision:
+        await super().async_evaluate(
+            profile_id=profile_id,
+            track_id=track_id,
+            card_key=card_key,
+            learning_item_id=learning_item_id,
+            state=state,
+        )
+        return SelectionDecision(
+            eligible=False,
+            reasons=("prerequisite_not_met:card-x",),
+            blocked_until_utc=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_prerequisite_blocker_never_invents_next_available_time() -> None:
+    service = SessionSelectionService(
+        _Tracks((_candidate(1, state="new", content_type="vocabulary"),)),
+        _Profiles(),
+        _Reviews(),
+        _PrerequisiteConstraint(),
+        clock=_FixedClock(datetime(2026, 9, 23, 12, 0, tzinfo=UTC)),
+    )
+
+    availability = await service.async_availability(
+        profile_id="profile-1", track_id="track-1", session_type="learn"
+    )
+
+    assert availability["available_now"] == 0
+    assert availability["next_available_at_utc"] is None
+    assert availability["prerequisite_blocked_cards"] == 1
+    assert availability["blockers"][0]["code"] == "prerequisite"
+    assert availability["blockers"][0]["until_utc"] is None

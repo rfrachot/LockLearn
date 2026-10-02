@@ -397,7 +397,7 @@ async def test_snapshot_rebuild_preserves_overlay_only_progress_row(tmp_path: Pa
             profile_id=identity["profile_id"],
             track_id=identity["track_id"],
             card_key=identity["card_key"],
-            user_state="known_already",
+            user_state="suspended",
         )
 
         result = await integrity.async_rebuild_progress(profile_id=identity["profile_id"])
@@ -409,7 +409,7 @@ async def test_snapshot_rebuild_preserves_overlay_only_progress_row(tmp_path: Pa
         )
         assert preserved is not None
         assert preserved["state"] == "new"
-        assert preserved["user_state"] == "known_already"
+        assert preserved["user_state"] == "suspended"
         assert preserved["seen_count"] == 0
     finally:
         await storage.async_close()

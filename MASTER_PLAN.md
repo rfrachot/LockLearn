@@ -29,6 +29,7 @@
 | P4 | Scheduler/notifications/HA automation | complete | yes | `docs/plan/P4.md` |
 | P5 | Useful panel | complete | yes | `docs/plan/P5.md` |
 | P6 | Hardening/release | in progress | yes | `docs/plan/P6.md` |
+| UX-B5 | No-dead-end UX v0.3 / beta.5 follow-up | in progress | yes | `docs/ux/LOCKLEARN_UX_NO_DEAD_END_V0_3_WIREFRAMES.md` |
 | P7 | V1.1/research | later | no | `docs/plan/P7.md` |
 
 ## Work-package index
@@ -127,6 +128,16 @@
 - **P7.2** — Advanced stats and optional HA sensors
 - **P7.3** — Image/audio learning renderers
 - **P7.4** — Future research backlog
+
+### UX beta.5 hardening
+
+- **UX-B5.1** — Effective availability + blocker model and temporal formatting
+- **UX-B5.2** — Calibration-pending `known_already` lifecycle + Learn fallback/undo
+- **UX-B5.3** — Verified quick calibration flow
+- **UX-B5.4** — One-shot readiness reminders + return-to-ready behavior
+- **UX-B5.5** — Learn/Quiz no-dead-end states, cross-track alternatives and cards sheet
+- **UX-B5.6** — Multi-client send/confirm/retry and connection/load failure states
+- **UX-B5.7** — Dirty-scope form protection, accessibility and acceptance/CI qualification
 
 ## Cross-cutting 1.0 gates
 

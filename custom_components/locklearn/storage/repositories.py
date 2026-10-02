@@ -2055,7 +2055,7 @@ class ReviewEventsRepository:
             question_type = str(row[9])
             pre = json.loads(str(row[10]))
             post = json.loads(str(row[11]))
-            if mode == "introduction":
+            if mode in {"introduction", "known_already"}:
                 item["learning_exposures"] += 1
                 item["new_cards"].add(str(post["card_key"]))
             trusted_verified = (
@@ -2076,13 +2076,10 @@ class ReviewEventsRepository:
                     item["verified_correct"] += 1
                 else:
                     item["verified_wrong"] += 1
-            if mode == "self_assessment_after_retrieval" and result in {
-                "correct",
-                "known",
-                "knew",
-                "easy",
-                "hard",
-            }:
+            if mode == "known_already" or (
+                mode == "self_assessment_after_retrieval"
+                and result in {"correct", "known", "knew", "easy", "hard"}
+            ):
                 item["self_known"] += 1
             if question_type in {"mcq", "cloze", "cloze_mcq"}:
                 item["quiz_total"] += 1
@@ -2298,6 +2295,39 @@ class ReviewEventsRepository:
                 (session_id, limit),
             ).fetchall()
             return tuple(str(row[0]) for row in rows)
+
+        return await self._storage._async_reader(read)
+
+    async def async_session_verified_result_counts(
+        self,
+        session_id: str,
+    ) -> dict[str, int]:
+        """Return verified calibration outcome counts for one session."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, int]:
+            rows = connection.execute(
+                """SELECT result, COUNT(*)
+                   FROM review_events
+                   WHERE session_id = ?
+                     AND retrieval_occurred = 1
+                     AND mode IN (
+                         'verified_mcq',
+                         'verified_free_text',
+                         'verified_cloze'
+                     )
+                   GROUP BY result""",
+                (session_id,),
+            ).fetchall()
+            counts = {str(row[0]): int(row[1]) for row in rows}
+            known = counts.get("correct", 0)
+            needs_learning = sum(
+                counts.get(result, 0) for result in ("wrong", "idk", "unrecognized")
+            )
+            return {
+                "known": known,
+                "needs_learning": needs_learning,
+                "answered": known + needs_learning,
+            }
 
         return await self._storage._async_reader(read)
 
@@ -4787,6 +4817,31 @@ class SettingsRepository:
                 (key,),
             ).fetchone()
             return None if row is None else json.loads(str(row[0]))
+
+        return await self._storage._async_reader(read)
+
+    async def async_delete(self, key: str) -> bool:
+        """Delete one setting key."""
+
+        def delete_value(connection: sqlite3.Connection) -> bool:
+            cursor = connection.execute("DELETE FROM settings WHERE key = ?", (key,))
+            connection.commit()
+            return cursor.rowcount == 1
+
+        return await self._storage._async_writer(delete_value)
+
+    async def async_list_prefix(self, prefix: str) -> dict[str, Any]:
+        """Return JSON settings whose keys share one internal namespace."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any]:
+            rows = connection.execute(
+                """SELECT key, value_json
+                   FROM settings
+                   WHERE key LIKE ?
+                   ORDER BY key""",
+                (f"{prefix}%",),
+            ).fetchall()
+            return {str(key): json.loads(str(value)) for key, value in rows}
 
         return await self._storage._async_reader(read)
 

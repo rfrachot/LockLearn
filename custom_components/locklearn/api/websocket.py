@@ -34,7 +34,9 @@ from ..core.presentation import PresentationError
 from ..core.profiles import ProfileValidationError
 from ..core.progress_state import ProgressUserStateError
 from ..core.quiz_sessions import QuizSessionError
+from ..core.ready_reminders import ReadyReminderError
 from ..core.scheduler import SchedulerValidationError
+from ..core.selection import SelectionConstraintError
 from ..core.session_selection import SessionSelectionError
 from ..core.sessions import SessionQuestion, SessionValidationError
 from ..core.stats import StatsServiceError
@@ -301,6 +303,12 @@ async def _with_fatigue_advice(
         active=str(state.get("status")) == "active",
     )
     enriched["fatigue_advice"] = advice.as_dict()
+    if str(state.get("type")) == "calibration":
+        enriched[
+            "calibration_summary"
+        ] = await runtime.storage.repositories.review_events.async_session_verified_result_counts(
+            str(state["id"])
+        )
     return enriched
 
 
@@ -1836,7 +1844,7 @@ async def ws_content_report_question(
         vol.Required("profile_id"): str,
         vol.Required("track_id"): str,
         vol.Required("card_key"): str,
-        vol.Required("user_state"): vol.In(("active", "known_already", "suspended", "buried")),
+        vol.Required("user_state"): vol.In(("active", "suspended", "buried")),
         vol.Optional("suspend_until_utc"): vol.Any(str, None),
     }
 )
@@ -1871,6 +1879,182 @@ async def ws_progress_set_user_state(
             suspend_until_utc=msg.get("suspend_until_utc"),
         )
     except (ProgressUserStateError, ContentReferenceError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/cards/concerned/list",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("filter"): vol.In(
+            (
+                "known_pending",
+                "suspended",
+                "buried",
+                "prerequisite_support",
+                "current_waiting_context",
+            )
+        ),
+        vol.Optional("mode", default="learn"): vol.In(("learn", "quiz")),
+    }
+)
+@websocket_api.async_response
+async def ws_cards_concerned_list(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return a bounded prompt-only view of cards relevant to the current wait."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    profile_id = msg["profile_id"]
+    track_id = msg["track_id"]
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        profile_id,
+        ProfilePermission.READ,
+    ):
+        return
+    track = await runtime.storage.repositories.tracks.async_get(track_id)
+    if track is None or str(track["profile_id"]) != profile_id:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Track not found")
+        return
+
+    rows = await runtime.storage.repositories.tracks.async_session_candidates(
+        profile_id=profile_id,
+        track_id=track_id,
+    )
+    selected_keys: set[str] = set()
+    filter_name = msg["filter"]
+    if filter_name == "known_pending":
+        selected_keys = {
+            str(row["card_key"])
+            for row in rows
+            if str(row.get("user_state", "active")) == "known_already"
+        }
+    elif filter_name == "suspended":
+        selected_keys = {
+            str(row["card_key"])
+            for row in rows
+            if str(row.get("user_state", "active")) == "suspended"
+        }
+    elif filter_name == "buried":
+        selected_keys = {
+            str(row["card_key"]) for row in rows if str(row.get("user_state", "active")) == "buried"
+        }
+    else:
+        prerequisite_keys: set[str] = set()
+        blocked_keys: set[str] = set()
+        now = datetime.now(UTC)
+        for row in rows:
+            card_key = str(row["card_key"])
+            user_state = str(row.get("user_state", "active"))
+            next_due = row.get("next_due_at_utc")
+            if user_state in {"known_already", "suspended", "buried"}:
+                blocked_keys.add(card_key)
+            if isinstance(next_due, str):
+                due_at = datetime.fromisoformat(next_due)
+                if due_at.tzinfo is not None and due_at > now:
+                    blocked_keys.add(card_key)
+            try:
+                decision = await runtime.selection.async_evaluate(
+                    profile_id=profile_id,
+                    track_id=track_id,
+                    card_key=card_key,
+                    learning_item_id=str(row["learning_item_id"]),
+                    state=str(row["state"]),
+                )
+            except SelectionConstraintError:
+                continue
+            if decision.eligible:
+                continue
+            blocked_keys.add(card_key)
+            for reason in decision.reasons:
+                if reason.startswith("prerequisite_"):
+                    parts = reason.split(":")
+                    if len(parts) >= 2:
+                        prerequisite_keys.add(parts[1])
+        selected_keys = prerequisite_keys if filter_name == "prerequisite_support" else blocked_keys
+
+    payload: list[dict[str, Any]] = []
+    for row in rows:
+        card_key = str(row["card_key"])
+        if card_key not in selected_keys:
+            continue
+        try:
+            presentation = await runtime.presentation.async_for_card(
+                track_id=track_id,
+                card_key=card_key,
+            )
+        except PresentationError:
+            continue
+        user_state = str(row.get("user_state", "active"))
+        action: str | None = None
+        if user_state == "known_already":
+            action = "learn_instead"
+        elif user_state in {"suspended", "buried"}:
+            action = "reactivate"
+        horizon = row.get("next_due_at_utc")
+        if user_state == "buried" and row.get("suspend_until_utc") is not None:
+            horizon = row.get("suspend_until_utc")
+        payload.append(
+            {
+                "card_key": card_key,
+                "prompt": presentation["prompt"],
+                "state": str(row["state"]),
+                "user_state": user_state,
+                "horizon_utc": horizon,
+                "action": action,
+            }
+        )
+        if len(payload) >= 200:
+            break
+    connection.send_result(
+        msg["id"],
+        {
+            "profile_id": profile_id,
+            "track_id": track_id,
+            "filter": filter_name,
+            "cards": payload,
+        },
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/cards/learn_instead",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("card_key"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_cards_learn_instead(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return one pending-known card to the new-card learning path."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        msg["profile_id"],
+        ProfilePermission.MANAGE_PROGRESS,
+    ):
+        return
+    try:
+        result = await runtime.progress_state.async_learn_instead(
+            profile_id=msg["profile_id"],
+            track_id=msg["track_id"],
+            card_key=msg["card_key"],
+        )
+    except ProgressUserStateError as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     connection.send_result(msg["id"], result)
@@ -2475,7 +2659,7 @@ async def ws_session_start(
                 session_type=msg["session_type"],
                 settings=msg["settings"],
             )
-            if msg["session_type"] == "quiz":
+            if msg["session_type"] in {"quiz", "calibration"}:
                 prepared_questions = await runtime.quiz_sessions.async_prepare_questions(
                     track_id=track_id,
                     selected=selected,
@@ -2615,8 +2799,12 @@ async def ws_quiz_answer(
     )
     if state is None:
         return
-    if str(state.get("type")) != "quiz":
-        connection.send_error(msg["id"], ERR_INVALID_REQUEST, "Session is not a quiz")
+    if str(state.get("type")) not in {"quiz", "calibration"}:
+        connection.send_error(
+            msg["id"],
+            ERR_INVALID_REQUEST,
+            "Session is not a quiz/calibration session",
+        )
         return
     try:
         result = await runtime.quiz_sessions.async_answer(
@@ -2987,6 +3175,100 @@ async def ws_scheduler_preview(
     connection.send_result(msg["id"], preview)
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/reminders/ready/status",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("mode"): vol.In(("learn", "quiz")),
+    }
+)
+@websocket_api.async_response
+async def ws_ready_reminder_status(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Return the current one-shot readiness reminder state."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], msg["profile_id"], ProfilePermission.READ
+    ):
+        return
+    try:
+        result = await runtime.ready_reminders.async_status(
+            profile_id=msg["profile_id"],
+            track_id=msg["track_id"],
+            mode=msg["mode"],
+        )
+    except ReadyReminderError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/reminders/ready/arm",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("mode"): vol.In(("learn", "quiz")),
+        vol.Optional("target_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_ready_reminder_arm(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Arm one idempotent readiness reminder for profile+track+mode."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], msg["profile_id"], ProfilePermission.ANSWER
+    ):
+        return
+    try:
+        result = await runtime.ready_reminders.async_arm(
+            profile_id=msg["profile_id"],
+            track_id=msg["track_id"],
+            mode=msg["mode"],
+            target_id=msg.get("target_id"),
+        )
+    except (ReadyReminderError, SessionSelectionError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/reminders/ready/cancel",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Required("mode"): vol.In(("learn", "quiz")),
+    }
+)
+@websocket_api.async_response
+async def ws_ready_reminder_cancel(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Cancel the one-shot readiness reminder for profile+track+mode."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if not await _require_profile_permission(
+        runtime, connection, msg["id"], msg["profile_id"], ProfilePermission.ANSWER
+    ):
+        return
+    result = await runtime.ready_reminders.async_cancel(
+        profile_id=msg["profile_id"],
+        track_id=msg["track_id"],
+        mode=msg["mode"],
+    )
+    connection.send_result(msg["id"], result)
+
+
 COMMANDS = (
     ws_bootstrap,
     ws_profiles_list,
@@ -3020,6 +3302,8 @@ COMMANDS = (
     ws_content_report,
     ws_content_report_question,
     ws_progress_set_user_state,
+    ws_cards_concerned_list,
+    ws_cards_learn_instead,
     ws_calibration_sample,
     ws_stats_get,
     ws_dashboard_get,
@@ -3036,6 +3320,9 @@ COMMANDS = (
     ws_admin_recompute_progress,
     ws_admin_storage_status,
     ws_notification_unrecorded_responses,
+    ws_ready_reminder_status,
+    ws_ready_reminder_arm,
+    ws_ready_reminder_cancel,
     ws_scheduler_preview,
     ws_session_availability,
     ws_session_start,

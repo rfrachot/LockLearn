@@ -134,6 +134,8 @@ export class LockLearnManagementView extends LitElement {
   @state() private loading = false;
   @state() private errorMessage = "";
   @state() private notice = "";
+  @state() private dirtyScopes = new Set<string>();
+  @state() private submittingScope?: string;
 
   static styles = css`
     ${interactiveAccessibilityStyles}
@@ -165,6 +167,21 @@ export class LockLearnManagementView extends LitElement {
     button.primary { border-color: var(--primary-color); color: var(--text-primary-color,white); background: var(--primary-color); }
     button:disabled { cursor: not-allowed; opacity: .55; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .scope-state {
+      margin-top: 10px;
+      color: var(--secondary-text-color);
+      font-size: .86rem;
+    }
+    .scope-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .scope-error-summary {
+      margin-top: 10px;
+      color: var(--error-color,var(--primary-text-color));
+    }
     .track-form { display: grid; gap: 14px; }
     .section-panel {
       margin-top: 14px;
@@ -249,6 +266,19 @@ export class LockLearnManagementView extends LitElement {
       .grid, .form-grid, dl { grid-template-columns: 1fr; }
       .actions { flex-direction: column; align-items: stretch; }
       button { width: 100%; }
+      .scope-actions.is-dirty {
+        position: sticky;
+        bottom: 0;
+        z-index: 10;
+        margin-inline: -18px;
+        margin-bottom: -18px;
+        padding: 10px max(18px, env(safe-area-inset-right))
+          max(10px, env(safe-area-inset-bottom))
+          max(18px, env(safe-area-inset-left));
+        background: var(--card-background-color,var(--primary-background-color));
+        border-top: 1px solid var(--divider-color);
+        box-shadow: 0 -4px 14px rgb(0 0 0 / 10%);
+      }
     }
   `;
 
@@ -316,6 +346,160 @@ export class LockLearnManagementView extends LitElement {
     } finally {
       this.loading = false;
     }
+  }
+
+  private scopeKey(trackId: string, scope: "details" | "plan" | "danger"): string {
+    return `${trackId}:${scope}`;
+  }
+
+  private isScopeDirty(key: string): boolean {
+    return this.dirtyScopes.has(key);
+  }
+
+  private markScopeDirty(key: string): void {
+    if (this.dirtyScopes.has(key)) return;
+    const next = new Set(this.dirtyScopes);
+    next.add(key);
+    this.dirtyScopes = next;
+    this.emitDirtyState();
+  }
+
+  private clearScopeDirty(key: string): void {
+    if (!this.dirtyScopes.has(key)) return;
+    const next = new Set(this.dirtyScopes);
+    next.delete(key);
+    this.dirtyScopes = next;
+    this.emitDirtyState();
+  }
+
+  private emitDirtyState(): void {
+    this.dispatchEvent(
+      new CustomEvent("locklearn-dirty-state-changed", {
+        detail: { dirty: this.dirtyScopes.size > 0 },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  private cancelScope(key: string, form: HTMLFormElement): void {
+    form.reset();
+    this.clearScopeDirty(key);
+    this.requestUpdate();
+  }
+
+  private validateScope(form: HTMLFormElement): boolean {
+    if (form.checkValidity()) return true;
+    const invalid = form.querySelector<HTMLElement>(":invalid");
+    const details = invalid?.closest("details");
+    if (details instanceof HTMLDetailsElement) details.open = true;
+    invalid?.focus();
+    form.reportValidity();
+    return false;
+  }
+
+  private async mutateScope(
+    key: string,
+    action: () => Promise<unknown>,
+    message: string,
+  ): Promise<void> {
+    this.submittingScope = key;
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      await action();
+      this.clearScopeDirty(key);
+      await this.load();
+      this.notice = message;
+      this.dispatchEvent(new CustomEvent("locklearn-refresh", { bubbles: true, composed: true }));
+    } catch (error) {
+      this.errorMessage = errorMessage(error);
+    } finally {
+      this.loading = false;
+      this.submittingScope = undefined;
+    }
+  }
+
+  private async saveTrackDetails(track: TrackRecord, form: HTMLFormElement): Promise<boolean> {
+    if (this.hass === undefined || !this.validateScope(form)) return false;
+    const data = new FormData(form);
+    const scheduler = objectSetting(track.settings, "scheduler");
+    const weights = track.content_weights ?? {};
+    const selectedTargets = data.getAll("notificationTarget").map(String);
+    const contentWeights = {
+      vocabulary: asFloat(data.get("weightVocabulary"), Number(weights.vocabulary ?? 1), 0, 100),
+      kanji: asFloat(data.get("weightKanji"), Number(weights.kanji ?? 1), 0, 100),
+      grammar: asFloat(data.get("weightGrammar"), Number(weights.grammar ?? 1), 0, 100),
+      expression: asFloat(data.get("weightExpression"), Number(weights.expression ?? 1), 0, 100),
+    };
+    const key = this.scopeKey(track.track_id, "details");
+    await this.mutateScope(
+      key,
+      () => updateTrack(this.hass!, track.track_id, {
+        name: String(data.get("name") ?? track.name),
+        source_language: String(data.get("source") ?? track.source_language ?? "").trim(),
+        target_language: String(data.get("target") ?? track.target_language ?? "").trim(),
+        status: String(data.get("status") ?? track.status),
+        priority: asInt(data.get("priority"), track.priority, 1),
+        content_weights: contentWeights,
+        scheduler_settings: {
+          learning_count: asInt(data.get("learningCount"), Number(scheduler.learning_count ?? 0), 0),
+          quiz_count: asInt(data.get("quizCount"), Number(scheduler.quiz_count ?? 0), 0),
+          ...(selectedTargets.length === 0 ? {} : { target_ids: selectedTargets }),
+        },
+      }),
+      this.t("manage.saved"),
+    );
+    return !this.isScopeDirty(key);
+  }
+
+  private async savePlanScope(track: TrackRecord, form: HTMLFormElement): Promise<boolean> {
+    if (this.hass === undefined || !this.validateScope(form)) return false;
+    const key = this.scopeKey(track.track_id, "plan");
+    const plan = this.planFrom(form);
+    await this.mutateScope(
+      key,
+      () => setTrackPlan(this.hass!, track.track_id, plan),
+      this.t("manage.saved"),
+    );
+    return !this.isScopeDirty(key);
+  }
+
+  async saveDirtyScopes(): Promise<boolean> {
+    const keys = [...this.dirtyScopes];
+    for (const key of keys) {
+      const split = key.lastIndexOf(":");
+      if (split < 1) continue;
+      const trackId = key.slice(0, split);
+      const kind = key.slice(split + 1);
+      const track = this.tracks.find((item) => item.track_id === trackId);
+      const form = this.renderRoot.querySelector<HTMLFormElement>(
+        `form[data-save-scope="${key}"]`,
+      );
+      if (track === undefined || form === null) return false;
+      const saved =
+        kind === "details"
+          ? await this.saveTrackDetails(track, form)
+          : kind === "plan"
+            ? await this.savePlanScope(track, form)
+            : false;
+      if (!saved) return false;
+    }
+    return this.dirtyScopes.size === 0;
+  }
+
+  discardDirtyScopes(): void {
+    for (const key of [...this.dirtyScopes]) {
+      const form = this.renderRoot.querySelector<HTMLFormElement>(
+        `form[data-save-scope="${key}"]`,
+      );
+      form?.reset();
+    }
+    this.dirtyScopes = new Set();
+    this.forecasts = {};
+    this.forecastPlans = {};
+    this.emitDirtyState();
+    this.requestUpdate();
   }
 
   private async mutate(action: () => Promise<unknown>, message: string): Promise<void> {
@@ -571,6 +755,7 @@ export class LockLearnManagementView extends LitElement {
       ? scheduler.target_ids.map(String)
       : [];
     const weights = track.content_weights ?? {};
+    const detailsScope = this.scopeKey(track.track_id, "details");
     const sourceLabel = languageDisplayName(track.source_language ?? "", this.locale());
     const targetLabel = languageDisplayName(track.target_language ?? "", this.locale());
     return html`
@@ -587,31 +772,15 @@ export class LockLearnManagementView extends LitElement {
           <p class="meta">${this.t("manage.packVersion")}: ${track.pack_version_id ?? "—"}</p>
         </div>
         ${this.canEditTrack() ? html`
-          <form class="track-form" @submit=${(event: SubmitEvent) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget as HTMLFormElement);
-            if (this.hass === undefined) return;
-            const selectedTargets = data.getAll("notificationTarget").map(String);
-            const contentWeights = {
-              vocabulary: asFloat(data.get("weightVocabulary"), Number(weights.vocabulary ?? 1), 0, 100),
-              kanji: asFloat(data.get("weightKanji"), Number(weights.kanji ?? 1), 0, 100),
-              grammar: asFloat(data.get("weightGrammar"), Number(weights.grammar ?? 1), 0, 100),
-              expression: asFloat(data.get("weightExpression"), Number(weights.expression ?? 1), 0, 100),
-            };
-            void this.mutate(() => updateTrack(this.hass!, track.track_id, {
-              name: String(data.get("name") ?? track.name),
-              source_language: String(data.get("source") ?? track.source_language ?? "").trim(),
-              target_language: String(data.get("target") ?? track.target_language ?? "").trim(),
-              status: String(data.get("status") ?? track.status),
-              priority: asInt(data.get("priority"), track.priority, 1),
-              content_weights: contentWeights,
-              scheduler_settings: {
-                learning_count: asInt(data.get("learningCount"), Number(scheduler.learning_count ?? 0), 0),
-                quiz_count: asInt(data.get("quizCount"), Number(scheduler.quiz_count ?? 0), 0),
-                ...(selectedTargets.length === 0 ? {} : { target_ids: selectedTargets }),
-              },
-            }), this.t("manage.saved"));
-          }}>
+          <form
+            class="track-form"
+            data-save-scope=${detailsScope}
+            @input=${() => this.markScopeDirty(detailsScope)}
+            @change=${() => this.markScopeDirty(detailsScope)}
+            @submit=${(event: SubmitEvent) => {
+              event.preventDefault();
+              void this.saveTrackDetails(track, event.currentTarget as HTMLFormElement);
+            }}>
             <div class="form-grid">
               <label>${this.t("manage.name")}<input name="name" .value=${track.name} /></label>
               <label>${this.t("manage.status")}
@@ -640,8 +809,27 @@ export class LockLearnManagementView extends LitElement {
               </label>
             </div>
 
-            <div class="actions">
-              <button class="primary" type="submit">${this.t("manage.save")}</button>
+            <p class="scope-state" role="status">
+              ${this.isScopeDirty(detailsScope) ? this.t("form.dirty") : this.t("form.pristine")}
+            </p>
+            <div class="scope-actions ${this.isScopeDirty(detailsScope) ? "is-dirty" : ""}">
+              <button
+                class="primary"
+                type="submit"
+                ?disabled=${!this.isScopeDirty(detailsScope) || this.submittingScope === detailsScope}
+              >
+                ${this.submittingScope === detailsScope ? this.t("form.saving") : this.t("form.save")}
+              </button>
+              <button
+                type="button"
+                ?disabled=${!this.isScopeDirty(detailsScope) || this.submittingScope === detailsScope}
+                @click=${(event: Event) => {
+                  const form = (event.currentTarget as HTMLElement).closest("form");
+                  if (form instanceof HTMLFormElement) this.cancelScope(detailsScope, form);
+                }}
+              >
+                ${this.t("form.cancel")}
+              </button>
             </div>
 
             <details class="section-panel">
@@ -789,15 +977,23 @@ export class LockLearnManagementView extends LitElement {
 
   private renderPlan(track: TrackRecord) {
     const raw = objectSetting(track.settings, "learning_plan");
+    const planScope = this.scopeKey(track.track_id, "plan");
     const profileNew = Number(this.profile?.settings?.max_new_per_day_cards ?? 8);
     const forecast = this.forecasts[track.track_id];
     return html`
       <div class="stack">
         <p class="muted">${this.t("manage.planHelp")}</p>
-        <form class="stack" @submit=${(event: SubmitEvent) => {
+        <form
+          class="stack"
+          data-save-scope=${planScope}
+          @input=${() => this.markScopeDirty(planScope)}
+          @change=${() => this.markScopeDirty(planScope)}
+          @submit=${(event: SubmitEvent) => {
           event.preventDefault();
           if (this.hass === undefined) return;
-          const plan = this.planFrom(event.currentTarget as HTMLFormElement);
+          const form = event.currentTarget as HTMLFormElement;
+          if (!this.validateScope(form)) return;
+          const plan = this.planFrom(form);
           this.loading = true;
           this.errorMessage = "";
           void previewTrackPlan(this.hass, track.track_id, plan)
@@ -850,7 +1046,37 @@ export class LockLearnManagementView extends LitElement {
             </div>
           </details>
           <p class="muted">${this.t("manage.planPreviewHelp")}</p>
-          <div class="actions"><button class="primary" type="submit">${this.t("manage.preview")}</button></div>
+          <div class="actions"><button type="submit">${this.t("manage.preview")}</button></div>
+          <p class="scope-state" role="status">
+            ${this.isScopeDirty(planScope) ? this.t("form.dirty") : this.t("form.pristine")}
+          </p>
+          <div class="scope-actions ${this.isScopeDirty(planScope) ? "is-dirty" : ""}">
+            <button
+              class="primary"
+              type="button"
+              @click=${(event: Event) => {
+                const form = (event.currentTarget as HTMLElement).closest("form");
+                if (form instanceof HTMLFormElement) void this.savePlanScope(track, form);
+              }}
+              ?disabled=${!this.isScopeDirty(planScope) || this.submittingScope === planScope}
+            >
+              ${this.submittingScope === planScope ? this.t("form.saving") : this.t("form.save")}
+            </button>
+            <button
+              type="button"
+              ?disabled=${!this.isScopeDirty(planScope) || this.submittingScope === planScope}
+              @click=${(event: Event) => {
+                const form = (event.currentTarget as HTMLElement).closest("form");
+                if (form instanceof HTMLFormElement) {
+                  this.forecasts = { ...this.forecasts, [track.track_id]: undefined };
+                  this.forecastPlans = { ...this.forecastPlans, [track.track_id]: undefined };
+                  this.cancelScope(planScope, form);
+                }
+              }}
+            >
+              ${this.t("form.cancel")}
+            </button>
+          </div>
         </form>
         ${forecast === undefined ? nothing : this.renderForecast(track, forecast)}
       </div>
@@ -915,7 +1141,12 @@ export class LockLearnManagementView extends LitElement {
   private async applyPlan(track: TrackRecord): Promise<void> {
     const plan = this.forecastPlans[track.track_id];
     if (this.hass === undefined || plan === undefined) return;
-    await this.mutate(() => setTrackPlan(this.hass!, track.track_id, plan), this.t("manage.saved"));
+    const planScope = this.scopeKey(track.track_id, "plan");
+    await this.mutateScope(
+      planScope,
+      () => setTrackPlan(this.hass!, track.track_id, plan),
+      this.t("manage.saved"),
+    );
   }
 
   private renderPacks() {

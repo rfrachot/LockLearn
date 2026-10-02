@@ -1,7 +1,7 @@
 # LockLearn — Spécification fonctionnelle et technique V1
 
-**Statut :** Draft v0.6  
-**Date :** 15 septembre 2026  
+**Statut :** Draft v0.6 + amendement UX no-dead-end v0.3 validé  
+**Date :** 15 septembre 2026 — amendement UX validé le 30 septembre 2026  
 **Nom de travail :** LockLearn  
 **Plateforme cible :** Home Assistant / HACS  
 **Architecture :** locale, self-hosted, local-first  
@@ -9,6 +9,66 @@
 **Frontend :** TypeScript + Lit, panneau Home Assistant dédié  
 **Stockage :** SQLite  
 **Distribution :** GitHub + HACS
+
+---
+
+## 0.1 Amendement UX no-dead-end v0.3 — normatif
+
+L'amendement `LOCKLEARN_SPEC_UX_NO_DEAD_END_v0.3`, validé le 30 septembre 2026, fait partie de la source de vérité V1. En cas de conflit avec une formulation plus ancienne du présent document, les règles ci-dessous prévalent.
+
+### Invariant no-dead-end
+
+Une attente n'est acceptable que si l'écran fournit au moins l'un des éléments suivants :
+
+- une progression immédiate disponible ;
+- une alternative réellement actionnable ;
+- un mécanisme de retour fiable, soit par rafraîchissement automatique clairement annoncé, soit par un rappel one-shot explicite.
+
+Un simple bouton Home ou une explication textuelle ne suffit pas à rendre une impasse acceptable.
+
+### `known_already` devient un état de calibration en attente de preuve
+
+`Je la connais déjà` ne signifie plus « retirer durablement cette carte des sélections ». Sur une carte encore `new` en phase d'introduction :
+
+- l'action est disponible uniquement à cet instant ;
+- la carte devient `user_state=known_already`, `state=review`, `box=1` ;
+- `self_known_count` augmente, sans ajouter de récupération vérifiée ;
+- `last_result=self_known` et `retrieval_occurred=false` ;
+- une vérification réelle est due après un minimum de 10 minutes plus un jitter déterministe de 0 à 20 minutes ;
+- la carte est exclue de Learn tant que cette vérification n'a pas eu lieu, mais devient éligible au Quiz lorsqu'elle est effectivement due ;
+- une récupération vérifiée correcte l'établit en review réelle et remet `user_state=active` ; une récupération vérifiée échouée la remet `user_state=active` et l'envoie en relearning ;
+- `Apprendre finalement` annule cet état avant vérification et rétablit une carte `active/new/box 0` sans inventer d'évidence.
+
+Cette transition doit rester auditable et reconstructible depuis l'historique canonique.
+
+### Garde-fou d'auto-évaluation en série
+
+Pour éviter qu'un apprenant ayant déjà des bases ne doive cliquer « Je la connais déjà » carte après carte sans aide, le panel affiche au plus une fois par session une proposition de calibration rapide lorsque le premier des seuils suivants est franchi :
+
+- 3 actions `known_already` consécutives ;
+- 5 actions `known_already` au total dans la session, même non consécutives.
+
+Le seuil consécutif détecte rapidement un niveau initial manifestement trop bas ; le seuil total détecte un décalage plus diffus sans interrompre quelques cartes isolées déjà connues. Ce garde-fou est uniquement UX : il ne modifie aucune preuve pédagogique, n'effectue aucune promotion SRS et propose toujours de continuer la session courante.
+
+### Calibration rapide
+
+La calibration rapide est une surface V1 obligatoire pour les apprenants ayant déjà des bases. Elle teste par défaut 20 cartes, configurable de 20 à 40, avec un prompt qui ne révèle pas la réponse avant la tentative. Les cartes correctement récupérées entrent dans le SRS à partir d'un signal vérifié ; les cartes non reconnues restent à apprendre. Elle ne doit pas être implémentée comme une succession de déclarations `known_already`.
+
+### Disponibilité effective
+
+`locklearn/session/availability` calcule la disponibilité à partir des mêmes règles que `session/start`. `next_available_at_utc` est le premier instant où au moins une carte pourra réellement être sélectionnée, après composition des échéances SRS, vérification `known_already`, quota de nouvelles cartes, sibling gap, confusable gap, burial et contraintes temporisées. Un prérequis bloqué sans date ne produit jamais de faux horaire.
+
+La réponse expose au minimum : `selected_cards`, `due_now_total`, `known_already_cards`, `known_already_pending_verification`, `suspended_cards`, `buried_cards`, `temporarily_blocked_cards`, `prerequisite_blocked_cards`, `session_capacity` et `blockers[]`. Chaque blocker possède `code`, `count`, `until_utc|null` et `forceable` ; les codes V1 sont `scheduled_step`, `known_already_verification`, `new_quota`, `sibling_gap`, `confusable_gap`, `buried`, `prerequisite`, `suspended`.
+
+### Attente et retour
+
+Les écrans Learn/Quiz attendus se rafraîchissent sans polling permanent : timer one-shot vers la prochaine disponibilité (+ marge), plus refetch sur retour de visibilité/focus/pageshow/reconnexion. Un compteur visuel peut se mettre à jour localement chaque minute sans requête réseau.
+
+Quand une date effective existe et qu'un target Companion compatible est configuré, l'utilisateur peut armer un rappel one-shot lié à `profile + track + mode`. Il est unique, idempotent et annulable. À l'échéance, le backend revalide : il notifie seulement si le mode est réellement prêt, reprogramme si l'échéance s'est déplacée, annule si aucune date fiable ne subsiste et ne notifie pas si l'opportunité a déjà été consommée.
+
+### Robustesse client
+
+Aucune mutation n'est optimiste côté UI : après réponse, l'interface affiche un état d'envoi et n'avance qu'après accusé backend. Après 8 s sans confirmation, elle propose de vérifier/réessayer en relisant d'abord l'état canonique. Les mutations de réponse doivent être dédupliquées par identifiant client ou mécanisme serveur équivalent. Aucune file offline n'est créée.
 
 ---
 
@@ -1418,7 +1478,7 @@ Masquer jusqu'à...
 Réactiver
 ```
 
-À la création d'un track, une calibration optionnelle de 20–40 cartes échantillonnées permet d'estimer ce que l'apprenant connaît déjà et d'éviter plusieurs jours de trivialités.
+À la création d'un track, LockLearn propose une **calibration rapide** de 20 cartes par défaut (configurable de 20 à 40). Cette calibration est une vraie récupération avant révélation : une réponse correcte constitue une preuve vérifiée et entre dans le SRS, tandis qu'une réponse non reconnue reste à apprendre. Elle est distincte de l'action ponctuelle `Je la connais déjà`, qui crée un état `known_already` temporaire en attente d'une vérification ultérieure.
 
 Un item retiré d'un dataset ne provoque jamais de suppression en cascade de la progression. Il devient un **tombstone** / contenu retiré et reste visible dans l'historique.
 

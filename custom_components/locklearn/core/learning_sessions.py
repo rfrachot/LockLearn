@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from ..storage.database import SQLiteStorage
@@ -121,6 +122,19 @@ class LearningSessionService:
                 session_id=session_id,
                 persist=False,
             )
+        elif action == "known_already":
+            if str(pre["state"]) != "new":
+                raise LearningSessionError("known_already is valid only for a new card")
+            raw_payload = current.get("payload")
+            selection = raw_payload.get("selection") if isinstance(raw_payload, dict) else None
+            if not isinstance(selection, dict) or selection.get("progress_state") != "new":
+                raise LearningSessionError("known_already is valid only during introduction")
+            event = await self._known_already_event(
+                pre=pre,
+                identity=identity,
+                session_id=session_id,
+                presentation_to_answer_ms=latency,
+            )
         elif action in {"known", "review", "idk"}:
             if str(pre["state"]) == "new":
                 raise LearningSessionError("new card must be introduced before retrieval")
@@ -205,6 +219,58 @@ class LearningSessionService:
             "answer_facet_id": str(current["answer_facet_id"]),
             "payload": payload,
         }
+
+    async def _known_already_event(
+        self,
+        *,
+        pre: dict[str, Any],
+        identity: dict[str, str],
+        session_id: str,
+        presentation_to_answer_ms: int | None,
+    ) -> Any:
+        """Record calibration-pending prior knowledge without verified evidence."""
+        now = self._clock.now()
+        seed = (f"{identity['profile_id']}|{identity['track_id']}|{identity['card_key']}").encode()
+        jitter_seconds = int.from_bytes(hashlib.sha256(seed).digest()[:4], "big") % 1201
+        due = now + timedelta(minutes=10, seconds=jitter_seconds)
+        post = dict(pre)
+        post.update(
+            {
+                "state": "review",
+                "box": 1,
+                "seen_count": int(pre.get("seen_count", 0)) + 1,
+                "self_known_count": int(pre.get("self_known_count", 0)) + 1,
+                "first_seen_at_utc": pre.get("first_seen_at_utc") or now.isoformat(),
+                "last_seen_at_utc": now.isoformat(),
+                "last_result": "self_known",
+                "next_due_at_utc": due.isoformat(),
+                "user_state": "known_already",
+                "suspend_until_utc": None,
+                "policy_version": self._review_policy.policy_version,
+                "updated_at_utc": now.isoformat(),
+            }
+        )
+        return await self._reviews.async_record(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            learning_item_id=identity["learning_item_id"],
+            prompt_facet_id=identity["prompt_facet_id"],
+            answer_facet_id=identity["answer_facet_id"],
+            card_key=identity["card_key"],
+            mode="known_already",
+            question_type="learning",
+            result="self_known",
+            signal_quality="none",
+            policy_version=self._review_policy.policy_version,
+            dataset_generation=str(pre["dataset_generation"]),
+            normalization_version=int(pre["normalization_version"]),
+            pre_state_snapshot=pre,
+            post_state_snapshot=post,
+            retrieval_occurred=False,
+            presentation_to_answer_ms=presentation_to_answer_ms,
+            session_id=session_id,
+            persist=False,
+        )
 
     async def _self_assessment_event(
         self,

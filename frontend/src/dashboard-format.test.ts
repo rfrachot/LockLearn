@@ -16,6 +16,7 @@ describe("dashboard payload shape", () => {
         {
           track_id: "track-1",
           name: "Japanese N5",
+          priority: 1,
           source_language: "ja",
           target_language: "ja-Latn",
           due_today: 12,

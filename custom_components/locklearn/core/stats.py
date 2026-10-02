@@ -290,9 +290,12 @@ class StatsService:
                 declarations[card_key] = moment
 
         for event in events:
-            if str(event["mode"]) != "self_assessment_after_retrieval":
-                continue
-            if str(event["result"]) not in _SELF_KNOWN_RESULTS:
+            mode = str(event["mode"])
+            result = str(event["result"])
+            if not (
+                mode == "known_already"
+                or (mode == "self_assessment_after_retrieval" and result in _SELF_KNOWN_RESULTS)
+            ):
                 continue
             moment = self._parse_time(str(event["created_at_utc"]))
             if moment < start_utc:

@@ -9,6 +9,7 @@ from enum import StrEnum
 from typing import Any, Protocol
 
 from .clock import Clock, SystemClock
+from .reviews import ReviewEventService
 
 
 class ProgressUserStateError(ValueError):
@@ -74,12 +75,14 @@ class ProgressUserStateService:
         self,
         tracks: UserStateTracksRepository,
         progress: UserStateProgressRepository,
+        reviews: ReviewEventService | None = None,
         *,
         dataset_generation: Callable[[], str],
         clock: Clock | None = None,
     ) -> None:
         self._tracks = tracks
         self._progress = progress
+        self._reviews = reviews
         self._dataset_generation = dataset_generation
         self._clock = clock or SystemClock()
 
@@ -105,6 +108,10 @@ class ProgressUserStateService:
             resolved_state = CardUserState(user_state)
         except ValueError as err:
             raise ProgressUserStateError("unsupported user_state") from err
+        if resolved_state is CardUserState.KNOWN_ALREADY:
+            raise ProgressUserStateError(
+                "known_already must be recorded from a new-card introduction"
+            )
 
         now = self._clock.now()
         normalized_until = self._validate_suspend_until(
@@ -136,6 +143,79 @@ class ProgressUserStateService:
             else str(result["user_state"])
         )
         return result
+
+    async def async_learn_instead(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        card_key: str,
+    ) -> dict[str, Any]:
+        """Revert a pending known declaration through canonical event history."""
+        track = await self._tracks.async_get(track_id)
+        if track is None or str(track["profile_id"]) != profile_id:
+            raise ProgressUserStateError("track does not belong to profile")
+        card = await self._tracks.async_card_reference(track_id=track_id, card_key=card_key)
+        if card is None:
+            raise ProgressUserStateError("card is not enabled in track")
+
+        pre = await self._progress.async_get(
+            profile_id=profile_id,
+            track_id=track_id,
+            card_key=card_key,
+        )
+        if pre is None or str(pre.get("user_state")) != CardUserState.KNOWN_ALREADY.value:
+            raise ProgressUserStateError("card is not pending known verification")
+        if (
+            int(pre.get("verified_correct_count", 0)) > 0
+            or int(pre.get("verified_wrong_count", 0)) > 0
+        ):
+            raise ProgressUserStateError("card already has verified evidence")
+
+        now = self._clock.now()
+        post = dict(pre)
+        post.update(
+            {
+                "state": "new",
+                "mastery": 0.0,
+                "box": 0,
+                "last_result": "known_reverted",
+                "next_due_at_utc": None,
+                "streak_correct": 0,
+                "verified_success_since_box": 0,
+                "user_state": CardUserState.ACTIVE.value,
+                "suspend_until_utc": None,
+                "updated_at_utc": now.isoformat(),
+            }
+        )
+        if self._reviews is None:
+            raise RuntimeError("canonical review service is required for known revert")
+        await self._reviews.async_record(
+            profile_id=profile_id,
+            track_id=track_id,
+            learning_item_id=str(pre["learning_item_id"]),
+            prompt_facet_id=str(pre["prompt_facet_id"]),
+            answer_facet_id=str(pre["answer_facet_id"]),
+            card_key=card_key,
+            mode="known_revert",
+            question_type="user_state",
+            result="reverted_to_learning",
+            signal_quality="none",
+            policy_version=int(pre["policy_version"]),
+            dataset_generation=str(pre["dataset_generation"]),
+            normalization_version=int(pre["normalization_version"]),
+            pre_state_snapshot=dict(pre),
+            post_state_snapshot=post,
+            retrieval_occurred=False,
+        )
+        snapshot = await self._progress.async_get(
+            profile_id=profile_id,
+            track_id=track_id,
+            card_key=card_key,
+        )
+        if snapshot is None:
+            raise RuntimeError("known revert did not materialize progress")
+        return dict(snapshot)
 
     async def async_calibration_sample(
         self,

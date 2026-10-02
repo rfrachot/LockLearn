@@ -1,30 +1,44 @@
 import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 
+import "./concerned-cards";
+
 import {
   contentRendererStyles,
   interactiveAccessibilityStyles,
   renderContentBlock,
 } from "./content-renderer";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
+import { findReadyAlternative, type ReadyAlternative } from "./next-action";
+import { navigateToRoute } from "./router";
 import {
   canAnswerProfile,
   isIntroductionQuestion,
   questionAvailableAtMs,
+  shouldShowKnownAlreadyBulkGuard,
 } from "./learn-model";
 import {
   answerSession,
+  armReadyReminder,
+  cancelReadyReminder,
   completeSession,
   createCardAnnotation,
+  getReadyReminderStatus,
   getSession,
   getSessionAvailability,
+  listNotificationTargets,
   reportQuestion,
   setCardUserState,
+  startCalibrationSession,
   startLearnSession,
+  startQuizSession,
+  undoLastProgress,
+  type ConcernedCardsFilter,
   type DashboardResponse,
   type DashboardTrack,
   type HomeAssistantLike,
   type LearnContentBlock,
+  type ReadyReminderStatus,
   type SessionAvailability,
   type SessionQuestion,
   type SessionState,
@@ -55,11 +69,31 @@ export class LockLearnLearnView extends LitElement {
   @state() private waitingUntil?: string;
   @state() private availability?: SessionAvailability;
   @state() private forceEarlyCurrent = false;
+  @state() private reminder?: ReadyReminderStatus;
+  @state() private submissionSlow = false;
+  @state() private retryRequest?: {
+    session: SessionState;
+    questionId: string;
+    answer: Record<string, unknown>;
+  };
+  @state() private lastKnownCardKey?: string;
+  @state() private knownNoticeVisible = false;
+  @state() private concernedFilter?: ConcernedCardsFilter;
+  @state() private readyAlternative?: ReadyAlternative;
+  @state() private calibrationSetup = false;
+  @state() private calibrationSize = 20;
+  @state() private hasNotificationTarget = false;
+  @state() private knownBulkGuardVisible = false;
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
   private availabilityTimer?: ReturnType<typeof globalThis.setTimeout>;
   private nextDueTimer?: ReturnType<typeof globalThis.setTimeout>;
+  private submissionTimer?: ReturnType<typeof globalThis.setTimeout>;
+  private knownUndoTimer?: ReturnType<typeof globalThis.setTimeout>;
+  private readonly refreshOnReturn = () => {
+    if (document.visibilityState === "visible") void this.refreshAvailability();
+  };
 
   static styles = css`
     ${contentRendererStyles}
@@ -240,6 +274,44 @@ export class LockLearnLearnView extends LitElement {
       background: transparent;
     }
 
+    .bulk-guard {
+      position: fixed;
+      z-index: 1200;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgb(0 0 0 / 45%);
+    }
+
+    .bulk-guard-card {
+      width: min(520px, 100%);
+      display: grid;
+      gap: 14px;
+      padding: 20px;
+      border-radius: 14px;
+      background: var(--card-background-color, var(--primary-background-color));
+      box-shadow: var(--ha-card-box-shadow, 0 12px 36px rgb(0 0 0 / 30%));
+    }
+
+    .known-snackbar {
+      position: fixed;
+      z-index: 1100;
+      inset-inline: 16px;
+      bottom: max(16px, env(safe-area-inset-bottom));
+      width: min(560px, calc(100% - 32px));
+      margin-inline: auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--card-background-color, var(--primary-background-color));
+      color: var(--primary-text-color);
+      box-shadow: var(--ha-card-box-shadow, 0 8px 28px rgb(0 0 0 / 24%));
+    }
+
     @media (max-width: 600px) {
       .toolbar,
       .actions,
@@ -269,9 +341,23 @@ export class LockLearnLearnView extends LitElement {
     }
   `;
 
+  connectedCallback(): void {
+    super.connectedCallback();
+    globalThis.addEventListener("focus", this.refreshOnReturn);
+    globalThis.addEventListener("online", this.refreshOnReturn);
+    globalThis.addEventListener("pageshow", this.refreshOnReturn);
+    document.addEventListener("visibilitychange", this.refreshOnReturn);
+  }
+
   disconnectedCallback(): void {
     this.clearAvailabilityTimer();
     if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
+    if (this.submissionTimer !== undefined) globalThis.clearTimeout(this.submissionTimer);
+    if (this.knownUndoTimer !== undefined) globalThis.clearTimeout(this.knownUndoTimer);
+    globalThis.removeEventListener("focus", this.refreshOnReturn);
+    globalThis.removeEventListener("online", this.refreshOnReturn);
+    globalThis.removeEventListener("pageshow", this.refreshOnReturn);
+    document.removeEventListener("visibilitychange", this.refreshOnReturn);
     super.disconnectedCallback();
   }
 
@@ -396,6 +482,18 @@ export class LockLearnLearnView extends LitElement {
         this.trackId,
         "learn",
       );
+      this.readyAlternative = this.availability.available_now === 0
+        ? await findReadyAlternative(this.hass, this.dashboard, this.trackId, "learn")
+        : undefined;
+      this.reminder = await getReadyReminderStatus(
+        this.hass,
+        this.profile.profile_id,
+        this.trackId,
+        "learn",
+      );
+      this.hasNotificationTarget = (
+        await listNotificationTargets(this.hass, this.profile.profile_id)
+      ).some((target) => target.enabled);
       if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
       const nextAvailable = this.availability.next_available_at_utc;
       if (nextAvailable !== null) {
@@ -409,6 +507,46 @@ export class LockLearnLearnView extends LitElement {
       }
     } catch {
       this.availability = undefined;
+      this.readyAlternative = undefined;
+    }
+  }
+
+  private async openReadyAlternative(): Promise<void> {
+    if (
+      this.hass === undefined ||
+      this.profile === undefined ||
+      this.readyAlternative === undefined
+    ) return;
+    const alternative = this.readyAlternative;
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      if (alternative.mode === "learn") {
+        this.trackId = alternative.trackId;
+        this.session = undefined;
+        this.resetQuestionUi();
+        this.applySession(await startLearnSession(
+          this.hass,
+          this.profile.profile_id,
+          alternative.trackId,
+        ));
+        await this.refreshAvailability();
+        return;
+      }
+      const session = await startQuizSession(
+        this.hass,
+        this.profile.profile_id,
+        alternative.trackId,
+      );
+      this.dispatchEvent(new CustomEvent("locklearn-open-session", {
+        detail: { session },
+        bubbles: true,
+        composed: true,
+      }));
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.loading = false;
     }
   }
 
@@ -432,6 +570,199 @@ export class LockLearnLearnView extends LitElement {
     return Math.max(0, Math.round(nowMs() - this.questionStartedAt));
   }
 
+  private beginSubmissionWatch(): void {
+    this.submissionSlow = false;
+    if (this.submissionTimer !== undefined) globalThis.clearTimeout(this.submissionTimer);
+    this.submissionTimer = globalThis.setTimeout(() => {
+      this.submissionTimer = undefined;
+      this.submissionSlow = true;
+    }, 8000);
+  }
+
+  private endSubmissionWatch(): void {
+    if (this.submissionTimer !== undefined) globalThis.clearTimeout(this.submissionTimer);
+    this.submissionTimer = undefined;
+    this.submissionSlow = false;
+  }
+
+  private async verifySubmission(): Promise<void> {
+    if (this.hass === undefined || this.session === undefined) return;
+    try {
+      const basis = this.retryRequest?.session ?? this.session;
+      const canonical = await getSession(this.hass, basis.id);
+      const advanced =
+        canonical.version !== basis.version ||
+        canonical.current_question?.question_id !== basis.current_question?.question_id;
+      this.applySession(canonical);
+      if (advanced) {
+        this.loading = false;
+        this.retryRequest = undefined;
+        this.endSubmissionWatch();
+        this.notice = this.t("learn.answerApplied");
+      } else {
+        this.loading = false;
+        this.submissionSlow = true;
+        this.notice = this.t("learn.answerNotConfirmed");
+      }
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  private async retrySubmission(): Promise<void> {
+    if (this.hass === undefined || this.retryRequest === undefined) return;
+    const request = this.retryRequest;
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      const canonical = await getSession(this.hass, request.session.id);
+      const stillCurrent =
+        canonical.version === request.session.version &&
+        canonical.current_question?.question_id === request.questionId;
+      if (!stillCurrent) {
+        this.applySession(canonical);
+        this.retryRequest = undefined;
+        this.endSubmissionWatch();
+        this.notice = this.t("learn.answerApplied");
+        return;
+      }
+      this.applySession(await answerSession(
+        this.hass,
+        request.session,
+        request.questionId,
+        request.answer,
+      ));
+      this.retryRequest = undefined;
+      this.endSubmissionWatch();
+      await this.refreshAvailability();
+    } catch (error) {
+      await this.recover(error);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private async armReminder(): Promise<void> {
+    if (this.hass === undefined || this.profile === undefined || this.trackId === "") return;
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      this.reminder = await armReadyReminder(this.hass, this.profile.profile_id, this.trackId, "learn");
+      this.notice = this.t("learn.reminderArmed");
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private async cancelReminder(): Promise<void> {
+    if (this.hass === undefined || this.profile === undefined || this.trackId === "") return;
+    this.loading = true;
+    try {
+      this.reminder = await cancelReadyReminder(this.hass, this.profile.profile_id, this.trackId, "learn");
+      this.notice = this.t("learn.reminderCancelled");
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private openCalibrationSetup(): void {
+    this.calibrationSetup = true;
+  }
+
+  private closeCalibrationSetup(): void {
+    this.calibrationSetup = false;
+  }
+
+  private setCalibrationSize(event: Event): void {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLSelectElement)) return;
+    const value = Number.parseInt(target.value, 10);
+    if ([20, 30, 40].includes(value)) this.calibrationSize = value;
+  }
+
+  private async startCalibration(): Promise<void> {
+    if (this.hass === undefined || this.profile === undefined || this.trackId === "") return;
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      const session = await startCalibrationSession(
+        this.hass,
+        this.profile.profile_id,
+        this.trackId,
+        this.calibrationSize,
+      );
+      this.calibrationSetup = false;
+      this.dispatchEvent(new CustomEvent("locklearn-open-session", {
+        detail: { session },
+        bubbles: true,
+        composed: true,
+      }));
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private bulkGuardStorageKey(sessionId: string): string {
+    return `locklearn:known-bulk-guard:${sessionId}`;
+  }
+
+  private maybeShowKnownBulkGuard(): void {
+    if (this.session === undefined) return;
+    if (!shouldShowKnownAlreadyBulkGuard(this.session.answers)) return;
+    const key = this.bulkGuardStorageKey(this.session.id);
+    if (globalThis.localStorage?.getItem(key) === "shown") return;
+    globalThis.localStorage?.setItem(key, "shown");
+    this.knownBulkGuardVisible = true;
+  }
+
+  private dismissKnownBulkGuard(): void {
+    this.knownBulkGuardVisible = false;
+  }
+
+  private startCalibrationFromBulkGuard(): void {
+    this.knownBulkGuardVisible = false;
+    this.calibrationSetup = true;
+  }
+
+  private async markKnownAlready(question: SessionQuestion): Promise<void> {
+    this.lastKnownCardKey = question.card_key;
+    await this.learningAction("known_already");
+    this.maybeShowKnownBulkGuard();
+    if (this.lastKnownCardKey !== question.card_key) return;
+    this.notice = "";
+    this.knownNoticeVisible = true;
+    if (this.knownUndoTimer !== undefined) globalThis.clearTimeout(this.knownUndoTimer);
+    this.knownUndoTimer = globalThis.setTimeout(() => {
+      this.knownUndoTimer = undefined;
+      this.knownNoticeVisible = false;
+      this.lastKnownCardKey = undefined;
+    }, 8000);
+  }
+
+  private async undoKnownAlready(): Promise<void> {
+    if (
+      this.hass === undefined || this.profile === undefined || this.session === undefined ||
+      this.session.track_id === null || this.lastKnownCardKey === undefined
+    ) return;
+    this.loading = true;
+    try {
+      await undoLastProgress(this.hass, this.profile.profile_id, this.session.track_id, this.lastKnownCardKey);
+      this.lastKnownCardKey = undefined;
+      this.knownNoticeVisible = false;
+      if (this.knownUndoTimer !== undefined) globalThis.clearTimeout(this.knownUndoTimer);
+      this.knownUndoTimer = undefined;
+      this.notice = this.t("learn.knownUndone");
+      await this.refreshAvailability();
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.loading = false;
+    }
+  }
   private async start(allowEarlyLearning = false): Promise<void> {
     if (
       this.hass === undefined ||
@@ -500,32 +831,42 @@ export class LockLearnLearnView extends LitElement {
   }
 
   private async learningAction(
-    action: "introduce" | "known" | "review" | "idk",
+    action: "introduce" | "known_already" | "known" | "review" | "idk",
     latency?: number,
   ): Promise<void> {
     const question = this.session?.current_question;
     if (this.hass === undefined || this.session === undefined || question === null || question === undefined) return;
+    const requestSession = this.session;
+    const requestAnswer = {
+      kind: "learning",
+      action,
+      hint_used: this.hintUsed,
+      presentation_to_answer_ms: latency ?? this.elapsedMs(),
+      ...(this.forceEarlyCurrent ? { force_early: true } : {}),
+    };
+    this.retryRequest = {
+      session: requestSession,
+      questionId: question.question_id,
+      answer: requestAnswer,
+    };
     this.loading = true;
     this.errorMessage = "";
+    this.beginSubmissionWatch();
     try {
       const answered = await answerSession(
         this.hass,
-        this.session,
+        requestSession,
         question.question_id,
-        {
-          kind: "learning",
-          action,
-          hint_used: this.hintUsed,
-          presentation_to_answer_ms: latency ?? this.elapsedMs(),
-          ...(this.forceEarlyCurrent ? { force_early: true } : {}),
-        },
+        requestAnswer,
       );
+      this.retryRequest = undefined;
       this.applySession(await this.finalizeIfDone(answered));
       await this.refreshAvailability();
     } catch (error) {
       await this.recover(error);
     } finally {
       this.loading = false;
+      this.endSubmissionWatch();
     }
   }
 
@@ -543,7 +884,7 @@ export class LockLearnLearnView extends LitElement {
     this.hintUsed = true;
   }
 
-  private async setUserState(userState: "known_already" | "suspended"): Promise<void> {
+  private async setUserState(userState: "suspended"): Promise<void> {
     const question = this.session?.current_question;
     if (
       this.hass === undefined ||
@@ -694,7 +1035,7 @@ export class LockLearnLearnView extends LitElement {
                     : html`
                         <div>
                           <strong>${this.t(
-                            this.availability.next_available_reason === "new_quota_reset"
+                            this.availability.next_available_reason === "new_quota"
                               ? "learn.quotaReset"
                               : "learn.nextAvailable",
                           )}:</strong>
@@ -714,6 +1055,31 @@ export class LockLearnLearnView extends LitElement {
                 `}
           </div>
         ` : nothing}
+        ${this.session === undefined ? this.renderNoDeadEndActions() : nothing}
+        ${this.session === undefined && this.calibrationSetup
+          ? html`
+              <section class="learn-card" role="dialog" aria-labelledby="calibration-title">
+                <h2 id="calibration-title">${this.t("learn.calibrationTitle")}</h2>
+                <p>${this.t("learn.calibrationHelp")}</p>
+                <label>
+                  <span>${this.t("learn.calibrationSize")}</span>
+                  <select .value=${String(this.calibrationSize)} @change=${this.setCalibrationSize}>
+                    <option value="20">20</option>
+                    <option value="30">30</option>
+                    <option value="40">40</option>
+                  </select>
+                </label>
+                <div class="actions">
+                  <button class="primary" @click=${() => void this.startCalibration()} ?disabled=${this.loading}>
+                    ${this.t("learn.calibrationStart")}
+                  </button>
+                  <button @click=${this.closeCalibrationSetup} ?disabled=${this.loading}>
+                    ${this.t("common.close")}
+                  </button>
+                </div>
+              </section>
+            `
+          : nothing}
         ${this.loading && this.session === undefined
           ? html`<div class="notice" role="status">${this.t("learn.loading")}</div>`
           : nothing}
@@ -723,14 +1089,132 @@ export class LockLearnLearnView extends LitElement {
               <div>${this.errorMessage}</div>
             </div>`
           : nothing}
+        ${this.submissionSlow
+          ? html`<div class="notice" role="status" aria-live="polite">
+              <strong>${this.t("learn.answerUnconfirmed")}</strong>
+              <button @click=${() => void this.verifySubmission()}>${this.t("learn.verify")}</button>
+              ${this.retryRequest === undefined
+                ? nothing
+                : html`<button @click=${() => void this.retrySubmission()}>${this.t("learn.retryAnswer")}</button>`}
+            </div>`
+          : nothing}
         ${this.notice
           ? html`<div class="notice" role="status" aria-live="polite">${this.notice}</div>`
           : nothing}
         ${this.renderSession()}
+        ${this.knownBulkGuardVisible
+          ? html`<div class="bulk-guard" role="presentation">
+              <section class="bulk-guard-card" role="dialog" aria-modal="true" aria-labelledby="known-bulk-title">
+                <h2 id="known-bulk-title">${this.t("learn.bulkGuardTitle")}</h2>
+                <p>${this.t("learn.bulkGuardBody")}</p>
+                <div class="actions">
+                  <button class="primary" @click=${this.startCalibrationFromBulkGuard}>
+                    ${this.t("learn.bulkGuardCalibrate")}
+                  </button>
+                  <button @click=${this.dismissKnownBulkGuard}>
+                    ${this.t("learn.bulkGuardContinue")}
+                  </button>
+                </div>
+              </section>
+            </div>`
+          : nothing}
+        ${this.knownNoticeVisible && this.lastKnownCardKey !== undefined
+          ? html`<div class="known-snackbar" role="status" aria-live="polite">
+              <span>${this.t("learn.knownPending")}</span>
+              <button @click=${() => void this.undoKnownAlready()} ?disabled=${this.loading}>
+                ${this.t("learn.undo")}
+              </button>
+            </div>`
+          : nothing}
+        ${this.concernedFilter === undefined
+          ? nothing
+          : html`<locklearn-concerned-cards
+              .hass=${this.hass}
+              .profileId=${this.profile.profile_id}
+              .trackId=${this.trackId}
+              .filter=${this.concernedFilter}
+              .mode=${"learn"}
+              .language=${this.locale()}
+              @locklearn-concerned-cards-close=${this.closeConcerned}
+              @locklearn-concerned-cards-changed=${() => void this.refreshAvailability()}
+            ></locklearn-concerned-cards>`}
       </section>
     `;
   }
 
+  private blockerFilter(code: string): ConcernedCardsFilter {
+    if (code === "known_already_verification") return "known_pending";
+    if (code === "suspended") return "suspended";
+    if (code === "buried") return "buried";
+    if (code === "prerequisite") return "prerequisite_support";
+    return "current_waiting_context";
+  }
+
+  private openConcerned(filter: ConcernedCardsFilter): void {
+    this.concernedFilter = filter;
+  }
+
+  private closeConcerned(): void {
+    this.concernedFilter = undefined;
+  }
+
+  private renderNoDeadEndActions() {
+    const availability = this.availability;
+    if (availability === undefined) return nothing;
+    const canRemind =
+      availability.available_now === 0 && availability.next_available_at_utc !== null;
+    return html`
+      <div class="actions">
+        ${availability.new_cards > 0
+          ? html`<button @click=${this.openCalibrationSetup} ?disabled=${this.loading}>
+              ${this.t("learn.quickCalibration")}
+            </button>`
+          : nothing}
+        ${this.readyAlternative === undefined
+          ? nothing
+          : html`<button @click=${() => void this.openReadyAlternative()} ?disabled=${this.loading}>
+              ${this.t("learn.readyAlternative")
+                .replace("{track}", this.readyAlternative.trackName)
+                .replace("{mode}", this.readyAlternative.mode === "learn"
+                  ? this.t("learn.title")
+                  : this.t("quiz.title"))}
+            </button>`}
+        ${canRemind
+          ? !this.hasNotificationTarget
+            ? html`<button @click=${() => navigateToRoute("settings")}>${this.t("learn.configureNotifications")}</button>`
+            : this.reminder?.active
+              ? html`<button @click=${() => void this.cancelReminder()} ?disabled=${this.loading}>
+                  ${this.t("learn.cancelReminder")}
+                </button>`
+              : html`<button @click=${() => void this.armReminder()} ?disabled=${this.loading}>
+                  ${this.t("learn.remindMe")}
+                </button>`
+          : nothing}
+      </div>
+      ${availability.blockers.length > 0
+        ? html`<details>
+            <summary>${this.t("learn.conditionsTitle")}</summary>
+            <dl>
+              ${availability.blockers.map(
+                (blocker) => html`
+                  <dt>${blocker.code}</dt>
+                  <dd>
+                    ${blocker.count}
+                    ${blocker.until_utc === null ? nothing : html` · ${this.dueLabel(blocker.until_utc)}`}
+                    <button
+                      @click=${() => this.openConcerned(this.blockerFilter(blocker.code))}
+                      ?disabled=${this.loading}
+                    >
+                      ${this.t("learn.viewCards")}
+                    </button>
+                  </dd>
+                `,
+              )}
+            </dl>
+          </details>`
+        : nothing}
+    `;
+  }
   private renderSession() {
     if (this.session === undefined) return nothing;
     if (this.session.question_count === 0) {
@@ -763,7 +1247,7 @@ export class LockLearnLearnView extends LitElement {
             : html`
                 <p>
                   <strong>${this.t(
-                    nextReason === "new_quota_reset" ? "learn.quotaReset" : "learn.nextAvailable",
+                    nextReason === "new_quota" ? "learn.quotaReset" : "learn.nextAvailable",
                   )}:</strong>
                   ${this.dueLabel(nextAvailable)}
                 </p>
@@ -792,7 +1276,7 @@ export class LockLearnLearnView extends LitElement {
           ${nextAvailable === null ? nothing : html`
             <p>
               <strong>${this.t(
-                nextReason === "new_quota_reset" ? "learn.quotaReset" : "learn.nextAvailable",
+                nextReason === "new_quota" ? "learn.quotaReset" : "learn.nextAvailable",
               )}:</strong>
               ${this.dueLabel(nextAvailable)}
             </p>
@@ -873,7 +1357,7 @@ export class LockLearnLearnView extends LitElement {
             ${this.t("learn.continue")}
           </button>
         </div>
-        ${this.renderSecondaryActions(question)}
+        ${this.renderSecondaryActions(question, true)}
       </article>
     `;
   }
@@ -971,15 +1455,17 @@ export class LockLearnLearnView extends LitElement {
     `;
   }
 
-  private renderSecondaryActions(question: SessionQuestion) {
+  private renderSecondaryActions(question: SessionQuestion, allowKnownAlready = false) {
     return html`
       <div class="secondary-actions">
-        <button
-          @click=${() => void this.setUserState("known_already")}
-          ?disabled=${this.loading}
-        >
-          ${this.t("learn.knownAlready")}
-        </button>
+        ${allowKnownAlready
+          ? html`<button
+              @click=${() => void this.markKnownAlready(question)}
+              ?disabled=${this.loading}
+            >
+              ${this.t("learn.knownAlready")}
+            </button>`
+          : nothing}
         <button
           @click=${() => void this.setUserState("suspended")}
           ?disabled=${this.loading}
