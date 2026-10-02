@@ -20,6 +20,8 @@ describes the additional LockLearn authorization boundary enforced by the backen
 | `locklearn/annotations/update` | `ws_annotations_update` | profile-acl | `profile_id`, `annotation_id`, `note` | — | `ERR_INVALID_REQUEST` |
 | `locklearn/bootstrap` | `ws_bootstrap` | authenticated | — | — | `ERR_INVALID_REQUEST` |
 | `locklearn/calibration/sample` | `ws_calibration_sample` | profile-acl | `profile_id`, `track_id` | — | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND` |
+| `locklearn/cards/concerned/list` | `ws_cards_concerned_list` | profile-acl | `profile_id`, `track_id`, `filter` | — | `ERR_NOT_FOUND` |
+| `locklearn/cards/learn_instead` | `ws_cards_learn_instead` | profile-acl | `profile_id`, `track_id`, `card_key` | — | `ERR_INVALID_REQUEST` |
 | `locklearn/confusions/list` | `ws_confusions_list` | profile-acl | `profile_id` | `track_id`, `card_key` | `ERR_NOT_FOUND` |
 | `locklearn/content/report` | `ws_content_report` | profile-acl | `profile_id`, `track_id`, `card_key`, `learning_item_id`, `prompt_facet_id`, `answer_facet_id`, `submitted_text`, `grading_policy_kind`, `grading_policy_version`, `normalization_version` | `normalized_submission` | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND` |
 | `locklearn/content/report_question` | `ws_content_report_question` | profile-acl | `profile_id`, `track_id`, `card_key`, `learning_item_id`, `prompt_facet_id`, `answer_facet_id` | `message` | `ERR_INVALID_REQUEST` |
@@ -48,6 +50,9 @@ describes the additional LockLearn authorization boundary enforced by the backen
 | `locklearn/progress/undo_last` | `ws_progress_undo_last` | profile-acl | `profile_id` | `track_id`, `card_key` | `ERR_INVALID_REQUEST` |
 | `locklearn/quiz/answer` | `ws_quiz_answer` | session-via-profile-acl | `session_id`, `expected_version`, `question_id`, `answer` | — | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
 | `locklearn/quiz/evaluate` | `ws_quiz_evaluate` | session-via-profile-acl | `session_id`, `question_id`, `answer` | — | `ERR_INVALID_REQUEST` |
+| `locklearn/reminders/ready/arm` | `ws_ready_reminder_arm` | profile-acl | `profile_id`, `track_id`, `mode` | `target_id` | `ERR_INVALID_REQUEST` |
+| `locklearn/reminders/ready/cancel` | `ws_ready_reminder_cancel` | profile-acl | `profile_id`, `track_id`, `mode` | — | — |
+| `locklearn/reminders/ready/status` | `ws_ready_reminder_status` | profile-acl | `profile_id`, `track_id`, `mode` | — | `ERR_INVALID_REQUEST` |
 | `locklearn/scheduler/preview` | `ws_scheduler_preview` | profile-acl | `profile_id` | `local_date` | `ERR_INVALID_REQUEST` |
 | `locklearn/session/answer` | `ws_session_answer` | session-via-profile-acl | `session_id`, `expected_version`, `question_id`, `answer` | — | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
 | `locklearn/session/availability` | `ws_session_availability` | profile-acl | `profile_id`, `track_id`, `session_type` | `settings` | `ERR_INVALID_REQUEST` |
