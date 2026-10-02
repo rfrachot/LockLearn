@@ -15,6 +15,7 @@ import {
   canAnswerProfile,
   isIntroductionQuestion,
   questionAvailableAtMs,
+  shouldShowKnownAlreadyBulkGuard,
 } from "./learn-model";
 import {
   answerSession,
@@ -82,6 +83,7 @@ export class LockLearnLearnView extends LitElement {
   @state() private calibrationSetup = false;
   @state() private calibrationSize = 20;
   @state() private hasNotificationTarget = false;
+  @state() private knownBulkGuardVisible = false;
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
@@ -270,6 +272,26 @@ export class LockLearnLearnView extends LitElement {
 
     .secondary-actions button {
       background: transparent;
+    }
+
+    .bulk-guard {
+      position: fixed;
+      z-index: 1200;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgb(0 0 0 / 45%);
+    }
+
+    .bulk-guard-card {
+      width: min(520px, 100%);
+      display: grid;
+      gap: 14px;
+      padding: 20px;
+      border-radius: 14px;
+      background: var(--card-background-color, var(--primary-background-color));
+      box-shadow: var(--ha-card-box-shadow, 0 12px 36px rgb(0 0 0 / 30%));
     }
 
     .known-snackbar {
@@ -684,9 +706,32 @@ export class LockLearnLearnView extends LitElement {
     }
   }
 
+  private bulkGuardStorageKey(sessionId: string): string {
+    return `locklearn:known-bulk-guard:${sessionId}`;
+  }
+
+  private maybeShowKnownBulkGuard(): void {
+    if (this.session === undefined) return;
+    if (!shouldShowKnownAlreadyBulkGuard(this.session.answers)) return;
+    const key = this.bulkGuardStorageKey(this.session.id);
+    if (globalThis.localStorage?.getItem(key) === "shown") return;
+    globalThis.localStorage?.setItem(key, "shown");
+    this.knownBulkGuardVisible = true;
+  }
+
+  private dismissKnownBulkGuard(): void {
+    this.knownBulkGuardVisible = false;
+  }
+
+  private startCalibrationFromBulkGuard(): void {
+    this.knownBulkGuardVisible = false;
+    this.calibrationSetup = true;
+  }
+
   private async markKnownAlready(question: SessionQuestion): Promise<void> {
     this.lastKnownCardKey = question.card_key;
     await this.learningAction("known_already");
+    this.maybeShowKnownBulkGuard();
     if (this.lastKnownCardKey !== question.card_key) return;
     this.notice = "";
     this.knownNoticeVisible = true;
@@ -1057,6 +1102,22 @@ export class LockLearnLearnView extends LitElement {
           ? html`<div class="notice" role="status" aria-live="polite">${this.notice}</div>`
           : nothing}
         ${this.renderSession()}
+        ${this.knownBulkGuardVisible
+          ? html`<div class="bulk-guard" role="presentation">
+              <section class="bulk-guard-card" role="dialog" aria-modal="true" aria-labelledby="known-bulk-title">
+                <h2 id="known-bulk-title">${this.t("learn.bulkGuardTitle")}</h2>
+                <p>${this.t("learn.bulkGuardBody")}</p>
+                <div class="actions">
+                  <button class="primary" @click=${this.startCalibrationFromBulkGuard}>
+                    ${this.t("learn.bulkGuardCalibrate")}
+                  </button>
+                  <button @click=${this.dismissKnownBulkGuard}>
+                    ${this.t("learn.bulkGuardContinue")}
+                  </button>
+                </div>
+              </section>
+            </div>`
+          : nothing}
         ${this.knownNoticeVisible && this.lastKnownCardKey !== undefined
           ? html`<div class="known-snackbar" role="status" aria-live="polite">
               <span>${this.t("learn.knownPending")}</span>
