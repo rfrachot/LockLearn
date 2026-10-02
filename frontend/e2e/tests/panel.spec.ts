@@ -62,6 +62,34 @@ test("Learn and Quiz explain readiness before a session starts", async ({ page }
   await expect(page.getByText(/1 cards ready now/)).toBeVisible();
 });
 
+test("Undo of an already-known introduction uses the canonical reversal", async ({ page }) => {
+  await page.getByRole("button", { name: "Learn", exact: true }).click();
+  await page.getByRole("button", { name: "Start learning" }).click();
+  await page.evaluate(() => {
+    const hass = (window as unknown as {
+      __LOCKLEARN_E2E_HASS__: {
+        callWS: (message: Record<string, unknown>) => Promise<unknown>;
+      };
+    }).__LOCKLEARN_E2E_HASS__;
+    const original = hass.callWS.bind(hass);
+    const calls: string[] = [];
+    hass.callWS = async (message) => {
+      calls.push(String(message.type));
+      return original(message);
+    };
+    Object.assign(window, { __LOCKLEARN_E2E_CALLS__: calls });
+  });
+
+  await page.getByRole("button", { name: "I already know this card" }).click();
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(page.getByText("The already-known mark was undone.")).toBeVisible();
+  const calls = await page.evaluate(() =>
+    (window as unknown as { __LOCKLEARN_E2E_CALLS__: string[] }).__LOCKLEARN_E2E_CALLS__,
+  );
+  expect(calls).toContain("locklearn/cards/learn_instead");
+  expect(calls).not.toContain("locklearn/progress/undo_last");
+});
+
 test("multi-Track cards keep advanced settings and plans attached to each Track", async ({ page }) => {
   await page.getByRole("button", { name: "Tracks", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Japanese Core" })).toBeVisible();

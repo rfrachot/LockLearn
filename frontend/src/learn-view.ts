@@ -27,13 +27,13 @@ import {
   getReadyReminderStatus,
   getSession,
   getSessionAvailability,
+  learnCardInstead,
   listNotificationTargets,
   reportQuestion,
   setCardUserState,
   startCalibrationSession,
   startLearnSession,
   startQuizSession,
-  undoLastProgress,
   type ConcernedCardsFilter,
   type DashboardResponse,
   type DashboardTrack,
@@ -751,7 +751,7 @@ export class LockLearnLearnView extends LitElement {
     ) return;
     this.loading = true;
     try {
-      await undoLastProgress(this.hass, this.profile.profile_id, this.session.track_id, this.lastKnownCardKey);
+      await learnCardInstead(this.hass, this.profile.profile_id, this.session.track_id, this.lastKnownCardKey);
       this.lastKnownCardKey = undefined;
       this.knownNoticeVisible = false;
       if (this.knownUndoTimer !== undefined) globalThis.clearTimeout(this.knownUndoTimer);
