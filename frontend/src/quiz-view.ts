@@ -67,6 +67,11 @@ export class LockLearnQuizView extends LitElement {
   @state() private availability?: SessionAvailability;
   @state() private reminder?: ReadyReminderStatus;
   @state() private submissionSlow = false;
+  @state() private retryRequest?: {
+    session: SessionState;
+    questionId: string;
+    answer: Record<string, unknown>;
+  };
   @state() private concernedFilter?: ConcernedCardsFilter;
   @state() private readyAlternative?: ReadyAlternative;
 
@@ -514,21 +519,59 @@ export class LockLearnQuizView extends LitElement {
   private async verifySubmission(): Promise<void> {
     if (this.hass === undefined || this.session === undefined) return;
     try {
-      const canonical = await getSession(this.hass, this.session.id);
+      const basis = this.retryRequest?.session ?? this.session;
+      const canonical = await getSession(this.hass, basis.id);
       const advanced =
-        canonical.version !== this.session.version ||
-        canonical.current_question?.question_id !== this.session.current_question?.question_id;
+        canonical.version !== basis.version ||
+        canonical.current_question?.question_id !== basis.current_question?.question_id;
       this.applySession(canonical);
       if (advanced) {
         this.loading = false;
+        this.retryRequest = undefined;
         this.endSubmissionWatch();
         this.notice = this.t("quiz.answerApplied");
       } else {
         this.loading = false;
+        this.submissionSlow = true;
         this.notice = this.t("quiz.answerNotConfirmed");
       }
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  private async retrySubmission(): Promise<void> {
+    if (this.hass === undefined || this.retryRequest === undefined) return;
+    const request = this.retryRequest;
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      const canonical = await getSession(this.hass, request.session.id);
+      const stillCurrent =
+        canonical.version === request.session.version &&
+        canonical.current_question?.question_id === request.questionId;
+      if (!stillCurrent) {
+        this.applySession(canonical);
+        this.retryRequest = undefined;
+        this.endSubmissionWatch();
+        this.notice = this.t("quiz.answerApplied");
+        return;
+      }
+      const result = await submitQuizAnswer(
+        this.hass,
+        request.session,
+        request.questionId,
+        request.answer,
+      );
+      this.feedback = result.feedback;
+      this.pendingSession = result.session;
+      this.retryRequest = undefined;
+      this.retryRequest = undefined;
+      this.endSubmissionWatch();
+    } catch (error) {
+      await this.recover(error);
+    } finally {
+      this.loading = false;
     }
   }
 
@@ -660,19 +703,26 @@ export class LockLearnQuizView extends LitElement {
       question === undefined
     ) return;
     const enriched = this.enrichAnswer(answer);
+    const requestSession = this.session;
+    this.retryRequest = {
+      session: requestSession,
+      questionId: question.question_id,
+      answer: enriched,
+    };
     this.loading = true;
     this.errorMessage = "";
     this.beginSubmissionWatch();
     try {
       const result = await submitQuizAnswer(
         this.hass,
-        this.session,
+        requestSession,
         question.question_id,
         enriched,
       );
       this.feedback = result.feedback;
       this.pendingAnswer = undefined;
       this.pendingSession = result.session;
+      this.retryRequest = undefined;
     } catch (error) {
       await this.recover(error);
     } finally {
@@ -690,15 +740,22 @@ export class LockLearnQuizView extends LitElement {
       question === undefined ||
       this.pendingAnswer === undefined
     ) return;
+    const requestSession = this.session;
+    const requestAnswer = this.pendingAnswer;
+    this.retryRequest = {
+      session: requestSession,
+      questionId: question.question_id,
+      answer: requestAnswer,
+    };
     this.loading = true;
     this.errorMessage = "";
     this.beginSubmissionWatch();
     try {
       const result = await submitQuizAnswer(
         this.hass,
-        this.session,
+        requestSession,
         question.question_id,
-        this.pendingAnswer,
+        requestAnswer,
       );
       if (this.feedback?.result === "correct") {
         await this.advanceSession(result.session);
@@ -967,6 +1024,9 @@ export class LockLearnQuizView extends LitElement {
           ? html`<div class="notice" role="status" aria-live="polite">
               <strong>${this.t("quiz.answerUnconfirmed")}</strong>
               <button @click=${() => void this.verifySubmission()}>${this.t("quiz.verify")}</button>
+              ${this.retryRequest === undefined
+                ? nothing
+                : html`<button @click=${() => void this.retrySubmission()}>${this.t("quiz.retryAnswer")}</button>`}
             </div>`
           : nothing}
         ${this.errorMessage
