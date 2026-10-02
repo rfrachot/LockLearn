@@ -68,6 +68,11 @@ export class LockLearnLearnView extends LitElement {
   @state() private forceEarlyCurrent = false;
   @state() private reminder?: ReadyReminderStatus;
   @state() private submissionSlow = false;
+  @state() private retryRequest?: {
+    session: SessionState;
+    questionId: string;
+    answer: Record<string, unknown>;
+  };
   @state() private lastKnownCardKey?: string;
   @state() private knownNoticeVisible = false;
   @state() private concernedFilter?: ConcernedCardsFilter;
@@ -555,21 +560,57 @@ export class LockLearnLearnView extends LitElement {
   private async verifySubmission(): Promise<void> {
     if (this.hass === undefined || this.session === undefined) return;
     try {
-      const canonical = await getSession(this.hass, this.session.id);
+      const basis = this.retryRequest?.session ?? this.session;
+      const canonical = await getSession(this.hass, basis.id);
       const advanced =
-        canonical.version !== this.session.version ||
-        canonical.current_question?.question_id !== this.session.current_question?.question_id;
+        canonical.version !== basis.version ||
+        canonical.current_question?.question_id !== basis.current_question?.question_id;
       this.applySession(canonical);
       if (advanced) {
         this.loading = false;
+        this.retryRequest = undefined;
         this.endSubmissionWatch();
         this.notice = this.t("learn.answerApplied");
       } else {
         this.loading = false;
+        this.submissionSlow = true;
         this.notice = this.t("learn.answerNotConfirmed");
       }
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  private async retrySubmission(): Promise<void> {
+    if (this.hass === undefined || this.retryRequest === undefined) return;
+    const request = this.retryRequest;
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      const canonical = await getSession(this.hass, request.session.id);
+      const stillCurrent =
+        canonical.version === request.session.version &&
+        canonical.current_question?.question_id === request.questionId;
+      if (!stillCurrent) {
+        this.applySession(canonical);
+        this.retryRequest = undefined;
+        this.endSubmissionWatch();
+        this.notice = this.t("learn.answerApplied");
+        return;
+      }
+      this.applySession(await answerSession(
+        this.hass,
+        request.session,
+        request.questionId,
+        request.answer,
+      ));
+      this.retryRequest = undefined;
+      this.endSubmissionWatch();
+      await this.refreshAvailability();
+    } catch (error) {
+      await this.recover(error);
+    } finally {
+      this.loading = false;
     }
   }
 
@@ -744,22 +785,30 @@ export class LockLearnLearnView extends LitElement {
   ): Promise<void> {
     const question = this.session?.current_question;
     if (this.hass === undefined || this.session === undefined || question === null || question === undefined) return;
+    const requestSession = this.session;
+    const requestAnswer = {
+      kind: "learning",
+      action,
+      hint_used: this.hintUsed,
+      presentation_to_answer_ms: latency ?? this.elapsedMs(),
+      ...(this.forceEarlyCurrent ? { force_early: true } : {}),
+    };
+    this.retryRequest = {
+      session: requestSession,
+      questionId: question.question_id,
+      answer: requestAnswer,
+    };
     this.loading = true;
     this.errorMessage = "";
     this.beginSubmissionWatch();
     try {
       const answered = await answerSession(
         this.hass,
-        this.session,
+        requestSession,
         question.question_id,
-        {
-          kind: "learning",
-          action,
-          hint_used: this.hintUsed,
-          presentation_to_answer_ms: latency ?? this.elapsedMs(),
-          ...(this.forceEarlyCurrent ? { force_early: true } : {}),
-        },
+        requestAnswer,
       );
+      this.retryRequest = undefined;
       this.applySession(await this.finalizeIfDone(answered));
       await this.refreshAvailability();
     } catch (error) {
@@ -993,6 +1042,9 @@ export class LockLearnLearnView extends LitElement {
           ? html`<div class="notice" role="status" aria-live="polite">
               <strong>${this.t("learn.answerUnconfirmed")}</strong>
               <button @click=${() => void this.verifySubmission()}>${this.t("learn.verify")}</button>
+              ${this.retryRequest === undefined
+                ? nothing
+                : html`<button @click=${() => void this.retrySubmission()}>${this.t("learn.retryAnswer")}</button>`}
             </div>`
           : nothing}
         ${this.notice
