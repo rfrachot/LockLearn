@@ -11,6 +11,8 @@ const profile = {
   role: "owner",
 };
 
+const otherProfile = { ...profile, profile_id: "profile-other", name: "Other profile" };
+
 const track = {
   track_id: "track-ja",
   profile_id: profile.profile_id,
@@ -254,20 +256,20 @@ const hass = {
           personal_profile: { profile_id: profile.profile_id },
         };
       case "locklearn/profiles/list":
-        return { items: [profile], cursor: null };
+        return { items: [profile, otherProfile], cursor: null };
       case "locklearn/dashboard/get":
         return {
           profile: {
-            profile_id: profile.profile_id,
-            name: profile.name,
+            profile_id: String(message.profile_id),
+            name: message.profile_id === otherProfile.profile_id ? otherProfile.name : profile.name,
             preset: profile.preset,
             timezone: profile.timezone,
           },
           generated_at_utc: now,
-          tracks: [dashboardTrack, dashboardTrack2],
+          tracks: message.profile_id === otherProfile.profile_id ? [] : [dashboardTrack, dashboardTrack2],
         };
       case "locklearn/tracks/list":
-        return { items: [track, track2], cursor: null };
+        return { items: message.profile_id === otherProfile.profile_id ? [] : [track, track2], cursor: null };
       case "locklearn/session/availability":
         return message.session_type === "quiz"
           ? {

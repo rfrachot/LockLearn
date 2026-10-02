@@ -6692,14 +6692,13 @@ const ge = class ge extends T {
     this.handoffSession = void 0;
   }
   async refreshManagement() {
-    if (this.hass === void 0) return;
-    const e = this.selectedProfileId;
-    try {
-      const t = await tt(this.hass);
-      this.profiles = t, this.selectedProfileId = e !== null && t.some((i) => i.profile_id === e) ? e : this.bootstrapState === void 0 ? t[0]?.profile_id ?? null : mt(t, this.bootstrapState), ce(this.activeRoute, t) || (this.activeRoute = "home", ee("home")), await this.loadDashboard();
-    } catch (t) {
-      this.errorMessage = t instanceof Error ? t.message : String(t);
-    }
+    if (this.hass !== void 0)
+      try {
+        const e = await tt(this.hass), t = this.selectedProfileId;
+        this.profiles = e, this.selectedProfileId = t !== null && e.some((i) => i.profile_id === t) ? t : this.bootstrapState === void 0 ? e[0]?.profile_id ?? null : mt(e, this.bootstrapState), ce(this.activeRoute, e) || (this.activeRoute = "home", ee("home")), await this.loadDashboard();
+      } catch (e) {
+        this.errorMessage = e instanceof Error ? e.message : String(e);
+      }
   }
   async loadDashboard() {
     if (this.hass === void 0 || this.selectedProfileId === null) {

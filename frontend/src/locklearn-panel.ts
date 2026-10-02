@@ -567,9 +567,10 @@ export class LockLearnPanel extends LitElement {
 
   private async refreshManagement(): Promise<void> {
     if (this.hass === undefined) return;
-    const selected = this.selectedProfileId;
     try {
       const profiles = await listVisibleProfiles(this.hass);
+      // A Save and leave action may select another Profile while this request is in flight.
+      const selected = this.selectedProfileId;
       this.profiles = profiles;
       this.selectedProfileId =
         selected !== null && profiles.some((profile) => profile.profile_id === selected)

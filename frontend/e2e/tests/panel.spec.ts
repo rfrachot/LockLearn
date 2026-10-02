@@ -90,6 +90,34 @@ test("Undo of an already-known introduction uses the canonical reversal", async 
   expect(calls).not.toContain("locklearn/progress/undo_last");
 });
 
+test("Save and leave keeps the selected Profile when refresh returns late", async ({ page }) => {
+  await page.getByRole("button", { name: "Tracks", exact: true }).click();
+  await page.evaluate(() => {
+    const hass = (window as unknown as {
+      __LOCKLEARN_E2E_HASS__: {
+        callWS: (message: Record<string, unknown>) => Promise<unknown>;
+      };
+    }).__LOCKLEARN_E2E_HASS__;
+    const original = hass.callWS.bind(hass);
+    let saved = false;
+    hass.callWS = async (message) => {
+      if (message.type === "locklearn/tracks/update") saved = true;
+      if (saved && message.type === "locklearn/profiles/list") {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      return original(message);
+    };
+  });
+  const name = page.locator("locklearn-management-view form.track-form").first().locator('input[name="name"]');
+  await name.fill("Japanese Core edited");
+  await page.getByRole("combobox").first().selectOption("profile-other");
+  await page.getByRole("dialog", { name: "Unsaved changes" })
+    .getByRole("button", { name: "Save and leave" }).click();
+  await expect(page.getByRole("combobox").first()).toHaveValue("profile-other");
+  await page.waitForTimeout(350);
+  await expect(page.getByRole("combobox").first()).toHaveValue("profile-other");
+});
+
 test("multi-Track cards keep advanced settings and plans attached to each Track", async ({ page }) => {
   await page.getByRole("button", { name: "Tracks", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Japanese Core" })).toBeVisible();

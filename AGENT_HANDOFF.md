@@ -1,17 +1,20 @@
 # AGENT_HANDOFF.md
 
-## Mission
+## Mission and branch
 
-Qualify beta.5 on `feat/beta5-no-dead-end-v03` against the real HAOS instance. Initial branch SHA: `277374ddaf55f0f6c36f8e00166d793e29597cb0`. The maintainer authorized branch push, CI dispatch and HAOS deployment for this mission. Preserve the HA state database and keep rollback code outside `/config/custom_components/`.
+Qualify beta.5 on `feat/beta5-no-dead-end-v03`. Initial SHA `277374ddaf55f0f6c36f8e00166d793e29597cb0`. The maintainer authorized push, CI dispatch and deployment to the HAOS test instance. Preserve `/config/.storage/locklearn/state.db` and keep rollback code outside `/config/custom_components/`.
 
 ## Verified state
 
-- Calibration selection, new-card question preparation and final summary/resume were fixed in commits `dfa9c588`, `d9d86d26`, `f75d501b`. Each passed 8/8 CI jobs and was field tested. Real UI calibration 20 completed with a visible known/remaining summary and CTAs; 30/40 started with nonempty exact samples. Browser reload resumed calibration in Quiz; HA Config Entry reload preserved an active 40-card session.
-- Legacy pending `known_already` verification in Quiz was fixed in `53022701` (CI `37013616468`, 8/8), deployed with exact integration tree and served bundle verification. The real Quiz first answer then advanced from 1/19 to 2/19 without error.
-- A real Learn UI Undo showed a false success: the generic progress undo preserved `user_state=known_already`. The current uncommitted fix calls the canonical `cards/learn_instead` reversal. A new Playwright test verifies the UI command and success message. The real card still needs cleanup and post-deployment Undo retest.
-- Current local gates: 516 pytest; Ruff format/lint; mypy; resource validation; frontend lint/typecheck, 66 Vitest, build, 8 Playwright; no-polling, bundle budget and generated docs contracts all pass. The tests emit one expected duplicate ZIP warning. An initial optional check used two wrong script names, then both correct commands passed.
-- HAOS backup `PRE_BETA5_CALIBRATION_FIX` (`b2e550b5`) is complete. The current deployed and served SHA remains `530227018723e5f5aa4c2ed59434cf9ef4ccc5ef` until the next CI-qualified deployment.
+- Calibration fixes `dfa9c588`, `d9d86d26`, `f75d501b` passed CI (8/8 each) and real UI checks: 20 completed with visible known/remaining summary and CTAs; 30/40 started at exact nonzero sizes; browser and integration reload preserved active calibration.
+- Legacy known-card Quiz fix `53022701` passed CI 8/8 and field Quiz answer progressed 1/19 to 2/19.
+- `48c9b37a4655a2fdc524319340512185b73be9cb` passed CI `37015756211` (8/8) and is currently deployed: 91 tracked files match; served bundle SHA-256 `dbbbcf6bf56d43dae0bb0932c197b60fcfa920ed4cc29b15479fb2b8d1b0793b` matches. HA 2026.7.4 loaded after restart. Real Learn Undo returned a card to `active/new/box 0`, with zero verified counts. A QA Track proved the five-total bulk guard appeared after K,K,introduce,K,K,introduce,K, with both CTAs and no additional session mutation; a sixth K did not retrigger it.
+- The concerned-cards UI showed known pending (6), suspended (1), buried (1); Learn it instead removed one pending card. No current Track exposed prerequisite or waiting-context blockers for their UI entry paths.
+- A real Quiz readiness reminder had `available_now=0` and a future `next_available_at_utc`. Arm/status/cancel/rearm succeeded. At due time, availability was rechecked, became 0/null, and the reminder was cancelled without a false notification. The temporary QA notification target was disabled afterward.
+- Real browser offline banner appeared and disappeared on reconnect. Controlled 10-second bootstrap timeout showed Retry, Home and Copy diagnostic after three failures; Retry recovered, Home returned to HA. Controlled answer latency >8 seconds showed Check status and Retry answer; canonical verification, one actual retry and a rejected stale CAS produced exactly three ReviewEvents for three answers.
+- Dirty guard route Stay/Discard, Profile change dialog, Back, refresh beforeunload dialog and mobile sticky save were field checked. **New reproduced bug:** Save and leave saves Track changes but a concurrent `refreshManagement` request reselects the old Profile. Current uncommitted fix reads the selected Profile after the async profiles request; a new E2E test covers the race.
+- Current local gates after that fix: 516 pytest, Ruff, mypy, resources, generated docs, frontend lint/typecheck, 66 Vitest, build, 9 Playwright E2E, no-polling and bundle budget pass. One expected duplicate ZIP warning remains. The QA Track name was restored after tests.
 
 ## Next action
 
-Commit this Undo fix and bundle, push, dispatch CI for the exact SHA and verify all 8 jobs. Deploy only after green CI, verify the complete file tree and served bundle, then retest Undo with the real UI and canonical card state. Continue the remaining beta.5 field scenarios and report PASS/BLOCKED/FAIL with evidence. Update this handoff before ending.
+Commit the dirty guard fix, test, bundle, changelog and this handoff; push, dispatch CI on its exact SHA, require 8/8 green, deploy complete tree and verify served hash. Retest Save and leave/profile navigation on HAOS. Finish final-SHA calibration/reload smoke and report remaining unexercisable UI filters and tab-close automation honestly as BLOCKED if still unavailable. Update this handoff before ending.
