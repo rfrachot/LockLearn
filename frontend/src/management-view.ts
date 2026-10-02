@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 
 import { interactiveAccessibilityStyles } from "./content-renderer";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
@@ -135,6 +136,7 @@ export class LockLearnManagementView extends LitElement {
   @state() private errorMessage = "";
   @state() private notice = "";
   @state() private dirtyScopes = new Set<string>();
+  @state() private formResetVersions: Record<string, number> = {};
   @state() private submittingScope?: string;
 
   static styles = css`
@@ -382,8 +384,15 @@ export class LockLearnManagementView extends LitElement {
     );
   }
 
-  private cancelScope(key: string, form: HTMLFormElement): void {
-    form.reset();
+  private resetScope(key: string): void {
+    this.formResetVersions = {
+      ...this.formResetVersions,
+      [key]: (this.formResetVersions[key] ?? 0) + 1,
+    };
+  }
+
+  private cancelScope(key: string): void {
+    this.resetScope(key);
     this.clearScopeDirty(key);
     this.requestUpdate();
   }
@@ -490,10 +499,7 @@ export class LockLearnManagementView extends LitElement {
 
   discardDirtyScopes(): void {
     for (const key of [...this.dirtyScopes]) {
-      const form = this.renderRoot.querySelector<HTMLFormElement>(
-        `form[data-save-scope="${key}"]`,
-      );
-      form?.reset();
+      this.resetScope(key);
     }
     this.dirtyScopes = new Set();
     this.forecasts = {};
@@ -772,7 +778,7 @@ export class LockLearnManagementView extends LitElement {
           <p class="meta">${this.t("manage.packVersion")}: ${track.pack_version_id ?? "—"}</p>
         </div>
         ${this.canEditTrack() ? html`
-          <form
+          ${keyed(`${detailsScope}:${this.formResetVersions[detailsScope] ?? 0}`, html`<form
             class="track-form"
             data-save-scope=${detailsScope}
             @input=${() => this.markScopeDirty(detailsScope)}
@@ -823,10 +829,7 @@ export class LockLearnManagementView extends LitElement {
               <button
                 type="button"
                 ?disabled=${!this.isScopeDirty(detailsScope) || this.submittingScope === detailsScope}
-                @click=${(event: Event) => {
-                  const form = (event.currentTarget as HTMLElement).closest("form");
-                  if (form instanceof HTMLFormElement) this.cancelScope(detailsScope, form);
-                }}
+                @click=${() => this.cancelScope(detailsScope)}
               >
                 ${this.t("form.cancel")}
               </button>
@@ -858,7 +861,7 @@ export class LockLearnManagementView extends LitElement {
                 </div>
               </div>
             </details>
-          </form>
+          </form>`)}
 
           <details class="section-panel">
             <summary>${this.t("manage.plan")}</summary>
@@ -983,7 +986,7 @@ export class LockLearnManagementView extends LitElement {
     return html`
       <div class="stack">
         <p class="muted">${this.t("manage.planHelp")}</p>
-        <form
+        ${keyed(`${planScope}:${this.formResetVersions[planScope] ?? 0}`, html`<form
           class="stack"
           data-save-scope=${planScope}
           @input=${() => this.markScopeDirty(planScope)}
@@ -1065,19 +1068,16 @@ export class LockLearnManagementView extends LitElement {
             <button
               type="button"
               ?disabled=${!this.isScopeDirty(planScope) || this.submittingScope === planScope}
-              @click=${(event: Event) => {
-                const form = (event.currentTarget as HTMLElement).closest("form");
-                if (form instanceof HTMLFormElement) {
-                  this.forecasts = { ...this.forecasts, [track.track_id]: undefined };
-                  this.forecastPlans = { ...this.forecastPlans, [track.track_id]: undefined };
-                  this.cancelScope(planScope, form);
-                }
+              @click=${() => {
+                this.forecasts = { ...this.forecasts, [track.track_id]: undefined };
+                this.forecastPlans = { ...this.forecastPlans, [track.track_id]: undefined };
+                this.cancelScope(planScope);
               }}
             >
               ${this.t("form.cancel")}
             </button>
           </div>
-        </form>
+        </form>`)}
         ${forecast === undefined ? nothing : this.renderForecast(track, forecast)}
       </div>
     `;

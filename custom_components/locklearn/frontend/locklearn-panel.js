@@ -1,13 +1,13 @@
-const ue = globalThis, ze = ue.ShadowRoot && (ue.ShadyCSS === void 0 || ue.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, Ae = /* @__PURE__ */ Symbol(), je = /* @__PURE__ */ new WeakMap();
-let vt = class {
+const ue = globalThis, Ae = ue.ShadowRoot && (ue.ShadyCSS === void 0 || ue.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, ze = /* @__PURE__ */ Symbol(), je = /* @__PURE__ */ new WeakMap();
+let ft = class {
   constructor(e, t, i) {
-    if (this._$cssResult$ = !0, i !== Ae) throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");
+    if (this._$cssResult$ = !0, i !== ze) throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");
     this.cssText = e, this.t = t;
   }
   get styleSheet() {
     let e = this.o;
     const t = this.t;
-    if (ze && e === void 0) {
+    if (Ae && e === void 0) {
       const i = t !== void 0 && t.length === 1;
       i && (e = je.get(t)), e === void 0 && ((this.o = e = new CSSStyleSheet()).replaceSync(this.cssText), i && je.set(t, e));
     }
@@ -17,28 +17,28 @@ let vt = class {
     return this.cssText;
   }
 };
-const Lt = (s) => new vt(typeof s == "string" ? s : s + "", void 0, Ae), E = (s, ...e) => {
+const Dt = (s) => new ft(typeof s == "string" ? s : s + "", void 0, ze), E = (s, ...e) => {
   const t = s.length === 1 ? s[0] : e.reduce((i, a, n) => i + ((o) => {
     if (o._$cssResult$ === !0) return o.cssText;
     if (typeof o == "number") return o;
     throw Error("Value passed to 'css' function must be a 'css' function result: " + o + ". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.");
   })(a) + s[n + 1], s[0]);
-  return new vt(t, s, Ae);
-}, Dt = (s, e) => {
-  if (ze) s.adoptedStyleSheets = e.map((t) => t instanceof CSSStyleSheet ? t : t.styleSheet);
+  return new ft(t, s, ze);
+}, Nt = (s, e) => {
+  if (Ae) s.adoptedStyleSheets = e.map((t) => t instanceof CSSStyleSheet ? t : t.styleSheet);
   else for (const t of e) {
     const i = document.createElement("style"), a = ue.litNonce;
     a !== void 0 && i.setAttribute("nonce", a), i.textContent = t.cssText, s.appendChild(i);
   }
-}, We = ze ? (s) => s : (s) => s instanceof CSSStyleSheet ? ((e) => {
+}, We = Ae ? (s) => s : (s) => s instanceof CSSStyleSheet ? ((e) => {
   let t = "";
   for (const i of e.cssRules) t += i.cssText;
-  return Lt(t);
+  return Dt(t);
 })(s) : s;
-const { is: Nt, defineProperty: It, getOwnPropertyDescriptor: Ht, getOwnPropertyNames: Ut, getOwnPropertySymbols: Ot, getPrototypeOf: jt } = Object, ve = globalThis, Fe = ve.trustedTypes, Wt = Fe ? Fe.emptyScript : "", Ft = ve.reactiveElementPolyfillSupport, X = (s, e) => s, he = { toAttribute(s, e) {
+const { is: It, defineProperty: Ht, getOwnPropertyDescriptor: Ut, getOwnPropertyNames: Ot, getOwnPropertySymbols: jt, getPrototypeOf: Wt } = Object, ve = globalThis, Fe = ve.trustedTypes, Ft = Fe ? Fe.emptyScript : "", Vt = ve.reactiveElementPolyfillSupport, X = (s, e) => s, he = { toAttribute(s, e) {
   switch (e) {
     case Boolean:
-      s = s ? Wt : null;
+      s = s ? Ft : null;
       break;
     case Object:
     case Array:
@@ -63,7 +63,7 @@ const { is: Nt, defineProperty: It, getOwnPropertyDescriptor: Ht, getOwnProperty
       }
   }
   return t;
-} }, Ce = (s, e) => !Nt(s, e), Ve = { attribute: !0, type: String, converter: he, reflect: !1, useDefault: !1, hasChanged: Ce };
+} }, Ce = (s, e) => !It(s, e), Ve = { attribute: !0, type: String, converter: he, reflect: !1, useDefault: !1, hasChanged: Ce };
 Symbol.metadata ??= /* @__PURE__ */ Symbol("metadata"), ve.litPropertyMetadata ??= /* @__PURE__ */ new WeakMap();
 let V = class extends HTMLElement {
   static addInitializer(e) {
@@ -75,11 +75,11 @@ let V = class extends HTMLElement {
   static createProperty(e, t = Ve) {
     if (t.state && (t.attribute = !1), this._$Ei(), this.prototype.hasOwnProperty(e) && ((t = Object.create(t)).wrapped = !0), this.elementProperties.set(e, t), !t.noAccessor) {
       const i = /* @__PURE__ */ Symbol(), a = this.getPropertyDescriptor(e, i, t);
-      a !== void 0 && It(this.prototype, e, a);
+      a !== void 0 && Ht(this.prototype, e, a);
     }
   }
   static getPropertyDescriptor(e, t, i) {
-    const { get: a, set: n } = Ht(this.prototype, e) ?? { get() {
+    const { get: a, set: n } = Ut(this.prototype, e) ?? { get() {
       return this[t];
     }, set(o) {
       this[t] = o;
@@ -94,13 +94,13 @@ let V = class extends HTMLElement {
   }
   static _$Ei() {
     if (this.hasOwnProperty(X("elementProperties"))) return;
-    const e = jt(this);
+    const e = Wt(this);
     e.finalize(), e.l !== void 0 && (this.l = [...e.l]), this.elementProperties = new Map(e.elementProperties);
   }
   static finalize() {
     if (this.hasOwnProperty(X("finalized"))) return;
     if (this.finalized = !0, this._$Ei(), this.hasOwnProperty(X("properties"))) {
-      const t = this.properties, i = [...Ut(t), ...Ot(t)];
+      const t = this.properties, i = [...Ot(t), ...jt(t)];
       for (const a of i) this.createProperty(a, t[a]);
     }
     const e = this[Symbol.metadata];
@@ -146,7 +146,7 @@ let V = class extends HTMLElement {
   }
   createRenderRoot() {
     const e = this.shadowRoot ?? this.attachShadow(this.constructor.shadowRootOptions);
-    return Dt(e, this.constructor.elementStyles), e;
+    return Nt(e, this.constructor.elementStyles), e;
   }
   connectedCallback() {
     this.renderRoot ??= this.createRenderRoot(), this.enableUpdating(!0), this._$EO?.forEach((e) => e.hostConnected?.());
@@ -246,51 +246,51 @@ let V = class extends HTMLElement {
   firstUpdated(e) {
   }
 };
-V.elementStyles = [], V.shadowRootOptions = { mode: "open" }, V[X("elementProperties")] = /* @__PURE__ */ new Map(), V[X("finalized")] = /* @__PURE__ */ new Map(), Ft?.({ ReactiveElement: V }), (ve.reactiveElementVersions ??= []).push("2.1.2");
-const Pe = globalThis, Be = (s) => s, pe = Pe.trustedTypes, Ke = pe ? pe.createPolicy("lit-html", { createHTML: (s) => s }) : void 0, ft = "$lit$", M = `lit$${Math.random().toFixed(9).slice(2)}$`, bt = "?" + M, Vt = `<${bt}>`, H = document, te = () => H.createComment(""), ie = (s) => s === null || typeof s != "object" && typeof s != "function", Ee = Array.isArray, Bt = (s) => Ee(s) || typeof s?.[Symbol.iterator] == "function", ye = `[ 	
+V.elementStyles = [], V.shadowRootOptions = { mode: "open" }, V[X("elementProperties")] = /* @__PURE__ */ new Map(), V[X("finalized")] = /* @__PURE__ */ new Map(), Vt?.({ ReactiveElement: V }), (ve.reactiveElementVersions ??= []).push("2.1.2");
+const Pe = globalThis, Be = (s) => s, pe = Pe.trustedTypes, Ke = pe ? pe.createPolicy("lit-html", { createHTML: (s) => s }) : void 0, bt = "$lit$", M = `lit$${Math.random().toFixed(9).slice(2)}$`, yt = "?" + M, Bt = `<${yt}>`, H = document, te = () => H.createComment(""), ie = (s) => s === null || typeof s != "object" && typeof s != "function", Ee = Array.isArray, Kt = (s) => Ee(s) || typeof s?.[Symbol.iterator] == "function", ye = `[ 	
 \f\r]`, Q = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, Ge = /-->/g, Qe = />/g, N = RegExp(`>|${ye}(?:([^\\s"'>=/]+)(${ye}*=${ye}*(?:[^ 	
-\f\r"'\`<>=]|("|')|))|$)`, "g"), Ye = /'/g, Je = /"/g, yt = /^(?:script|style|textarea|title)$/i, Kt = (s) => (e, ...t) => ({ _$litType$: s, strings: e, values: t }), r = Kt(1), B = /* @__PURE__ */ Symbol.for("lit-noChange"), l = /* @__PURE__ */ Symbol.for("lit-nothing"), Ze = /* @__PURE__ */ new WeakMap(), I = H.createTreeWalker(H, 129);
-function $t(s, e) {
+\f\r"'\`<>=]|("|')|))|$)`, "g"), Ye = /'/g, Je = /"/g, $t = /^(?:script|style|textarea|title)$/i, Gt = (s) => (e, ...t) => ({ _$litType$: s, strings: e, values: t }), r = Gt(1), B = /* @__PURE__ */ Symbol.for("lit-noChange"), l = /* @__PURE__ */ Symbol.for("lit-nothing"), Ze = /* @__PURE__ */ new WeakMap(), I = H.createTreeWalker(H, 129);
+function wt(s, e) {
   if (!Ee(s) || !s.hasOwnProperty("raw")) throw Error("invalid template strings array");
   return Ke !== void 0 ? Ke.createHTML(e) : e;
 }
-const Gt = (s, e) => {
+const Qt = (s, e) => {
   const t = s.length - 1, i = [];
   let a, n = e === 2 ? "<svg>" : e === 3 ? "<math>" : "", o = Q;
   for (let u = 0; u < t; u++) {
     const c = s[u];
-    let h, k, g = -1, _ = 0;
-    for (; _ < c.length && (o.lastIndex = _, k = o.exec(c), k !== null); ) _ = o.lastIndex, o === Q ? k[1] === "!--" ? o = Ge : k[1] !== void 0 ? o = Qe : k[2] !== void 0 ? (yt.test(k[2]) && (a = RegExp("</" + k[2], "g")), o = N) : k[3] !== void 0 && (o = N) : o === N ? k[0] === ">" ? (o = a ?? Q, g = -1) : k[1] === void 0 ? g = -2 : (g = o.lastIndex - k[2].length, h = k[1], o = k[3] === void 0 ? N : k[3] === '"' ? Je : Ye) : o === Je || o === Ye ? o = N : o === Ge || o === Qe ? o = Q : (o = N, a = void 0);
+    let h, _, g = -1, k = 0;
+    for (; k < c.length && (o.lastIndex = k, _ = o.exec(c), _ !== null); ) k = o.lastIndex, o === Q ? _[1] === "!--" ? o = Ge : _[1] !== void 0 ? o = Qe : _[2] !== void 0 ? ($t.test(_[2]) && (a = RegExp("</" + _[2], "g")), o = N) : _[3] !== void 0 && (o = N) : o === N ? _[0] === ">" ? (o = a ?? Q, g = -1) : _[1] === void 0 ? g = -2 : (g = o.lastIndex - _[2].length, h = _[1], o = _[3] === void 0 ? N : _[3] === '"' ? Je : Ye) : o === Je || o === Ye ? o = N : o === Ge || o === Qe ? o = Q : (o = N, a = void 0);
     const R = o === N && s[u + 1].startsWith("/>") ? " " : "";
-    n += o === Q ? c + Vt : g >= 0 ? (i.push(h), c.slice(0, g) + ft + c.slice(g) + M + R) : c + M + (g === -2 ? u : R);
+    n += o === Q ? c + Bt : g >= 0 ? (i.push(h), c.slice(0, g) + bt + c.slice(g) + M + R) : c + M + (g === -2 ? u : R);
   }
-  return [$t(s, n + (s[t] || "<?>") + (e === 2 ? "</svg>" : e === 3 ? "</math>" : "")), i];
+  return [wt(s, n + (s[t] || "<?>") + (e === 2 ? "</svg>" : e === 3 ? "</math>" : "")), i];
 };
 class ae {
   constructor({ strings: e, _$litType$: t }, i) {
     let a;
     this.parts = [];
     let n = 0, o = 0;
-    const u = e.length - 1, c = this.parts, [h, k] = Gt(e, t);
+    const u = e.length - 1, c = this.parts, [h, _] = Qt(e, t);
     if (this.el = ae.createElement(h, i), I.currentNode = this.el.content, t === 2 || t === 3) {
       const g = this.el.content.firstChild;
       g.replaceWith(...g.childNodes);
     }
     for (; (a = I.nextNode()) !== null && c.length < u; ) {
       if (a.nodeType === 1) {
-        if (a.hasAttributes()) for (const g of a.getAttributeNames()) if (g.endsWith(ft)) {
-          const _ = k[o++], R = a.getAttribute(g).split(M), ne = /([.?@])?(.*)/.exec(_);
-          c.push({ type: 1, index: n, name: ne[2], strings: R, ctor: ne[1] === "." ? Yt : ne[1] === "?" ? Jt : ne[1] === "@" ? Zt : fe }), a.removeAttribute(g);
+        if (a.hasAttributes()) for (const g of a.getAttributeNames()) if (g.endsWith(bt)) {
+          const k = _[o++], R = a.getAttribute(g).split(M), ne = /([.?@])?(.*)/.exec(k);
+          c.push({ type: 1, index: n, name: ne[2], strings: R, ctor: ne[1] === "." ? Jt : ne[1] === "?" ? Zt : ne[1] === "@" ? Xt : fe }), a.removeAttribute(g);
         } else g.startsWith(M) && (c.push({ type: 6, index: n }), a.removeAttribute(g));
-        if (yt.test(a.tagName)) {
-          const g = a.textContent.split(M), _ = g.length - 1;
-          if (_ > 0) {
+        if ($t.test(a.tagName)) {
+          const g = a.textContent.split(M), k = g.length - 1;
+          if (k > 0) {
             a.textContent = pe ? pe.emptyScript : "";
-            for (let R = 0; R < _; R++) a.append(g[R], te()), I.nextNode(), c.push({ type: 2, index: ++n });
-            a.append(g[_], te());
+            for (let R = 0; R < k; R++) a.append(g[R], te()), I.nextNode(), c.push({ type: 2, index: ++n });
+            a.append(g[k], te());
           }
         }
-      } else if (a.nodeType === 8) if (a.data === bt) c.push({ type: 2, index: n });
+      } else if (a.nodeType === 8) if (a.data === yt) c.push({ type: 2, index: n });
       else {
         let g = -1;
         for (; (g = a.data.indexOf(M, g + 1)) !== -1; ) c.push({ type: 7, index: n }), g += M.length - 1;
@@ -309,7 +309,7 @@ function K(s, e, t = s, i) {
   const n = ie(e) ? void 0 : e._$litDirective$;
   return a?.constructor !== n && (a?._$AO?.(!1), n === void 0 ? a = void 0 : (a = new n(s), a._$AT(s, t, i)), i !== void 0 ? (t._$Co ??= [])[i] = a : t._$Cl = a), a !== void 0 && (e = K(s, a._$AS(s, e.values), a, i)), e;
 }
-class Qt {
+class Yt {
   constructor(e, t) {
     this._$AV = [], this._$AN = void 0, this._$AD = e, this._$AM = t;
   }
@@ -326,7 +326,7 @@ class Qt {
     for (; c !== void 0; ) {
       if (o === c.index) {
         let h;
-        c.type === 2 ? h = new se(n, n.nextSibling, this, e) : c.type === 1 ? h = new c.ctor(n, c.name, c.strings, this, e) : c.type === 6 && (h = new Xt(n, this, e)), this._$AV.push(h), c = i[++u];
+        c.type === 2 ? h = new se(n, n.nextSibling, this, e) : c.type === 1 ? h = new c.ctor(n, c.name, c.strings, this, e) : c.type === 6 && (h = new ei(n, this, e)), this._$AV.push(h), c = i[++u];
       }
       o !== c?.index && (n = I.nextNode(), o++);
     }
@@ -356,7 +356,7 @@ class se {
     return this._$AB;
   }
   _$AI(e, t = this) {
-    e = K(this, e, t), ie(e) ? e === l || e == null || e === "" ? (this._$AH !== l && this._$AR(), this._$AH = l) : e !== this._$AH && e !== B && this._(e) : e._$litType$ !== void 0 ? this.$(e) : e.nodeType !== void 0 ? this.T(e) : Bt(e) ? this.k(e) : this._(e);
+    e = K(this, e, t), ie(e) ? e === l || e == null || e === "" ? (this._$AH !== l && this._$AR(), this._$AH = l) : e !== this._$AH && e !== B && this._(e) : e._$litType$ !== void 0 ? this.$(e) : e.nodeType !== void 0 ? this.T(e) : Kt(e) ? this.k(e) : this._(e);
   }
   O(e) {
     return this._$AA.parentNode.insertBefore(e, this._$AB);
@@ -368,10 +368,10 @@ class se {
     this._$AH !== l && ie(this._$AH) ? this._$AA.nextSibling.data = e : this.T(H.createTextNode(e)), this._$AH = e;
   }
   $(e) {
-    const { values: t, _$litType$: i } = e, a = typeof i == "number" ? this._$AC(e) : (i.el === void 0 && (i.el = ae.createElement($t(i.h, i.h[0]), this.options)), i);
+    const { values: t, _$litType$: i } = e, a = typeof i == "number" ? this._$AC(e) : (i.el === void 0 && (i.el = ae.createElement(wt(i.h, i.h[0]), this.options)), i);
     if (this._$AH?._$AD === a) this._$AH.p(t);
     else {
-      const n = new Qt(a, this), o = n.u(this.options);
+      const n = new Yt(a, this), o = n.u(this.options);
       n.p(t), this.T(o), this._$AH = n;
     }
   }
@@ -421,7 +421,7 @@ class fe {
     e === l ? this.element.removeAttribute(this.name) : this.element.setAttribute(this.name, e ?? "");
   }
 }
-class Yt extends fe {
+class Jt extends fe {
   constructor() {
     super(...arguments), this.type = 3;
   }
@@ -429,7 +429,7 @@ class Yt extends fe {
     this.element[this.name] = e === l ? void 0 : e;
   }
 }
-class Jt extends fe {
+class Zt extends fe {
   constructor() {
     super(...arguments), this.type = 4;
   }
@@ -437,7 +437,7 @@ class Jt extends fe {
     this.element.toggleAttribute(this.name, !!e && e !== l);
   }
 }
-class Zt extends fe {
+class Xt extends fe {
   constructor(e, t, i, a, n) {
     super(e, t, i, a, n), this.type = 5;
   }
@@ -450,7 +450,7 @@ class Zt extends fe {
     typeof this._$AH == "function" ? this._$AH.call(this.options?.host ?? this.element, e) : this._$AH.handleEvent(e);
   }
 }
-class Xt {
+class ei {
   constructor(e, t, i) {
     this.element = e, this.type = 6, this._$AN = void 0, this._$AM = t, this.options = i;
   }
@@ -461,9 +461,9 @@ class Xt {
     K(this, e);
   }
 }
-const ei = Pe.litHtmlPolyfillSupport;
-ei?.(ae, se), (Pe.litHtmlVersions ??= []).push("3.3.3");
-const ti = (s, e, t) => {
+const ti = Pe.litHtmlPolyfillSupport;
+ti?.(ae, se), (Pe.litHtmlVersions ??= []).push("3.3.3");
+const ii = (s, e, t) => {
   const i = t?.renderBefore ?? e;
   let a = i._$litPart$;
   if (a === void 0) {
@@ -473,7 +473,7 @@ const ti = (s, e, t) => {
   return a._$AI(s), a;
 };
 const Re = globalThis;
-class T extends V {
+let T = class extends V {
   constructor() {
     super(...arguments), this.renderOptions = { host: this }, this._$Do = void 0;
   }
@@ -483,7 +483,7 @@ class T extends V {
   }
   update(e) {
     const t = this.render();
-    this.hasUpdated || (this.renderOptions.isConnected = this.isConnected), super.update(e), this._$Do = ti(t, this.renderRoot, this.renderOptions);
+    this.hasUpdated || (this.renderOptions.isConnected = this.isConnected), super.update(e), this._$Do = ii(t, this.renderRoot, this.renderOptions);
   }
   connectedCallback() {
     super.connectedCallback(), this._$Do?.setConnected(!0);
@@ -494,17 +494,17 @@ class T extends V {
   render() {
     return B;
   }
-}
+};
 T._$litElement$ = !0, T.finalized = !0, Re.litElementHydrateSupport?.({ LitElement: T });
-const ii = Re.litElementPolyfillSupport;
-ii?.({ LitElement: T });
+const ai = Re.litElementPolyfillSupport;
+ai?.({ LitElement: T });
 (Re.litElementVersions ??= []).push("4.2.2");
-const ai = (s) => (e, t) => {
+const si = (s) => (e, t) => {
   t !== void 0 ? t.addInitializer(() => {
     customElements.define(s, e);
   }) : customElements.define(s, e);
 };
-const si = { attribute: !0, type: String, converter: he, reflect: !1, hasChanged: Ce }, ri = (s = si, e, t) => {
+const ri = { attribute: !0, type: String, converter: he, reflect: !1, hasChanged: Ce }, ni = (s = ri, e, t) => {
   const { kind: i, metadata: a } = t;
   let n = globalThis.litPropertyMetadata.get(a);
   if (n === void 0 && globalThis.litPropertyMetadata.set(a, n = /* @__PURE__ */ new Map()), i === "setter" && ((s = Object.create(s)).wrapped = !0), n.set(t.name, s), i === "accessor") {
@@ -526,7 +526,7 @@ const si = { attribute: !0, type: String, converter: he, reflect: !1, hasChanged
   throw Error("Unsupported decorator location: " + i);
 };
 function b(s) {
-  return (e, t) => typeof t == "object" ? ri(s, e, t) : ((i, a, n) => {
+  return (e, t) => typeof t == "object" ? ni(s, e, t) : ((i, a, n) => {
     const o = a.hasOwnProperty(n);
     return a.constructor.createProperty(n, i), o ? Object.getOwnPropertyDescriptor(a, n) : void 0;
   })(s, e, t);
@@ -591,7 +591,7 @@ const Me = E`
     overflow-wrap: anywhere;
   }
 `;
-function ni(s, e) {
+function oi(s, e) {
   const t = s.ruby_segments;
   if (!Array.isArray(t) || t.length === 0) return null;
   const i = [];
@@ -605,12 +605,12 @@ function ni(s, e) {
   }
   return i.map((a) => a.text).join("") !== e ? null : i;
 }
-function oi(s) {
+function li(s) {
   return r`${s.map(
     (e) => e.reading === null ? e.text : r`<ruby>${e.text}<rp>(</rp><rt>${e.reading}</rt><rp>)</rp></ruby>`
   )}`;
 }
-function wt(s, e = 0) {
+function _t(s, e = 0) {
   if (e > 16 || typeof s != "object" || s === null) return l;
   const t = s;
   if ((t.type === "text" || t.type === "inline_code") && typeof t.text == "string")
@@ -619,21 +619,21 @@ function wt(s, e = 0) {
   if (t.type === "ruby" && typeof t.text == "string" && t.text !== "" && typeof t.reading == "string" && t.reading !== "")
     return r`<ruby>${t.text}<rp>(</rp><rt>${t.reading}</rt><rp>)</rp></ruby>`;
   if ((t.type === "paragraph" || t.type === "emphasis" || t.type === "strong") && Array.isArray(t.children)) {
-    const i = t.children.map((a) => wt(a, e + 1));
+    const i = t.children.map((a) => _t(a, e + 1));
     return t.type === "paragraph" ? r`<p>${i}</p>` : t.type === "emphasis" ? r`<em>${i}</em>` : r`<strong>${i}</strong>`;
   }
   return l;
 }
-function li(s) {
+function di(s) {
   const e = s.payload.text;
   if (typeof e == "string" && e !== "") {
-    const t = ni(s.payload, e);
-    return t === null ? e : oi(t);
+    const t = oi(s.payload, e);
+    return t === null ? e : li(t);
   }
-  return s.kind === "rich_text" && s.payload.type === "document" && Array.isArray(s.payload.children) ? r`${s.payload.children.map((t) => wt(t, 1))}` : l;
+  return s.kind === "rich_text" && s.payload.type === "document" && Array.isArray(s.payload.children) ? r`${s.payload.children.map((t) => _t(t, 1))}` : l;
 }
 function Le(s, e = !1) {
-  const t = li(s);
+  const t = di(s);
   return t === l ? l : r`
     <div
       class="content-block ${e ? "primary-content" : ""}"
@@ -1559,7 +1559,7 @@ class kt extends Error {
     ), this.frontendProtocol = e, this.backendProtocol = t, this.backendVersion = i;
   }
 }
-async function di(s) {
+async function ci(s) {
   const e = await s.callWS({
     type: "locklearn/bootstrap"
   });
@@ -1598,7 +1598,7 @@ async function re(s, e, t = {}) {
   } while (a !== null);
   return i;
 }
-async function ci(s, e, t, i) {
+async function ui(s, e, t, i) {
   return s.callWS({
     type: "locklearn/profiles/create",
     name: e,
@@ -1621,13 +1621,13 @@ async function at(s, e, t, i) {
     ...i === void 0 ? {} : { confirmation: i }
   });
 }
-async function ui(s, e) {
+async function hi(s, e) {
   return s.callWS({
     type: "locklearn/profiles/members",
     profile_id: e
   });
 }
-async function hi(s, e) {
+async function pi(s, e) {
   return s.callWS({
     type: "locklearn/profiles/share_targets",
     profile_id: e
@@ -1641,7 +1641,7 @@ async function st(s, e, t, i) {
     role: i
   });
 }
-async function pi(s, e, t) {
+async function mi(s, e, t) {
   await s.callWS({
     type: "locklearn/profiles/share",
     profile_id: e,
@@ -1649,7 +1649,7 @@ async function pi(s, e, t) {
     remove: !0
   });
 }
-async function _t(s, e) {
+async function xt(s, e) {
   return re(s, "locklearn/tracks/list", {
     profile_id: e
   });
@@ -1659,19 +1659,19 @@ async function De(s, e) {
     profile_id: e
   });
 }
-async function mi(s, e) {
+async function gi(s, e) {
   return re(s, "locklearn/targets/discover", {
     profile_id: e
   });
 }
-async function gi(s, e, t) {
+async function vi(s, e, t) {
   return s.callWS({
     type: "locklearn/targets/create",
     profile_id: e,
     device_registry_id: t
   });
 }
-async function vi(s, e, t, i) {
+async function fi(s, e, t, i) {
   return s.callWS({
     type: "locklearn/targets/update",
     profile_id: e,
@@ -1679,14 +1679,14 @@ async function vi(s, e, t, i) {
     ...i
   });
 }
-async function fi(s, e, t) {
+async function bi(s, e, t) {
   return s.callWS({
     type: "locklearn/targets/test",
     profile_id: e,
     target_id: t
   });
 }
-async function bi(s, e, t) {
+async function yi(s, e, t) {
   return s.callWS({
     type: "locklearn/stats/get",
     profile_id: e,
@@ -1696,20 +1696,20 @@ async function bi(s, e, t) {
     ...t ? { track_id: t } : {}
   });
 }
-async function yi(s, e, t) {
+async function $i(s, e, t) {
   return (await s.callWS({
     type: "locklearn/difficulties/list",
     profile_id: e,
     ...t ? { track_id: t } : {}
   })).items;
 }
-async function $i(s, e) {
+async function wi(s, e) {
   return s.callWS({
     type: "locklearn/tracks/create",
     ...e
   });
 }
-async function wi(s, e, t) {
+async function _i(s, e, t) {
   return s.callWS({
     type: "locklearn/tracks/update",
     track_id: e,
@@ -1722,10 +1722,10 @@ async function ki(s, e) {
     track_id: e
   });
 }
-async function _i(s) {
+async function xi(s) {
   return re(s, "locklearn/packs/list");
 }
-async function xi(s) {
+async function Si(s) {
   return re(s, "locklearn/datasets/list");
 }
 async function rt(s, e, t, i) {
@@ -1737,19 +1737,19 @@ async function rt(s, e, t, i) {
     ...i ? { cursor: i } : {}
   });
 }
-async function Si(s) {
+async function qi(s) {
   return (await s.callWS({
     type: "locklearn/datasets/refresh"
   })).items;
 }
-async function qi(s, e, t) {
+async function Ti(s, e, t) {
   return s.callWS({
     type: "locklearn/datasets/install",
     dataset_id: e,
     ...t ? { version: t } : {}
   });
 }
-async function Ti(s, e, t) {
+async function Ai(s, e, t) {
   return s.callWS({
     type: "locklearn/tracks/preview_pack_update",
     track_id: e,
@@ -1763,24 +1763,24 @@ async function zi(s, e, t) {
     pack_version_id: t
   });
 }
-function xt(s, e, t) {
+function St(s, e, t) {
   return {
     type: s,
     track_id: e,
     ...t
   };
 }
-async function Ai(s, e, t) {
+async function Ci(s, e, t) {
   return s.callWS(
-    xt("locklearn/tracks/plan_preview", e, t)
+    St("locklearn/tracks/plan_preview", e, t)
   );
 }
 async function nt(s, e, t) {
   return s.callWS(
-    xt("locklearn/tracks/plan_set", e, t)
+    St("locklearn/tracks/plan_set", e, t)
   );
 }
-async function Ci(s, e) {
+async function Pi(s, e) {
   return s.callWS({
     type: "locklearn/dashboard/get",
     profile_id: e
@@ -1808,7 +1808,7 @@ async function qe(s, e, t, i, a = "mixed") {
     }
   });
 }
-async function Pi(s, e, t, i = 20) {
+async function Ei(s, e, t, i = 20) {
   return s.callWS({
     type: "locklearn/session/start",
     profile_id: e,
@@ -1831,7 +1831,7 @@ async function oe(s, e, t, i) {
     answer: i
   });
 }
-async function Ei(s, e, t, i) {
+async function Ri(s, e, t, i) {
   return s.callWS({
     type: "locklearn/quiz/evaluate",
     session_id: e,
@@ -1839,7 +1839,7 @@ async function Ei(s, e, t, i) {
     answer: i
   });
 }
-async function Ri(s, e, t, i, a) {
+async function Mi(s, e, t, i, a) {
   if (typeof a.submitted_text != "string" || a.grading_policy_kind === void 0 || a.grading_policy_version === void 0 || a.normalization_version === void 0)
     throw new Error("free-text report metadata is incomplete");
   return s.callWS({
@@ -1884,14 +1884,14 @@ async function $e(s, e, t, i) {
     answer: i
   });
 }
-async function St(s, e) {
+async function qt(s, e) {
   return s.callWS({
     type: "locklearn/session/complete",
     session_id: e.id,
     expected_version: e.version
   });
 }
-async function qt(s, e, t, i, a) {
+async function Tt(s, e, t, i, a) {
   return s.callWS({
     type: "locklearn/progress/set_user_state",
     profile_id: e,
@@ -1900,7 +1900,7 @@ async function qt(s, e, t, i, a) {
     user_state: a
   });
 }
-async function Mi(s, e, t, i, a) {
+async function Li(s, e, t, i, a) {
   return s.callWS({
     type: "locklearn/cards/concerned/list",
     profile_id: e,
@@ -1909,7 +1909,7 @@ async function Mi(s, e, t, i, a) {
     mode: a
   });
 }
-async function Tt(s, e, t, i) {
+async function At(s, e, t, i) {
   return s.callWS({
     type: "locklearn/cards/learn_instead",
     profile_id: e,
@@ -1925,7 +1925,7 @@ async function zt(s, e, t, i) {
     mode: i
   });
 }
-async function At(s, e, t, i) {
+async function Ct(s, e, t, i) {
   return s.callWS({
     type: "locklearn/reminders/ready/arm",
     profile_id: e,
@@ -1933,7 +1933,7 @@ async function At(s, e, t, i) {
     mode: i
   });
 }
-async function Ct(s, e, t, i) {
+async function Pt(s, e, t, i) {
   return s.callWS({
     type: "locklearn/reminders/ready/cancel",
     profile_id: e,
@@ -1941,7 +1941,7 @@ async function Ct(s, e, t, i) {
     mode: i
   });
 }
-async function Pt(s, e, t, i, a) {
+async function Et(s, e, t, i, a) {
   return s.callWS({
     type: "locklearn/content/report_question",
     profile_id: e,
@@ -1954,7 +1954,7 @@ async function Pt(s, e, t, i, a) {
     ...a === void 0 || a.trim() === "" ? {} : { message: a.trim() }
   });
 }
-async function Et(s, e, t, i) {
+async function Rt(s, e, t, i) {
   return s.callWS({
     type: "locklearn/annotations/create",
     profile_id: e,
@@ -1962,7 +1962,7 @@ async function Et(s, e, t, i) {
     note: i.trim()
   });
 }
-async function Li(s, e, t, i) {
+async function Di(s, e, t, i) {
   return s.callWS({
     type: "locklearn/annotations/update",
     profile_id: e,
@@ -1970,7 +1970,7 @@ async function Li(s, e, t, i) {
     note: i.trim()
   });
 }
-async function Di(s, e, t, i) {
+async function Ni(s, e, t, i) {
   return s.callWS({
     type: "locklearn/leeches/reactivate",
     profile_id: e,
@@ -1978,7 +1978,7 @@ async function Di(s, e, t, i) {
     card_key: i
   });
 }
-async function Ni(s, e, t, i = 20) {
+async function Ii(s, e, t, i = 20) {
   return s.callWS({
     type: "locklearn/session/start",
     profile_id: e,
@@ -1991,10 +1991,10 @@ async function Ni(s, e, t, i = 20) {
     }
   });
 }
-var Ii = Object.defineProperty, Hi = Object.getOwnPropertyDescriptor, P = (s, e, t, i) => {
-  for (var a = i > 1 ? void 0 : i ? Hi(e, t) : e, n = s.length - 1, o; n >= 0; n--)
+var Hi = Object.defineProperty, Ui = Object.getOwnPropertyDescriptor, P = (s, e, t, i) => {
+  for (var a = i > 1 ? void 0 : i ? Ui(e, t) : e, n = s.length - 1, o; n >= 0; n--)
     (o = s[n]) && (a = (i ? o(e, t, a) : o(a)) || a);
-  return i && a && Ii(e, t, a), a;
+  return i && a && Hi(e, t, a), a;
 };
 let q = class extends T {
   constructor() {
@@ -2013,7 +2013,7 @@ let q = class extends T {
     if (!(this.hass === void 0 || this.profileId === "" || this.trackId === "")) {
       this.loading = !0, this.errorMessage = "";
       try {
-        const s = await Mi(
+        const s = await Li(
           this.hass,
           this.profileId,
           this.trackId,
@@ -2038,7 +2038,7 @@ let q = class extends T {
     if (this.hass !== void 0) {
       this.loading = !0, this.errorMessage = "";
       try {
-        s.action === "learn_instead" ? await Tt(this.hass, this.profileId, this.trackId, s.card_key) : s.action === "reactivate" && await qt(this.hass, this.profileId, this.trackId, s.card_key, "active"), await this.refresh(), this.dispatchEvent(new CustomEvent("locklearn-concerned-cards-changed", {
+        s.action === "learn_instead" ? await At(this.hass, this.profileId, this.trackId, s.card_key) : s.action === "reactivate" && await Tt(this.hass, this.profileId, this.trackId, s.card_key, "active"), await this.refresh(), this.dispatchEvent(new CustomEvent("locklearn-concerned-cards-changed", {
           bubbles: !0,
           composed: !0
         }));
@@ -2206,9 +2206,9 @@ P([
   d()
 ], q.prototype, "errorMessage", 2);
 q = P([
-  ai("locklearn-concerned-cards")
+  si("locklearn-concerned-cards")
 ], q);
-function Ui(s) {
+function Oi(s) {
   return s.sort(
     (e, t) => e.track.priority - t.track.priority || t.availableNow - e.availableNow || e.track.track_id.localeCompare(t.track.track_id)
   );
@@ -2225,11 +2225,11 @@ async function ot(s, e, t, i) {
       return { track: n, availableNow: o.available_now };
     })
   );
-  return Ui(a.filter((n) => n.availableNow > 0));
+  return Oi(a.filter((n) => n.availableNow > 0));
 }
-async function Rt(s, e, t, i) {
+async function Mt(s, e, t, i) {
   if (e === void 0 || t === "") return;
-  const a = e.tracks.find((_) => _.track_id === t);
+  const a = e.tracks.find((k) => k.track_id === t);
   if (a === void 0) return;
   const n = i === "learn" ? "quiz" : "learn", o = e.profile.profile_id, u = await be(
     s,
@@ -2244,19 +2244,19 @@ async function Rt(s, e, t, i) {
       mode: n,
       availableNow: u.available_now
     };
-  const c = e.tracks.filter((_) => _.track_id !== t), h = await ot(s, o, c, i);
+  const c = e.tracks.filter((k) => k.track_id !== t), h = await ot(s, o, c, i);
   if (h.length > 0) {
-    const _ = h[0];
+    const k = h[0];
     return {
-      trackId: _.track.track_id,
-      trackName: _.track.name,
+      trackId: k.track.track_id,
+      trackName: k.track.name,
       mode: i,
-      availableNow: _.availableNow
+      availableNow: k.availableNow
     };
   }
-  const k = await ot(s, o, c, n);
-  if (k.length === 0) return;
-  const g = k[0];
+  const _ = await ot(s, o, c, n);
+  if (_.length === 0) return;
+  const g = _[0];
   return {
     trackId: g.track.track_id,
     trackName: g.track.name,
@@ -2264,7 +2264,7 @@ async function Rt(s, e, t, i) {
     availableNow: g.availableNow
   };
 }
-const Oi = [
+const ji = [
   "home",
   "learn",
   "quiz",
@@ -2275,25 +2275,25 @@ const Oi = [
   "packs",
   "sources",
   "settings"
-], ji = "home";
+], Wi = "home";
 function we(s) {
   const t = s.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean), i = t[0] === "locklearn" ? t[1] : t[0];
-  return Oi.includes(i) ? i : ji;
+  return ji.includes(i) ? i : Wi;
 }
-function Mt(s) {
+function Lt(s) {
   return s === "home" ? "/locklearn" : `/locklearn/${s}`;
 }
 function ee(s) {
-  const e = Mt(s);
+  const e = Lt(s);
   globalThis.location?.pathname !== e && (globalThis.history?.pushState({}, "", e), globalThis.dispatchEvent?.(new PopStateEvent("popstate")));
 }
 function lt(s) {
   return s != null && ["learn", "learning", "bounded"].includes(s.session_type) && ["active", "paused"].includes(s.status);
 }
-function Wi(s) {
+function Fi(s) {
   return s?.payload.selection?.progress_state === "new";
 }
-function Fi(s) {
+function Vi(s) {
   const e = s?.payload.available_at_utc;
   if (typeof e != "string") return null;
   const t = Date.parse(e);
@@ -2302,17 +2302,17 @@ function Fi(s) {
 function dt(s) {
   return s !== void 0 && s.role !== "viewer";
 }
-const Vi = 3, Bi = 5;
-function Ki(s) {
+const Bi = 3, Ki = 5;
+function Gi(s) {
   if (typeof s != "object" || s === null) return !1;
   const e = s;
   return e.kind === "learning" && e.action === "known_already";
 }
-function Gi(s) {
+function Qi(s) {
   let e = 0, t = 0;
   for (const [i, a] of s.entries()) {
-    if (Ki(a.answer)) {
-      if (e += 1, t += 1, t >= Vi || e >= Bi)
+    if (Gi(a.answer)) {
+      if (e += 1, t += 1, t >= Bi || e >= Ki)
         return i;
       continue;
     }
@@ -2320,13 +2320,13 @@ function Gi(s) {
   }
   return null;
 }
-function Qi(s) {
-  return s.length === 0 ? !1 : Gi(s) === s.length - 1;
+function Yi(s) {
+  return s.length === 0 ? !1 : Qi(s) === s.length - 1;
 }
-var Yi = Object.defineProperty, m = (s, e, t, i) => {
+var Ji = Object.defineProperty, m = (s, e, t, i) => {
   for (var a = void 0, n = s.length - 1, o; n >= 0; n--)
     (o = s[n]) && (a = o(e, t, a) || a);
-  return a && Yi(e, t, a), a;
+  return a && Ji(e, t, a), a;
 };
 function Y() {
   return globalThis.performance?.now() ?? Date.now();
@@ -2379,7 +2379,7 @@ const Ne = class Ne extends T {
     this.availabilityTimer !== void 0 && (globalThis.clearTimeout(this.availabilityTimer), this.availabilityTimer = void 0);
   }
   scheduleCurrentQuestionAvailability() {
-    const e = Fi(this.session?.current_question);
+    const e = Vi(this.session?.current_question);
     e === null || e <= Date.now() || (this.waitingUntil = new Date(e).toISOString(), this.availabilityTimer = globalThis.setTimeout(() => {
       this.availabilityTimer = void 0, this.waitingUntil = void 0, this.questionStartedAt = Y();
     }, e - Date.now()));
@@ -2399,7 +2399,7 @@ const Ne = class Ne extends T {
         this.profile.profile_id,
         this.trackId,
         "learn"
-      ), this.readyAlternative = this.availability.available_now === 0 ? await Rt(this.hass, this.dashboard, this.trackId, "learn") : void 0, this.reminder = await zt(
+      ), this.readyAlternative = this.availability.available_now === 0 ? await Mt(this.hass, this.dashboard, this.trackId, "learn") : void 0, this.reminder = await zt(
         this.hass,
         this.profile.profile_id,
         this.trackId,
@@ -2501,7 +2501,7 @@ const Ne = class Ne extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "")) {
       this.loading = !0, this.errorMessage = "";
       try {
-        this.reminder = await At(this.hass, this.profile.profile_id, this.trackId, "learn"), this.notice = this.t("learn.reminderArmed");
+        this.reminder = await Ct(this.hass, this.profile.profile_id, this.trackId, "learn"), this.notice = this.t("learn.reminderArmed");
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
       } finally {
@@ -2513,7 +2513,7 @@ const Ne = class Ne extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "")) {
       this.loading = !0;
       try {
-        this.reminder = await Ct(this.hass, this.profile.profile_id, this.trackId, "learn"), this.notice = this.t("learn.reminderCancelled");
+        this.reminder = await Pt(this.hass, this.profile.profile_id, this.trackId, "learn"), this.notice = this.t("learn.reminderCancelled");
       } finally {
         this.loading = !1;
       }
@@ -2535,7 +2535,7 @@ const Ne = class Ne extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "")) {
       this.loading = !0, this.errorMessage = "";
       try {
-        const e = await Pi(
+        const e = await Ei(
           this.hass,
           this.profile.profile_id,
           this.trackId,
@@ -2557,7 +2557,7 @@ const Ne = class Ne extends T {
     return `locklearn:known-bulk-guard:${e}`;
   }
   maybeShowKnownBulkGuard() {
-    if (this.session === void 0 || !Qi(this.session.answers)) return;
+    if (this.session === void 0 || !Yi(this.session.answers)) return;
     const e = this.bulkGuardStorageKey(this.session.id);
     globalThis.localStorage?.getItem(e) !== "shown" && (globalThis.localStorage?.setItem(e, "shown"), this.knownBulkGuardVisible = !0);
   }
@@ -2576,7 +2576,7 @@ const Ne = class Ne extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.session === void 0 || this.session.track_id === null || this.lastKnownCardKey === void 0)) {
       this.loading = !0;
       try {
-        await Tt(this.hass, this.profile.profile_id, this.session.track_id, this.lastKnownCardKey), this.lastKnownCardKey = void 0, this.knownNoticeVisible = !1, this.knownUndoTimer !== void 0 && globalThis.clearTimeout(this.knownUndoTimer), this.knownUndoTimer = void 0, this.notice = this.t("learn.knownUndone"), await this.refreshAvailability();
+        await At(this.hass, this.profile.profile_id, this.session.track_id, this.lastKnownCardKey), this.lastKnownCardKey = void 0, this.knownNoticeVisible = !1, this.knownUndoTimer !== void 0 && globalThis.clearTimeout(this.knownUndoTimer), this.knownUndoTimer = void 0, this.notice = this.t("learn.knownUndone"), await this.refreshAvailability();
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
       } finally {
@@ -2626,7 +2626,7 @@ const Ne = class Ne extends T {
     this.errorMessage = e instanceof Error ? e.message : String(e);
   }
   async finalizeIfDone(e) {
-    return this.hass !== void 0 && e.status === "active" && e.current_question === null && e.question_count > 0 ? St(this.hass, e) : e;
+    return this.hass !== void 0 && e.status === "active" && e.current_question === null && e.question_count > 0 ? qt(this.hass, e) : e;
   }
   async learningAction(e, t) {
     const i = this.session?.current_question;
@@ -2671,7 +2671,7 @@ const Ne = class Ne extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.session === void 0 || t === null || t === void 0 || this.session.track_id === null)) {
       this.loading = !0, this.errorMessage = "";
       try {
-        await qt(
+        await Tt(
           this.hass,
           this.profile.profile_id,
           this.session.track_id,
@@ -2697,7 +2697,7 @@ const Ne = class Ne extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.session?.track_id === null || this.session === void 0 || e === null || e === void 0)) {
       this.loading = !0, this.errorMessage = "";
       try {
-        await Pt(
+        await Et(
           this.hass,
           this.profile.profile_id,
           this.session.track_id,
@@ -2716,7 +2716,7 @@ const Ne = class Ne extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || e === null || e === void 0 || this.mnemonic.trim() === "")) {
       this.loading = !0, this.errorMessage = "";
       try {
-        await Et(
+        await Rt(
           this.hass,
           this.profile.profile_id,
           e.card_key,
@@ -3003,7 +3003,7 @@ const Ne = class Ne extends T {
         </section>
       `;
     }
-    return this.waitingUntil !== void 0 ? this.renderWaiting(this.session.current_question) : Wi(this.session.current_question) ? this.renderIntroduction(this.session.current_question) : this.renderRetrieval(this.session.current_question);
+    return this.waitingUntil !== void 0 ? this.renderWaiting(this.session.current_question) : Fi(this.session.current_question) ? this.renderIntroduction(this.session.current_question) : this.renderRetrieval(this.session.current_question);
   }
   renderWaiting(e) {
     const t = this.waitingUntil;
@@ -3535,26 +3535,26 @@ function ct(s) {
 function ut(s) {
   return s !== void 0 && s.role !== "viewer";
 }
-function Ji(s) {
+function Zi(s) {
   return s?.payload.quiz;
 }
-function Zi(s) {
+function Xi(s) {
   return s?.format === "mcq" || s?.format === "cloze_mcq";
 }
 function ht(s) {
   return s?.format === "free_text" && s.result === "wrong" && s.reportable && typeof s.submitted_text == "string" && s.grading_policy_kind !== void 0 && s.grading_policy_version !== void 0 && s.normalization_version !== void 0;
 }
-var Xi = Object.defineProperty, y = (s, e, t, i) => {
+var ea = Object.defineProperty, y = (s, e, t, i) => {
   for (var a = void 0, n = s.length - 1, o; n >= 0; n--)
     (o = s[n]) && (a = o(e, t, a) || a);
-  return a && Xi(e, t, a), a;
+  return a && ea(e, t, a), a;
 };
-function ke() {
+function _e() {
   return globalThis.performance?.now() ?? Date.now();
 }
 const Ie = class Ie extends T {
   constructor() {
-    super(...arguments), this.trackId = "", this.format = "mixed", this.loading = !1, this.errorMessage = "", this.notice = "", this.freeText = "", this.hintUsed = !1, this.submissionSlow = !1, this.hasNotificationTarget = !1, this.questionStartedAt = ke(), this.questionId = null, this.refreshOnReturn = () => {
+    super(...arguments), this.trackId = "", this.format = "mixed", this.loading = !1, this.errorMessage = "", this.notice = "", this.freeText = "", this.hintUsed = !1, this.submissionSlow = !1, this.hasNotificationTarget = !1, this.questionStartedAt = _e(), this.questionId = null, this.refreshOnReturn = () => {
       document.visibilityState === "visible" && this.refreshAvailability();
     };
   }
@@ -3596,7 +3596,7 @@ const Ie = class Ie extends T {
     t instanceof HTMLSelectElement && (this.format = t.value, this.session = void 0, this.errorMessage = "", this.resetQuestionUi());
   }
   resetQuestionUi() {
-    this.feedback = void 0, this.pendingAnswer = void 0, this.pendingSession = void 0, this.freeText = "", this.hintUsed = !1, this.notice = "", this.questionStartedAt = ke(), this.questionId = this.session?.current_question?.question_id ?? null;
+    this.feedback = void 0, this.pendingAnswer = void 0, this.pendingSession = void 0, this.freeText = "", this.hintUsed = !1, this.notice = "", this.questionStartedAt = _e(), this.questionId = this.session?.current_question?.question_id ?? null;
   }
   applySession(e) {
     const i = (e.current_question?.question_id ?? null) !== this.questionId;
@@ -3613,7 +3613,7 @@ const Ie = class Ie extends T {
         this.profile.profile_id,
         this.trackId,
         "quiz"
-      ), this.readyAlternative = this.availability.available_now === 0 ? await Rt(this.hass, this.dashboard, this.trackId, "quiz") : void 0, this.reminder = await zt(
+      ), this.readyAlternative = this.availability.available_now === 0 ? await Mt(this.hass, this.dashboard, this.trackId, "quiz") : void 0, this.reminder = await zt(
         this.hass,
         this.profile.profile_id,
         this.trackId,
@@ -3669,7 +3669,7 @@ const Ie = class Ie extends T {
     return `${new Intl.DateTimeFormat(this.locale(), { timeStyle: "short" }).format(t)} · ${this.t("quiz.inAbout")} ${i} min`;
   }
   elapsedMs() {
-    return Math.max(0, Math.round(ke() - this.questionStartedAt));
+    return Math.max(0, Math.round(_e() - this.questionStartedAt));
   }
   beginSubmissionWatch() {
     this.submissionSlow = !1, this.submissionTimer !== void 0 && globalThis.clearTimeout(this.submissionTimer), this.submissionTimer = globalThis.setTimeout(() => {
@@ -3715,7 +3715,7 @@ const Ie = class Ie extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "")) {
       this.loading = !0, this.errorMessage = "";
       try {
-        this.reminder = await At(this.hass, this.profile.profile_id, this.trackId, "quiz"), this.notice = this.t("quiz.reminderArmed");
+        this.reminder = await Ct(this.hass, this.profile.profile_id, this.trackId, "quiz"), this.notice = this.t("quiz.reminderArmed");
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
       } finally {
@@ -3727,7 +3727,7 @@ const Ie = class Ie extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "")) {
       this.loading = !0;
       try {
-        this.reminder = await Ct(this.hass, this.profile.profile_id, this.trackId, "quiz"), this.notice = this.t("quiz.reminderCancelled");
+        this.reminder = await Pt(this.hass, this.profile.profile_id, this.trackId, "quiz"), this.notice = this.t("quiz.reminderCancelled");
       } finally {
         this.loading = !1;
       }
@@ -3789,7 +3789,7 @@ const Ie = class Ie extends T {
     const i = this.enrichAnswer(e);
     this.loading = !0, this.errorMessage = "";
     try {
-      this.feedback = await Ei(
+      this.feedback = await Ri(
         this.hass,
         this.session.id,
         t.question_id,
@@ -3853,7 +3853,7 @@ const Ie = class Ie extends T {
   }
   async advanceSession(e) {
     let t = e;
-    this.hass !== void 0 && t.status === "active" && t.current_question === null && t.question_count > 0 && (t = await St(this.hass, t)), this.applySession(t), await this.refreshAvailability();
+    this.hass !== void 0 && t.status === "active" && t.current_question === null && t.question_count > 0 && (t = await qt(this.hass, t)), this.applySession(t), await this.refreshAvailability();
   }
   async startLearningAfterCalibration() {
     if (!(this.hass === void 0 || this.profile === void 0 || this.session?.track_id === null || this.session?.track_id === void 0)) {
@@ -3893,7 +3893,7 @@ const Ie = class Ie extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.session === void 0 || this.session.track_id === null || e === null || e === void 0 || this.feedback === void 0 || this.pendingAnswer === void 0 || !ht(this.feedback))) {
       this.loading = !0, this.errorMessage = "";
       try {
-        if ((await Ri(
+        if ((await Mi(
           this.hass,
           this.profile.profile_id,
           this.session.track_id,
@@ -3923,7 +3923,7 @@ const Ie = class Ie extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.session === void 0 || this.session.track_id === null || e === null || e === void 0)) {
       this.loading = !0, this.errorMessage = "";
       try {
-        await Pt(
+        await Et(
           this.hass,
           this.profile.profile_id,
           this.session.track_id,
@@ -4135,7 +4135,7 @@ const Ie = class Ie extends T {
         </section>
       `;
     }
-    const e = Ji(this.session.current_question);
+    const e = Zi(this.session.current_question);
     return e === void 0 ? r`<section class="quiz-card"><p>${this.t("quiz.invalidQuestion")}</p></section>` : this.renderQuestion(this.session.current_question, e);
   }
   renderQuestion(e, t) {
@@ -4170,7 +4170,7 @@ const Ie = class Ie extends T {
     `;
   }
   renderInput(e) {
-    return Zi(e) ? r`
+    return Xi(e) ? r`
         <div class="options" aria-label=${this.t("quiz.answers")}>
           ${e.options.map(
       (t, i) => r`
@@ -4569,16 +4569,45 @@ y([
   d()
 ], v.prototype, "hasNotificationTarget");
 globalThis.customElements !== void 0 && customElements.get("locklearn-quiz-view") === void 0 && customElements.define("locklearn-quiz-view", v);
-var ea = Object.defineProperty, $ = (s, e, t, i) => {
+const ta = (s) => (...e) => ({ _$litDirective$: s, values: e });
+let ia = class {
+  constructor(e) {
+  }
+  get _$AU() {
+    return this._$AM._$AU;
+  }
+  _$AT(e, t, i) {
+    this._$Ct = e, this._$AM = t, this._$Ci = i;
+  }
+  _$AS(e, t) {
+    return this.update(e, t);
+  }
+  update(e, t) {
+    return this.render(...t);
+  }
+};
+const aa = {}, sa = (s, e = aa) => s._$AH = e;
+const pt = ta(class extends ia {
+  constructor() {
+    super(...arguments), this.key = l;
+  }
+  render(s, e) {
+    return this.key = s, e;
+  }
+  update(s, [e, t]) {
+    return e !== this.key && (sa(s), this.key = e), t;
+  }
+});
+var ra = Object.defineProperty, $ = (s, e, t, i) => {
   for (var a = void 0, n = s.length - 1, o; n >= 0; n--)
     (o = s[n]) && (a = o(e, t, a) || a);
-  return a && ea(e, t, a), a;
+  return a && ra(e, t, a), a;
 };
-function A(s, e, t) {
+function z(s, e, t) {
   const i = Number.parseInt(String(s ?? ""), 10);
   return Number.isFinite(i) && i >= t ? i : e;
 }
-function _e(s, e) {
+function ke(s, e) {
   const t = String(s ?? "").trim();
   if (t === "") return null;
   const i = Number.parseInt(t, 10);
@@ -4617,15 +4646,15 @@ function Z(s, e) {
   const t = s?.[e];
   return typeof t == "object" && t !== null ? t : {};
 }
-function ta(s) {
+function na(s) {
   return s === "owner";
 }
-function ia(s) {
+function oa(s) {
   return s === "owner" || s === "editor";
 }
 const He = class He extends T {
   constructor() {
-    super(...arguments), this.route = "profiles", this.tracks = [], this.packs = [], this.notificationTargets = [], this.notificationCandidates = [], this.members = [], this.shareTargets = [], this.createTrackPackId = "", this.createTrackSource = "", this.forecasts = {}, this.forecastPlans = {}, this.packDiffTrack = "", this.packDiffTarget = "", this.loading = !1, this.errorMessage = "", this.notice = "", this.dirtyScopes = /* @__PURE__ */ new Set();
+    super(...arguments), this.route = "profiles", this.tracks = [], this.packs = [], this.notificationTargets = [], this.notificationCandidates = [], this.members = [], this.shareTargets = [], this.createTrackPackId = "", this.createTrackSource = "", this.forecasts = {}, this.forecastPlans = {}, this.packDiffTrack = "", this.packDiffTarget = "", this.loading = !1, this.errorMessage = "", this.notice = "", this.dirtyScopes = /* @__PURE__ */ new Set(), this.formResetVersions = {};
   }
   updated(e) {
     (e.has("profile") || e.has("route")) && this.load();
@@ -4639,10 +4668,10 @@ const He = class He extends T {
     return O(this.locale(), e);
   }
   isOwner() {
-    return ta(this.profile?.role);
+    return na(this.profile?.role);
   }
   canEditTrack() {
-    return ia(this.profile?.role);
+    return oa(this.profile?.role);
   }
   async load() {
     if (this.hass !== void 0) {
@@ -4653,11 +4682,11 @@ const He = class He extends T {
       this.loading = !0, this.errorMessage = "";
       try {
         [this.tracks, this.packs] = await Promise.all([
-          _t(this.hass, this.profile.profile_id),
-          _i(this.hass)
-        ]), this.notificationTargets = this.canEditTrack() ? await De(this.hass, this.profile.profile_id) : [], this.notificationCandidates = this.isOwner() && this.route === "settings" ? await mi(this.hass, this.profile.profile_id) : [], this.packs.some((e) => e.pack_version_id === this.createTrackPackId) || (this.createTrackPackId = this.packs[0]?.pack_version_id ?? "", this.createTrackSource = ""), this.isOwner() && this.route === "profiles" ? [this.members, this.shareTargets] = await Promise.all([
-          ui(this.hass, this.profile.profile_id),
-          hi(this.hass, this.profile.profile_id)
+          xt(this.hass, this.profile.profile_id),
+          xi(this.hass)
+        ]), this.notificationTargets = this.canEditTrack() ? await De(this.hass, this.profile.profile_id) : [], this.notificationCandidates = this.isOwner() && this.route === "settings" ? await gi(this.hass, this.profile.profile_id) : [], this.packs.some((e) => e.pack_version_id === this.createTrackPackId) || (this.createTrackPackId = this.packs[0]?.pack_version_id ?? "", this.createTrackSource = ""), this.isOwner() && this.route === "profiles" ? [this.members, this.shareTargets] = await Promise.all([
+          hi(this.hass, this.profile.profile_id),
+          pi(this.hass, this.profile.profile_id)
         ]) : (this.members = [], this.shareTargets = []);
       } catch (e) {
         this.errorMessage = J(e);
@@ -4691,8 +4720,14 @@ const He = class He extends T {
       })
     );
   }
-  cancelScope(e, t) {
-    t.reset(), this.clearScopeDirty(e), this.requestUpdate();
+  resetScope(e) {
+    this.formResetVersions = {
+      ...this.formResetVersions,
+      [e]: (this.formResetVersions[e] ?? 0) + 1
+    };
+  }
+  cancelScope(e) {
+    this.resetScope(e), this.clearScopeDirty(e), this.requestUpdate();
   }
   validateScope(e) {
     if (e.checkValidity()) return !0;
@@ -4719,16 +4754,16 @@ const He = class He extends T {
     }, c = this.scopeKey(e.track_id, "details");
     return await this.mutateScope(
       c,
-      () => wi(this.hass, e.track_id, {
+      () => _i(this.hass, e.track_id, {
         name: String(i.get("name") ?? e.name),
         source_language: String(i.get("source") ?? e.source_language ?? "").trim(),
         target_language: String(i.get("target") ?? e.target_language ?? "").trim(),
         status: String(i.get("status") ?? e.status),
-        priority: A(i.get("priority"), e.priority, 1),
+        priority: z(i.get("priority"), e.priority, 1),
         content_weights: u,
         scheduler_settings: {
-          learning_count: A(i.get("learningCount"), Number(a.learning_count ?? 0), 0),
-          quiz_count: A(i.get("quizCount"), Number(a.quiz_count ?? 0), 0),
+          learning_count: z(i.get("learningCount"), Number(a.learning_count ?? 0), 0),
+          quiz_count: z(i.get("quizCount"), Number(a.quiz_count ?? 0), 0),
           ...o.length === 0 ? {} : { target_ids: o }
         }
       }),
@@ -4758,9 +4793,7 @@ const He = class He extends T {
   }
   discardDirtyScopes() {
     for (const e of [...this.dirtyScopes])
-      this.renderRoot.querySelector(
-        `form[data-save-scope="${e}"]`
-      )?.reset();
+      this.resetScope(e);
     this.dirtyScopes = /* @__PURE__ */ new Set(), this.forecasts = {}, this.forecastPlans = {}, this.emitDirtyState(), this.requestUpdate();
   }
   async mutate(e, t) {
@@ -4888,7 +4921,7 @@ const He = class He extends T {
     !e || this.hass === void 0 || this.profile === void 0 || await this.mutate(() => st(this.hass, this.profile.profile_id, e, t), this.t("manage.saved"));
   }
   async removeMember(e) {
-    this.hass === void 0 || this.profile === void 0 || globalThis.confirm?.(this.t("manage.confirmRemoveMember")) && await this.mutate(() => pi(this.hass, this.profile.profile_id, e), this.t("manage.saved"));
+    this.hass === void 0 || this.profile === void 0 || globalThis.confirm?.(this.t("manage.confirmRemoveMember")) && await this.mutate(() => mi(this.hass, this.profile.profile_id, e), this.t("manage.saved"));
   }
   async changeMemberRole(e, t) {
     this.hass === void 0 || this.profile === void 0 || await this.mutate(
@@ -4925,7 +4958,7 @@ const He = class He extends T {
       e.preventDefault();
       const t = new FormData(e.currentTarget);
       this.hass !== void 0 && this.mutate(
-        () => ci(
+        () => ui(
           this.hass,
           String(t.get("name") ?? "").trim(),
           String(t.get("preset") ?? "standard"),
@@ -4975,7 +5008,7 @@ const He = class He extends T {
           <p class="meta">${this.t("manage.packVersion")}: ${e.pack_version_id ?? "—"}</p>
         </div>
         ${this.canEditTrack() ? r`
-          <form
+          ${pt(`${n}:${this.formResetVersions[n] ?? 0}`, r`<form
             class="track-form"
             data-save-scope=${n}
             @input=${() => this.markScopeDirty(n)}
@@ -5025,10 +5058,7 @@ const He = class He extends T {
               <button
                 type="button"
                 ?disabled=${!this.isScopeDirty(n) || this.submittingScope === n}
-                @click=${(c) => {
-      const h = c.currentTarget.closest("form");
-      h instanceof HTMLFormElement && this.cancelScope(n, h);
-    }}
+                @click=${() => this.cancelScope(n)}
               >
                 ${this.t("form.cancel")}
               </button>
@@ -5058,7 +5088,7 @@ const He = class He extends T {
                 </div>
               </div>
             </details>
-          </form>
+          </form>`)}
 
           <details class="section-panel">
             <summary>${this.t("manage.plan")}</summary>
@@ -5085,13 +5115,13 @@ const He = class He extends T {
           <form class="form-grid" @submit=${(n) => {
       n.preventDefault();
       const o = new FormData(n.currentTarget);
-      this.hass === void 0 || this.profile === void 0 || this.mutate(() => $i(this.hass, {
+      this.hass === void 0 || this.profile === void 0 || this.mutate(() => wi(this.hass, {
         profile_id: this.profile.profile_id,
         name: String(o.get("name") ?? "").trim(),
         pack_version_id: String(o.get("pack") ?? ""),
         source_language: String(o.get("source") ?? "").trim(),
         target_language: String(o.get("target") ?? "").trim(),
-        priority: A(o.get("priority"), 1, 1)
+        priority: z(o.get("priority"), 1, 1)
       }), this.t("manage.created"));
     }}>
             <label>${this.t("manage.name")}<input name="name" required /></label>
@@ -5151,9 +5181,9 @@ const He = class He extends T {
   planFrom(e) {
     const t = new FormData(e);
     return {
-      max_new_per_day_cards: A(t.get("new"), 0, 0),
-      max_reviews_per_day_cards: A(t.get("reviews"), 50, 1),
-      max_notification_new_teasers: A(t.get("teasers"), 2, 0),
+      max_new_per_day_cards: z(t.get("new"), 0, 0),
+      max_reviews_per_day_cards: z(t.get("reviews"), 50, 1),
+      max_notification_new_teasers: z(t.get("teasers"), 2, 0),
       target_date: String(t.get("date") ?? "").trim() || null,
       target_coverage: W(t.get("coverage"), 1, 0.01, 1),
       target_retention: W(t.get("retention"), 0.9, 0.01, 1)
@@ -5164,7 +5194,7 @@ const He = class He extends T {
     return r`
       <div class="stack">
         <p class="muted">${this.t("manage.planHelp")}</p>
-        <form
+        ${pt(`${i}:${this.formResetVersions[i] ?? 0}`, r`<form
           class="stack"
           data-save-scope=${i}
           @input=${() => this.markScopeDirty(i)}
@@ -5174,7 +5204,7 @@ const He = class He extends T {
       const u = o.currentTarget;
       if (!this.validateScope(u)) return;
       const c = this.planFrom(u);
-      this.loading = !0, this.errorMessage = "", Ai(this.hass, e.track_id, c).then((h) => {
+      this.loading = !0, this.errorMessage = "", Ci(this.hass, e.track_id, c).then((h) => {
         this.forecasts = { ...this.forecasts, [e.track_id]: h }, this.forecastPlans = { ...this.forecastPlans, [e.track_id]: c };
       }).catch((h) => {
         this.forecasts = { ...this.forecasts, [e.track_id]: void 0 }, this.errorMessage = `${this.t("manage.previewFailed")} ${J(h)}`;
@@ -5240,15 +5270,14 @@ const He = class He extends T {
             <button
               type="button"
               ?disabled=${!this.isScopeDirty(i) || this.submittingScope === i}
-              @click=${(o) => {
-      const u = o.currentTarget.closest("form");
-      u instanceof HTMLFormElement && (this.forecasts = { ...this.forecasts, [e.track_id]: void 0 }, this.forecastPlans = { ...this.forecastPlans, [e.track_id]: void 0 }, this.cancelScope(i, u));
+              @click=${() => {
+      this.forecasts = { ...this.forecasts, [e.track_id]: void 0 }, this.forecastPlans = { ...this.forecastPlans, [e.track_id]: void 0 }, this.cancelScope(i);
     }}
             >
               ${this.t("form.cancel")}
             </button>
           </div>
-        </form>
+        </form>`)}
         ${n === void 0 ? l : this.renderForecast(e, n)}
       </div>
     `;
@@ -5340,7 +5369,7 @@ const He = class He extends T {
     if (this.hass !== void 0) {
       this.loading = !0;
       try {
-        this.packDiff = await Ti(this.hass, e.track_id, t.pack_version_id), this.packDiffTrack = e.track_id, this.packDiffTarget = t.pack_version_id;
+        this.packDiff = await Ai(this.hass, e.track_id, t.pack_version_id), this.packDiffTrack = e.track_id, this.packDiffTarget = t.pack_version_id;
       } catch (i) {
         this.errorMessage = J(i);
       } finally {
@@ -5374,7 +5403,7 @@ const He = class He extends T {
       t.preventDefault();
       const i = new FormData(t.currentTarget), a = String(i.get("device") ?? "");
       !a || this.hass === void 0 || this.profile === void 0 || this.mutate(
-        () => gi(this.hass, this.profile.profile_id, a),
+        () => vi(this.hass, this.profile.profile_id, a),
         this.t("manage.notificationTargetCreated")
       );
     }}>
@@ -5405,7 +5434,7 @@ const He = class He extends T {
       i.preventDefault();
       const a = new FormData(i.currentTarget);
       this.hass === void 0 || this.profile === void 0 || this.mutate(
-        () => vi(
+        () => fi(
           this.hass,
           this.profile.profile_id,
           t.target_id,
@@ -5416,9 +5445,9 @@ const He = class He extends T {
               a.get("lockscreenVisibility") ?? "private"
             ),
             enabled: a.get("enabled") === "on",
-            minimum_gap_seconds: _e(a.get("minimumGap"), 0),
-            maximum_notifications_per_hour: _e(a.get("maxPerHour"), 1),
-            daily_push_budget: _e(a.get("targetBudget"), 0)
+            minimum_gap_seconds: ke(a.get("minimumGap"), 0),
+            maximum_notifications_per_hour: ke(a.get("maxPerHour"), 1),
+            daily_push_budget: ke(a.get("targetBudget"), 0)
           }
         ),
         this.t("manage.notificationTargetUpdated")
@@ -5476,7 +5505,7 @@ const He = class He extends T {
                     type="button"
                     @click=${() => {
       this.hass === void 0 || this.profile === void 0 || this.mutate(
-        () => fi(
+        () => bi(
           this.hass,
           this.profile.profile_id,
           t.target_id
@@ -5507,9 +5536,9 @@ const He = class He extends T {
       const u = new FormData(o.currentTarget);
       this.hass === void 0 || this.profile === void 0 || this.mutate(() => it(this.hass, this.profile.profile_id, {
         settings_patch: {
-          session_length_cards: A(u.get("session"), 20, 1),
-          max_new_per_day_cards: A(u.get("new"), 8, 0),
-          daily_push_budget: A(u.get("push"), 6, 0),
+          session_length_cards: z(u.get("session"), 20, 1),
+          max_new_per_day_cards: z(u.get("new"), 8, 0),
+          daily_push_budget: z(u.get("push"), 6, 0),
           quiet_hours: {
             start: String(u.get("quietStart") ?? "22:00"),
             end: String(u.get("quietEnd") ?? "08:00")
@@ -5745,12 +5774,15 @@ $([
 ], f.prototype, "dirtyScopes");
 $([
   d()
+], f.prototype, "formResetVersions");
+$([
+  d()
 ], f.prototype, "submittingScope");
 globalThis.customElements !== void 0 && customElements.get("locklearn-management-view") === void 0 && customElements.define("locklearn-management-view", f);
-var aa = Object.defineProperty, j = (s, e, t, i) => {
+var la = Object.defineProperty, j = (s, e, t, i) => {
   for (var a = void 0, n = s.length - 1, o; n >= 0; n--)
     (o = s[n]) && (a = o(e, t, a) || a);
-  return a && aa(e, t, a), a;
+  return a && la(e, t, a), a;
 };
 function le(s) {
   if (s === null) return null;
@@ -5761,7 +5793,7 @@ function le(s) {
     return null;
   }
 }
-function sa(s) {
+function da(s) {
   if (s < 1024) return `${s} B`;
   const e = ["KiB", "MiB", "GiB"];
   let t = s / 1024, i = 0;
@@ -5791,7 +5823,7 @@ const Ue = class Ue extends T {
     if (this.hass !== void 0) {
       this.loading = !0, this.errorMessage = "";
       try {
-        this.datasets = await xi(this.hass);
+        this.datasets = await Si(this.hass);
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
       } finally {
@@ -5803,7 +5835,7 @@ const Ue = class Ue extends T {
     if (!(this.hass === void 0 || !this.admin)) {
       this.loading = !0, this.errorMessage = "", this.notice = "";
       try {
-        this.datasets = await Si(this.hass), this.notice = this.t("datasets.refreshed");
+        this.datasets = await qi(this.hass), this.notice = this.t("datasets.refreshed");
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
       } finally {
@@ -5815,7 +5847,7 @@ const Ue = class Ue extends T {
     if (!(this.hass === void 0 || !this.admin)) {
       this.loading = !0, this.errorMessage = "", this.notice = "";
       try {
-        const t = await qi(this.hass, e.dataset_id, e.available_version);
+        const t = await Ti(this.hass, e.dataset_id, e.available_version);
         this.datasets = t.statuses, this.notice = this.t("datasets.installed"), this.dispatchEvent(new CustomEvent("locklearn-refresh", { bubbles: !0, composed: !0 }));
       } catch (t) {
         this.errorMessage = t instanceof Error ? t.message : String(t);
@@ -5917,7 +5949,7 @@ const Ue = class Ue extends T {
           <dt>${this.t("datasets.availableVersion")}</dt><dd>${e.available_version ?? "—"}</dd>
           <dt>${this.t("datasets.sourceAge")}</dt>
           <dd>${e.source_age_days === null ? "—" : `${e.source_age_days} ${this.t("datasets.days")}`}</dd>
-          <dt>${this.t("datasets.disk")}</dt><dd>${sa(e.cache_bytes)}</dd>
+          <dt>${this.t("datasets.disk")}</dt><dd>${da(e.cache_bytes)}</dd>
           <dt>${this.t("datasets.builtAt")}</dt><dd>${e.built_at_utc ?? "—"}</dd>
         </dl>
         ${t ? r`<div class="warning" role="status">
@@ -6057,15 +6089,15 @@ j([
   d()
 ], C.prototype, "attributionPages");
 globalThis.customElements !== void 0 && customElements.get("locklearn-dataset-view") === void 0 && customElements.define("locklearn-dataset-view", C);
-var ra = Object.defineProperty, z = (s, e, t, i) => {
+var ca = Object.defineProperty, A = (s, e, t, i) => {
   for (var a = void 0, n = s.length - 1, o; n >= 0; n--)
     (o = s[n]) && (a = o(e, t, a) || a);
-  return a && ra(e, t, a), a;
+  return a && ca(e, t, a), a;
 };
 function xe(s) {
   return s === null ? "—" : `${Math.round(s * 100)}%`;
 }
-function na(s, e = 14) {
+function ua(s, e = 14) {
   if (e <= 0) return [];
   const t = /* @__PURE__ */ new Map();
   for (const i of s) {
@@ -6078,7 +6110,7 @@ function na(s, e = 14) {
   }
   return [...t.values()].sort((i, a) => i.local_date.localeCompare(a.local_date)).slice(-e).reverse();
 }
-function oa(s) {
+function ha(s) {
   return {
     exposures: s.reduce((e, t) => e + t.learning_exposures, 0),
     verifiedRetrievals: s.reduce((e, t) => e + t.verified_retrievals, 0)
@@ -6110,11 +6142,11 @@ const Oe = class Oe extends T {
     const e = ++this.loadGeneration, t = this.hass, i = this.profile.profile_id;
     this.loading = !0, this.errorMessage = "";
     try {
-      const a = (await _t(t, i)).filter(
+      const a = (await xt(t, i)).filter(
         (h) => h.status === "active"
       ), n = this.selectedTrackId && a.some((h) => h.track_id === this.selectedTrackId) ? this.selectedTrackId : "", [o, u] = await Promise.all([
-        bi(t, i, n || null),
-        yi(t, i, n || null)
+        yi(t, i, n || null),
+        $i(t, i, n || null)
       ]);
       if (e !== this.loadGeneration) return;
       this.tracks = a, this.selectedTrackId = n, this.stats = o, this.difficulties = u;
@@ -6143,7 +6175,7 @@ const Oe = class Oe extends T {
       this.busyCardKey = e.card_key, this.errorMessage = "", this.notice = "";
       try {
         const i = e.annotations[0];
-        i === void 0 ? await Et(this.hass, this.profile.profile_id, e.card_key, t) : await Li(
+        i === void 0 ? await Rt(this.hass, this.profile.profile_id, e.card_key, t) : await Di(
           this.hass,
           this.profile.profile_id,
           i.annotation_id,
@@ -6160,7 +6192,7 @@ const Oe = class Oe extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || !de(this.profile))) {
       this.busyCardKey = e.card_key, this.errorMessage = "", this.notice = "";
       try {
-        const t = await Ni(
+        const t = await Ii(
           this.hass,
           this.profile.profile_id,
           e.track_id,
@@ -6184,7 +6216,7 @@ const Oe = class Oe extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || !de(this.profile) || !(globalThis.confirm?.(this.t("stats.reactivateConfirm")) ?? !0))) {
       this.busyCardKey = e.card_key, this.errorMessage = "", this.notice = "";
       try {
-        await Di(
+        await Ni(
           this.hass,
           this.profile.profile_id,
           e.track_id,
@@ -6223,7 +6255,7 @@ const Oe = class Oe extends T {
     `;
   }
   renderStats(e) {
-    const t = e.recent_verified_accuracy, i = e.calibration, a = na(e.daily), n = oa(a);
+    const t = e.recent_verified_accuracy, i = e.calibration, a = ua(e.daily), n = ha(a);
     return r`
       <section class="grid" aria-label=${this.t("stats.verifiedGroup")}>
         <article class="card metric verified">
@@ -6459,41 +6491,41 @@ Oe.styles = E`
     }
   `;
 let S = Oe;
-z([
+A([
   b({ attribute: !1 })
 ], S.prototype, "hass");
-z([
+A([
   b({ attribute: !1 })
 ], S.prototype, "profile");
-z([
+A([
   d()
 ], S.prototype, "stats");
-z([
+A([
   d()
 ], S.prototype, "difficulties");
-z([
+A([
   d()
 ], S.prototype, "tracks");
-z([
+A([
   d()
 ], S.prototype, "selectedTrackId");
-z([
+A([
   d()
 ], S.prototype, "loading");
-z([
+A([
   d()
 ], S.prototype, "errorMessage");
-z([
+A([
   d()
 ], S.prototype, "notice");
-z([
+A([
   d()
 ], S.prototype, "mnemonicEdits");
-z([
+A([
   d()
 ], S.prototype, "busyCardKey");
 globalThis.customElements !== void 0 && customElements.get("locklearn-stats-view") === void 0 && customElements.define("locklearn-stats-view", S);
-const pt = [
+const mt = [
   { route: "home", labelKey: "nav.home" },
   { route: "learn", labelKey: "nav.learn" },
   { route: "quiz", labelKey: "nav.quiz" },
@@ -6503,29 +6535,29 @@ const pt = [
   { route: "tracks", labelKey: "nav.tracks" },
   { route: "packs", labelKey: "nav.packs" },
   { route: "sources", labelKey: "nav.sources" }
-], la = [
+], pa = [
   { route: "settings", labelKey: "nav.settings" }
 ];
 function Te(s) {
-  return s.length === 0 ? [] : new Set(s.map((t) => t.role)).has("owner") ? [...pt, ...la] : pt;
+  return s.length === 0 ? [] : new Set(s.map((t) => t.role)).has("owner") ? [...mt, ...pa] : mt;
 }
 function ce(s, e) {
   return Te(e).some((t) => t.route === s);
 }
-function da(s) {
+function ma(s) {
   return {
     mine: s.filter((e) => e.role === "owner"),
     shared: s.filter((e) => e.role !== "owner")
   };
 }
-function mt(s, e) {
+function gt(s, e) {
   const t = e.personal_profile?.profile_id;
   if (t !== void 0 && s.some((a) => a.profile_id === t))
     return t;
   const i = s.find((a) => a.role === "owner");
   return i !== void 0 ? i.profile_id : s[0]?.profile_id ?? null;
 }
-function ca(s) {
+function ga(s) {
   if (s === void 0) return { kind: "define" };
   const e = typeof s.locklearnFrontendProtocol == "number" ? s.locklearnFrontendProtocol : null;
   return e === D ? { kind: "reuse" } : {
@@ -6534,16 +6566,16 @@ function ca(s) {
     frontendProtocol: D
   };
 }
-function ua(s, e, t) {
+function va(s, e, t) {
   return !s && e && t;
 }
-var ha = Object.defineProperty, x = (s, e, t, i) => {
+var fa = Object.defineProperty, x = (s, e, t, i) => {
   for (var a = void 0, n = s.length - 1, o; n >= 0; n--)
     (o = s[n]) && (a = o(e, t, a) || a);
-  return a && ha(e, t, a), a;
+  return a && fa(e, t, a), a;
 };
-const gt = "locklearn-hard-reload-required";
-async function pa(s, e) {
+const vt = "locklearn-hard-reload-required";
+async function ba(s, e) {
   let t;
   try {
     return await Promise.race([
@@ -6566,7 +6598,7 @@ const ge = class ge extends T {
     ), this.profiles = [], this.selectedProfileId = null, this.dashboardLoading = !1, this.dashboardError = "", this.errorMessage = "", this.managementDirty = !1, this.navigationSaving = !1, this.loadFailures = 0, this.diagnosticNotice = "", this.online = globalThis.navigator?.onLine ?? !0, this.loadGeneration = 0, this.dashboardGeneration = 0, this.initialLoadStarted = !1, this.handlePopState = () => {
       const e = we(globalThis.location?.pathname ?? "/locklearn"), t = ce(e, this.profiles) ? e : "home";
       if (this.managementDirty && t !== this.activeRoute) {
-        this.pendingNavigation = { kind: "route", route: t }, globalThis.history?.replaceState({}, "", Mt(this.activeRoute)), this.requestUpdate();
+        this.pendingNavigation = { kind: "route", route: t }, globalThis.history?.replaceState({}, "", Lt(this.activeRoute)), this.requestUpdate();
         return;
       }
       this.activeRoute = t;
@@ -6583,7 +6615,7 @@ const ge = class ge extends T {
     globalThis.removeEventListener?.("popstate", this.handlePopState), globalThis.removeEventListener?.("beforeunload", this.handleBeforeUnload), globalThis.removeEventListener?.("online", this.handleConnectivity), globalThis.removeEventListener?.("offline", this.handleConnectivity), super.disconnectedCallback();
   }
   updated(e) {
-    ua(
+    va(
       this.initialLoadStarted,
       e.has("hass"),
       this.hass !== void 0
@@ -6601,12 +6633,12 @@ const ge = class ge extends T {
     const e = ++this.loadGeneration;
     this.status = "loading", this.errorMessage = "";
     try {
-      const { bootstrapState: t, profiles: i } = await pa((async () => {
-        const n = await di(this.hass), o = await tt(this.hass);
+      const { bootstrapState: t, profiles: i } = await ba((async () => {
+        const n = await ci(this.hass), o = await tt(this.hass);
         return { bootstrapState: n, profiles: o };
       })(), 1e4);
       if (e !== this.loadGeneration) return;
-      this.bootstrapState = t, this.profiles = i, this.selectedProfileId = mt(i, t);
+      this.bootstrapState = t, this.profiles = i, this.selectedProfileId = gt(i, t);
       const a = we(globalThis.location?.pathname ?? t.panel_path);
       this.activeRoute = ce(a, i) ? a : "home", this.status = "ready", this.loadFailures = 0, this.diagnosticNotice = "", this.loadDashboard();
     } catch (t) {
@@ -6695,7 +6727,7 @@ const ge = class ge extends T {
     if (this.hass !== void 0)
       try {
         const e = await tt(this.hass), t = this.selectedProfileId;
-        this.profiles = e, this.selectedProfileId = t !== null && e.some((i) => i.profile_id === t) ? t : this.bootstrapState === void 0 ? e[0]?.profile_id ?? null : mt(e, this.bootstrapState), ce(this.activeRoute, e) || (this.activeRoute = "home", ee("home")), await this.loadDashboard();
+        this.profiles = e, this.selectedProfileId = t !== null && e.some((i) => i.profile_id === t) ? t : this.bootstrapState === void 0 ? e[0]?.profile_id ?? null : gt(e, this.bootstrapState), ce(this.activeRoute, e) || (this.activeRoute = "home", ee("home")), await this.loadDashboard();
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
       }
@@ -6708,7 +6740,7 @@ const ge = class ge extends T {
     const e = ++this.dashboardGeneration;
     this.dashboardLoading = !0, this.dashboardError = "";
     try {
-      const t = await Ci(this.hass, this.selectedProfileId);
+      const t = await Pi(this.hass, this.selectedProfileId);
       if (e !== this.dashboardGeneration) return;
       this.dashboard = t;
     } catch (t) {
@@ -6782,7 +6814,7 @@ const ge = class ge extends T {
           </section>
         </main>
       `;
-    const e = Te(this.profiles), t = da(this.profiles);
+    const e = Te(this.profiles), t = ma(this.profiles);
     return r`
       <div class="shell">
         <header>
@@ -7323,10 +7355,10 @@ x([
 x([
   d()
 ], w.prototype, "online");
-function ma(s) {
-  if (typeof document > "u" || document.getElementById(gt) !== null) return;
+function ya(s) {
+  if (typeof document > "u" || document.getElementById(vt) !== null) return;
   const e = document.createElement("div");
-  e.id = gt, e.setAttribute("role", "alert"), e.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;padding:24px;background:var(--primary-background-color,#fff);color:var(--primary-text-color,#111);font-family:system-ui,sans-serif";
+  e.id = vt, e.setAttribute("role", "alert"), e.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;padding:24px;background:var(--primary-background-color,#fff);color:var(--primary-text-color,#111);font-family:system-ui,sans-serif";
   const t = document.createElement("div");
   t.style.cssText = "max-width:680px;padding:24px;border:1px solid var(--divider-color,#ddd);border-radius:12px;background:var(--card-background-color,#fff)";
   const i = document.createElement("h1");
@@ -7338,10 +7370,10 @@ function ma(s) {
   const o = document.createElement("button");
   o.textContent = "Reload now", o.addEventListener("click", () => globalThis.location?.reload()), t.append(i, a, n, o), e.append(t), document.body.append(e);
 }
-const ga = customElements.get(
+const $a = customElements.get(
   "locklearn-panel"
-), Se = ca(ga);
-Se.kind === "define" ? customElements.define("locklearn-panel", w) : Se.kind === "reload" && ma(Se.existingProtocol);
+), Se = ga($a);
+Se.kind === "define" ? customElements.define("locklearn-panel", w) : Se.kind === "reload" && ya(Se.existingProtocol);
 export {
   w as LockLearnPanel
 };

@@ -118,6 +118,25 @@ test("Save and leave keeps the selected Profile when refresh returns late", asyn
   await expect(page.getByRole("combobox").first()).toHaveValue("profile-other");
 });
 
+test("Discard restores saved Track details and plan values", async ({ page }) => {
+  await page.getByRole("button", { name: "Tracks", exact: true }).click();
+  const details = page.locator('locklearn-management-view form[data-save-scope="track-ja:details"]');
+  const name = details.locator('input[name="name"]');
+  await name.fill("Unsaved name");
+  await details.getByRole("button", { name: "Discard changes" }).click();
+  await expect(name).toHaveValue("Japanese Core");
+  await expect(details.getByText("No unsaved changes")).toBeVisible();
+
+  await page.locator("summary").filter({ hasText: "Learning pace & goal" }).first().click();
+  const plan = page.locator('locklearn-management-view form[data-save-scope="track-ja:plan"]');
+  const newPerDay = plan.locator('input[name="new"]');
+  const savedValue = await newPerDay.inputValue();
+  await newPerDay.fill("5");
+  await plan.getByRole("button", { name: "Discard changes" }).click();
+  await expect(newPerDay).toHaveValue(savedValue);
+  await expect(plan.getByText("No unsaved changes")).toBeVisible();
+});
+
 test("multi-Track cards keep advanced settings and plans attached to each Track", async ({ page }) => {
   await page.getByRole("button", { name: "Tracks", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Japanese Core" })).toBeVisible();
