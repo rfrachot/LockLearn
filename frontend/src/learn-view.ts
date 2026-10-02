@@ -10,6 +10,7 @@ import {
 } from "./content-renderer";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
 import { findReadyAlternative, type ReadyAlternative } from "./next-action";
+import { navigateToRoute } from "./router";
 import {
   canAnswerProfile,
   isIntroductionQuestion,
@@ -24,6 +25,7 @@ import {
   getReadyReminderStatus,
   getSession,
   getSessionAvailability,
+  listNotificationTargets,
   reportQuestion,
   setCardUserState,
   startCalibrationSession,
@@ -79,6 +81,7 @@ export class LockLearnLearnView extends LitElement {
   @state() private readyAlternative?: ReadyAlternative;
   @state() private calibrationSetup = false;
   @state() private calibrationSize = 20;
+  @state() private hasNotificationTarget = false;
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
@@ -466,6 +469,9 @@ export class LockLearnLearnView extends LitElement {
         this.trackId,
         "learn",
       );
+      this.hasNotificationTarget = (
+        await listNotificationTargets(this.hass, this.profile.profile_id)
+      ).some((target) => target.enabled);
       if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
       const nextAvailable = this.availability.next_available_at_utc;
       if (nextAvailable !== null) {
@@ -1113,13 +1119,15 @@ export class LockLearnLearnView extends LitElement {
                   : this.t("quiz.title"))}
             </button>`}
         ${canRemind
-          ? this.reminder?.active
-            ? html`<button @click=${() => void this.cancelReminder()} ?disabled=${this.loading}>
-                ${this.t("learn.cancelReminder")}
-              </button>`
-            : html`<button @click=${() => void this.armReminder()} ?disabled=${this.loading}>
-                ${this.t("learn.remindMe")}
-              </button>`
+          ? !this.hasNotificationTarget
+            ? html`<button @click=${() => navigateToRoute("settings")}>${this.t("learn.configureNotifications")}</button>`
+            : this.reminder?.active
+              ? html`<button @click=${() => void this.cancelReminder()} ?disabled=${this.loading}>
+                  ${this.t("learn.cancelReminder")}
+                </button>`
+              : html`<button @click=${() => void this.armReminder()} ?disabled=${this.loading}>
+                  ${this.t("learn.remindMe")}
+                </button>`
           : nothing}
       </div>
       ${availability.blockers.length > 0
