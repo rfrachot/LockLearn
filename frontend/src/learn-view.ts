@@ -9,6 +9,7 @@ import {
   renderContentBlock,
 } from "./content-renderer";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
+import { findReadyAlternative, type ReadyAlternative } from "./next-action";
 import {
   canAnswerProfile,
   isIntroductionQuestion,
@@ -27,6 +28,7 @@ import {
   setCardUserState,
   startCalibrationSession,
   startLearnSession,
+  startQuizSession,
   undoLastProgress,
   type ConcernedCardsFilter,
   type DashboardResponse,
@@ -68,6 +70,7 @@ export class LockLearnLearnView extends LitElement {
   @state() private submissionSlow = false;
   @state() private lastKnownCardKey?: string;
   @state() private concernedFilter?: ConcernedCardsFilter;
+  @state() private readyAlternative?: ReadyAlternative;
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
@@ -426,6 +429,9 @@ export class LockLearnLearnView extends LitElement {
         this.trackId,
         "learn",
       );
+      this.readyAlternative = this.availability.available_now === 0
+        ? await findReadyAlternative(this.hass, this.dashboard, this.trackId, "learn")
+        : undefined;
       this.reminder = await getReadyReminderStatus(
         this.hass,
         this.profile.profile_id,
@@ -445,6 +451,46 @@ export class LockLearnLearnView extends LitElement {
       }
     } catch {
       this.availability = undefined;
+      this.readyAlternative = undefined;
+    }
+  }
+
+  private async openReadyAlternative(): Promise<void> {
+    if (
+      this.hass === undefined ||
+      this.profile === undefined ||
+      this.readyAlternative === undefined
+    ) return;
+    const alternative = this.readyAlternative;
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      if (alternative.mode === "learn") {
+        this.trackId = alternative.trackId;
+        this.session = undefined;
+        this.resetQuestionUi();
+        this.applySession(await startLearnSession(
+          this.hass,
+          this.profile.profile_id,
+          alternative.trackId,
+        ));
+        await this.refreshAvailability();
+        return;
+      }
+      const session = await startQuizSession(
+        this.hass,
+        this.profile.profile_id,
+        alternative.trackId,
+      );
+      this.dispatchEvent(new CustomEvent("locklearn-open-session", {
+        detail: { session },
+        bubbles: true,
+        composed: true,
+      }));
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.loading = false;
     }
   }
 
@@ -923,6 +969,15 @@ export class LockLearnLearnView extends LitElement {
               ${this.t("learn.quickCalibration")}
             </button>`
           : nothing}
+        ${this.readyAlternative === undefined
+          ? nothing
+          : html`<button @click=${() => void this.openReadyAlternative()} ?disabled=${this.loading}>
+              ${this.t("learn.readyAlternative")
+                .replace("{track}", this.readyAlternative.trackName)
+                .replace("{mode}", this.readyAlternative.mode === "learn"
+                  ? this.t("learn.title")
+                  : this.t("quiz.title"))}
+            </button>`}
         ${canRemind
           ? this.reminder?.active
             ? html`<button @click=${() => void this.cancelReminder()} ?disabled=${this.loading}>
