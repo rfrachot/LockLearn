@@ -907,6 +907,11 @@ export interface SessionState {
   }>;
   current_question: SessionQuestion | null;
   fatigue_advice?: Record<string, unknown>;
+  calibration_summary?: {
+    known: number;
+    needs_learning: number;
+    answered: number;
+  };
 }
 
 
