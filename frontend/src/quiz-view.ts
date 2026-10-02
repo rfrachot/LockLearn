@@ -9,6 +9,7 @@ import {
   renderContentBlock,
 } from "./content-renderer";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
+import { findReadyAlternative, type ReadyAlternative } from "./next-action";
 import {
   canQuizProfile,
   canReportFreeText,
@@ -25,6 +26,7 @@ import {
   getSessionAvailability,
   reportFreeTextShouldBeAccepted,
   reportQuestion,
+  startLearnSession,
   startQuizSession,
   submitQuizAnswer,
   type ConcernedCardsFilter,
@@ -66,6 +68,7 @@ export class LockLearnQuizView extends LitElement {
   @state() private reminder?: ReadyReminderStatus;
   @state() private submissionSlow = false;
   @state() private concernedFilter?: ConcernedCardsFilter;
+  @state() private readyAlternative?: ReadyAlternative;
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
@@ -413,6 +416,9 @@ export class LockLearnQuizView extends LitElement {
         this.trackId,
         "quiz",
       );
+      this.readyAlternative = this.availability.available_now === 0
+        ? await findReadyAlternative(this.hass, this.dashboard, this.trackId, "quiz")
+        : undefined;
       this.reminder = await getReadyReminderStatus(
         this.hass,
         this.profile.profile_id,
@@ -432,6 +438,48 @@ export class LockLearnQuizView extends LitElement {
       }
     } catch {
       this.availability = undefined;
+      this.readyAlternative = undefined;
+    }
+  }
+
+  private async openReadyAlternative(): Promise<void> {
+    if (
+      this.hass === undefined ||
+      this.profile === undefined ||
+      this.readyAlternative === undefined
+    ) return;
+    const alternative = this.readyAlternative;
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      if (alternative.mode === "quiz") {
+        this.trackId = alternative.trackId;
+        this.session = undefined;
+        this.resetQuestionUi();
+        this.applySession(await startQuizSession(
+          this.hass,
+          this.profile.profile_id,
+          alternative.trackId,
+          undefined,
+          this.format,
+        ));
+        await this.refreshAvailability();
+        return;
+      }
+      const session = await startLearnSession(
+        this.hass,
+        this.profile.profile_id,
+        alternative.trackId,
+      );
+      this.dispatchEvent(new CustomEvent("locklearn-open-session", {
+        detail: { session },
+        bubbles: true,
+        composed: true,
+      }));
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.loading = false;
     }
   }
 
@@ -875,6 +923,15 @@ export class LockLearnQuizView extends LitElement {
                   ?disabled=${this.loading}
                 >${this.t("quiz.viewCards")}</button>`
               : nothing}
+            ${this.readyAlternative === undefined
+              ? nothing
+              : html`<button @click=${() => void this.openReadyAlternative()} ?disabled=${this.loading}>
+                  ${this.t("quiz.readyAlternative")
+                    .replace("{track}", this.readyAlternative.trackName)
+                    .replace("{mode}", this.readyAlternative.mode === "learn"
+                      ? this.t("learn.title")
+                      : this.t("quiz.title"))}
+                </button>`}
             ${this.renderReminderButton()}
           </div>
         ` : nothing}
@@ -953,6 +1010,15 @@ export class LockLearnQuizView extends LitElement {
                 ?disabled=${this.loading}
               >${this.t("quiz.viewCards")}</button>`
             : nothing}
+          ${this.readyAlternative === undefined
+            ? nothing
+            : html`<button @click=${() => void this.openReadyAlternative()} ?disabled=${this.loading}>
+                ${this.t("quiz.readyAlternative")
+                  .replace("{track}", this.readyAlternative.trackName)
+                  .replace("{mode}", this.readyAlternative.mode === "learn"
+                    ? this.t("learn.title")
+                    : this.t("quiz.title"))}
+              </button>`}
           ${this.renderReminderButton()}
         </section>
       `;
