@@ -124,11 +124,10 @@ export class LockLearnManagementView extends LitElement {
   @state() private notificationCandidates: NotificationTargetCandidate[] = [];
   @state() private members: ProfileMember[] = [];
   @state() private shareTargets: ShareTarget[] = [];
-  @state() private selectedTrackId = "";
   @state() private createTrackPackId = "";
   @state() private createTrackSource = "";
-  @state() private forecast?: LoadForecast;
-  @state() private forecastPlan?: LearningPlanInput;
+  @state() private forecasts: Record<string, LoadForecast | undefined> = {};
+  @state() private forecastPlans: Record<string, LearningPlanInput | undefined> = {};
   @state() private packDiff?: PackVersionDiff;
   @state() private packDiffTrack = "";
   @state() private packDiffTarget = "";
@@ -166,16 +165,63 @@ export class LockLearnManagementView extends LitElement {
     button.primary { border-color: var(--primary-color); color: var(--text-primary-color,white); background: var(--primary-color); }
     button:disabled { cursor: not-allowed; opacity: .55; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-    details {
+    .track-form { display: grid; gap: 14px; }
+    .section-panel {
       margin-top: 14px;
-      border-top: 1px solid var(--divider-color);
-      padding-top: 12px;
+      border: 1px solid var(--divider-color);
+      border-radius: 10px;
+      overflow: clip;
+      background: var(--secondary-background-color);
     }
-    summary {
+    .section-panel > summary {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 12px 14px;
       cursor: pointer;
+      list-style: none;
       font-weight: 650;
       color: var(--primary-text-color);
+      background: var(--card-background-color,var(--primary-background-color));
     }
+    .section-panel > summary::-webkit-details-marker { display: none; }
+    .section-panel > summary::before {
+      content: "›";
+      display: inline-block;
+      font-size: 1.2rem;
+      line-height: 1;
+      transition: transform 120ms ease;
+    }
+    .section-panel[open] > summary::before { transform: rotate(90deg); }
+    .section-body { padding: 14px; }
+    .section-body > :first-child { margin-top: 0; }
+    .section-body > :last-child { margin-bottom: 0; }
+    .target-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit,minmax(300px,1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+    .target-card {
+      display: grid;
+      align-content: start;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--divider-color);
+      border-radius: 10px;
+      background: var(--card-background-color,var(--primary-background-color));
+    }
+    .target-header { display: grid; gap: 3px; }
+    .target-header h3 { margin: 0; }
+    .target-card .section-panel { margin-top: 0; }
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--primary-text-color);
+      font-size: .9rem;
+    }
+    .check-row input { width: auto; }
     .track-summary {
       display: grid;
       gap: 4px;
@@ -252,9 +298,6 @@ export class LockLearnManagementView extends LitElement {
       this.notificationCandidates = this.isOwner() && this.route === "settings"
         ? await discoverNotificationTargets(this.hass, this.profile.profile_id)
         : [];
-      if (!this.tracks.some((item) => item.track_id === this.selectedTrackId)) {
-        this.selectedTrackId = this.tracks[0]?.track_id ?? "";
-      }
       if (!this.packs.some((item) => item.pack_version_id === this.createTrackPackId)) {
         this.createTrackPackId = this.packs[0]?.pack_version_id ?? "";
         this.createTrackSource = "";
@@ -544,7 +587,7 @@ export class LockLearnManagementView extends LitElement {
           <p class="meta">${this.t("manage.packVersion")}: ${track.pack_version_id ?? "—"}</p>
         </div>
         ${this.canEditTrack() ? html`
-          <form class="form-grid" @submit=${(event: SubmitEvent) => {
+          <form class="track-form" @submit=${(event: SubmitEvent) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget as HTMLFormElement);
             if (this.hass === undefined) return;
@@ -569,67 +612,70 @@ export class LockLearnManagementView extends LitElement {
               },
             }), this.t("manage.saved"));
           }}>
-            <label>${this.t("manage.name")}<input name="name" .value=${track.name} /></label>
-            <label>${this.t("manage.status")}
-              <select name="status" .value=${track.status}>
-                <option value="active">${this.t("manage.active")}</option>
-                <option value="paused">${this.t("manage.paused")}</option>
-                <option value="archived">${this.t("manage.archived")}</option>
-              </select>
-            </label>
-            <label>${this.t("manage.sourceLanguage")}
-              <select name="source" .value=${track.source_language ?? ""} required>
-                ${this.sourceLanguages(track.pack_version_id ?? "").map((language) => html`
-                  <option value=${language}>${languageDisplayName(language, this.locale())}</option>
-                `)}
-              </select>
-            </label>
-            <label>${this.t("manage.targetLanguage")}
-              <select name="target" .value=${track.target_language ?? ""} required>
-                ${this.targetLanguages(
-                  track.pack_version_id ?? "",
-                  track.source_language ?? "",
-                ).map((language) => html`
-                  <option value=${language}>${languageDisplayName(language, this.locale())}</option>
-                `)}
-              </select>
-            </label>
-            <div class="actions">
-              <button class="primary" type="submit">${this.t("manage.save")}</button>
-              <button type="button" @click=${() => {
-                this.selectedTrackId = track.track_id;
-                this.forecast = undefined;
-                this.forecastPlan = undefined;
-              }}>${this.t("manage.plan")}</button>
+            <div class="form-grid">
+              <label>${this.t("manage.name")}<input name="name" .value=${track.name} /></label>
+              <label>${this.t("manage.status")}
+                <select name="status" .value=${track.status}>
+                  <option value="active">${this.t("manage.active")}</option>
+                  <option value="paused">${this.t("manage.paused")}</option>
+                  <option value="archived">${this.t("manage.archived")}</option>
+                </select>
+              </label>
+              <label>${this.t("manage.sourceLanguage")}
+                <select name="source" .value=${track.source_language ?? ""} required>
+                  ${this.sourceLanguages(track.pack_version_id ?? "").map((language) => html`
+                    <option value=${language}>${languageDisplayName(language, this.locale())}</option>
+                  `)}
+                </select>
+              </label>
+              <label>${this.t("manage.targetLanguage")}
+                <select name="target" .value=${track.target_language ?? ""} required>
+                  ${this.targetLanguages(
+                    track.pack_version_id ?? "",
+                    track.source_language ?? "",
+                  ).map((language) => html`
+                    <option value=${language}>${languageDisplayName(language, this.locale())}</option>
+                  `)}
+                </select>
+              </label>
             </div>
 
-            <details>
+            <div class="actions">
+              <button class="primary" type="submit">${this.t("manage.save")}</button>
+            </div>
+
+            <details class="section-panel">
               <summary>${this.t("manage.advancedTrackSettings")}</summary>
-              <p class="muted">${this.t("manage.advancedTrackSettingsHelp")}</p>
-              <div class="form-grid">
-                <label>${this.t("manage.priority")}<input name="priority" type="number" min="1" .value=${String(track.priority)} /></label>
-                <label>${this.t("manage.weightVocabulary")}<input name="weightVocabulary" type="number" min="0" step=".1" .value=${String(weights.vocabulary ?? 1)} /></label>
-                <label>${this.t("manage.weightKanji")}<input name="weightKanji" type="number" min="0" step=".1" .value=${String(weights.kanji ?? 1)} /></label>
-                <label>${this.t("manage.weightGrammar")}<input name="weightGrammar" type="number" min="0" step=".1" .value=${String(weights.grammar ?? 1)} /></label>
-                <label>${this.t("manage.weightExpression")}<input name="weightExpression" type="number" min="0" step=".1" .value=${String(weights.expression ?? 1)} /></label>
-                <label>${this.t("manage.learningNotifications")}<input name="learningCount" type="number" min="0" .value=${String(scheduler.learning_count ?? 0)} /></label>
-                <label>${this.t("manage.quizNotifications")}<input name="quizCount" type="number" min="0" .value=${String(scheduler.quiz_count ?? 0)} /></label>
-                <label>${this.t("manage.notificationTargets")}
-                  <select name="notificationTarget" multiple size=${Math.min(4, Math.max(2, this.notificationTargets.length))}>
-                    ${this.notificationTargets.map((target) => html`
-                      <option value=${target.target_id} ?selected=${targetIds.includes(target.target_id)}>
-                        ${target.friendly_name} · ${target.platform}
-                      </option>`)}
-                  </select>
-                  <span class="meta">${this.notificationTargets.length === 0
-                    ? this.t("manage.noNotificationTargets")
-                    : this.t("manage.notificationTargetsHelp")}</span>
-                </label>
+              <div class="section-body">
+                <p class="muted">${this.t("manage.advancedTrackSettingsHelp")}</p>
+                <div class="form-grid">
+                  <label>${this.t("manage.priority")}<input name="priority" type="number" min="1" .value=${String(track.priority)} /></label>
+                  <label>${this.t("manage.weightVocabulary")}<input name="weightVocabulary" type="number" min="0" step=".1" .value=${String(weights.vocabulary ?? 1)} /></label>
+                  <label>${this.t("manage.weightKanji")}<input name="weightKanji" type="number" min="0" step=".1" .value=${String(weights.kanji ?? 1)} /></label>
+                  <label>${this.t("manage.weightGrammar")}<input name="weightGrammar" type="number" min="0" step=".1" .value=${String(weights.grammar ?? 1)} /></label>
+                  <label>${this.t("manage.weightExpression")}<input name="weightExpression" type="number" min="0" step=".1" .value=${String(weights.expression ?? 1)} /></label>
+                  <label>${this.t("manage.learningNotifications")}<input name="learningCount" type="number" min="0" .value=${String(scheduler.learning_count ?? 0)} /></label>
+                  <label>${this.t("manage.quizNotifications")}<input name="quizCount" type="number" min="0" .value=${String(scheduler.quiz_count ?? 0)} /></label>
+                  <label>${this.t("manage.notificationTargets")}
+                    <select name="notificationTarget" multiple size=${Math.min(4, Math.max(2, this.notificationTargets.length))}>
+                      ${this.notificationTargets.map((target) => html`
+                        <option value=${target.target_id} ?selected=${targetIds.includes(target.target_id)}>
+                          ${target.friendly_name} · ${target.platform}
+                        </option>`)}
+                    </select>
+                    <span class="meta">${this.notificationTargets.length === 0
+                      ? this.t("manage.noNotificationTargets")
+                      : this.t("manage.notificationTargetsHelp")}</span>
+                  </label>
+                </div>
               </div>
             </details>
           </form>
 
-          ${this.selectedTrackId === track.track_id ? this.renderPlan(track) : nothing}
+          <details class="section-panel">
+            <summary>${this.t("manage.plan")}</summary>
+            <div class="section-body">${this.renderPlan(track)}</div>
+          </details>
 
           <div class="danger-zone">
             <strong>${this.t("manage.dangerZone")}</strong>
@@ -744,40 +790,107 @@ export class LockLearnManagementView extends LitElement {
   private renderPlan(track: TrackRecord) {
     const raw = objectSetting(track.settings, "learning_plan");
     const profileNew = Number(this.profile?.settings?.max_new_per_day_cards ?? 8);
+    const forecast = this.forecasts[track.track_id];
     return html`
       <div class="stack">
-        <h3>${this.t("manage.plan")}</h3>
-        <form class="form-grid" @submit=${(event: SubmitEvent) => {
+        <p class="muted">${this.t("manage.planHelp")}</p>
+        <form class="stack" @submit=${(event: SubmitEvent) => {
           event.preventDefault();
           if (this.hass === undefined) return;
           const plan = this.planFrom(event.currentTarget as HTMLFormElement);
           this.loading = true;
+          this.errorMessage = "";
           void previewTrackPlan(this.hass, track.track_id, plan)
-            .then((forecast) => { this.forecast = forecast; this.forecastPlan = plan; })
-            .catch((error: unknown) => { this.errorMessage = errorMessage(error); })
+            .then((nextForecast) => {
+              this.forecasts = { ...this.forecasts, [track.track_id]: nextForecast };
+              this.forecastPlans = { ...this.forecastPlans, [track.track_id]: plan };
+            })
+            .catch((error: unknown) => {
+              this.forecasts = { ...this.forecasts, [track.track_id]: undefined };
+              this.errorMessage = `${this.t("manage.previewFailed")} ${errorMessage(error)}`;
+            })
             .finally(() => { this.loading = false; });
         }}>
-          <label>${this.t("manage.newPerDay")}<input name="new" type="number" min="0" .value=${String(raw.max_new_per_day_cards ?? profileNew)} /></label>
-          <label>${this.t("manage.reviewsPerDay")}<input name="reviews" type="number" min="1" .value=${String(raw.max_reviews_per_day_cards ?? 50)} /></label>
-          <label>${this.t("manage.notificationTeasers")}<input name="teasers" type="number" min="0" .value=${String(raw.max_notification_new_teasers ?? Math.min(2, profileNew))} /></label>
-          <label>${this.t("manage.targetDate")}<input name="date" type="date" .value=${String(raw.target_date ?? "")} /></label>
-          <label>${this.t("manage.coverage")}<input name="coverage" type="number" min=".01" max="1" step=".01" .value=${String(raw.target_coverage ?? 1)} /></label>
-          <label>${this.t("manage.retention")}<input name="retention" type="number" min=".01" max="1" step=".01" .value=${String(raw.target_retention ?? .9)} /></label>
+          <strong>${this.t("manage.basicPlan")}</strong>
+          <div class="form-grid">
+            <label>
+              ${this.t("manage.newPerDay")}
+              <input name="new" type="number" min="0" .value=${String(raw.max_new_per_day_cards ?? profileNew)} />
+              <span class="meta">${this.t("manage.newPerDayHelp")}</span>
+            </label>
+            <label>
+              ${this.t("manage.reviewsPerDay")}
+              <input name="reviews" type="number" min="1" .value=${String(raw.max_reviews_per_day_cards ?? 50)} />
+              <span class="meta">${this.t("manage.reviewsPerDayHelp")}</span>
+            </label>
+            <label>
+              ${this.t("manage.targetDate")}
+              <input name="date" type="date" .value=${String(raw.target_date ?? "")} />
+              <span class="meta">${this.t("manage.targetDateHelp")}</span>
+            </label>
+          </div>
+          <details class="section-panel">
+            <summary>${this.t("manage.advancedPlan")}</summary>
+            <div class="section-body form-grid">
+              <label>
+                ${this.t("manage.notificationTeasers")}
+                <input name="teasers" type="number" min="0" .value=${String(raw.max_notification_new_teasers ?? Math.min(2, profileNew))} />
+                <span class="meta">${this.t("manage.notificationTeasersHelp")}</span>
+              </label>
+              <label>
+                ${this.t("manage.coverage")}
+                <input name="coverage" type="number" min=".01" max="1" step=".01" .value=${String(raw.target_coverage ?? 1)} />
+                <span class="meta">${this.t("manage.coverageHelp")}</span>
+              </label>
+              <label>
+                ${this.t("manage.retention")}
+                <input name="retention" type="number" min=".01" max="1" step=".01" .value=${String(raw.target_retention ?? .9)} />
+                <span class="meta">${this.t("manage.retentionHelp")}</span>
+              </label>
+            </div>
+          </details>
+          <p class="muted">${this.t("manage.planPreviewHelp")}</p>
           <div class="actions"><button class="primary" type="submit">${this.t("manage.preview")}</button></div>
         </form>
-        ${this.forecast === undefined ? nothing : this.renderForecast(track)}
+        ${forecast === undefined ? nothing : this.renderForecast(track, forecast)}
       </div>
     `;
   }
 
-  private renderForecast(track: TrackRecord) {
-    const forecast = this.forecast!;
+  private forecastWarning(item: string): string {
+    if (item === "target_date_requires_more_new_cards_than_daily_quota") {
+      return this.t("manage.warningTargetDate");
+    }
+    if (item === "review_load_exceeds_quota_in_3_weeks") {
+      return this.t("manage.warningReviews3Weeks");
+    }
+    if (item === "review_load_exceeds_quota_in_3_months") {
+      return this.t("manage.warningReviews3Months");
+    }
+    if (item === "current_due_backlog_exceeds_review_quota") {
+      return this.t("manage.warningDueBacklog");
+    }
+    return item;
+  }
+
+  private renderForecast(track: TrackRecord, forecast: LoadForecast) {
+    const invalidZeroSnapshot = forecast.selected_cards === 0;
     return html`
-      <div class=${forecast.warnings.length > 0 ? "warning" : "notice"}>
+      <div class=${forecast.warnings.length > 0 || invalidZeroSnapshot ? "warning" : "notice"}>
         <strong>${this.t("manage.forecast")}</strong>
+        ${invalidZeroSnapshot ? html`<p>${this.t("manage.forecastZeroWarning")}</p>` : nothing}
+        <h3>${this.t("manage.forecastCurrent")}</h3>
         <dl>
+          <dt>${this.t("manage.selectedCards")}</dt><dd>${forecast.selected_cards}</dd>
+          <dt>${this.t("manage.introducedCards")}</dt><dd>${forecast.introduced_cards}</dd>
+          <dt>${this.t("manage.targetCards")}</dt><dd>${forecast.target_cards}</dd>
           <dt>${this.t("manage.cardsRemaining")}</dt><dd>${forecast.remaining_target_cards}</dd>
+          <dt>${this.t("manage.dueNow")}</dt><dd>${forecast.due_now}</dd>
           <dt>${this.t("manage.requiredNew")}</dt><dd>${forecast.required_new_per_day}</dd>
+          <dt>${this.t("manage.plannedNew")}</dt><dd>${forecast.planned_new_per_day}</dd>
+        </dl>
+        <h3>${this.t("manage.forecast")}</h3>
+        <dl>
           <dt>${this.t("manage.reviews3Weeks")}</dt><dd>${forecast.reviews_per_day_in_3_weeks}</dd>
           <dt>${this.t("manage.reviews3Months")}</dt><dd>${forecast.reviews_per_day_in_3_months}</dd>
           <dt>${this.t("manage.notifications3Weeks")}</dt><dd>${forecast.notification_deliverable_in_3_weeks}</dd>
@@ -785,15 +898,24 @@ export class LockLearnManagementView extends LitElement {
           <dt>${this.t("manage.sessionLoad3Weeks")}</dt><dd>${forecast.active_session_cards_in_3_weeks}</dd>
           <dt>${this.t("manage.sessionLoad3Months")}</dt><dd>${forecast.active_session_cards_in_3_months}</dd>
         </dl>
-        ${forecast.warnings.length === 0 ? nothing : html`<ul>${forecast.warnings.map((item) => html`<li>${item}</li>`)}</ul>`}
-        <div class="actions"><button class="primary" @click=${() => this.applyPlan(track)}>${this.t("manage.applyPlan")}</button></div>
+        <details class="section-panel">
+          <summary>${this.t("manage.forecastMethod")}</summary>
+          <div class="section-body"><p class="muted">${this.t("manage.forecastMethodHelp")}</p></div>
+        </details>
+        ${forecast.warnings.length === 0 ? nothing : html`<ul>${forecast.warnings.map((item) => html`<li>${this.forecastWarning(item)}</li>`)}</ul>`}
+        <div class="actions">
+          <button class="primary" @click=${() => this.applyPlan(track)} ?disabled=${invalidZeroSnapshot}>
+            ${this.t("manage.applyPlan")}
+          </button>
+        </div>
       </div>
     `;
   }
 
   private async applyPlan(track: TrackRecord): Promise<void> {
-    if (this.hass === undefined || this.forecastPlan === undefined) return;
-    await this.mutate(() => setTrackPlan(this.hass!, track.track_id, this.forecastPlan!), this.t("manage.saved"));
+    const plan = this.forecastPlans[track.track_id];
+    if (this.hass === undefined || plan === undefined) return;
+    await this.mutate(() => setTrackPlan(this.hass!, track.track_id, plan), this.t("manage.saved"));
   }
 
   private renderPacks() {
@@ -870,131 +992,138 @@ export class LockLearnManagementView extends LitElement {
       <article class="card">
         <h2>${this.t("manage.notificationTargetSettings")}</h2>
         <p class="muted">${this.t("manage.notificationTargetSettingsHelp")}</p>
-        ${available.length === 0 ? html`
-          <p class="muted">${this.t("manage.noAvailableNotificationDevices")}</p>
-        ` : html`
-          <form class="form-grid" @submit=${(event: SubmitEvent) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget as HTMLFormElement);
-            const deviceId = String(data.get("device") ?? "");
-            if (!deviceId || this.hass === undefined || this.profile === undefined) return;
-            void this.mutate(
-              () => createNotificationTarget(this.hass!, this.profile!.profile_id, deviceId),
-              this.t("manage.notificationTargetCreated"),
-            );
-          }}>
-            <label>${this.t("manage.availableNotificationDevice")}
-              <select name="device" required>
-                ${available.map((candidate) => html`
-                  <option value=${candidate.device_registry_id}>
-                    ${candidate.friendly_name} · ${candidate.platform}
-                    ${candidate.route_available ? "" : ` · ${this.t("manage.routeUnavailable")}`}
-                  </option>
-                `)}
-              </select>
-            </label>
-            <div class="actions">
-              <button class="primary" type="submit">${this.t("manage.addNotificationTarget")}</button>
-            </div>
-          </form>
-        `}
+
+        <div class="section-panel">
+          <div class="section-body">
+            ${available.length === 0 ? html`
+              <p class="muted">${this.t("manage.noAvailableNotificationDevices")}</p>
+            ` : html`
+              <form class="form-grid" @submit=${(event: SubmitEvent) => {
+                event.preventDefault();
+                const data = new FormData(event.currentTarget as HTMLFormElement);
+                const deviceId = String(data.get("device") ?? "");
+                if (!deviceId || this.hass === undefined || this.profile === undefined) return;
+                void this.mutate(
+                  () => createNotificationTarget(this.hass!, this.profile!.profile_id, deviceId),
+                  this.t("manage.notificationTargetCreated"),
+                );
+              }}>
+                <label>${this.t("manage.availableNotificationDevice")}
+                  <select name="device" required>
+                    ${available.map((candidate) => html`
+                      <option value=${candidate.device_registry_id}>
+                        ${candidate.friendly_name} · ${candidate.platform}
+                        ${candidate.route_available ? "" : ` · ${this.t("manage.routeUnavailable")}`}
+                      </option>
+                    `)}
+                  </select>
+                </label>
+                <div class="actions">
+                  <button class="primary" type="submit">${this.t("manage.addNotificationTarget")}</button>
+                </div>
+              </form>
+            `}
+          </div>
+        </div>
+
         ${this.notificationTargets.length === 0 ? html`
           <p>${this.t("manage.noNotificationTargets")}</p>
-        ` : this.notificationTargets.map((target) => html`
-          <form class="form-grid" @submit=${(event: SubmitEvent) => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget as HTMLFormElement);
-            if (this.hass === undefined || this.profile === undefined) return;
-            void this.mutate(
-              () => updateNotificationTarget(
-                this.hass!,
-                this.profile!.profile_id,
-                target.target_id,
-                {
-                  friendly_name: String(data.get("friendlyName") ?? "").trim(),
-                  shared_device: data.get("sharedDevice") === "on",
-                  lockscreen_visibility: String(
-                    data.get("lockscreenVisibility") ?? "private",
-                  ) as "public" | "private" | "secret",
-                  enabled: data.get("enabled") === "on",
-                  minimum_gap_seconds: asOptionalInt(data.get("minimumGap"), 0),
-                  maximum_notifications_per_hour: asOptionalInt(data.get("maxPerHour"), 1),
-                  daily_push_budget: asOptionalInt(data.get("targetBudget"), 0),
-                },
-              ),
-              this.t("manage.notificationTargetUpdated"),
-            );
-          }}>
-            <label>${this.t("manage.name")}
-              <input name="friendlyName" .value=${target.friendly_name} required />
-            </label>
-            <label>${this.t("manage.platform")}
-              <input .value=${target.platform} disabled />
-            </label>
-            <label>${this.t("manage.lockscreenVisibility")}
-              <select name="lockscreenVisibility" .value=${target.lockscreen_visibility}>
-                <option value="public">public</option>
-                <option value="private">private</option>
-                <option value="secret">secret</option>
-              </select>
-            </label>
-            <label>${this.t("manage.minimumGapSeconds")}
-              <input
-                name="minimumGap"
-                type="number"
-                min="0"
-                .value=${target.minimum_gap_seconds === null ? "" : String(target.minimum_gap_seconds)}
-              />
-            </label>
-            <label>${this.t("manage.maximumPerHour")}
-              <input
-                name="maxPerHour"
-                type="number"
-                min="1"
-                .value=${target.maximum_notifications_per_hour === null ? "" : String(target.maximum_notifications_per_hour)}
-              />
-            </label>
-            <label>${this.t("manage.targetPushBudget")}
-              <input
-                name="targetBudget"
-                type="number"
-                min="0"
-                .value=${target.daily_push_budget === null ? "" : String(target.daily_push_budget)}
-              />
-            </label>
-            <label>
-              <input name="enabled" type="checkbox" .checked=${target.enabled} />
-              ${this.t("manage.targetEnabled")}
-            </label>
-            <label>
-              <input name="sharedDevice" type="checkbox" .checked=${target.shared_device} />
-              ${this.t("manage.sharedDevice")}
-            </label>
-            <p class="meta">
-              ${this.t("manage.capabilitiesConservative")}
-              · ${target.device_registry_id}
-            </p>
-            <div class="actions">
-              <button class="primary" type="submit">${this.t("manage.save")}</button>
-              <button
-                type="button"
-                @click=${() => {
-                  if (this.hass === undefined || this.profile === undefined) return;
-                  void this.mutate(
-                    () => testNotificationTarget(
-                      this.hass!,
-                      this.profile!.profile_id,
-                      target.target_id,
-                    ),
-                    this.t("manage.notificationTestSent"),
-                  );
-                }}
-              >
-                ${this.t("manage.testNotification")}
-              </button>
-            </div>
-          </form>
-        `)}
+        ` : html`
+          <div class="target-grid">
+            ${this.notificationTargets.map((target) => html`
+              <form class="target-card" @submit=${(event: SubmitEvent) => {
+                event.preventDefault();
+                const data = new FormData(event.currentTarget as HTMLFormElement);
+                if (this.hass === undefined || this.profile === undefined) return;
+                void this.mutate(
+                  () => updateNotificationTarget(
+                    this.hass!,
+                    this.profile!.profile_id,
+                    target.target_id,
+                    {
+                      friendly_name: String(data.get("friendlyName") ?? "").trim(),
+                      shared_device: data.get("sharedDevice") === "on",
+                      lockscreen_visibility: String(
+                        data.get("lockscreenVisibility") ?? "private",
+                      ) as "public" | "private" | "secret",
+                      enabled: data.get("enabled") === "on",
+                      minimum_gap_seconds: asOptionalInt(data.get("minimumGap"), 0),
+                      maximum_notifications_per_hour: asOptionalInt(data.get("maxPerHour"), 1),
+                      daily_push_budget: asOptionalInt(data.get("targetBudget"), 0),
+                    },
+                  ),
+                  this.t("manage.notificationTargetUpdated"),
+                );
+              }}>
+                <div class="target-header">
+                  <h3>${target.friendly_name}</h3>
+                  <span class="meta">${target.platform} · ${target.enabled ? this.t("manage.active") : this.t("manage.paused")}</span>
+                </div>
+
+                <div class="form-grid">
+                  <label>${this.t("manage.name")}
+                    <input name="friendlyName" .value=${target.friendly_name} required />
+                  </label>
+                  <label class="check-row">
+                    <input name="enabled" type="checkbox" .checked=${target.enabled} />
+                    ${this.t("manage.targetEnabled")}
+                  </label>
+                  <label class="check-row">
+                    <input name="sharedDevice" type="checkbox" .checked=${target.shared_device} />
+                    ${this.t("manage.sharedDevice")}
+                  </label>
+                </div>
+
+                <details class="section-panel">
+                  <summary>${this.t("manage.advancedTargetSettings")}</summary>
+                  <div class="section-body">
+                    <div class="form-grid">
+                      <label>${this.t("manage.lockscreenVisibility")}
+                        <select name="lockscreenVisibility" .value=${target.lockscreen_visibility}>
+                          <option value="public">public</option>
+                          <option value="private">private</option>
+                          <option value="secret">secret</option>
+                        </select>
+                      </label>
+                      <label>${this.t("manage.minimumGapSeconds")}
+                        <input name="minimumGap" type="number" min="0" .value=${target.minimum_gap_seconds === null ? "" : String(target.minimum_gap_seconds)} />
+                      </label>
+                      <label>${this.t("manage.maximumPerHour")}
+                        <input name="maxPerHour" type="number" min="1" .value=${target.maximum_notifications_per_hour === null ? "" : String(target.maximum_notifications_per_hour)} />
+                      </label>
+                      <label>${this.t("manage.targetPushBudget")}
+                        <input name="targetBudget" type="number" min="0" .value=${target.daily_push_budget === null ? "" : String(target.daily_push_budget)} />
+                      </label>
+                    </div>
+                    <p class="meta">
+                      ${this.t("manage.capabilitiesConservative")} · ${target.device_registry_id}
+                    </p>
+                  </div>
+                </details>
+
+                <div class="actions">
+                  <button class="primary" type="submit">${this.t("manage.save")}</button>
+                  <button
+                    type="button"
+                    @click=${() => {
+                      if (this.hass === undefined || this.profile === undefined) return;
+                      void this.mutate(
+                        () => testNotificationTarget(
+                          this.hass!,
+                          this.profile!.profile_id,
+                          target.target_id,
+                        ),
+                        this.t("manage.notificationTestSent"),
+                      );
+                    }}
+                  >
+                    ${this.t("manage.testNotification")}
+                  </button>
+                </div>
+              </form>
+            `)}
+          </div>
+        `}
       </article>
     `;
   }

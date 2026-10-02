@@ -4,7 +4,20 @@ All notable changes will be documented here.
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Fixed
+- Make Learn and Quiz actions mutually exclusive when an unfinished session exists, with plain-language explanations of Resume vs Start.\n- Keep readiness visible even when an older empty session object is still present, including concrete counts and explicit timing/eligibility explanations.\n- Rename and explain the Track workload planner, surface the current Track snapshot in previews, translate forecast warnings, and reject misleading zero-card forecasts.\n- Explain spaced-repetition states in the Stats view without assuming SRS terminology.\n- Keep Learn/Quiz readiness counts and actual session starts on the same
+  profile-defined session length; the frontend no longer overrides child,
+  standard or intensive Profile defaults with hard-coded 20/10-card values.
+- Let `locklearn/session/availability` evaluate the same selection settings as
+  `session/start`, including explicit requested-card and content-type filters.
+- Show the real next Learn availability after progress mutations and session
+  completion, including the next spaced step or the local new-card quota reset.
+- Base Quiz readiness copy on persisted Track progress rather than only the
+  currently selectable candidate pool, and refresh Quiz automatically when its
+  next scheduled card becomes due.
+- Show concrete started/new/quota facts before a Learn session starts, and keep
+  only the contextual action for an already opened session. Quiz now shows
+  started and ready counts whenever no review is due.
 
 ## [1.0.0-beta.3] - 2026-09-29
 

@@ -50,7 +50,7 @@ describes the additional LockLearn authorization boundary enforced by the backen
 | `locklearn/quiz/evaluate` | `ws_quiz_evaluate` | session-via-profile-acl | `session_id`, `question_id`, `answer` | — | `ERR_INVALID_REQUEST` |
 | `locklearn/scheduler/preview` | `ws_scheduler_preview` | profile-acl | `profile_id` | `local_date` | `ERR_INVALID_REQUEST` |
 | `locklearn/session/answer` | `ws_session_answer` | session-via-profile-acl | `session_id`, `expected_version`, `question_id`, `answer` | — | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
-| `locklearn/session/availability` | `ws_session_availability` | profile-acl | `profile_id`, `track_id`, `session_type` | — | `ERR_INVALID_REQUEST` |
+| `locklearn/session/availability` | `ws_session_availability` | profile-acl | `profile_id`, `track_id`, `session_type` | `settings` | `ERR_INVALID_REQUEST` |
 | `locklearn/session/complete` | `ws_session_complete` | session-via-profile-acl | `session_id`, `expected_version` | — | `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
 | `locklearn/session/get` | `ws_session_get` | session-via-profile-acl | `session_id` | — | — |
 | `locklearn/session/pause` | `ws_session_pause` | session-via-profile-acl | `session_id`, `expected_version` | — | `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |

@@ -58,6 +58,7 @@ export class LockLearnQuizView extends LitElement {
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
+  private nextDueTimer?: ReturnType<typeof globalThis.setTimeout>;
 
   static styles = css`
     ${contentRendererStyles}
@@ -234,6 +235,22 @@ export class LockLearnQuizView extends LitElement {
       gap: 10px;
     }
 
+    dl {
+      display: grid;
+      grid-template-columns: minmax(170px, auto) 1fr;
+      gap: 6px 12px;
+      margin: 12px 0 0;
+    }
+
+    dt {
+      color: var(--secondary-text-color);
+    }
+
+    dd {
+      margin: 0;
+      font-weight: 650;
+    }
+
     @media (max-width: 600px) {
       .toolbar,
       .toolbar-fields,
@@ -257,6 +274,11 @@ export class LockLearnQuizView extends LitElement {
       }
     }
   `;
+
+  disconnectedCallback(): void {
+    if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
+    super.disconnectedCallback();
+  }
 
   protected updated(changed: Map<PropertyKey, unknown>): void {
     if (changed.has("profile") || changed.has("dashboard")) {
@@ -346,6 +368,17 @@ export class LockLearnQuizView extends LitElement {
         this.trackId,
         "quiz",
       );
+      if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
+      const nextDue = this.availability.next_due_at_utc;
+      if (nextDue !== null) {
+        const delay = Date.parse(nextDue) - Date.now();
+        if (delay > 0 && delay < 2_147_000_000) {
+          this.nextDueTimer = globalThis.setTimeout(() => {
+            this.nextDueTimer = undefined;
+            void this.refreshAvailability();
+          }, delay + 250);
+        }
+      }
     } catch {
       this.availability = undefined;
     }
@@ -379,7 +412,7 @@ export class LockLearnQuizView extends LitElement {
           this.hass,
           this.profile.profile_id,
           this.trackId,
-          10,
+          undefined,
           this.format,
         ),
       );
@@ -403,6 +436,7 @@ export class LockLearnQuizView extends LitElement {
     this.errorMessage = "";
     try {
       this.applySession(await getSession(this.hass, last.session_id));
+      await this.refreshAvailability();
     } catch (error) {
       this.errorMessage = error instanceof Error ? error.message : String(error);
     } finally {
@@ -660,15 +694,17 @@ export class LockLearnQuizView extends LitElement {
             </label>
           </div>
           <div class="actions">
-            ${resumable
-              ? html`<button @click=${this.resume} ?disabled=${this.loading}>
+            ${this.session === undefined && resumable
+              ? html`<button class="primary" @click=${this.resume} ?disabled=${this.loading}>
                   ${this.t("quiz.resume")}
                 </button>`
-              : nothing}
-            <button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
-              ${this.t("quiz.start")}
-            </button>
+              : this.session === undefined ? html`<button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
+                  ${this.t("quiz.start")}
+                </button>` : nothing}
           </div>
+          ${this.session === undefined ? html`<p class="muted">
+            ${resumable ? this.t("quiz.resumeHelp") : this.t("quiz.startHelp")}
+          </p>` : nothing}
         </div>
         ${this.session === undefined && this.availability !== undefined ? html`
           <div class="notice" role="status">
@@ -679,12 +715,18 @@ export class LockLearnQuizView extends LitElement {
                 ? html`<div>${this.t("quiz.learnFirst")}</div>`
                 : html`
                     <div>${this.t("quiz.emptyExplain")}</div>
-                    ${this.availability.next_due_at_utc === null ? nothing : html`
-                      <div>
-                        <strong>${this.t("quiz.nextAvailable")}:</strong>
-                        ${this.dueLabel(this.availability.next_due_at_utc)}
-                      </div>
-                    `}
+                    <dl>
+                      <dt>${this.t("quiz.startedCards")}</dt><dd>${this.availability.introduced_cards}</dd>
+                      <dt>${this.t("quiz.readyCards")}</dt><dd>${this.availability.available_now}</dd>
+                    </dl>
+                    ${this.availability.next_due_at_utc === null
+                      ? html`<div class="muted">${this.t("quiz.noExactTime")}</div>`
+                      : html`
+                          <div>
+                            <strong>${this.t("quiz.nextAvailable")}:</strong>
+                            ${this.dueLabel(this.availability.next_due_at_utc)}
+                          </div>
+                        `}
                   `}
             <div class="muted">${this.t("quiz.whyDueOnly")}</div>
           </div>
@@ -708,6 +750,18 @@ export class LockLearnQuizView extends LitElement {
     if (this.session.question_count === 0) {
       const introduced = this.availability?.introduced_cards ?? 0;
       const nextDue = this.availability?.next_due_at_utc ?? null;
+      const readyNow = this.availability?.available_now ?? 0;
+      if (readyNow > 0) {
+        return html`
+          <section class="quiz-card">
+            <h2>${this.t("quiz.howItWorks")}</h2>
+            <p>${this.t("quiz.readyFromEmpty").replace("{count}", String(readyNow))}</p>
+            <button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
+              ${this.t("quiz.start")}
+            </button>
+          </section>
+        `;
+      }
       return html`
         <section class="quiz-card">
           <h2>${this.t("quiz.notReadyTitle")}</h2>
@@ -716,9 +770,15 @@ export class LockLearnQuizView extends LitElement {
               ? this.t("quiz.learnFirst")
               : this.t("quiz.emptyExplain")}
           </p>
-          ${nextDue === null ? nothing : html`
-            <p><strong>${this.t("quiz.nextAvailable")}:</strong> ${this.dueLabel(nextDue)}</p>
-          `}
+          <dl>
+            <dt>${this.t("quiz.startedCards")}</dt><dd>${introduced}</dd>
+            <dt>${this.t("quiz.readyCards")}</dt><dd>${readyNow}</dd>
+          </dl>
+          ${nextDue === null
+            ? html`<p class="muted">${this.t("quiz.noExactTime")}</p>`
+            : html`
+                <p><strong>${this.t("quiz.nextAvailable")}:</strong> ${this.dueLabel(nextDue)}</p>
+              `}
           <p class="muted">${this.t("quiz.whyDueOnly")}</p>
         </section>
       `;

@@ -223,6 +223,8 @@ describe("frontend protocol", () => {
             new_cards: 0,
             forceable_early: 1,
             next_due_at_utc: "2026-09-29T12:10:00+00:00",
+            next_available_at_utc: "2026-09-29T12:10:00+00:00",
+            next_available_reason: "scheduled_step",
           } as T;
         }
         return {
@@ -246,7 +248,10 @@ describe("frontend protocol", () => {
       },
     };
 
-    expect((await getSessionAvailability(hass, "p1", "t1", "learn")).forceable_early).toBe(1);
+    const availability = await getSessionAvailability(hass, "p1", "t1", "learn");
+    expect(availability.forceable_early).toBe(1);
+    expect(availability.next_available_at_utc).toBe("2026-09-29T12:10:00+00:00");
+    expect(availability.next_available_reason).toBe("scheduled_step");
     await startLearnSession(hass, "p1", "t1", 20, true);
 
     expect(messages).toEqual([
@@ -255,6 +260,7 @@ describe("frontend protocol", () => {
         profile_id: "p1",
         track_id: "t1",
         session_type: "learn",
+        settings: {},
       },
       {
         type: "locklearn/session/start",
@@ -265,6 +271,96 @@ describe("frontend protocol", () => {
         settings: {
           requested_cards: 20,
           allow_early_learning: true,
+        },
+      },
+    ]);
+  });
+
+  it("defers default Learn and Quiz lengths to the backend profile settings", async () => {
+    const messages: Record<string, unknown>[] = [];
+    const hass: HomeAssistantLike = {
+      callWS: async <T>(message: Record<string, unknown>): Promise<T> => {
+        messages.push(message);
+        return {
+          id: "s1",
+          profile_id: "p1",
+          track_id: "t1",
+          type: String(message.session_type ?? "learn"),
+          strategy: "default",
+          status: "active",
+          version: 1,
+          current_position: 0,
+          started_at_utc: "2026-09-29T12:00:00+00:00",
+          last_activity_at_utc: "2026-09-29T12:00:00+00:00",
+          completed_at_utc: null,
+          question_count: 0,
+          settings: message.settings ?? {},
+          items: [],
+          answers: [],
+          current_question: null,
+        } as T;
+      },
+    };
+
+    await startLearnSession(hass, "p1", "t1");
+    await startQuizSession(hass, "p1", "t1");
+
+    expect(messages).toEqual([
+      {
+        type: "locklearn/session/start",
+        profile_id: "p1",
+        track_id: "t1",
+        session_type: "learn",
+        strategy: "default",
+        settings: {},
+      },
+      {
+        type: "locklearn/session/start",
+        profile_id: "p1",
+        track_id: "t1",
+        session_type: "quiz",
+        strategy: "default",
+        settings: { quiz_format: "mixed", option_count: 4 },
+      },
+    ]);
+  });
+
+  it("passes explicit availability selection settings without inventing defaults", async () => {
+    const messages: Record<string, unknown>[] = [];
+    const hass: HomeAssistantLike = {
+      callWS: async <T>(message: Record<string, unknown>): Promise<T> => {
+        messages.push(message);
+        return {
+          profile_id: "p1",
+          track_id: "t1",
+          session_type: "quiz",
+          available_now: 1,
+          introduced_cards: 1,
+          new_cards: 0,
+          remaining_new_quota: 0,
+          forceable_new: 0,
+          forceable_early: 0,
+          next_due_at_utc: null,
+        } as T;
+      },
+    };
+
+    await getSessionAvailability(hass, "p1", "t1", "quiz", {
+      requested_cards: 7,
+      content_types: ["grammar"],
+      leeches_only: true,
+    });
+
+    expect(messages).toEqual([
+      {
+        type: "locklearn/session/availability",
+        profile_id: "p1",
+        track_id: "t1",
+        session_type: "quiz",
+        settings: {
+          requested_cards: 7,
+          content_types: ["grammar"],
+          leeches_only: true,
         },
       },
     ]);

@@ -2400,6 +2400,7 @@ async def ws_admin_storage_status(
         vol.Required("profile_id"): str,
         vol.Required("track_id"): str,
         vol.Required("session_type"): str,
+        vol.Optional("settings"): dict,
     }
 )
 @websocket_api.async_response
@@ -2424,6 +2425,7 @@ async def ws_session_availability(
             profile_id=profile_id,
             track_id=msg["track_id"],
             session_type=msg["session_type"],
+            settings=msg.get("settings", {}),
         )
     except SessionSelectionError as err:
         connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
