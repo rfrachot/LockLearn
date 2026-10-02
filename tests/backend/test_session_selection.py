@@ -954,6 +954,39 @@ async def test_calibration_samples_new_cards_without_consuming_daily_new_quota()
 
 
 @pytest.mark.asyncio
+async def test_calibration_bypasses_learning_order_constraints_without_mutating_them() -> None:
+    candidates = tuple(
+        _candidate(index, state="new", content_type="vocabulary") for index in range(1, 31)
+    )
+    rejected = {str(candidate["card_key"]) for candidate in candidates}
+    constraints = _RejectConstraints(rejected)
+    service = SessionSelectionService(
+        _Tracks(candidates),
+        _Profiles(max_new=0, session_length=10),
+        _Reviews(introductions=99),
+        constraints,
+        clock=_FixedClock(datetime(2026, 9, 23, 12, 0, tzinfo=UTC)),
+    )
+
+    calibration = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="calibration",
+        settings={"requested_cards": 20},
+    )
+    learn = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="learn",
+        settings={"requested_cards": 20},
+    )
+
+    assert len(calibration) == 20
+    assert {item.payload["selection"]["reason"] for item in calibration} == {"calibration"}
+    assert learn == ()
+
+
+@pytest.mark.asyncio
 async def test_known_already_is_learn_hidden_until_verified_quiz_due() -> None:
     candidate = _candidate(
         1,
