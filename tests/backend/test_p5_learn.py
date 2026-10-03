@@ -14,7 +14,6 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.locklearn.const import DATA_RUNTIME, DOMAIN
 from custom_components.locklearn.core.content import derive_card_definition_id, derive_card_key
 from custom_components.locklearn.core.sessions import SessionQuestion
-from custom_components.locklearn.storage.database import StaleSessionError
 from tests.backend.content_db_helpers import (
     CONCEPT_ID,
     DATASET_ID,
@@ -353,7 +352,8 @@ async def test_learning_answer_commits_event_progress_and_session_atomically(
         ),
         return_exceptions=True,
     )
-    assert sum(isinstance(result, StaleSessionError) for result in results) == 1
+    assert all(isinstance(result, dict) for result in results)
+    assert results[0] == results[1]
     after = len(
         await runtime.storage.repositories.review_events.async_list_scope_events(
             profile_id=profile_id,
