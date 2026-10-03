@@ -41,6 +41,7 @@ import {
 } from "./protocol";
 
 export type ManagementRoute = "profiles" | "tracks" | "packs" | "settings";
+type SaveFeedback = "saved" | "error";
 
 function asInt(value: FormDataEntryValue | null, fallback: number, min: number): number {
   const parsed = Number.parseInt(String(value ?? ""), 10);
@@ -138,6 +139,7 @@ export class LockLearnManagementView extends LitElement {
   @state() private dirtyScopes = new Set<string>();
   @state() private formResetVersions: Record<string, number> = {};
   @state() private submittingScope?: string;
+  @state() private saveFeedback: Record<string, SaveFeedback | undefined> = {};
 
   static styles = css`
     ${interactiveAccessibilityStyles}
@@ -174,6 +176,7 @@ export class LockLearnManagementView extends LitElement {
       color: var(--secondary-text-color);
       font-size: .86rem;
     }
+    .scope-state.is-error { color: var(--error-color,var(--primary-text-color)); }
     .scope-actions {
       display: flex;
       flex-wrap: wrap;
@@ -354,11 +357,27 @@ export class LockLearnManagementView extends LitElement {
     return `${trackId}:${scope}`;
   }
 
+  private profileSettingsScope(): string {
+    return `settings:${this.profile?.profile_id ?? "none"}`;
+  }
+
+  private targetScope(targetId: string): string {
+    return `target:${targetId}`;
+  }
+
   private isScopeDirty(key: string): boolean {
     return this.dirtyScopes.has(key);
   }
 
+  private clearSaveFeedback(key: string): void {
+    if (this.saveFeedback[key] === undefined) return;
+    const next = { ...this.saveFeedback };
+    delete next[key];
+    this.saveFeedback = next;
+  }
+
   private markScopeDirty(key: string): void {
+    this.clearSaveFeedback(key);
     if (this.dirtyScopes.has(key)) return;
     const next = new Set(this.dirtyScopes);
     next.add(key);
@@ -372,6 +391,19 @@ export class LockLearnManagementView extends LitElement {
     next.delete(key);
     this.dirtyScopes = next;
     this.emitDirtyState();
+  }
+
+  private scopeFeedbackText(key: string): string {
+    const fr = this.locale() === "fr";
+    if (this.submittingScope === key) return fr ? "Enregistrement…" : "Saving…";
+    if (this.saveFeedback[key] === "error") {
+      return fr ? "Échec de l’enregistrement" : "Save failed";
+    }
+    if (this.isScopeDirty(key)) {
+      return fr ? "Modifications non enregistrées" : "Unsaved changes";
+    }
+    if (this.saveFeedback[key] === "saved") return fr ? "Enregistré ✓" : "Saved ✓";
+    return this.t("form.pristine");
   }
 
   private emitDirtyState(): void {
@@ -394,6 +426,7 @@ export class LockLearnManagementView extends LitElement {
   private cancelScope(key: string): void {
     this.resetScope(key);
     this.clearScopeDirty(key);
+    this.clearSaveFeedback(key);
     this.requestUpdate();
   }
 
@@ -412,16 +445,19 @@ export class LockLearnManagementView extends LitElement {
     action: () => Promise<unknown>,
     message: string,
   ): Promise<void> {
+    this.clearSaveFeedback(key);
     this.submittingScope = key;
     this.loading = true;
     this.errorMessage = "";
     try {
       await action();
       this.clearScopeDirty(key);
+      this.saveFeedback = { ...this.saveFeedback, [key]: "saved" };
       await this.load();
       this.notice = message;
       this.dispatchEvent(new CustomEvent("locklearn-refresh", { bubbles: true, composed: true }));
     } catch (error) {
+      this.saveFeedback = { ...this.saveFeedback, [key]: "error" };
       this.errorMessage = errorMessage(error);
     } finally {
       this.loading = false;
@@ -474,18 +510,90 @@ export class LockLearnManagementView extends LitElement {
     return !this.isScopeDirty(key);
   }
 
+  private async saveProfileSettings(form: HTMLFormElement): Promise<boolean> {
+    if (this.hass === undefined || this.profile === undefined || !this.validateScope(form)) return false;
+    const key = this.profileSettingsScope();
+    const data = new FormData(form);
+    const settings = this.profile.settings ?? {};
+    const scheduler = objectSetting(settings, "scheduler");
+    await this.mutateScope(
+      key,
+      () => updateProfile(this.hass!, this.profile!.profile_id, {
+        settings_patch: {
+          session_length_cards: asInt(data.get("session"), 20, 1),
+          max_new_per_day_cards: asInt(data.get("new"), 8, 0),
+          daily_push_budget: asInt(data.get("push"), 6, 0),
+          quiet_hours: {
+            start: String(data.get("quietStart") ?? "22:00"),
+            end: String(data.get("quietEnd") ?? "08:00"),
+          },
+          scheduler: {
+            ...scheduler,
+            active_windows: [{
+              start: String(data.get("activeStart") ?? "08:00"),
+              end: String(data.get("activeEnd") ?? "20:00"),
+            }],
+          },
+        },
+      }),
+      this.t("manage.saved"),
+    );
+    return !this.isScopeDirty(key);
+  }
+
+  private async saveNotificationTarget(
+    target: NotificationTargetSummary,
+    form: HTMLFormElement,
+  ): Promise<boolean> {
+    if (this.hass === undefined || this.profile === undefined || !this.validateScope(form)) return false;
+    const key = this.targetScope(target.target_id);
+    const data = new FormData(form);
+    await this.mutateScope(
+      key,
+      () => updateNotificationTarget(
+        this.hass!,
+        this.profile!.profile_id,
+        target.target_id,
+        {
+          friendly_name: String(data.get("friendlyName") ?? "").trim(),
+          shared_device: data.get("sharedDevice") === "on",
+          lockscreen_visibility: String(
+            data.get("lockscreenVisibility") ?? "private",
+          ) as "public" | "private" | "secret",
+          enabled: data.get("enabled") === "on",
+          minimum_gap_seconds: asOptionalInt(data.get("minimumGap"), 0),
+          maximum_notifications_per_hour: asOptionalInt(data.get("maxPerHour"), 1),
+          daily_push_budget: asOptionalInt(data.get("targetBudget"), 0),
+        },
+      ),
+      this.t("manage.notificationTargetUpdated"),
+    );
+    return !this.isScopeDirty(key);
+  }
+
   async saveDirtyScopes(): Promise<boolean> {
     const keys = [...this.dirtyScopes];
     for (const key of keys) {
+      const form = this.renderRoot.querySelector<HTMLFormElement>(
+        `form[data-save-scope="${key}"]`,
+      );
+      if (form === null) return false;
+      if (key.startsWith("settings:")) {
+        if (!await this.saveProfileSettings(form)) return false;
+        continue;
+      }
+      if (key.startsWith("target:")) {
+        const targetId = key.slice("target:".length);
+        const target = this.notificationTargets.find((item) => item.target_id === targetId);
+        if (target === undefined || !await this.saveNotificationTarget(target, form)) return false;
+        continue;
+      }
       const split = key.lastIndexOf(":");
       if (split < 1) continue;
       const trackId = key.slice(0, split);
       const kind = key.slice(split + 1);
       const track = this.tracks.find((item) => item.track_id === trackId);
-      const form = this.renderRoot.querySelector<HTMLFormElement>(
-        `form[data-save-scope="${key}"]`,
-      );
-      if (track === undefined || form === null) return false;
+      if (track === undefined) return false;
       const saved =
         kind === "details"
           ? await this.saveTrackDetails(track, form)
@@ -504,6 +612,7 @@ export class LockLearnManagementView extends LitElement {
     this.dirtyScopes = new Set();
     this.forecasts = {};
     this.forecastPlans = {};
+    this.saveFeedback = {};
     this.emitDirtyState();
     this.requestUpdate();
   }
@@ -815,26 +924,6 @@ export class LockLearnManagementView extends LitElement {
               </label>
             </div>
 
-            <p class="scope-state" role="status">
-              ${this.isScopeDirty(detailsScope) ? this.t("form.dirty") : this.t("form.pristine")}
-            </p>
-            <div class="scope-actions ${this.isScopeDirty(detailsScope) ? "is-dirty" : ""}">
-              <button
-                class="primary"
-                type="submit"
-                ?disabled=${!this.isScopeDirty(detailsScope) || this.submittingScope === detailsScope}
-              >
-                ${this.submittingScope === detailsScope ? this.t("form.saving") : this.t("form.save")}
-              </button>
-              <button
-                type="button"
-                ?disabled=${!this.isScopeDirty(detailsScope) || this.submittingScope === detailsScope}
-                @click=${() => this.cancelScope(detailsScope)}
-              >
-                ${this.t("form.cancel")}
-              </button>
-            </div>
-
             <details class="section-panel">
               <summary>${this.t("manage.advancedTrackSettings")}</summary>
               <div class="section-body">
@@ -861,6 +950,26 @@ export class LockLearnManagementView extends LitElement {
                 </div>
               </div>
             </details>
+
+            <p class="scope-state ${this.saveFeedback[detailsScope] === "error" ? "is-error" : ""}" role="status">
+              ${this.scopeFeedbackText(detailsScope)}
+            </p>
+            <div class="scope-actions ${this.isScopeDirty(detailsScope) ? "is-dirty" : ""}">
+              <button
+                class="primary"
+                type="submit"
+                ?disabled=${!this.isScopeDirty(detailsScope) || this.submittingScope === detailsScope}
+              >
+                ${this.submittingScope === detailsScope ? this.t("form.saving") : this.t("form.save")}
+              </button>
+              <button
+                type="button"
+                ?disabled=${!this.isScopeDirty(detailsScope) || this.submittingScope === detailsScope}
+                @click=${() => this.cancelScope(detailsScope)}
+              >
+                ${this.t("form.cancel")}
+              </button>
+            </div>
           </form>`)}
 
           <details class="section-panel">
@@ -1050,8 +1159,8 @@ export class LockLearnManagementView extends LitElement {
           </details>
           <p class="muted">${this.t("manage.planPreviewHelp")}</p>
           <div class="actions"><button type="submit">${this.t("manage.preview")}</button></div>
-          <p class="scope-state" role="status">
-            ${this.isScopeDirty(planScope) ? this.t("form.dirty") : this.t("form.pristine")}
+          <p class="scope-state ${this.saveFeedback[planScope] === "error" ? "is-error" : ""}" role="status">
+            ${this.scopeFeedbackText(planScope)}
           </p>
           <div class="scope-actions ${this.isScopeDirty(planScope) ? "is-dirty" : ""}">
             <button
@@ -1261,31 +1370,18 @@ export class LockLearnManagementView extends LitElement {
           <p>${this.t("manage.noNotificationTargets")}</p>
         ` : html`
           <div class="target-grid">
-            ${this.notificationTargets.map((target) => html`
-              <form class="target-card" @submit=${(event: SubmitEvent) => {
-                event.preventDefault();
-                const data = new FormData(event.currentTarget as HTMLFormElement);
-                if (this.hass === undefined || this.profile === undefined) return;
-                void this.mutate(
-                  () => updateNotificationTarget(
-                    this.hass!,
-                    this.profile!.profile_id,
-                    target.target_id,
-                    {
-                      friendly_name: String(data.get("friendlyName") ?? "").trim(),
-                      shared_device: data.get("sharedDevice") === "on",
-                      lockscreen_visibility: String(
-                        data.get("lockscreenVisibility") ?? "private",
-                      ) as "public" | "private" | "secret",
-                      enabled: data.get("enabled") === "on",
-                      minimum_gap_seconds: asOptionalInt(data.get("minimumGap"), 0),
-                      maximum_notifications_per_hour: asOptionalInt(data.get("maxPerHour"), 1),
-                      daily_push_budget: asOptionalInt(data.get("targetBudget"), 0),
-                    },
-                  ),
-                  this.t("manage.notificationTargetUpdated"),
-                );
-              }}>
+            ${this.notificationTargets.map((target) => {
+              const targetScope = this.targetScope(target.target_id);
+              return keyed(`${targetScope}:${this.formResetVersions[targetScope] ?? 0}`, html`
+              <form
+                class="target-card"
+                data-save-scope=${targetScope}
+                @input=${() => this.markScopeDirty(targetScope)}
+                @change=${() => this.markScopeDirty(targetScope)}
+                @submit=${(event: SubmitEvent) => {
+                  event.preventDefault();
+                  void this.saveNotificationTarget(target, event.currentTarget as HTMLFormElement);
+                }}>
                 <div class="target-header">
                   <h3>${target.friendly_name}</h3>
                   <span class="meta">${target.platform} · ${target.enabled ? this.t("manage.active") : this.t("manage.paused")}</span>
@@ -1332,8 +1428,26 @@ export class LockLearnManagementView extends LitElement {
                   </div>
                 </details>
 
+                <p class="scope-state ${this.saveFeedback[targetScope] === "error" ? "is-error" : ""}" role="status">
+                  ${this.scopeFeedbackText(targetScope)}
+                </p>
+                <div class="scope-actions ${this.isScopeDirty(targetScope) ? "is-dirty" : ""}">
+                  <button
+                    class="primary"
+                    type="submit"
+                    ?disabled=${!this.isScopeDirty(targetScope) || this.submittingScope === targetScope}
+                  >
+                    ${this.submittingScope === targetScope ? this.t("form.saving") : this.t("form.save")}
+                  </button>
+                  <button
+                    type="button"
+                    ?disabled=${!this.isScopeDirty(targetScope) || this.submittingScope === targetScope}
+                    @click=${() => this.cancelScope(targetScope)}
+                  >
+                    ${this.t("form.cancel")}
+                  </button>
+                </div>
                 <div class="actions">
-                  <button class="primary" type="submit">${this.t("manage.save")}</button>
                   <button
                     type="button"
                     @click=${() => {
@@ -1351,8 +1465,8 @@ export class LockLearnManagementView extends LitElement {
                     ${this.t("manage.testNotification")}
                   </button>
                 </div>
-              </form>
-            `)}
+              </form>`);
+            })}
           </div>
         `}
       </article>
@@ -1370,33 +1484,20 @@ export class LockLearnManagementView extends LitElement {
     const firstWindow = typeof windows[0] === "object" && windows[0] !== null
       ? windows[0] as Record<string, unknown>
       : {};
+    const settingsScope = this.profileSettingsScope();
     return html`
       <article class="card">
         <h2>${this.t("manage.profileSettings")}</h2>
         <p class="muted">${this.t("manage.presetInitialOnly")}: ${this.profile?.preset}</p>
-        <form class="form-grid" @submit=${(event: SubmitEvent) => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget as HTMLFormElement);
-          if (this.hass === undefined || this.profile === undefined) return;
-          void this.mutate(() => updateProfile(this.hass!, this.profile!.profile_id, {
-            settings_patch: {
-              session_length_cards: asInt(data.get("session"), 20, 1),
-              max_new_per_day_cards: asInt(data.get("new"), 8, 0),
-              daily_push_budget: asInt(data.get("push"), 6, 0),
-              quiet_hours: {
-                start: String(data.get("quietStart") ?? "22:00"),
-                end: String(data.get("quietEnd") ?? "08:00"),
-              },
-              scheduler: {
-                ...scheduler,
-                active_windows: [{
-                  start: String(data.get("activeStart") ?? "08:00"),
-                  end: String(data.get("activeEnd") ?? "20:00"),
-                }],
-              },
-            },
-          }), this.t("manage.saved"));
-        }}>
+        ${keyed(`${settingsScope}:${this.formResetVersions[settingsScope] ?? 0}`, html`<form
+          class="form-grid"
+          data-save-scope=${settingsScope}
+          @input=${() => this.markScopeDirty(settingsScope)}
+          @change=${() => this.markScopeDirty(settingsScope)}
+          @submit=${(event: SubmitEvent) => {
+            event.preventDefault();
+            void this.saveProfileSettings(event.currentTarget as HTMLFormElement);
+          }}>
           <label>${this.t("manage.sessionLength")}<input name="session" type="number" min="1" .value=${String(settings.session_length_cards ?? 20)} /></label>
           <label>${this.t("manage.newPerDay")}<input name="new" type="number" min="0" .value=${String(settings.max_new_per_day_cards ?? 8)} /></label>
           <label>${this.t("manage.pushBudget")}<input name="push" type="number" min="0" .value=${String(settings.daily_push_budget ?? 6)} /></label>
@@ -1404,8 +1505,26 @@ export class LockLearnManagementView extends LitElement {
           <label>${this.t("manage.quietEnd")}<input name="quietEnd" type="time" .value=${String(quiet.end ?? "08:00")} /></label>
           <label>${this.t("manage.activeStart")}<input name="activeStart" type="time" .value=${String(firstWindow.start ?? "08:00")} /></label>
           <label>${this.t("manage.activeEnd")}<input name="activeEnd" type="time" .value=${String(firstWindow.end ?? "20:00")} /></label>
-          <div class="actions"><button class="primary" type="submit">${this.t("manage.save")}</button></div>
-        </form>
+          <p class="scope-state ${this.saveFeedback[settingsScope] === "error" ? "is-error" : ""}" role="status">
+            ${this.scopeFeedbackText(settingsScope)}
+          </p>
+          <div class="scope-actions ${this.isScopeDirty(settingsScope) ? "is-dirty" : ""}">
+            <button
+              class="primary"
+              type="submit"
+              ?disabled=${!this.isScopeDirty(settingsScope) || this.submittingScope === settingsScope}
+            >
+              ${this.submittingScope === settingsScope ? this.t("form.saving") : this.t("form.save")}
+            </button>
+            <button
+              type="button"
+              ?disabled=${!this.isScopeDirty(settingsScope) || this.submittingScope === settingsScope}
+              @click=${() => this.cancelScope(settingsScope)}
+            >
+              ${this.t("form.cancel")}
+            </button>
+          </div>
+        </form>`)}
       </article>
       ${this.renderNotificationTargets()}
     `;
