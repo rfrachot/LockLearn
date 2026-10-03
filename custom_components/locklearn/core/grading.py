@@ -56,55 +56,82 @@ class FreeTextGrader:
         if kind is GradingPolicyKind.RULE_BASED_RESERVED:
             raise GradingError("rule_based_reserved is not implemented in V1")
 
-        policy = self._effective_policy(normalization_policy, script=script)
-        normalized_submission = normalize_text(submitted_text, policy, script=script)
-        normalized_answers = tuple(
-            (answer, normalize_text(answer, policy, script=script)) for answer in accepted_answers
-        )
-
-        if kind is GradingPolicyKind.EXACT:
-            if len(accepted_answers) != 1:
+        if kind in {GradingPolicyKind.EXACT, GradingPolicyKind.ANY_OF}:
+            if kind is GradingPolicyKind.EXACT and len(accepted_answers) != 1:
                 raise GradingError("exact grading requires exactly one accepted answer")
-            matched = (
-                accepted_answers[0]
-                if normalized_submission == normalized_answers[0][1]
-                else None
-            )
+            if normalization_policy.policy_id == "quiz_free_text":
+                policy = self._effective_quiz_policy(normalization_policy, script=script)
+                normalized_submission = normalize_text(submitted_text, policy, script=script)
+                normalized_answers = tuple(
+                    (answer, normalize_text(answer, policy, script=script))
+                    for answer in accepted_answers
+                )
+                matched = next(
+                    (
+                        answer
+                        for answer, normalized in normalized_answers
+                        if normalized == normalized_submission
+                    ),
+                    None,
+                )
+                reason_prefix = "exact" if kind is GradingPolicyKind.EXACT else "any_of"
+                return FreeTextGradingResult(
+                    outcome=(
+                        GradingOutcome.CORRECT if matched is not None else GradingOutcome.WRONG
+                    ),
+                    submitted_text=submitted_text,
+                    normalized_submission=normalized_submission,
+                    matched_answer=matched,
+                    grading_policy_kind=kind,
+                    grading_policy_version=grading_policy_version,
+                    normalization_version=normalization_policy.normalization_version,
+                    reason=(
+                        f"{reason_prefix}_normalized_match"
+                        if matched is not None
+                        else f"{reason_prefix}_normalized_mismatch"
+                    ),
+                )
+
+            if kind is GradingPolicyKind.EXACT:
+                matched = accepted_answers[0] if submitted_text == accepted_answers[0] else None
+                reason = "exact_match" if matched is not None else "exact_mismatch"
+            else:
+                matched = next(
+                    (answer for answer in accepted_answers if submitted_text == answer), None
+                )
+                reason = "any_of_match" if matched is not None else "any_of_mismatch"
             return FreeTextGradingResult(
                 outcome=GradingOutcome.CORRECT if matched is not None else GradingOutcome.WRONG,
                 submitted_text=submitted_text,
-                normalized_submission=normalized_submission,
+                normalized_submission=None,
                 matched_answer=matched,
                 grading_policy_kind=kind,
                 grading_policy_version=grading_policy_version,
                 normalization_version=normalization_policy.normalization_version,
-                reason="exact_normalized_match" if matched is not None else "exact_normalized_mismatch",
+                reason=reason,
             )
 
-        if kind is GradingPolicyKind.ANY_OF:
-            matched = next(
-                (
-                    answer
-                    for answer, normalized in normalized_answers
-                    if normalized == normalized_submission
-                ),
-                None,
-            )
-            return FreeTextGradingResult(
-                outcome=GradingOutcome.CORRECT if matched is not None else GradingOutcome.WRONG,
-                submitted_text=submitted_text,
-                normalized_submission=normalized_submission,
-                matched_answer=matched,
-                grading_policy_kind=kind,
-                grading_policy_version=grading_policy_version,
-                normalization_version=normalization_policy.normalization_version,
-                reason="any_of_normalized_match" if matched is not None else "any_of_normalized_mismatch",
-            )
-
+        policy = self._effective_quiz_policy(normalization_policy, script=script)
         if not policy.allowed_scripts:
             raise GradingError(
                 "fuzzy_normalized requires an explicit supported-script normalization policy"
             )
+        normalized_submission = normalize_text(
+            submitted_text,
+            policy,
+            script=script,
+        )
+        normalized_answers = tuple(
+            (
+                answer,
+                normalize_text(
+                    answer,
+                    policy,
+                    script=script,
+                ),
+            )
+            for answer in accepted_answers
+        )
         exact_normalized = next(
             (
                 answer
@@ -138,12 +165,12 @@ class FreeTextGrader:
         )
 
     @staticmethod
-    def _effective_policy(
+    def _effective_quiz_policy(
         policy: NormalizationPolicy,
         *,
         script: str | None,
     ) -> NormalizationPolicy:
-        """Apply panel natural-language case semantics without touching other scripts."""
+        """Apply natural-language quiz case semantics without touching other policies."""
         if policy.policy_id != "quiz_free_text" or script != "Latn":
             return policy
         if policy.case_mode is CaseMode.CASEFOLD:
