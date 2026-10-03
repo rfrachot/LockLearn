@@ -1,0 +1,50 @@
+name: Beta5 seeded selection completion
+
+on:
+  push:
+    branches:
+      - feat/beta5-field-polish-v04
+    paths:
+      - scripts/apply_beta5_seeded_selection.py
+      - .github/workflows/beta5-seeded-selection.yml
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/beta5-field-polish-v04
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          check-latest: true
+      - name: Apply seeded selection source/test transform
+        run: python scripts/apply_beta5_seeded_selection.py
+      - name: Install backend test dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Format changed Python
+        run: python -m ruff format custom_components/locklearn/core/session_selection.py tests/backend/test_session_selection.py tests/backend/test_beta5_polish.py
+      - name: Targeted regression tests
+        run: python -m pytest -q tests/backend/test_session_selection.py tests/backend/test_beta5_polish.py --tb=short
+      - name: Remove one-shot helpers
+        run: |
+          rm scripts/apply_beta5_seeded_selection.py
+          rm .github/workflows/beta5-seeded-selection.yml
+      - name: Commit final candidate
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check -- . ':(exclude)custom_components/locklearn/frontend/locklearn-panel.js'
+          git commit -m "feat(beta5): vary equivalent new-card selection per session"
+          git push origin HEAD:feat/beta5-field-polish-v04
+      - name: Dispatch canonical CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --ref feat/beta5-field-polish-v04
