@@ -11,7 +11,9 @@ from custom_components.locklearn.api import beta5_polish
 from custom_components.locklearn.core.session_selection import PreparedSessionSelection
 
 
-def _prepared(card_key: str, *, state: str = "new", reason: str = "new") -> PreparedSessionSelection:
+def _prepared(
+    card_key: str, *, state: str = "new", reason: str = "new"
+) -> PreparedSessionSelection:
     return PreparedSessionSelection(
         card_key=card_key,
         learning_item_id=f"item-{card_key}",
