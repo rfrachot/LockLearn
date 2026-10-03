@@ -192,7 +192,7 @@ async def test_learn_reminder_can_arm_while_new_session_is_already_available() -
         assert settings.values == {}
         assert len(delivery.rendered) == 1
         assert delivery.rendered[0].pedagogical_signal == "no_result"
-        assert delivery.rendered[0].message == "Ton prochain rappel d’apprentissage est dû."
+        assert delivery.rendered[0].message == "Ton prochain rappel d'apprentissage est dû."
     finally:
         service.close()
 
