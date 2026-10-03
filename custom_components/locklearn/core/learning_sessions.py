@@ -7,7 +7,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
 
-from ..storage.database import SQLiteStorage
+from ..storage.database import SQLiteStorage, StaleSessionError
 from .clock import Clock, SystemClock
 from .learning import LearningStateMachine
 from .review_policy import ReviewPolicyV1, ReviewTransition
@@ -74,6 +74,8 @@ class LearningSessionService:
             raise LearningSessionError("session not found")
         current = session.get("current_question")
         if not isinstance(current, dict) or current.get("question_id") != question_id:
+            if self._same_committed_answer(session, question_id=question_id, answer=answer):
+                return session
             raise LearningSessionError("question is no longer current")
         self._require_question_available(current, allow_early=force_early)
         profile_id = str(session["profile_id"])
@@ -149,15 +151,47 @@ class LearningSessionService:
         else:
             raise LearningSessionError("unsupported learning action")
 
-        state = await self._storage.async_answer_learning_session(
-            event,
-            expected_version=expected_version,
-            question_id=question_id,
-            answer=answer,
-            follow_up=follow_up,
-        )
+        try:
+            state = await self._storage.async_answer_learning_session(
+                event,
+                expected_version=expected_version,
+                question_id=question_id,
+                answer=answer,
+                follow_up=follow_up,
+            )
+        except StaleSessionError:
+            canonical = await self._sessions.async_get(session_id)
+            if canonical is not None and self._same_committed_answer(
+                canonical,
+                question_id=question_id,
+                answer=answer,
+            ):
+                return canonical
+            raise
         self._sessions.publish(session_id, state)
         return state
+
+    @staticmethod
+    def _same_committed_answer(
+        session: dict[str, Any],
+        *,
+        question_id: str,
+        answer: object,
+    ) -> bool:
+        """Return whether the exact mutation already won the session CAS.
+
+        This makes lost-response and same-question concurrent retries idempotent
+        without treating a conflicting answer as success.
+        """
+        answers = session.get("answers")
+        if not isinstance(answers, list):
+            return False
+        return any(
+            isinstance(item, dict)
+            and str(item.get("question_id", "")) == question_id
+            and item.get("answer") == answer
+            for item in answers
+        )
 
     def _require_question_available(
         self,
