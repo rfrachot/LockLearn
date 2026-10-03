@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for P3.7 on 2026-09-22, pending final quality gate.
+Accepted for P3.7 on 2026-09-22, amended for Beta.5 on 2026-10-04.
 
 ## Context
 
@@ -15,54 +15,59 @@ script-aware normalization primitives. ReviewEvent already persists
 `grading_result` and `normalization_version`. P3.7 connects those contracts
 without moving session concurrency or full question persistence out of P3.8.
 
+Beta.5 user testing exposed an important natural-language case: Latin-script
+answers such as romaji must not become wrong merely because a mobile keyboard
+changed `ko` to `Ko`. Case is not pedagogically meaningful for that answer, but
+the `exact` grader previously bypassed normalization entirely.
+
 ## Decision
 
 ### Supported V1 grading policies
 
 P3.7 implements:
 
-- `exact`: one explicit accepted answer, byte-for-byte text equality;
-- `any_of`: exact membership in an explicit accepted-answer set;
-- `fuzzy_normalized`: versioned script-aware normalization followed by a
-  conservative fuzzy comparison.
+- `exact`: one explicit accepted answer, equality after the declared normalization policy, with no edit-distance tolerance;
+- `any_of`: membership in an explicit accepted-answer set after the same declared normalization, with no edit-distance tolerance;
+- `fuzzy_normalized`: versioned script-aware normalization followed by a conservative fuzzy comparison.
 
 `rule_based_reserved` remains reserved and is rejected in V1.
 
-Every result carries both `grading_policy_version` and
-`normalization_version`.
+Every result carries both `grading_policy_version` and `normalization_version`.
+
+### Natural-language Latin quiz case handling
+
+The runtime panel policy `quiz_free_text` treats `Latn` answers as case-insensitive by applying Unicode `casefold()` before exact/any-of comparison. The existing Unicode, whitespace and punctuation rules remain in force.
+
+This rule is selected from script metadata rather than a Japanese language hardcode: romaji is one consumer, but the mechanism is generic for natural-language Latin-script answers. Non-Latin scripts keep their declared case policy unchanged.
+
+`exact` still means exact after normalization. It never enables the fuzzy single-edit rule, so case-insensitivity does not make `ka` equivalent to `ko` or `rests` equivalent to `rest`.
+
+This is a pre-1.0 correction to the P3.7 contract discovered during Beta.5 real user testing. Future behavioral changes after 1.0 require an explicit version increment/migration as appropriate.
 
 ### Fuzzy-normalized is opt-in and script-gated
 
-Fuzzy matching is unavailable unless the supplied NormalizationPolicy declares
-explicit supported scripts. The generic core therefore does not infer
-Japanese-, Latin- or other language behavior from a language tag.
+Fuzzy matching is unavailable unless the supplied NormalizationPolicy declares explicit supported scripts. The generic core therefore does not infer Japanese-, Latin- or other language behavior from a language tag.
 
 After normalization, V1 accepts:
 
 - an exact normalized match; or
-- for normalized strings of length >= 4, a single insertion/deletion/
-  substitution difference.
+- for normalized strings of length >= 4, a single insertion/deletion/substitution difference.
 
-This behavior is part of grading-policy version semantics and must change only
-through a new version.
+This behavior is part of grading-policy version semantics and must change only through a new version.
 
-If the only difference is Unicode diacritics on otherwise identical text, the
-fuzzy typo rule does not auto-accept it. This preserves the normalization
-contract that semantically meaningful accents are not silently erased.
+If the only difference is Unicode diacritics on otherwise identical text, the fuzzy typo rule does not auto-accept it. This preserves the normalization contract that semantically meaningful accents are not silently erased.
 
 ### wrong and unrecognized are distinct
 
 A normal unmatched answer is initially `wrong`.
 
-When the learner invokes "Ma réponse devrait être acceptée", the grader converts
-that non-correct result to `unrecognized`:
+When the learner invokes "Ma réponse devrait être acceptée", the grader converts that non-correct result to `unrecognized`:
 
 - `is_definitive_failure = false`;
 - the answer becomes reportable;
 - no automatic SRS failure is implied.
 
-SignalPolicy already treats `unrecognized` as neutral, so P3.7 does not apply
-a relapse or verified-wrong mutation.
+SignalPolicy already treats `unrecognized` as neutral, so P3.7 does not apply a relapse or verified-wrong mutation.
 
 A result that was already correct cannot be converted to unrecognized.
 
@@ -70,12 +75,9 @@ A result that was already correct cannot be converted to unrecognized.
 
 `locklearn/content/report` is a profile-scoped authenticated WebSocket command.
 
-It requires backend `ANSWER` permission, validates the Track belongs to the
-Profile, validates the exact active CardDefinition identity, and verifies the
-card is enabled in that Track.
+It requires backend `ANSWER` permission, validates the Track belongs to the Profile, validates the exact active CardDefinition identity, and verifies the card is enabled in that Track.
 
-The report is persisted as a private `audit_events` row with
-`event_type = content_report`. The payload stores:
+The report is persisted as a private `audit_events` row with `event_type = content_report`. The payload stores:
 
 - report kind;
 - Track/CardDefinition identity;
@@ -85,42 +87,35 @@ The report is persisted as a private `audit_events` row with
 - active dataset generation;
 - `grading_result = unrecognized`.
 
-No new state schema is required because V1 only needs an append-only report
-workflow, not a moderator/status queue. A future moderation workflow may promote
-reports into a dedicated schema through an explicit migration.
+No new state schema is required because V1 only needs an append-only report workflow, not a moderator/status queue. A future moderation workflow may promote reports into a dedicated schema through an explicit migration.
 
 ### Dataset-generation authority
 
-The WebSocket client does not choose the report's dataset generation. The
-backend records the active content generation from ContentGenerationManager.
+The WebSocket client does not choose the report's dataset generation. The backend records the active content generation from ContentGenerationManager.
 
-P3.8 will later persist generation identity per question/session so reports can
-remain tied to an already-presented question across a concurrent content switch.
+P3.8 will later persist generation identity per question/session so reports can remain tied to an already-presented question across a concurrent content switch.
 
 ### ReviewEvent integration
 
-P3.1 ReviewEvent already persists `grading_result` and
-`normalization_version`. P3.7 returns both pieces of versioned grading metadata
-for the answer pipeline to pass through unchanged.
+P3.1 ReviewEvent already persists `grading_result` and `normalization_version`. P3.7 returns both pieces of versioned grading metadata for the answer pipeline to pass through unchanged.
 
 P3.7 does not own session CAS or answer mutation; that integration remains P3.8.
 
 ## Consequences
 
-- plausible unknown answers remain recoverable instead of becoming irreversible
-  false failures;
-- normalization behavior is explicit, versioned and script-aware;
+- plausible unknown answers remain recoverable instead of becoming irreversible false failures;
+- exact/any-of comparisons can use explicitly allowed normalization without inheriting fuzzy typo tolerance;
+- `ko`, `Ko` and `KO` are equivalent for the Latin natural-language quiz policy;
+- non-Latin scripts are not blindly case-transformed;
 - semantic diacritics are not accidentally accepted by generic typo tolerance;
 - content feedback is private, ACL-checked and tied to exact content identity;
 - report submission cannot mutate SRS state;
-- P3.8 can compose the grader with persistent session answers without changing
-  the grading contract.
+- P3.8 can compose the grader with persistent session answers without changing the grading contract.
 
 ## Verification
 
-P3.7 tests cover exact/any-of membership, script-gated fuzzy normalization,
-normalization-version propagation, semantic-diacritic protection, conversion to
-unrecognized, no progress mutation from content reports, report persistence,
-WebSocket ACL and ReviewEvent normalization-version persistence.
+P3.7 tests cover exact/any-of membership, script-gated fuzzy normalization, normalization-version propagation, semantic-diacritic protection, conversion to unrecognized, no progress mutation from content reports, report persistence, WebSocket ACL and ReviewEvent normalization-version persistence.
+
+Beta.5 regression tests additionally cover `ko` / `Ko` / `KO` equivalence for `Latn`, no edit-distance tolerance for exact/any-of, and preservation of non-Latin script behavior.
 
 Final Ruff/mypy/resource/pytest results are recorded after the quality gate.
