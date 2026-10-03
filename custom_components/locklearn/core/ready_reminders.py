@@ -1,4 +1,4 @@
-"""Persistent one-shot return reminders for Learn/Quiz readiness."""
+"""Persistent one-shot return reminders for Learn steps and Quiz readiness."""
 
 from __future__ import annotations
 
@@ -16,7 +16,11 @@ from ..notifications.renderers import (
     RenderedNotification,
 )
 from .clock import Clock, SystemClock
-from .session_selection import SessionSelectionError, SessionSelectionService
+from .session_selection import (
+    PreparedSessionSelection,
+    SessionSelectionError,
+    SessionSelectionService,
+)
 
 _LOGGER = logging.getLogger(__name__)
 _KEY_PREFIX = "ready_reminder:"
@@ -107,7 +111,7 @@ class ReadyReminderService:
         mode: str,
         target_id: str | None = None,
     ) -> dict[str, Any]:
-        """Create or replace exactly one readiness reminder for the scope."""
+        """Create or replace exactly one return reminder for the scope."""
         normalized = self._validate_mode(mode)
         profile = await self._profiles.async_get(profile_id)
         if profile is None:
@@ -117,11 +121,16 @@ class ReadyReminderService:
             track_id=track_id,
             session_type=normalized,
         )
-        if int(availability["available_now"]) > 0:
-            raise ReadyReminderError("the requested mode is already ready")
-        scheduled_for = availability.get("next_available_at_utc")
-        if not isinstance(scheduled_for, str):
-            raise ReadyReminderError("no reliable next availability exists")
+        if normalized == "learn":
+            scheduled_for = self._next_learning_step_at(availability)
+            if scheduled_for is None:
+                raise ReadyReminderError("no reliable next learning step exists")
+        else:
+            if int(availability["available_now"]) > 0:
+                raise ReadyReminderError("the requested mode is already ready")
+            scheduled_for = availability.get("next_available_at_utc")
+            if not isinstance(scheduled_for, str):
+                raise ReadyReminderError("no reliable next availability exists")
 
         target = await self._resolve_target(profile_id, target_id)
         now = self._clock.now().astimezone(UTC)
@@ -197,11 +206,22 @@ class ReadyReminderService:
                 track_id=track_id,
                 session_type=mode,
             )
+            ready = int(availability["available_now"]) > 0
+            moved = availability.get("next_available_at_utc")
+            if mode == "learn":
+                prepared = await self._availability.async_prepare(
+                    profile_id=profile_id,
+                    track_id=track_id,
+                    session_type="learn",
+                    settings={},
+                )
+                ready = self._has_started_card_ready(prepared)
+                moved = self._next_learning_step_at(availability)
         except SessionSelectionError:
             await self._settings.async_delete(key)
             return "cancelled"
 
-        if int(availability["available_now"]) > 0:
+        if ready:
             profile = await self._profiles.async_get(profile_id)
             target = await self._targets.async_get(str(state["target_id"]))
             if (
@@ -227,7 +247,6 @@ class ReadyReminderService:
             await self._settings.async_delete(key)
             return "sent"
 
-        moved = availability.get("next_available_at_utc")
         if isinstance(moved, str):
             moved_at = datetime.fromisoformat(moved).astimezone(UTC)
             if moved_at > now:
@@ -238,6 +257,29 @@ class ReadyReminderService:
 
         await self._settings.async_delete(key)
         return "cancelled"
+
+    @staticmethod
+    def _next_learning_step_at(availability: Mapping[str, Any]) -> str | None:
+        """Return the earliest effective scheduled step for an already-started card."""
+        raw_blockers = availability.get("blockers")
+        if not isinstance(raw_blockers, (list, tuple)):
+            return None
+        for blocker in raw_blockers:
+            if not isinstance(blocker, Mapping) or blocker.get("code") != "scheduled_step":
+                continue
+            until = blocker.get("until_utc")
+            if isinstance(until, str):
+                return until
+        return None
+
+    @staticmethod
+    def _has_started_card_ready(selected: tuple[PreparedSessionSelection, ...]) -> bool:
+        """Return whether effective Learn selection contains a non-new card."""
+        for candidate in selected:
+            selection = candidate.payload.get("selection")
+            if isinstance(selection, Mapping) and selection.get("progress_state") != "new":
+                return True
+        return False
 
     async def _resolve_target(self, profile_id: str, target_id: str | None) -> dict[str, Any]:
         if target_id is not None:
@@ -273,7 +315,9 @@ class ReadyReminderService:
         shared = bool(target.get("shared_device"))
         title = f"LockLearn · {profile_name}" if shared else "LockLearn"
         message = (
-            "Une session d'apprentissage est prête." if mode == "learn" else "Un quiz est prêt."
+            "Ton prochain rappel d’apprentissage est dû."
+            if mode == "learn"
+            else "Un quiz est prêt."
         )
         return RenderedNotification(
             profile_id=str(profile["profile_id"]),
