@@ -324,6 +324,8 @@ const hass = {
                 { code: "scheduled_step", count: 2, until_utc: "2026-09-27T02:10:00+00:00", forceable: true },
               ],
             };
+      case "locklearn/calibration/followup/status":
+        return { source_session_id: null, pending_count: 0, card_keys: [] };
       case "locklearn/reminders/ready/status":
         return {
           active: false,
@@ -346,14 +348,17 @@ const hass = {
           target_available: true,
         };
       case "locklearn/session/start":
-        return session(message.session_type === "quiz" ? "quiz" : "learn");
+      case "locklearn/session/start_v04":
+        return session(message.session_type === "quiz" || message.session_type === "calibration" ? "quiz" : "learn");
       case "locklearn/session/get":
         return session(String(message.session_id).startsWith("quiz") ? "quiz" : "learn");
       case "locklearn/session/answer":
+      case "locklearn/session/answer_v04":
         return { ...session("learn"), version: 2 };
       case "locklearn/session/complete":
         return { ...session("learn"), status: "completed", current_question: null, version: 2 };
       case "locklearn/quiz/answer":
+      case "locklearn/quiz/answer_v04":
         return {
           feedback: {
             format: "mcq",

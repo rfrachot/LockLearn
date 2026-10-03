@@ -59,7 +59,7 @@ test("Learn and Quiz explain readiness before a session starts", async ({ page }
 
   await page.getByRole("button", { name: "Quiz", exact: true }).click();
   await expect(page.getByText("Quiz readiness", { exact: true })).toBeVisible();
-  await expect(page.getByText(/1 cards ready now/)).toBeVisible();
+  await expect(page.getByText(/1 cards ready for quiz/)).toBeVisible();
 });
 
 test("Undo of an already-known introduction uses the canonical reversal", async ({ page }) => {

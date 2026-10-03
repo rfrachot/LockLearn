@@ -161,7 +161,7 @@ describe("frontend protocol", () => {
 
     expect(messages).toEqual([
       {
-        type: "locklearn/session/start",
+        type: "locklearn/session/start_v04",
         profile_id: "p1",
         track_id: "t1",
         session_type: "learn",
@@ -170,7 +170,7 @@ describe("frontend protocol", () => {
       },
       { type: "locklearn/session/get", session_id: "s1" },
       {
-        type: "locklearn/session/answer",
+        type: "locklearn/session/answer_v04",
         session_id: "s1",
         expected_version: 3,
         question_id: "q1",
@@ -263,7 +263,7 @@ describe("frontend protocol", () => {
         settings: {},
       },
       {
-        type: "locklearn/session/start",
+        type: "locklearn/session/start_v04",
         profile_id: "p1",
         track_id: "t1",
         session_type: "learn",
@@ -307,7 +307,7 @@ describe("frontend protocol", () => {
 
     expect(messages).toEqual([
       {
-        type: "locklearn/session/start",
+        type: "locklearn/session/start_v04",
         profile_id: "p1",
         track_id: "t1",
         session_type: "learn",
@@ -315,7 +315,7 @@ describe("frontend protocol", () => {
         settings: {},
       },
       {
-        type: "locklearn/session/start",
+        type: "locklearn/session/start_v04",
         profile_id: "p1",
         track_id: "t1",
         session_type: "quiz",
@@ -445,7 +445,7 @@ describe("frontend protocol", () => {
 
     expect(messages).toEqual([
       {
-        type: "locklearn/session/start",
+        type: "locklearn/session/start_v04",
         profile_id: "p1",
         track_id: "t1",
         session_type: "quiz",
@@ -459,7 +459,7 @@ describe("frontend protocol", () => {
         answer: { kind: "quiz", submitted_text: "answr" },
       },
       {
-        type: "locklearn/quiz/answer",
+        type: "locklearn/quiz/answer_v04",
         session_id: "quiz-1",
         expected_version: 2,
         question_id: "q1",
