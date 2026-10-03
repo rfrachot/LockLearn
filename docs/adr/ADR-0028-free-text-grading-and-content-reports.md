@@ -18,7 +18,8 @@ without moving session concurrency or full question persistence out of P3.8.
 Beta.5 user testing exposed an important natural-language case: Latin-script
 answers such as romaji must not become wrong merely because a mobile keyboard
 changed `ko` to `Ko`. Case is not pedagogically meaningful for that answer, but
-the `exact` grader previously bypassed normalization entirely.
+the runtime panel grader previously bypassed normalization for `exact` and
+`any_of`.
 
 ## Decision
 
@@ -26,9 +27,11 @@ the `exact` grader previously bypassed normalization entirely.
 
 P3.7 implements:
 
-- `exact`: one explicit accepted answer, equality after the declared normalization policy, with no edit-distance tolerance;
-- `any_of`: membership in an explicit accepted-answer set after the same declared normalization, with no edit-distance tolerance;
+- `exact`: one explicit accepted answer, exact comparison with no edit-distance tolerance;
+- `any_of`: exact membership in an explicit accepted-answer set, with no edit-distance tolerance;
 - `fuzzy_normalized`: versioned script-aware normalization followed by a conservative fuzzy comparison.
+
+By default, `exact` and `any_of` preserve their historical raw-membership semantics. A caller may define a scoped natural-language normalization contract, as the panel does below; that does not turn either policy into fuzzy matching.
 
 `rule_based_reserved` remains reserved and is rejected in V1.
 
@@ -36,13 +39,13 @@ Every result carries both `grading_policy_version` and `normalization_version`.
 
 ### Natural-language Latin quiz case handling
 
-The runtime panel policy `quiz_free_text` treats `Latn` answers as case-insensitive by applying Unicode `casefold()` before exact/any-of comparison. The existing Unicode, whitespace and punctuation rules remain in force.
+The runtime panel policy `quiz_free_text` normalizes `exact` and `any_of` before comparison. For `Latn`, it applies Unicode `casefold()` in addition to the existing Unicode/whitespace/punctuation normalization.
 
-This rule is selected from script metadata rather than a Japanese language hardcode: romaji is one consumer, but the mechanism is generic for natural-language Latin-script answers. Non-Latin scripts keep their declared case policy unchanged.
+This rule is selected from script metadata rather than a Japanese language hardcode: romaji is one consumer, but the mechanism is generic for natural-language Latin-script panel answers. Non-Latin scripts keep their declared case behavior unchanged.
 
-`exact` still means exact after normalization. It never enables the fuzzy single-edit rule, so case-insensitivity does not make `ka` equivalent to `ko` or `rests` equivalent to `rest`.
+Within `quiz_free_text`, `exact` still means exact after normalization. It never enables the fuzzy single-edit rule, so case-insensitivity does not make `ka` equivalent to `ko` or `rests` equivalent to `rest`.
 
-This is a pre-1.0 correction to the P3.7 contract discovered during Beta.5 real user testing. Future behavioral changes after 1.0 require an explicit version increment/migration as appropriate.
+This is a pre-1.0 correction to the panel grading contract discovered during Beta.5 real user testing. Future behavioral changes after 1.0 require an explicit version increment/migration as appropriate.
 
 ### Fuzzy-normalized is opt-in and script-gated
 
@@ -104,7 +107,8 @@ P3.7 does not own session CAS or answer mutation; that integration remains P3.8.
 ## Consequences
 
 - plausible unknown answers remain recoverable instead of becoming irreversible false failures;
-- exact/any-of comparisons can use explicitly allowed normalization without inheriting fuzzy typo tolerance;
+- existing non-panel `exact`/`any_of` callers keep their raw-membership behavior;
+- the natural-language panel can apply explicit normalization without inheriting fuzzy typo tolerance;
 - `ko`, `Ko` and `KO` are equivalent for the Latin natural-language quiz policy;
 - non-Latin scripts are not blindly case-transformed;
 - semantic diacritics are not accidentally accepted by generic typo tolerance;
