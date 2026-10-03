@@ -53,7 +53,7 @@ test("Learn and Quiz explain readiness before a session starts", async ({ page }
     page.getByText("No card is due within the normal learning plan right now.", { exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Cards already started", { exact: true })).toBeVisible();
-  await expect(page.getByText("Cards not started yet", { exact: true })).toBeVisible();
+  await expect(page.getByText("Cards left to discover in this Track", { exact: true })).toBeVisible();
   await expect(page.getByText("New cards still allowed today", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue now" })).toBeVisible();
 
