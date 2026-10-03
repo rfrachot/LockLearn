@@ -192,12 +192,21 @@ class IntegrityService:
         )
         if current is None:
             raise IntegrityServiceError("undo target has no current progress")
-        if not self._same_progress(current, dict(target["post_state_snapshot"])):
+        post_snapshot = dict(target["post_state_snapshot"])
+        if not self._same_progress(current, post_snapshot):
             raise IntegrityServiceError("progress changed after the undo target")
 
-        restored = dict(target["pre_state_snapshot"])
+        pre_snapshot = dict(target["pre_state_snapshot"])
+        restored = dict(pre_snapshot)
         for overlay in ("user_state", "suspend_until_utc", "content_status"):
-            restored[overlay] = current[overlay]
+            pre_overlay = pre_snapshot.get(overlay)
+            post_overlay = post_snapshot.get(overlay)
+            current_overlay = current.get(overlay)
+            if pre_overlay == post_overlay or current_overlay != post_overlay:
+                # Preserve independent overlays, including a newer user action.
+                # If the target event itself owns the currently-visible overlay
+                # mutation, keep the pre-state value already in `restored`.
+                restored[overlay] = current_overlay
         now = self._clock.now()
         profile = await self._profiles.async_get(profile_id)
         if profile is None:
