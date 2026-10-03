@@ -34,6 +34,13 @@ committing, so a concurrent progress mutation makes the undo fail rather than
 overwrite newer state.
 
 Independent P3.10 overlays are preserved when restoring the SRS snapshot.
+An overlay is independent only when the ReviewEvent being undone did not own
+that overlay transition, or when a newer user action has since changed it. If
+the target ReviewEvent itself changed an overlay and the current value still
+matches that event's post-state, undo restores the overlay from the event's
+pre-state. In particular, undoing the calibration-pending `known_already`
+transition restores `user_state=active` together with the canonical
+`new / box 0` SRS state rather than leaving a phantom `known_pending` card.
 
 ### Historical rebuild replays stored snapshots
 
