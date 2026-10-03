@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 from datetime import datetime, time, timedelta
 from math import ceil
 from typing import Any, Protocol
@@ -246,11 +247,18 @@ class SessionSelectionService:
             # but it never changes _state_available(): failed/relearning cooldowns
             # remain authoritative.
             new_quota = max(new_quota, requested_cards)
+        raw_selection_seed = effective_settings.get("selection_seed")
+        selection_seed = (
+            raw_selection_seed
+            if isinstance(raw_selection_seed, str) and raw_selection_seed
+            else None
+        )
         ordered = self._build_sequence(
             candidates,
             requested_cards=requested_cards,
             new_quota=new_quota,
             weights=weights,
+            selection_seed=selection_seed,
         )
         return tuple(
             PreparedSessionSelection(
@@ -755,6 +763,7 @@ class SessionSelectionService:
         requested_cards: int,
         new_quota: int,
         weights: dict[str, float],
+        selection_seed: str | None = None,
     ) -> list[_Candidate]:
         due = [c for c in candidates if c.state != "new"]
         scheduled_due = [c for c in due if c.state != "leech"]
@@ -821,7 +830,7 @@ class SessionSelectionService:
                 key=lambda c: (
                     selected_type_counts.get(c.content_type, 0)
                     / self._weight(c.content_type, weights),
-                    *self._candidate_order_key(c),
+                    *self._candidate_order_key(c, selection_seed=selection_seed),
                 ),
             )
             selected.append(chosen)
@@ -890,7 +899,11 @@ class SessionSelectionService:
         return not selected_new_groups.intersection(candidate.confusable_group_ids)
 
     @staticmethod
-    def _candidate_order_key(candidate: _Candidate) -> tuple[int, str, int, str]:
+    def _candidate_order_key(
+        candidate: _Candidate,
+        *,
+        selection_seed: str | None = None,
+    ) -> tuple[int, str, str, int, str]:
         priority = {
             "relearning": 0,
             "learning": 1,
@@ -898,9 +911,13 @@ class SessionSelectionService:
             "leech": 3,
             "new": 4,
         }[candidate.state]
+        seeded_rank = ""
+        if selection_seed is not None and candidate.state == "new":
+            seeded_rank = sha256(f"{selection_seed}\0{candidate.card_key}".encode()).hexdigest()
         return (
             priority,
             candidate.next_due_at_utc or "",
+            seeded_rank,
             candidate.pack_position,
             candidate.card_key,
         )

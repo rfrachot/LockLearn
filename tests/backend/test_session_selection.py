@@ -1001,6 +1001,45 @@ async def test_calibration_bypasses_learning_order_constraints_without_mutating_
 
 
 @pytest.mark.asyncio
+async def test_selection_seed_varies_new_prefix_and_replays_stably() -> None:
+    candidates = tuple(
+        _candidate(index, state="new", content_type="vocabulary") for index in range(1, 41)
+    )
+    service = _service(
+        candidates,
+        profiles=_Profiles(max_new=40, session_length=8),
+    )
+
+    first = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="learn",
+        settings={"requested_cards": 8, "selection_seed": "session-a"},
+    )
+    replay = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="learn",
+        settings={"requested_cards": 8, "selection_seed": "session-a"},
+    )
+    second = await service.async_prepare(
+        profile_id="profile-1",
+        track_id="track-1",
+        session_type="learn",
+        settings={"requested_cards": 8, "selection_seed": "session-b"},
+    )
+
+    first_keys = tuple(item.card_key for item in first)
+    replay_keys = tuple(item.card_key for item in replay)
+    second_keys = tuple(item.card_key for item in second)
+    assert first_keys == replay_keys
+    assert first_keys != second_keys
+    assert len(first_keys) == len(second_keys)
+    assert len(first_keys) > 0
+    assert set(first_keys) != {f"card-{index}" for index in range(1, len(first_keys) + 1)}
+
+
+@pytest.mark.asyncio
 async def test_known_already_is_learn_hidden_until_verified_quiz_due() -> None:
     candidate = _candidate(
         1,
