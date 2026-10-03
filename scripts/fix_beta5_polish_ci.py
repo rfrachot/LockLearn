@@ -37,6 +37,18 @@ replace(
     '"locklearn/quiz/answer_v04"',
     count=None,
 )
+# startLeechSession is intentionally not migrated by v0.4; restore that focused
+# P5.7 fixture after the broad session-start expectation update above.
+replace(
+    "frontend/src/protocol.test.ts",
+    '        if (message.type === "locklearn/session/start_v04") {\n          return {\n            id: "leech-session",',
+    '        if (message.type === "locklearn/session/start") {\n          return {\n            id: "leech-session",',
+)
+replace(
+    "frontend/src/protocol.test.ts",
+    '        type: "locklearn/session/start_v04",\n        profile_id: "p1",\n        track_id: "t1",\n        session_type: "learn",\n        strategy: "default",\n        settings: { requested_cards: 20, leeches_only: true },',
+    '        type: "locklearn/session/start",\n        profile_id: "p1",\n        track_id: "t1",\n        session_type: "learn",\n        strategy: "default",\n        settings: { requested_cards: 20, leeches_only: true },',
+)
 
 # E2E HA harness serves both legacy and additive protocol names during the migration.
 replace(
