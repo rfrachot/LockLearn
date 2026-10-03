@@ -532,6 +532,12 @@ export class LockLearnQuizView extends LitElement {
     return `${time} · ${this.t("quiz.inAbout")} ${minutes} min`;
   }
 
+  private nextQuizAvailableLabel(): string {
+    return this.locale() === "fr"
+      ? "Prochaine carte disponible pour un quiz"
+      : "Next card available for a quiz";
+  }
+
   private elapsedMs(): number {
     return Math.max(0, Math.round(nowMs() - this.questionStartedAt));
   }
@@ -1029,7 +1035,7 @@ export class LockLearnQuizView extends LitElement {
                       ? html`<div class="muted">${this.t("quiz.noExactTime")}</div>`
                       : html`
                           <div>
-                            <strong>${this.t("quiz.nextAvailable")}:</strong>
+                            <strong>${this.nextQuizAvailableLabel()}:</strong>
                             ${this.dueLabel(this.availability.next_available_at_utc)}
                           </div>
                         `}
@@ -1125,7 +1131,7 @@ export class LockLearnQuizView extends LitElement {
           ${nextDue === null
             ? html`<p class="muted">${this.t("quiz.noExactTime")}</p>`
             : html`
-                <p><strong>${this.t("quiz.nextAvailable")}:</strong> ${this.dueLabel(nextDue)}</p>
+                <p><strong>${this.nextQuizAvailableLabel()}:</strong> ${this.dueLabel(nextDue)}</p>
               `}
           <p class="muted">${this.t("quiz.whyDueOnly")}</p>
           ${(this.availability?.blockers.length ?? 0) > 0
@@ -1267,6 +1273,9 @@ export class LockLearnQuizView extends LitElement {
           <span>${this.t("quiz.yourAnswer")}</span>
           <input
             autocomplete="off"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
             .value=${this.freeText}
             @input=${(event: Event) => {
               const target = event.currentTarget;
