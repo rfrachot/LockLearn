@@ -25,15 +25,18 @@ import {
   completeSession,
   createCardAnnotation,
   getReadyReminderStatus,
+  getCalibrationFollowupStatus,
   getSession,
   getSessionAvailability,
   learnCardInstead,
   listNotificationTargets,
   reportQuestion,
   setCardUserState,
+  startCalibrationFollowup,
   startCalibrationSession,
   startLearnSession,
   startQuizSession,
+  type CalibrationFollowupStatus,
   type ConcernedCardsFilter,
   type DashboardResponse,
   type DashboardTrack,
@@ -85,6 +88,7 @@ export class LockLearnLearnView extends LitElement {
   @state() private calibrationSize = 20;
   @state() private hasNotificationTarget = false;
   @state() private knownBulkGuardVisible = false;
+  @state() private calibrationFollowup?: CalibrationFollowupStatus;
 
   private questionStartedAt = nowMs();
   private questionId: string | null = null;
@@ -495,6 +499,11 @@ export class LockLearnLearnView extends LitElement {
       this.hasNotificationTarget = (
         await listNotificationTargets(this.hass, this.profile.profile_id)
       ).some((target) => target.enabled);
+      this.calibrationFollowup = await getCalibrationFollowupStatus(
+        this.hass,
+        this.profile.profile_id,
+        this.trackId,
+      );
       if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
       const nextAvailable = this.availability.next_available_at_utc;
       if (nextAvailable !== null) {
@@ -509,6 +518,7 @@ export class LockLearnLearnView extends LitElement {
     } catch {
       this.availability = undefined;
       this.readyAlternative = undefined;
+      this.calibrationFollowup = undefined;
     }
   }
 
@@ -731,7 +741,11 @@ export class LockLearnLearnView extends LitElement {
 
   private async markKnownAlready(question: SessionQuestion): Promise<void> {
     this.lastKnownCardKey = question.card_key;
-    await this.learningAction("known_already");
+    const applied = await this.learningAction("known_already");
+    if (!applied) {
+      this.lastKnownCardKey = undefined;
+      return;
+    }
     this.maybeShowKnownBulkGuard();
     if (this.lastKnownCardKey !== question.card_key) return;
     this.notice = "";
@@ -834,9 +848,9 @@ export class LockLearnLearnView extends LitElement {
   private async learningAction(
     action: "introduce" | "known_already" | "known" | "review" | "idk",
     latency?: number,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const question = this.session?.current_question;
-    if (this.hass === undefined || this.session === undefined || question === null || question === undefined) return;
+    if (this.hass === undefined || this.session === undefined || question === null || question === undefined) return false;
     const requestSession = this.session;
     const requestAnswer = {
       kind: "learning",
@@ -863,8 +877,10 @@ export class LockLearnLearnView extends LitElement {
       this.retryRequest = undefined;
       this.applySession(await this.finalizeIfDone(answered));
       await this.refreshAvailability();
+      return true;
     } catch (error) {
       await this.recover(error);
+      return false;
     } finally {
       this.loading = false;
       this.endSubmissionWatch();
@@ -1020,7 +1036,9 @@ export class LockLearnLearnView extends LitElement {
           <div class="notice" role="status">
             <strong>${this.t("learn.readiness")}</strong>
             ${this.availability.available_now > 0
-              ? html`<div>${this.availability.available_now} ${this.t("learn.cardsReady")}</div>`
+              ? html`<div>${this.availability.available_now} ${resumable
+                  ? (this.locale() === "fr" ? "autre(s) carte(s) prêtes après la session en cours" : "other card(s) ready after the current session")
+                  : this.t("learn.cardsReady")}</div>`
               : html`
                   <div>${this.t("learn.noCardsReady")}</div>
                   <dl>
@@ -1054,7 +1072,7 @@ export class LockLearnLearnView extends LitElement {
           </div>
         ` : nothing}
         ${this.session === undefined ? this.renderNoDeadEndActions() : nothing}
-        ${this.session === undefined && this.calibrationSetup
+        ${this.calibrationSetup
           ? html`
               <section class="learn-card" role="dialog" aria-labelledby="calibration-title">
                 <h2 id="calibration-title">${this.t("learn.calibrationTitle")}</h2>
@@ -1133,11 +1151,65 @@ export class LockLearnLearnView extends LitElement {
               .filter=${this.concernedFilter}
               .mode=${"learn"}
               .language=${this.locale()}
+              .timeZone=${this.profile.timezone}
               @locklearn-concerned-cards-close=${this.closeConcerned}
               @locklearn-concerned-cards-changed=${() => void this.refreshAvailability()}
             ></locklearn-concerned-cards>`}
       </section>
     `;
+  }
+
+  private async startCalibrationFollowup(): Promise<void> {
+    if (
+      this.hass === undefined ||
+      this.profile === undefined ||
+      this.calibrationFollowup?.source_session_id === null ||
+      this.calibrationFollowup?.source_session_id === undefined
+    ) return;
+    this.loading = true;
+    this.errorMessage = "";
+    try {
+      const session = await startCalibrationFollowup(
+        this.hass,
+        this.profile.profile_id,
+        this.trackId,
+        this.calibrationFollowup.source_session_id,
+      );
+      this.applySession(session);
+      await this.refreshAvailability();
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private blockerTitle(code: string): string {
+    const fr = this.locale() === "fr";
+    const labels: Record<string, [string, string]> = {
+      scheduled_step: ["Next scheduled recall", "Prochain rappel planifié"],
+      known_already_verification: ["Already-known cards to verify", "Cartes déjà connues à vérifier"],
+      new_quota: ["New-card limit reached", "Limite de nouvelles cartes atteinte"],
+      sibling_gap: ["Similar cards are spaced", "Cartes similaires espacées"],
+      confusable_gap: ["Similar cards are spaced", "Cartes similaires espacées"],
+      buried: ["Cards temporarily set aside", "Cartes mises de côté temporairement"],
+      prerequisite: ["Prerequisites first", "Prérequis à apprendre d’abord"],
+      suspended: ["Suspended cards", "Cartes suspendues"],
+    };
+    const pair = labels[code] ?? ["Unavailable for now", "Indisponible pour le moment"];
+    return pair[fr ? 1 : 0];
+  }
+
+  private blockerBody(code: string, count: number): string {
+    const fr = this.locale() === "fr";
+    if (code === "scheduled_step") return fr ? `${count} carte(s) attendent leur prochaine étape d’apprentissage.` : `${count} card(s) are waiting for their next learning step.`;
+    if (code === "known_already_verification") return fr ? `${count} carte(s) marquées comme déjà connues seront vérifiées plus tard.` : `${count} already-known card(s) will be verified later.`;
+    if (code === "new_quota") return fr ? `${count} carte(s) attendent le prochain quota de nouvelles cartes.` : `${count} card(s) are waiting for the next new-card quota.`;
+    if (code === "sibling_gap" || code === "confusable_gap") return fr ? `${count} carte(s) similaires sont espacées pour limiter les confusions.` : `${count} similar card(s) are spaced to reduce confusion.`;
+    if (code === "prerequisite") return fr ? `${count} carte(s) attendent un prérequis.` : `${count} card(s) are waiting for a prerequisite.`;
+    if (code === "suspended") return fr ? `${count} carte(s) sont suspendues.` : `${count} card(s) are suspended.`;
+    if (code === "buried") return fr ? `${count} carte(s) sont temporairement mises de côté.` : `${count} card(s) are temporarily set aside.`;
+    return fr ? `${count} carte(s) ne sont pas disponibles pour le moment.` : `${count} card(s) are not available yet.`;
   }
 
   private blockerFilter(code: string): ConcernedCardsFilter {
@@ -1163,11 +1235,15 @@ export class LockLearnLearnView extends LitElement {
       availability.available_now === 0 && availability.next_available_at_utc !== null;
     return html`
       <div class="actions">
-        ${availability.new_cards > 0
-          ? html`<button @click=${this.openCalibrationSetup} ?disabled=${this.loading}>
-              ${this.t("learn.quickCalibration")}
+        ${(this.calibrationFollowup?.pending_count ?? 0) > 0
+          ? html`<button class="primary" @click=${() => void this.startCalibrationFollowup()} ?disabled=${this.loading}>
+              ${this.locale() === "fr" ? "Apprendre les cartes identifiées par la calibration" : "Learn the cards identified by calibration"}
             </button>`
-          : nothing}
+          : availability.new_cards > 0
+            ? html`<button @click=${this.openCalibrationSetup} ?disabled=${this.loading}>
+                ${this.t("learn.quickCalibration")}
+              </button>`
+            : nothing}
         ${this.readyAlternative === undefined
           ? nothing
           : html`<button @click=${() => void this.openReadyAlternative()} ?disabled=${this.loading}>
@@ -1195,9 +1271,9 @@ export class LockLearnLearnView extends LitElement {
             <dl>
               ${availability.blockers.map(
                 (blocker) => html`
-                  <dt>${blocker.code}</dt>
+                  <dt>${this.blockerTitle(blocker.code)}</dt>
                   <dd>
-                    ${blocker.count}
+                    ${this.blockerBody(blocker.code, blocker.count)}
                     ${blocker.until_utc === null ? nothing : html` · ${this.dueLabel(blocker.until_utc)}`}
                     <button
                       @click=${() => this.openConcerned(this.blockerFilter(blocker.code))}
@@ -1352,7 +1428,9 @@ export class LockLearnLearnView extends LitElement {
             @click=${() => void this.learningAction("introduce")}
             ?disabled=${this.loading}
           >
-            ${this.t("learn.continue")}
+            ${question.position + 1 < (this.session?.question_count ?? 0)
+              ? (this.locale() === "fr" ? "Passer à la carte suivante" : "Go to the next card")
+              : (this.locale() === "fr" ? "Continuer la session" : "Continue the session")}
           </button>
         </div>
         ${this.renderSecondaryActions(question, true)}
@@ -1393,6 +1471,9 @@ export class LockLearnLearnView extends LitElement {
               </div>
             `
           : nothing}
+        ${!this.revealed
+          ? html`<p class="muted">${this.locale() === "fr" ? "Répondez mentalement, puis révélez la réponse pour vous évaluer." : "Answer mentally, then reveal the answer to evaluate yourself."}</p>`
+          : nothing}
         <div class="actions">
           ${!this.revealed
             ? html`
@@ -1415,7 +1496,7 @@ export class LockLearnLearnView extends LitElement {
                     void this.learningAction("idk", this.pendingIdkLatency)}
                   ?disabled=${this.loading}
                 >
-                  ${this.t("learn.continue")}
+                  ${this.locale() === "fr" ? "Continuer la session" : "Continue the session"}
                 </button>`
               : html`
                   <button

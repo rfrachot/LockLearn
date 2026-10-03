@@ -1019,7 +1019,7 @@ export async function startQuizSession(
   quizFormat: QuizFormat = "mixed",
 ): Promise<SessionState> {
   return hass.callWS<SessionState>({
-    type: "locklearn/session/start",
+    type: "locklearn/session/start_v04",
     profile_id: profileId,
     track_id: trackId,
     session_type: "quiz",
@@ -1040,7 +1040,7 @@ export async function startCalibrationSession(
   requestedCards = 20,
 ): Promise<SessionState> {
   return hass.callWS<SessionState>({
-    type: "locklearn/session/start",
+    type: "locklearn/session/start_v04",
     profile_id: profileId,
     track_id: trackId,
     session_type: "calibration",
@@ -1065,7 +1065,7 @@ export async function submitQuizAnswer(
   answer: Record<string, unknown>,
 ): Promise<QuizAnswerResponse> {
   return hass.callWS<QuizAnswerResponse>({
-    type: "locklearn/quiz/answer",
+    type: "locklearn/quiz/answer_v04",
     session_id: session.id,
     expected_version: session.version,
     question_id: questionId,
@@ -1126,7 +1126,7 @@ export async function startLearnSession(
   allowEarlyLearning = false,
 ): Promise<SessionState> {
   return hass.callWS<SessionState>({
-    type: "locklearn/session/start",
+    type: "locklearn/session/start_v04",
     profile_id: profileId,
     track_id: trackId,
     session_type: "learn",
@@ -1135,6 +1135,40 @@ export async function startLearnSession(
       ...(requestedCards === undefined ? {} : { requested_cards: requestedCards }),
       ...(allowEarlyLearning ? { allow_early_learning: true } : {}),
     },
+  });
+}
+
+export interface CalibrationFollowupStatus {
+  source_session_id: string | null;
+  pending_count: number;
+  card_keys: string[];
+}
+
+export async function getCalibrationFollowupStatus(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  calibrationSessionId?: string,
+): Promise<CalibrationFollowupStatus> {
+  return hass.callWS<CalibrationFollowupStatus>({
+    type: "locklearn/calibration/followup/status",
+    profile_id: profileId,
+    track_id: trackId,
+    ...(calibrationSessionId === undefined ? {} : { calibration_session_id: calibrationSessionId }),
+  });
+}
+
+export async function startCalibrationFollowup(
+  hass: HomeAssistantLike,
+  profileId: string,
+  trackId: string,
+  calibrationSessionId: string,
+): Promise<SessionState> {
+  return hass.callWS<SessionState>({
+    type: "locklearn/calibration/followup/start",
+    profile_id: profileId,
+    track_id: trackId,
+    calibration_session_id: calibrationSessionId,
   });
 }
 
@@ -1155,7 +1189,7 @@ export async function answerSession(
   answer: Record<string, unknown>,
 ): Promise<SessionState> {
   return hass.callWS<SessionState>({
-    type: "locklearn/session/answer",
+    type: "locklearn/session/answer_v04",
     session_id: session.id,
     expected_version: session.version,
     question_id: questionId,

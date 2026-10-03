@@ -29,6 +29,7 @@ import {
   listNotificationTargets,
   reportFreeTextShouldBeAccepted,
   reportQuestion,
+  startCalibrationFollowup,
   startLearnSession,
   startQuizSession,
   submitQuizAnswer,
@@ -216,6 +217,9 @@ export class LockLearnQuizView extends LitElement {
     }
 
     .prompt {
+      min-height: 110px;
+      display: grid;
+      place-items: center;
       overflow-wrap: anywhere;
       font-size: clamp(1.5rem, 6vw, 3rem);
       line-height: 1.25;
@@ -238,6 +242,8 @@ export class LockLearnQuizView extends LitElement {
     }
 
     .options {
+      min-height: 190px;
+      align-content: start;
       display: grid;
       gap: 10px;
     }
@@ -246,6 +252,23 @@ export class LockLearnQuizView extends LitElement {
       width: 100%;
       text-align: left;
       overflow-wrap: anywhere;
+    }
+
+    .feedback {
+      min-height: 190px;
+      align-content: start;
+    }
+
+    .availability-card {
+      display: grid;
+      gap: 16px;
+    }
+
+    .availability-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding-top: 4px;
     }
 
     .feedback-title {
@@ -258,6 +281,8 @@ export class LockLearnQuizView extends LitElement {
     }
 
     .free-text-form {
+      min-height: 190px;
+      align-content: start;
       display: grid;
       gap: 10px;
     }
@@ -294,6 +319,9 @@ export class LockLearnQuizView extends LitElement {
         min-width: 0;
         max-width: 100%;
       }
+
+      .prompt { min-height: 80px; }
+      .options, .free-text-form, .feedback { min-height: 150px; }
 
       .progress {
         flex-direction: column;
@@ -797,10 +825,11 @@ export class LockLearnQuizView extends LitElement {
     this.loading = true;
     this.errorMessage = "";
     try {
-      const session = await startLearnSession(
+      const session = await startCalibrationFollowup(
         this.hass,
         this.profile.profile_id,
         this.session.track_id,
+        this.session.id,
       );
       this.dispatchEvent(new CustomEvent("locklearn-open-session", {
         detail: { session },
@@ -984,7 +1013,7 @@ export class LockLearnQuizView extends LitElement {
           </p>` : nothing}
         </div>
         ${this.session === undefined && this.availability !== undefined ? html`
-          <div class="notice" role="status">
+          <div class="notice availability-card" role="status">
             <strong>${this.t("quiz.howItWorks")}</strong>
             ${this.availability.available_now > 0
               ? html`<div>${this.availability.available_now} ${this.t("quiz.cardsReady")}</div>`
@@ -1006,6 +1035,7 @@ export class LockLearnQuizView extends LitElement {
                         `}
                   `}
             <div class="muted">${this.t("quiz.whyDueOnly")}</div>
+            <div class="availability-actions">
             ${this.availability.blockers.length > 0
               ? html`<button
                   @click=${() => this.openConcerned(
@@ -1024,6 +1054,7 @@ export class LockLearnQuizView extends LitElement {
                       : this.t("quiz.title"))}
                 </button>`}
             ${this.renderReminderButton()}
+            </div>
           </div>
         ` : nothing}
         ${this.submissionSlow
@@ -1054,6 +1085,7 @@ export class LockLearnQuizView extends LitElement {
               .filter=${this.concernedFilter}
               .mode=${"quiz"}
               .language=${this.locale()}
+              .timeZone=${this.profile.timezone}
               @locklearn-concerned-cards-close=${this.closeConcerned}
               @locklearn-concerned-cards-changed=${() => void this.refreshAvailability()}
             ></locklearn-concerned-cards>`}
