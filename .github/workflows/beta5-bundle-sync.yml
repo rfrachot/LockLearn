@@ -1,0 +1,43 @@
+name: Beta.5 bundle sync helper
+
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  sync-bundle:
+    if: github.head_ref == 'ci/beta5-bundle-sync'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build panel
+        working-directory: frontend
+        run: |
+          npm install
+          npm run build
+          npm run check:bundle
+      - name: Commit generated bundle to polish branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp custom_components/locklearn/frontend/locklearn-panel.js /tmp/locklearn-panel.js
+          git fetch origin feat/beta5-final-polish-v05
+          git checkout -B feat/beta5-final-polish-v05 origin/feat/beta5-final-polish-v05
+          cp /tmp/locklearn-panel.js custom_components/locklearn/frontend/locklearn-panel.js
+          git add custom_components/locklearn/frontend/locklearn-panel.js
+          if git diff --cached --quiet; then
+            echo 'Bundle already current.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'build(beta5): sync frontend bundle'
+          git push origin HEAD:feat/beta5-final-polish-v05
