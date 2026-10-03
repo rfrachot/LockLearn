@@ -11,6 +11,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.typing import ConfigType
 
+from .api.beta5_polish import async_register_beta5_polish_commands
 from .api.websocket import async_register_commands
 from .const import (
     CONF_UNINSTALL_DATA_POLICY,
@@ -59,6 +60,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     if not domain_data.get(DATA_STATIC_REGISTERED):
         await async_register_static_path(hass)
         async_register_commands(hass)
+        async_register_beta5_polish_commands(hass)
         register_profile_transfer_views(hass)
         domain_data[DATA_STATIC_REGISTERED] = True
     return True
