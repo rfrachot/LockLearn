@@ -1,4 +1,10 @@
-import type { DashboardSession, SessionQuestion, SessionState, VisibleProfile } from "./protocol";
+import type {
+  DashboardSession,
+  SessionAvailability,
+  SessionQuestion,
+  SessionState,
+  VisibleProfile,
+} from "./protocol";
 
 export function isResumableLearnSession(
   last: DashboardSession | null | undefined,
@@ -27,6 +33,30 @@ export function canAnswerProfile(profile: VisibleProfile | undefined): boolean {
   return profile !== undefined && profile.role !== "viewer";
 }
 
+export function scheduledLearningReminderAt(
+  availability: SessionAvailability | undefined,
+): string | null {
+  if (availability === undefined) return null;
+  let earliest: { raw: string; timestamp: number } | undefined;
+  for (const blocker of availability.blockers) {
+    if (blocker.code !== "scheduled_step" || blocker.until_utc === null) continue;
+    const timestamp = Date.parse(blocker.until_utc);
+    if (Number.isNaN(timestamp)) continue;
+    if (earliest === undefined || timestamp < earliest.timestamp) {
+      earliest = { raw: blocker.until_utc, timestamp };
+    }
+  }
+  return earliest?.raw ?? null;
+}
+
+export function scheduledLearningWaitingCount(
+  availability: SessionAvailability | undefined,
+): number {
+  if (availability === undefined) return 0;
+  return availability.blockers
+    .filter((blocker) => blocker.code === "scheduled_step")
+    .reduce((total, blocker) => total + blocker.count, 0);
+}
 
 export const KNOWN_ALREADY_STREAK_GUARD = 3;
 export const KNOWN_ALREADY_TOTAL_GUARD = 5;
