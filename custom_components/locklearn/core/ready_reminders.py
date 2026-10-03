@@ -315,7 +315,7 @@ class ReadyReminderService:
         shared = bool(target.get("shared_device"))
         title = f"LockLearn · {profile_name}" if shared else "LockLearn"
         message = (
-            "Ton prochain rappel d’apprentissage est dû."
+            "Ton prochain rappel d'apprentissage est dû."
             if mode == "learn"
             else "Un quiz est prêt."
         )
