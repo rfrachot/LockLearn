@@ -72,6 +72,14 @@ export const interactiveAccessibilityStyles = css`
   :where(a, label, p, li, dd, dt, button) {
     overflow-wrap: anywhere;
   }
+
+  .track-form > .scope-actions {
+    order: 1;
+  }
+
+  .track-form > .scope-state {
+    order: 2;
+  }
 `;
 
 export function safeRubySegments(
