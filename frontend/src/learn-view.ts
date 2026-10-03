@@ -16,6 +16,8 @@ import {
   isIntroductionQuestion,
   isResumableLearnSession,
   questionAvailableAtMs,
+  scheduledLearningReminderAt,
+  scheduledLearningWaitingCount,
   shouldShowKnownAlreadyBulkGuard,
 } from "./learn-model";
 import {
@@ -300,12 +302,11 @@ export class LockLearnLearnView extends LitElement {
     }
 
     .known-snackbar {
-      position: fixed;
+      position: sticky;
       z-index: 1100;
-      inset-inline: 16px;
       bottom: max(16px, env(safe-area-inset-bottom));
-      width: min(560px, calc(100% - 32px));
-      margin-inline: auto;
+      width: min(560px, 100%);
+      margin: 0 auto max(16px, env(safe-area-inset-bottom));
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -337,6 +338,12 @@ export class LockLearnLearnView extends LitElement {
       .secondary-actions,
       .field-row {
         width: 100%;
+      }
+
+      .known-snackbar {
+        width: 100%;
+        align-items: stretch;
+        flex-direction: column;
       }
 
       .progress {
@@ -505,9 +512,17 @@ export class LockLearnLearnView extends LitElement {
         this.trackId,
       );
       if (this.nextDueTimer !== undefined) globalThis.clearTimeout(this.nextDueTimer);
-      const nextAvailable = this.availability.next_available_at_utc;
-      if (nextAvailable !== null) {
-        const delay = Date.parse(nextAvailable) - Date.now();
+      const deadlines = [
+        scheduledLearningReminderAt(this.availability),
+        this.availability.next_available_at_utc,
+      ]
+        .filter((value): value is string => value !== null)
+        .map((value) => Date.parse(value))
+        .filter((value) => !Number.isNaN(value) && value > Date.now())
+        .sort((left, right) => left - right);
+      const nextRefreshAt = deadlines[0];
+      if (nextRefreshAt !== undefined) {
+        const delay = nextRefreshAt - Date.now();
         if (delay > 0 && delay < 2_147_000_000) {
           this.nextDueTimer = globalThis.setTimeout(() => {
             this.nextDueTimer = undefined;
@@ -568,6 +583,12 @@ export class LockLearnLearnView extends LitElement {
     const minutes = Math.max(1, Math.ceil((due.getTime() - Date.now()) / 60_000));
     const time = new Intl.DateTimeFormat(this.locale(), { timeStyle: "short" }).format(due);
     return `${time} · ${this.t("learn.inAbout")} ${minutes} min`;
+  }
+
+  private nextLearningRecallLabel(): string {
+    return this.locale() === "fr"
+      ? "Prochain rappel d’une carte déjà commencée"
+      : "Next recall of a card already started";
   }
 
   private continueCurrentEarly(): void {
@@ -992,6 +1013,75 @@ export class LockLearnLearnView extends LitElement {
     }
   }
 
+  private renderReminderAction() {
+    if (scheduledLearningReminderAt(this.availability) === null) return nothing;
+    if (!this.hasNotificationTarget) {
+      return html`<button @click=${() => navigateToRoute("settings")}>
+        ${this.t("learn.configureNotifications")}
+      </button>`;
+    }
+    return this.reminder?.active
+      ? html`<button @click=${() => void this.cancelReminder()} ?disabled=${this.loading}>
+          ${this.t("learn.cancelReminder")}
+        </button>`
+      : html`<button @click=${() => void this.armReminder()} ?disabled=${this.loading}>
+          ${this.locale() === "fr" ? "Me prévenir pour ce rappel" : "Notify me for this recall"}
+        </button>`;
+  }
+
+  private renderAvailabilitySummary() {
+    const availability = this.availability;
+    if (availability === undefined) return nothing;
+    const nextRecall = scheduledLearningReminderAt(availability);
+    const waitingStarted = scheduledLearningWaitingCount(availability);
+    const fr = this.locale() === "fr";
+    return html`
+      <div class="notice" role="status">
+        <strong>${this.t("learn.readiness")}</strong>
+        ${availability.available_now > 0
+          ? html`<div>
+              ${fr
+                ? `Une nouvelle session de ${availability.available_now} cartes est disponible.`
+                : `A new session of ${availability.available_now} cards is available.`}
+            </div>`
+          : html`<div>${this.t("learn.noCardsReady")}</div>`}
+        <dl>
+          <dt>${fr ? "Cartes restant à découvrir dans ce parcours" : "Cards left to discover in this Track"}</dt>
+          <dd>${availability.new_cards}</dd>
+          <dt>${this.t("learn.startedCards")}</dt>
+          <dd>${availability.introduced_cards}</dd>
+          <dt>${fr ? "Cartes commencées en attente de leur prochaine étape" : "Started cards waiting for their next step"}</dt>
+          <dd>${waitingStarted}</dd>
+          <dt>${this.t("learn.newQuotaRemaining")}</dt>
+          <dd>${availability.remaining_new_quota}</dd>
+        </dl>
+        ${nextRecall === null
+          ? availability.next_available_reason === "new_quota" && availability.next_available_at_utc !== null
+            ? html`<div>
+                <strong>${this.t("learn.quotaReset")}:</strong>
+                ${this.dueLabel(availability.next_available_at_utc)}
+              </div>`
+            : availability.available_now === 0
+              ? html`<div class="muted">${this.t("learn.noExactTime")}</div>`
+              : nothing
+          : html`<div>
+              <strong>${this.nextLearningRecallLabel()}:</strong>
+              ${this.dueLabel(nextRecall)}
+            </div>`}
+        ${availability.forceable_early > 0 ? html`
+          <p class="muted">
+            ${availability.forceable_new > 0
+              ? this.t("learn.overrideNewHelp")
+              : this.t("learn.continueEarlyHelp")}
+          </p>
+          <button class="primary" @click=${() => void this.start(true)} ?disabled=${this.loading}>
+            ${this.t("learn.continueNow")}
+          </button>
+        ` : nothing}
+      </div>
+    `;
+  }
+
   protected render() {
     if (this.profile === undefined) return nothing;
     if (!canAnswerProfile(this.profile)) {
@@ -1032,45 +1122,7 @@ export class LockLearnLearnView extends LitElement {
             ${resumable ? this.t("learn.resumeHelp") : this.t("learn.startHelp")}
           </p>` : nothing}
         </div>
-        ${this.session === undefined && this.availability !== undefined ? html`
-          <div class="notice" role="status">
-            <strong>${this.t("learn.readiness")}</strong>
-            ${this.availability.available_now > 0
-              ? html`<div>${this.availability.available_now} ${resumable
-                  ? (this.locale() === "fr" ? "autre(s) carte(s) prêtes après la session en cours" : "other card(s) ready after the current session")
-                  : this.t("learn.cardsReady")}</div>`
-              : html`
-                  <div>${this.t("learn.noCardsReady")}</div>
-                  <dl>
-                    <dt>${this.t("learn.startedCards")}</dt><dd>${this.availability.introduced_cards}</dd>
-                    <dt>${this.t("learn.unstartedCards")}</dt><dd>${this.availability.new_cards}</dd>
-                    <dt>${this.t("learn.newQuotaRemaining")}</dt><dd>${this.availability.remaining_new_quota}</dd>
-                  </dl>
-                  ${this.availability.next_available_at_utc === null
-                    ? html`<div class="muted">${this.t("learn.noExactTime")}</div>`
-                    : html`
-                        <div>
-                          <strong>${this.t(
-                            this.availability.next_available_reason === "new_quota"
-                              ? "learn.quotaReset"
-                              : "learn.nextAvailable",
-                          )}:</strong>
-                          ${this.dueLabel(this.availability.next_available_at_utc)}
-                        </div>
-                      `}
-                  ${this.availability.forceable_early > 0 ? html`
-                    <p class="muted">
-                      ${this.availability.forceable_new > 0
-                        ? this.t("learn.overrideNewHelp")
-                        : this.t("learn.continueEarlyHelp")}
-                    </p>
-                    <button class="primary" @click=${() => void this.start(true)} ?disabled=${this.loading}>
-                      ${this.t("learn.continueNow")}
-                    </button>
-                  ` : nothing}
-                `}
-          </div>
-        ` : nothing}
+        ${this.session === undefined ? this.renderAvailabilitySummary() : nothing}
         ${this.session === undefined ? this.renderNoDeadEndActions() : nothing}
         ${this.calibrationSetup
           ? html`
@@ -1187,7 +1239,7 @@ export class LockLearnLearnView extends LitElement {
   private blockerTitle(code: string): string {
     const fr = this.locale() === "fr";
     const labels: Record<string, [string, string]> = {
-      scheduled_step: ["Next scheduled recall", "Prochain rappel planifié"],
+      scheduled_step: ["Started card waiting for recall", "Carte déjà commencée en attente de rappel"],
       known_already_verification: ["Already-known cards to verify", "Cartes déjà connues à vérifier"],
       new_quota: ["New-card limit reached", "Limite de nouvelles cartes atteinte"],
       sibling_gap: ["Similar cards are spaced", "Cartes similaires espacées"],
@@ -1231,8 +1283,6 @@ export class LockLearnLearnView extends LitElement {
   private renderNoDeadEndActions() {
     const availability = this.availability;
     if (availability === undefined) return nothing;
-    const canRemind =
-      availability.available_now === 0 && availability.next_available_at_utc !== null;
     return html`
       <div class="actions">
         ${(this.calibrationFollowup?.pending_count ?? 0) > 0
@@ -1253,17 +1303,7 @@ export class LockLearnLearnView extends LitElement {
                   ? this.t("learn.title")
                   : this.t("quiz.title"))}
             </button>`}
-        ${canRemind
-          ? !this.hasNotificationTarget
-            ? html`<button @click=${() => navigateToRoute("settings")}>${this.t("learn.configureNotifications")}</button>`
-            : this.reminder?.active
-              ? html`<button @click=${() => void this.cancelReminder()} ?disabled=${this.loading}>
-                  ${this.t("learn.cancelReminder")}
-                </button>`
-              : html`<button @click=${() => void this.armReminder()} ?disabled=${this.loading}>
-                  ${this.t("learn.remindMe")}
-                </button>`
-          : nothing}
+        ${this.renderReminderAction()}
       </div>
       ${availability.blockers.length > 0
         ? html`<details>
@@ -1292,6 +1332,7 @@ export class LockLearnLearnView extends LitElement {
   private renderSession() {
     if (this.session === undefined) return nothing;
     if (this.session.question_count === 0) {
+      const nextRecall = scheduledLearningReminderAt(this.availability);
       const nextAvailable = this.availability?.next_available_at_utc ?? null;
       const nextReason = this.availability?.next_available_reason ?? null;
       const canContinue = (this.availability?.forceable_early ?? 0) > 0;
@@ -1300,7 +1341,13 @@ export class LockLearnLearnView extends LitElement {
         return html`
           <section class="learn-card">
             <h2>${this.t("learn.readyTitle")}</h2>
-            <p>${this.t("learn.readyFromEmpty").replace("{count}", String(readyNow))}</p>
+            <p>${this.locale() === "fr"
+              ? `Une nouvelle session de ${readyNow} cartes est disponible.`
+              : `A new session of ${readyNow} cards is available.`}</p>
+            ${nextRecall === null ? nothing : html`
+              <p><strong>${this.nextLearningRecallLabel()}:</strong> ${this.dueLabel(nextRecall)}</p>
+              <div class="actions">${this.renderReminderAction()}</div>
+            `}
             <button class="primary" @click=${() => void this.start()} ?disabled=${this.loading}>
               ${this.t("learn.start")}
             </button>
@@ -1313,19 +1360,25 @@ export class LockLearnLearnView extends LitElement {
           <p>${this.t("learn.emptyExplain")}</p>
           <dl>
             <dt>${this.t("learn.startedCards")}</dt><dd>${this.availability?.introduced_cards ?? 0}</dd>
-            <dt>${this.t("learn.unstartedCards")}</dt><dd>${this.availability?.new_cards ?? 0}</dd>
+            <dt>${this.locale() === "fr" ? "Cartes restant à découvrir dans ce parcours" : "Cards left to discover in this Track"}</dt>
+            <dd>${this.availability?.new_cards ?? 0}</dd>
+            <dt>${this.locale() === "fr" ? "Cartes commencées en attente de leur prochaine étape" : "Started cards waiting for their next step"}</dt>
+            <dd>${scheduledLearningWaitingCount(this.availability)}</dd>
             <dt>${this.t("learn.newQuotaRemaining")}</dt><dd>${this.availability?.remaining_new_quota ?? 0}</dd>
           </dl>
-          ${nextAvailable === null
-            ? html`<p class="muted">${this.t("learn.noExactTime")}</p>`
-            : html`
-                <p>
-                  <strong>${this.t(
-                    nextReason === "new_quota" ? "learn.quotaReset" : "learn.nextAvailable",
-                  )}:</strong>
-                  ${this.dueLabel(nextAvailable)}
-                </p>
-              `}
+          ${nextRecall !== null
+            ? html`<p><strong>${this.nextLearningRecallLabel()}:</strong> ${this.dueLabel(nextRecall)}</p>`
+            : nextAvailable === null
+              ? html`<p class="muted">${this.t("learn.noExactTime")}</p>`
+              : html`
+                  <p>
+                    <strong>${this.t(
+                      nextReason === "new_quota" ? "learn.quotaReset" : "learn.nextAvailable",
+                    )}:</strong>
+                    ${this.dueLabel(nextAvailable)}
+                  </p>
+                `}
+          ${this.renderReminderAction()}
           ${canContinue ? html`
             <p class="muted">
               ${(this.availability?.forceable_new ?? 0) > 0
@@ -1340,6 +1393,7 @@ export class LockLearnLearnView extends LitElement {
       `;
     }
     if (this.session.current_question === null || this.session.status === "completed") {
+      const nextRecall = scheduledLearningReminderAt(this.availability);
       const nextAvailable = this.availability?.next_available_at_utc ?? null;
       const nextReason = this.availability?.next_available_reason ?? null;
       const canContinue = (this.availability?.forceable_early ?? 0) > 0;
@@ -1347,14 +1401,17 @@ export class LockLearnLearnView extends LitElement {
         <section class="learn-card">
           <h2>${this.t("learn.completed")}</h2>
           <p>${this.t("learn.completedBody")}</p>
-          ${nextAvailable === null ? nothing : html`
-            <p>
-              <strong>${this.t(
-                nextReason === "new_quota" ? "learn.quotaReset" : "learn.nextAvailable",
-              )}:</strong>
-              ${this.dueLabel(nextAvailable)}
-            </p>
-          `}
+          ${nextRecall !== null
+            ? html`<p><strong>${this.nextLearningRecallLabel()}:</strong> ${this.dueLabel(nextRecall)}</p>`
+            : nextAvailable === null ? nothing : html`
+              <p>
+                <strong>${this.t(
+                  nextReason === "new_quota" ? "learn.quotaReset" : "learn.nextAvailable",
+                )}:</strong>
+                ${this.dueLabel(nextAvailable)}
+              </p>
+            `}
+          <div class="actions">${this.renderReminderAction()}</div>
           ${canContinue ? html`
             <p class="muted">${this.t("learn.continueEarlyHelp")}</p>
             <button class="primary" @click=${() => void this.start(true)} ?disabled=${this.loading}>
