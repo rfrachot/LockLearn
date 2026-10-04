@@ -1,4 +1,4 @@
-"""Persistent one-shot return reminders for Learn steps and Quiz readiness."""
+"""Persistent return reminders for Learn steps and one-shot Quiz readiness."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import asyncio
 import hashlib
 import logging
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
 from ..notifications.delivery import NotificationDeliveryService
@@ -24,6 +24,8 @@ from .session_selection import (
 
 _LOGGER = logging.getLogger(__name__)
 _KEY_PREFIX = "ready_reminder:"
+_MONITOR_INTERVAL_SECONDS = 60.0
+_RETRY_DELAY = timedelta(minutes=1)
 
 
 class ReadyReminderError(ValueError):
@@ -49,7 +51,7 @@ class _Targets(Protocol):
 
 
 class ReadyReminderService:
-    """Own idempotent profile+track+mode reminders and their one-shot timers."""
+    """Own profile+track reminders; Learn stays enabled until explicit cancellation."""
 
     def __init__(
         self,
@@ -68,6 +70,7 @@ class ReadyReminderService:
         self._delivery = delivery
         self._clock = clock or SystemClock()
         self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._monitor_task: asyncio.Task[None] | None = None
         self._closed = False
 
     @staticmethod
@@ -76,11 +79,16 @@ class ReadyReminderService:
         return f"{_KEY_PREFIX}{digest}"
 
     async def async_start(self) -> None:
-        """Restore pending reminders after Home Assistant reload/restart."""
+        """Restore reminders after Home Assistant reload/restart."""
         self._closed = False
         for key, raw in (await self._settings.async_list_prefix(_KEY_PREFIX)).items():
             if isinstance(raw, Mapping):
                 self._schedule(key, dict(raw))
+        if self._monitor_task is None or self._monitor_task.done():
+            self._monitor_task = asyncio.create_task(
+                self._monitor_learning_reminders(),
+                name="locklearn-ready-reminder-monitor",
+            )
 
     async def async_status(
         self,
@@ -111,7 +119,7 @@ class ReadyReminderService:
         mode: str,
         target_id: str | None = None,
     ) -> dict[str, Any]:
-        """Create or replace exactly one return reminder for the scope."""
+        """Enable or replace exactly one return reminder for the scope."""
         normalized = self._validate_mode(mode)
         profile = await self._profiles.async_get(profile_id)
         if profile is None:
@@ -147,6 +155,7 @@ class ReadyReminderService:
             "target_id": str(target["target_id"]),
             "scheduled_for_utc": scheduled.isoformat(),
             "armed_at_utc": now.isoformat(),
+            "last_sent_for_utc": None,
         }
         await self._settings.async_set(key, state, updated_at_utc=now.isoformat())
         self._schedule(key, state)
@@ -181,7 +190,7 @@ class ReadyReminderService:
         }
 
     async def async_fire_due(self, key: str) -> str:
-        """Revalidate a due reminder and send, move or cancel it."""
+        """Revalidate a due reminder and send, move or keep its persistent intent."""
         raw = await self._settings.async_get(key)
         if not isinstance(raw, Mapping):
             return "missing"
@@ -190,7 +199,10 @@ class ReadyReminderService:
             profile_id = str(state["profile_id"])
             track_id = str(state["track_id"])
             mode = self._validate_mode(str(state["mode"]))
-            scheduled = datetime.fromisoformat(str(state["scheduled_for_utc"])).astimezone(UTC)
+            scheduled_raw = state.get("scheduled_for_utc")
+            if not isinstance(scheduled_raw, str):
+                return "waiting"
+            scheduled = datetime.fromisoformat(scheduled_raw).astimezone(UTC)
         except (KeyError, TypeError, ValueError) as err:
             await self._settings.async_delete(key)
             raise ReadyReminderError("persisted reminder is invalid") from err
@@ -218,6 +230,10 @@ class ReadyReminderService:
                 ready = self._has_started_card_ready(prepared)
                 moved = self._next_learning_step_at(availability)
         except SessionSelectionError:
+            if mode == "learn":
+                state["scheduled_for_utc"] = None
+                await self._settings.async_set(key, state, updated_at_utc=now.isoformat())
+                return "waiting"
             await self._settings.async_delete(key)
             return "cancelled"
 
@@ -225,11 +241,21 @@ class ReadyReminderService:
             profile = await self._profiles.async_get(profile_id)
             target = await self._targets.async_get(str(state["target_id"]))
             if (
-                profile is None
-                or target is None
-                or str(target["profile_id"]) != profile_id
-                or not bool(target["enabled"])
+                target is None
+                or str(target.get("profile_id")) != profile_id
+                or not bool(target.get("enabled"))
             ):
+                try:
+                    target = await self._resolve_target(profile_id, None)
+                except ReadyReminderError:
+                    target = None
+                else:
+                    state["target_id"] = str(target["target_id"])
+            if profile is None or target is None:
+                if mode == "learn":
+                    state["scheduled_for_utc"] = None
+                    await self._settings.async_set(key, state, updated_at_utc=now.isoformat())
+                    return "waiting"
                 await self._settings.async_delete(key)
                 return "cancelled"
             rendered = self._render_ready(
@@ -242,21 +268,95 @@ class ReadyReminderService:
                 await self._delivery.async_send(rendered)
             except Exception:
                 _LOGGER.exception("Ready reminder delivery failed")
+                if mode == "learn":
+                    state["scheduled_for_utc"] = (now + _RETRY_DELAY).isoformat()
+                    await self._settings.async_set(key, state, updated_at_utc=now.isoformat())
+                    self._schedule(key, state)
+                    return "delivery_failed"
                 await self._settings.async_delete(key)
                 return "delivery_failed"
-            await self._settings.async_delete(key)
+
+            if mode == "quiz":
+                await self._settings.async_delete(key)
+                return "sent"
+
+            # Learn is an opt-in subscription. Suppress duplicates for the exact
+            # step just announced, then let the monitor discover the next step
+            # after learning activity changes canonical progress.
+            state["last_sent_for_utc"] = scheduled.isoformat()
+            state["scheduled_for_utc"] = None
+            await self._settings.async_set(key, state, updated_at_utc=now.isoformat())
             return "sent"
 
         if isinstance(moved, str):
             moved_at = datetime.fromisoformat(moved).astimezone(UTC)
-            if moved_at > now:
+            if moved_at > now and not self._same_instant(
+                moved_at,
+                state.get("last_sent_for_utc"),
+            ):
                 state["scheduled_for_utc"] = moved_at.isoformat()
                 await self._settings.async_set(key, state, updated_at_utc=now.isoformat())
                 self._schedule(key, state)
                 return "rescheduled"
 
+        if mode == "learn":
+            state["scheduled_for_utc"] = None
+            await self._settings.async_set(key, state, updated_at_utc=now.isoformat())
+            return "waiting"
+
         await self._settings.async_delete(key)
         return "cancelled"
+
+    async def _monitor_learning_reminders(self) -> None:
+        """Keep enabled Learn reminders attached to the next distinct scheduled step."""
+        try:
+            while not self._closed:
+                await self._refresh_learning_reminders()
+                await asyncio.sleep(_MONITOR_INTERVAL_SECONDS)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            _LOGGER.exception("Ready reminder monitor failed")
+            if not self._closed:
+                self._monitor_task = asyncio.create_task(
+                    self._monitor_learning_reminders(),
+                    name="locklearn-ready-reminder-monitor-restart",
+                )
+
+    async def _refresh_learning_reminders(self) -> None:
+        now = self._clock.now().astimezone(UTC)
+        for key, raw in (await self._settings.async_list_prefix(_KEY_PREFIX)).items():
+            if not isinstance(raw, Mapping):
+                continue
+            state = dict(raw)
+            if str(state.get("mode")) != "learn":
+                continue
+            if isinstance(state.get("scheduled_for_utc"), str):
+                continue
+            profile_id = state.get("profile_id")
+            track_id = state.get("track_id")
+            if not isinstance(profile_id, str) or not isinstance(track_id, str):
+                continue
+            try:
+                availability = await self._availability.async_availability(
+                    profile_id=profile_id,
+                    track_id=track_id,
+                    session_type="learn",
+                )
+            except SessionSelectionError:
+                continue
+            next_raw = self._next_learning_step_at(availability)
+            if not isinstance(next_raw, str):
+                continue
+            try:
+                next_at = datetime.fromisoformat(next_raw).astimezone(UTC)
+            except ValueError:
+                continue
+            if self._same_instant(next_at, state.get("last_sent_for_utc")):
+                continue
+            state["scheduled_for_utc"] = next_at.isoformat()
+            await self._settings.async_set(key, state, updated_at_utc=now.isoformat())
+            self._schedule(key, state)
 
     @staticmethod
     def _next_learning_step_at(availability: Mapping[str, Any]) -> str | None:
@@ -280,6 +380,18 @@ class ReadyReminderService:
             if isinstance(selection, Mapping) and selection.get("progress_state") != "new":
                 return True
         return False
+
+    @staticmethod
+    def _same_instant(candidate: datetime, raw: Any) -> bool:
+        if not isinstance(raw, str):
+            return False
+        try:
+            other = datetime.fromisoformat(raw)
+        except ValueError:
+            return False
+        if other.tzinfo is None:
+            return False
+        return candidate.astimezone(UTC) == other.astimezone(UTC)
 
     async def _resolve_target(self, profile_id: str, target_id: str | None) -> dict[str, Any]:
         if target_id is not None:
@@ -343,9 +455,12 @@ class ReadyReminderService:
             old.cancel()
         if self._closed:
             return
+        raw_due = state.get("scheduled_for_utc")
+        if not isinstance(raw_due, str):
+            return
         try:
-            due = datetime.fromisoformat(str(state["scheduled_for_utc"])).astimezone(UTC)
-        except (KeyError, TypeError, ValueError):
+            due = datetime.fromisoformat(raw_due).astimezone(UTC)
+        except (TypeError, ValueError):
             return
         delay = max(0.0, (due - self._clock.now().astimezone(UTC)).total_seconds())
 
@@ -373,3 +488,6 @@ class ReadyReminderService:
         for task in self._tasks.values():
             task.cancel()
         self._tasks.clear()
+        if self._monitor_task is not None:
+            self._monitor_task.cancel()
+            self._monitor_task = None
