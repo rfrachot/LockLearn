@@ -22,6 +22,7 @@ from .const import (
     DOMAIN,
 )
 from .ha_services import async_register_services, async_unregister_services
+from .notification_dispatcher import NotificationSchedulerDispatcher
 from .panel import async_register_panel, async_register_static_path, async_unregister_panel
 from .profile_transfer_http import register_profile_transfer_views
 from .runtime import LockLearnRuntime
@@ -33,6 +34,7 @@ type LockLearnConfigEntry = ConfigEntry
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 _PLATFORMS = (Platform.UPDATE,)
 _LOGGER = logging.getLogger(__name__)
+_DATA_NOTIFICATION_DISPATCHER = "notification_dispatcher"
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: LockLearnConfigEntry) -> bool:
@@ -125,11 +127,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: LockLearnConfigEntry) ->
 
     domain_data[DATA_RUNTIME] = runtime
     async_register_services(hass)
+    dispatcher: NotificationSchedulerDispatcher | None = None
     try:
         await hass.config_entries.async_forward_entry_setups(entry, _PLATFORMS)
         await async_register_panel(hass)
+        dispatcher = NotificationSchedulerDispatcher(hass, runtime)
+        await dispatcher.async_start()
+        domain_data[_DATA_NOTIFICATION_DISPATCHER] = dispatcher
     except Exception:
         domain_data.pop(DATA_RUNTIME, None)
+        domain_data.pop(_DATA_NOTIFICATION_DISPATCHER, None)
+        if dispatcher is not None:
+            dispatcher.close()
         async_unregister_services(hass)
         await hass.config_entries.async_unload_platforms(entry, _PLATFORMS)
         await runtime.async_close()
@@ -141,6 +150,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: LockLearnConfigEntry) -
     """Unload a LockLearn config entry."""
     domain_data = hass.data.get(DOMAIN, {})
     runtime = domain_data.get(DATA_RUNTIME)
+    dispatcher = domain_data.pop(_DATA_NOTIFICATION_DISPATCHER, None)
+    if isinstance(dispatcher, NotificationSchedulerDispatcher):
+        dispatcher.close()
     if not await hass.config_entries.async_unload_platforms(entry, _PLATFORMS):
         return False
     domain_data.pop(DATA_RUNTIME, None)
