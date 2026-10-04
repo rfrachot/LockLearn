@@ -52,11 +52,18 @@ from reopening time the scheduler has already passed. Config Entry startup and
 reload reconcile against that watermark and expire only overdue unsent
 `scheduled`/`deferred` rows. Sent/consumed history is never changed.
 
+At runtime, a Home Assistant dispatcher owns future materialized deadlines. It
+wakes at the next effective deadline, with a low-frequency maintenance wake as
+a safety net. Each wake processes slots that have just become due **before**
+ordinary temporal reconciliation can classify them as missed. A short grace
+window absorbs event-loop scheduling jitter without turning genuinely missed
+notifications into catch-up floods. For a deferred slot, `deferred_until_utc`
+is the effective deadline even when its original `scheduled_for_utc` is older.
+
 A Profile timezone change creates a new scheduler config version, cancels only
 future unsent rows from older versions, and generates new opportunities using
 the new timezone. P4.5 remains responsible for ordinary missed/pending/backoff
 policy.
-
 
 ## P4.3 Track and target arbitration
 
@@ -82,7 +89,6 @@ A Profile with unmet non-suppressed demand for three consecutive generated local
 days raises the `scheduler_configuration_infeasible` Home Assistant Repair.
 A later feasible day clears it. Preview is side-effect free and never advances
 the Repair streak.
-
 
 ## P4.4 send-time receptivity and routine hooks
 
@@ -115,13 +121,17 @@ P4.3 Profile/target/device capacity and active-session suppression. The actual
 same-day or previous-day CardDefinition is deliberately left to P4.5 send-time
 selection.
 
-
 ## P4.5 notification selection, pending and backoff
 
 A materialized Track slot receives its CardDefinition only when it is actually
 ready to send. The binding is persisted on the slot as immutable content
 identity plus a machine-readable selection reason; rendered learned text is
 never copied into `state.db`.
+
+The runtime dispatcher delegates eligibility to `async_prepare_delivery()`;
+it does not duplicate scheduler policy. Therefore pending-notification,
+receptivity, deferral, no-candidate and send-time selection rules remain in one
+authoritative service before rendering or transport occurs.
 
 V1 selection priority is:
 
@@ -138,6 +148,12 @@ Routine slots use the same send-time binding: pre-sleep restricts the pool to
 cards introduced today, while morning-first-review restricts it to yesterday's
 introductions.
 
+For a direct-exposure learning teaser, canonical introduction evidence is
+written only after Home Assistant reports successful notification delivery. A
+failed route therefore cannot advance Progress. Actionable prompt-first paths
+remain pending until their single-use Companion interaction is consumed or
+cleared.
+
 The default pending policy is `skip_if_pending`: if the same Profile/target
 already has an unanswered sent slot, the later slot expires as
 `pending_existing`. Missed unsent slots expire rather than catch up.
@@ -146,4 +162,3 @@ Recent expirations and explicit clears reduce only notification-channel
 capacity: three consecutive failures apply a 75 % budget multiplier, six apply
 50 %, and successful interactions restore 25 points at a time. These outcomes
 never mutate Progress or ReviewEvent.
-
