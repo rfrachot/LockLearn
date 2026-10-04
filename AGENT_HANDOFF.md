@@ -2,27 +2,43 @@
 
 ## Mission and branch
 
-Qualify beta.5 on `feat/beta5-no-dead-end-v03`. Initial SHA `277374ddaf55f0f6c36f8e00166d793e29597cb0`. The maintainer authorized push, CI dispatch and deployment to the HAOS test instance. Preserve `/config/.storage/locklearn/state.db` and keep rollback code outside `/config/custom_components/`.
+Beta.5 final qualification, tests and deployment on
+`feat/beta5-final-polish-v05`. No merge, tag or release was created.
 
 ## Verified state
 
-- Calibration fixes `dfa9c588`, `d9d86d26`, `f75d501b` passed CI (8/8 each) and real UI checks: 20 completed with visible known/remaining summary and CTAs; 30/40 started at exact nonzero sizes; browser and integration reload preserved active calibration.
-- Legacy known-card Quiz fix `53022701` passed CI 8/8 and field Quiz answer progressed 1/19 to 2/19.
-- `48c9b37a4655a2fdc524319340512185b73be9cb` passed CI `37015756211` (8/8) and is currently deployed: 91 tracked files match; served bundle SHA-256 `dbbbcf6bf56d43dae0bb0932c197b60fcfa920ed4cc29b15479fb2b8d1b0793b` matches. HA 2026.7.4 loaded after restart. Real Learn Undo returned a card to `active/new/box 0`, with zero verified counts. A QA Track proved the five-total bulk guard appeared after K,K,introduce,K,K,introduce,K, with both CTAs and no additional session mutation; a sixth K did not retrigger it.
-- The concerned-cards UI showed known pending (6), suspended (1), buried (1); Learn it instead removed one pending card. No current Track exposed prerequisite or waiting-context blockers for their UI entry paths.
-- A real Quiz readiness reminder had `available_now=0` and a future `next_available_at_utc`. Arm/status/cancel/rearm succeeded. At due time, availability was rechecked, became 0/null, and the reminder was cancelled without a false notification. The temporary QA notification target was disabled afterward.
-- Real browser offline banner appeared and disappeared on reconnect. Controlled 10-second bootstrap timeout showed Retry, Home and Copy diagnostic after three failures; Retry recovered, Home returned to HA. Controlled answer latency >8 seconds showed Check status and Retry answer; canonical verification, one actual retry and a rejected stale CAS produced exactly three ReviewEvents for three answers.
-- `643f8ec0d98ae9502516cd3ec3e3e5ee7f9d5a9b` passed CI `37020220216` (8/8), deployment tree and served bundle matched. Real Save and leave now saves and navigates to the chosen Profile. Calibration 20/30/40, correct/wrong/IDK, summary, Quiz progression and calibration persistence were rechecked. Waiting-context concerned-cards UI displayed 23 cards; prerequisite UI remains unavailable (active content has zero prerequisite records).
-- Dirty guard route Stay/Discard, Profile change dialog, Back, refresh beforeunload dialog and mobile sticky save were field checked. Headless tab close did not emit a dialog, so that proof remains BLOCKED. A reproduced local Discard bug emptied Lit property-bound fields: this commit remounts only the discarded Track details/plan form from saved values and adds E2E coverage.
-- Current local gates after that fix: 516 pytest, Ruff, mypy, resources, generated docs, frontend lint/typecheck, 66 Vitest, build, 10 Playwright E2E, no-polling and bundle budget pass. One expected duplicate ZIP warning remains. The QA Track name was restored after tests.
+- Qualification HEAD before this handoff update: `35c024b845406374338a14eb71e117bc94c60cb9`.
+- Commits: `7d21cebe` synchronized the generated frontend bundle;
+  `35c024b8` refreshed the generated documentation screenshot.
+- CI run `37167605598` is green on the exact HEAD: frontend, frontend E2E and
+  screenshot, backend quality, dataset contracts, HA minimum 2025.2.5, current
+  harness 2026.9.3, latest stable smoke 2026.9.4 and hassfest/HACS.
+- Local gates: Ruff format/check, mypy, resource/schema/docs contracts, 529
+  pytest tests, frontend lint/typecheck, 69 Vitest tests, no-polling, build,
+  bundle check and 10 Playwright E2E. The expected duplicate ZIP warning remains.
+- `npx playwright install --with-deps chromium` cannot install system packages
+  locally because sudo requires interactive authentication; CI installed it and
+  passed the full E2E job.
 
-## Final field qualification
+## Real HA deployment
 
-- Discard correction `f6ddbf76f7e56844e22249af554cee06b68378b8` passed CI `37050151901` 8/8, all 91 deployed tracked files matched, and served bundle SHA-256 `5ddd8e8a13604d68e6aef44ad4f962b39b946d2cd0f819c9fe688f111df11495` matched after HA restart. Real details/plan Discard restored saved name and new/day=8 while preserving a neighboring dirty form.
-- HA 2026.7.4, backend version 1.0.0-beta.3, frontend wire protocol 3. Bootstrap healthy. Active retry session `39c797c4a9bc4ff6b5fc8a0ca2e57f68` retained version 4 and three answers after restart; zero LockLearn system-log errors.
-- Real snackbar duration measured 7,989 ms. New QA Track `729a15ca-0f70-44e7-a15c-72f14d13d123` recorded known_already with zero verified counts; its measurement session was completed. Read-only evidence confirms the prior concerned-cards Learn it instead action restored the original QA card to active/new/box 0, verified counts zero.
-- Qualification remains BLOCKED only for prerequisite_support UI (no active prerequisite records or natural UI entry) and tab-close confirmation (headless Chromium closes without a dialog; refresh confirmation passed). No product FAIL remains. Temporary reminder target is disabled; QA Tracks retained as evidence. State DB never edited.
+- HA test: 2026.7.4. Pre-deploy backup: `PRE_BETA5_BUNDLE_35C024B8`, backup
+  slug `da311e72`.
+- The complete tracked `custom_components/locklearn/` tree was deployed from
+  the tested archive; 92 files were present. Rollback copies remain outside
+  `/config/custom_components/`.
+- HA restarted successfully. Config Entry is `loaded`, panel is `/locklearn`,
+  schema is 5/WAL, integrity is `ok`, FK violations are zero and no
+  LockLearn error/critical records are present.
+- Local, CI and served panel bundle are identical: 304846 bytes,
+  SHA-256 `2c9d2772b6b4049af1ba7349ebc074316cea7ddb977ee02d40d24c355ef62404`.
+- Public real-HA P3.8 qualification passed: CAS/stale session, Undo,
+  reconnect/reload and storage health. Targeted Beta.5 reminder/grading tests
+  passed; real HA inventory remained healthy after cleanup.
+- Temporary Advanced SSH and File editor add-ons were stopped and the temporary
+  local SSH key was removed from the add-on configuration.
 
 ## Next action
 
-Qualify and deploy the final documentation-only commit on its exact green SHA, checking the unchanged bundle and healthy bootstrap. No additional functional changes or tests are needed unless that check fails. Maintainer can supply content with prerequisites and an interactive browser to close the two outstanding field-proof gaps. Final exact SHAs and CI run are in the session report.
+This handoff update must be committed, pushed, CI-qualified and redeployed so
+the final local/CI/HA SHA remains identical. Do not merge, tag or publish.
