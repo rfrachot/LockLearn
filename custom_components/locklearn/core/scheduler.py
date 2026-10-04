@@ -540,6 +540,7 @@ class SchedulerService:
         *,
         profile_id: str,
         local_date: date | None = None,
+        recovery_grace: timedelta = timedelta(0),
     ) -> dict[str, Any]:
         """Persist one deterministic day while preserving materialized history."""
         profile = await self._profiles.async_get(profile_id)
@@ -548,7 +549,10 @@ class SchedulerService:
         persisted = await self._scheduler.async_get_config(profile_id)
         prospective, daily_push_budget = self._resolve_config(profile, persisted)
 
-        reconciliation = await self.async_reconcile(reason="generate")
+        reconciliation = await self.async_reconcile(
+            reason="generate",
+            recovery_grace=recovery_grace,
+        )
         now = reconciliation.effective_now_utc
         timezone_changed = (
             persisted is not None and str(persisted["timezone"]) != prospective.timezone
@@ -1581,8 +1585,15 @@ class SchedulerService:
         previous = datetime.fromisoformat(raw).astimezone(UTC)
         return max(observed, previous)
 
-    async def async_reconcile(self, *, reason: str) -> SchedulerReconciliation:
+    async def async_reconcile(
+        self,
+        *,
+        reason: str,
+        recovery_grace: timedelta = timedelta(0),
+    ) -> SchedulerReconciliation:
         """Persist a monotonic scheduler time watermark across restart/clock jumps."""
+        if recovery_grace < timedelta(0):
+            raise SchedulerValidationError("scheduler recovery grace must not be negative")
         observed = self._aware_utc_now()
         state = await self._settings.async_get(_SCHEDULER_TIME_STATE_KEY)
         previous: datetime | None = None
@@ -1608,7 +1619,7 @@ class SchedulerService:
         INTERNAL_METRICS.record("scheduler.drift_ms", drift_ms)
 
         expired_slots = await self._scheduler.async_expire_before(
-            before_utc=effective.isoformat(),
+            before_utc=(effective - recovery_grace).isoformat(),
             updated_at_utc=effective.isoformat(),
         )
         await self._settings.async_set(

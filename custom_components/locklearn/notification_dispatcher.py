@@ -47,7 +47,7 @@ class NotificationSchedulerDispatcher:
     async def async_start(self) -> None:
         """Dispatch recoverable slots before any scheduler reconciliation."""
         self._closed = False
-        await self._async_cycle()
+        await self._async_cycle(startup=True)
 
     def close(self) -> None:
         """Cancel the next HA timer."""
@@ -56,13 +56,18 @@ class NotificationSchedulerDispatcher:
             self._unsub()
             self._unsub = None
 
-    async def _async_cycle(self) -> None:
+    async def _async_cycle(self, *, startup: bool = False) -> None:
         if self._closed:
             return
         async with self._lock:
             now = datetime.now(UTC)
             await self._async_dispatch_due(now)
             await self._async_expire_stale(now)
+            if startup:
+                await self._runtime.scheduler.async_reconcile(
+                    reason="startup",
+                    recovery_grace=_DISPATCH_GRACE,
+                )
             if not await self._async_has_guarded_pending(now):
                 await self._async_materialize_today()
             await self._async_schedule_next()
@@ -99,7 +104,10 @@ class NotificationSchedulerDispatcher:
         """Refresh materialized future work only when no deadline is at risk."""
         for profile in await self._runtime.storage.repositories.profiles.async_list_active():
             try:
-                await self._runtime.scheduler.async_generate(profile_id=str(profile["profile_id"]))
+                await self._runtime.scheduler.async_generate(
+                    profile_id=str(profile["profile_id"]),
+                    recovery_grace=_DISPATCH_GRACE,
+                )
             except Exception:
                 _LOGGER.exception(
                     "LockLearn scheduler materialization failed for an active profile"

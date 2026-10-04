@@ -475,6 +475,59 @@ async def test_forward_clock_jump_expires_overdue_unsent_slots(tmp_path: Path) -
         await storage.async_close()
 
 
+async def test_reconcile_recovery_grace_delays_destructive_expiration(tmp_path: Path) -> None:
+    clock = FixedClock(datetime(2026, 9, 24, 10, 0, tzinfo=UTC))
+    storage = await _storage(tmp_path, clock)
+    try:
+        await _profile(storage, now=clock.now(), settings={"daily_push_budget": 1})
+        await storage.repositories.scheduler.async_materialize_day(
+            profile_id="profile-scheduler",
+            scheduler_config_version=1,
+            seed="recovery-grace",
+            start_utc="2026-09-24T00:00:00+00:00",
+            end_utc="2026-09-25T00:00:00+00:00",
+            now_utc="2026-09-24T08:00:00+00:00",
+            slots=(
+                {
+                    "slot_id": "slot-in-grace",
+                    "track_id": None,
+                    "target_id": None,
+                    "slot_type": "learning",
+                    "scheduled_for_utc": "2026-09-24T09:55:00+00:00",
+                },
+                {
+                    "slot_id": "slot-too-old",
+                    "track_id": None,
+                    "target_id": None,
+                    "slot_type": "learning",
+                    "scheduled_for_utc": "2026-09-24T09:00:00+00:00",
+                },
+            ),
+            updated_at_utc="2026-09-24T08:00:00+00:00",
+        )
+        service = SchedulerService(
+            storage.repositories.profiles,
+            storage.repositories.tracks,
+            storage.repositories.notification_targets,
+            storage.repositories.scheduler,
+            storage.repositories.settings,
+            clock=clock,
+        )
+
+        reconciled = await service.async_reconcile(
+            reason="startup",
+            recovery_grace=timedelta(minutes=6),
+        )
+
+        assert reconciled.expired_slots == 1
+        assert await storage.repositories.scheduler.async_get_slot("slot-in-grace")
+        stale = await storage.repositories.scheduler.async_get_slot("slot-too-old")
+        assert stale is not None
+        assert stale["status"] == "expired"
+    finally:
+        await storage.async_close()
+
+
 async def test_restart_expires_overdue_unsent_slots_without_touching_consumed(
     tmp_path: Path,
 ) -> None:

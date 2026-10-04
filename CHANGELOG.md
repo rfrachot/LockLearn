@@ -18,6 +18,8 @@ All notable changes will be documented here.
 
 
 ### Fixed
+- Keep autonomous notification dispatch recoverable through a six-minute grace
+  window across startup, delayed wakes and scheduler materialization.
 - Dispatch deferred notification slots by their effective deadline, even when
   their original scheduled timestamp is older than the runtime look-back.
 - Record scheduler delivery only after successful transport without re-running

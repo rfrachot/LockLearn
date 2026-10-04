@@ -68,14 +68,15 @@ class _SchedulerRepository:
         return 0
 
 
-def _runtime(repository: _SchedulerRepository) -> Any:
+def _runtime(repository: _SchedulerRepository, scheduler: Any | None = None) -> Any:
     return SimpleNamespace(
+        scheduler=scheduler,
         storage=SimpleNamespace(
             repositories=SimpleNamespace(
                 profiles=_Profiles(),
                 scheduler=repository,
             )
-        )
+        ),
     )
 
 
@@ -302,6 +303,57 @@ async def test_dispatch_due_includes_normal_and_deferred_deadlines(
 
 
 @pytest.mark.asyncio
+async def test_callback_slightly_early_defers_once_then_dispatches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    due = datetime(2026, 10, 4, 12, 0, 0, 500000, tzinfo=UTC)
+    slot = _slot("early", due)
+    repository = _SchedulerRepository((slot,))
+    dispatcher = NotificationSchedulerDispatcher(
+        cast(HomeAssistant, object()),
+        cast(Any, _runtime(repository)),
+    )
+    dispatched: list[str] = []
+
+    async def capture(current: dict[str, Any]) -> None:
+        dispatched.append(str(current["slot_id"]))
+        current["status"] = "sent"
+
+    monkeypatch.setattr(dispatcher, "_async_dispatch_slot", capture)
+
+    await dispatcher._async_dispatch_due(due - timedelta(milliseconds=250))
+    assert dispatched == []
+    assert slot["status"] == "scheduled"
+
+    await dispatcher._async_dispatch_due(due + timedelta(milliseconds=250))
+    assert dispatched == ["early"]
+
+
+@pytest.mark.asyncio
+async def test_delayed_wake_inside_grace_dispatches_without_expiration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime(2026, 10, 4, 12, 3, tzinfo=UTC)
+    slot = _slot("delayed", now - timedelta(minutes=3))
+    repository = _SchedulerRepository((slot,))
+    dispatcher = NotificationSchedulerDispatcher(
+        cast(HomeAssistant, object()),
+        cast(Any, _runtime(repository)),
+    )
+    dispatched: list[str] = []
+
+    async def capture(current: dict[str, Any]) -> None:
+        dispatched.append(str(current["slot_id"]))
+
+    monkeypatch.setattr(dispatcher, "_async_dispatch_slot", capture)
+
+    await dispatcher._async_dispatch_due(now)
+
+    assert dispatched == ["delayed"]
+    assert repository.expire_calls == []
+
+
+@pytest.mark.asyncio
 async def test_near_due_slot_is_guarded_from_materialization_reconciliation() -> None:
     now = datetime(2026, 10, 4, 12, 0, tzinfo=UTC)
     repository = _SchedulerRepository((_slot("near", now + timedelta(milliseconds=250)),))
@@ -324,9 +376,82 @@ async def test_stale_expiration_starts_only_after_dispatch_grace() -> None:
 
     await dispatcher._async_expire_stale(now)
 
-    assert repository.expire_calls == [
-        ((now - timedelta(minutes=6)).isoformat(), now.isoformat())
-    ]
+    assert repository.expire_calls == [((now - timedelta(minutes=6)).isoformat(), now.isoformat())]
+
+
+@pytest.mark.asyncio
+async def test_startup_reconciles_only_after_dispatch_and_preserves_recovery_grace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[tuple[str, Any]] = []
+
+    class _CycleScheduler:
+        async def async_reconcile(self, **kwargs: Any) -> None:
+            events.append(("reconcile", kwargs))
+
+        async def async_generate(self, **kwargs: Any) -> None:
+            events.append(("generate", kwargs))
+
+    repository = _SchedulerRepository(())
+    dispatcher = NotificationSchedulerDispatcher(
+        cast(HomeAssistant, object()),
+        cast(Any, _runtime(repository, _CycleScheduler())),
+    )
+
+    async def capture_dispatch(_now: datetime) -> None:
+        events.append(("dispatch", None))
+
+    monkeypatch.setattr(dispatcher, "_async_dispatch_due", capture_dispatch)
+    monkeypatch.setattr(dispatcher, "_async_schedule_next", _async_noop)
+
+    await dispatcher._async_cycle(startup=True)
+
+    assert [name for name, _value in events] == ["dispatch", "reconcile", "generate"]
+    assert events[1][1]["reason"] == "startup"
+    assert events[1][1]["recovery_grace"] == timedelta(minutes=6)
+    assert events[2][1]["recovery_grace"] == timedelta(minutes=6)
+
+
+@pytest.mark.asyncio
+async def test_timer_rearms_and_close_cancels_previous_wake(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    armed: list[datetime] = []
+    cancelled: list[bool] = []
+
+    def track(_hass: HomeAssistant, _callback: Any, point: datetime) -> Any:
+        armed.append(point)
+
+        def cancel() -> None:
+            cancelled.append(True)
+
+        return cancel
+
+    monkeypatch.setattr(
+        "custom_components.locklearn.notification_dispatcher.async_track_point_in_utc_time",
+        track,
+    )
+    dispatcher = NotificationSchedulerDispatcher(
+        cast(HomeAssistant, object()),
+        cast(Any, _runtime(_SchedulerRepository(()))),
+    )
+
+    await dispatcher._async_schedule_next()
+    first = armed[-1]
+    await dispatcher._async_schedule_next()
+    second = armed[-1]
+
+    assert len(armed) == 2
+    assert first.tzinfo is not None
+    assert second.tzinfo is not None
+    assert cancelled == [True]
+
+    dispatcher.close()
+    assert cancelled == [True, True]
+
+
+async def _async_noop() -> None:
+    return None
 
 
 def test_effective_due_prefers_deferred_deadline() -> None:
