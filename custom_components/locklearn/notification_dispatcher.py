@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.event import async_track_point_in_utc_time
 
 from .core.learning import LearningStateMachine
 from .notifications.capabilities import TargetCapabilities
@@ -27,8 +27,8 @@ if TYPE_CHECKING:
     from .runtime import LockLearnRuntime
 
 _LOGGER = logging.getLogger(__name__)
-_DISPATCH_GRACE = timedelta(seconds=90)
-_MAINTENANCE_INTERVAL = timedelta(minutes=5)
+_DISPATCH_GRACE = timedelta(minutes=6)
+_MAINTENANCE_INTERVAL = timedelta(minutes=1)
 _INTERACTION_TTL = timedelta(minutes=30)
 
 
@@ -61,28 +61,30 @@ class NotificationSchedulerDispatcher:
             return
         async with self._lock:
             now = datetime.now(UTC)
-            if not startup:
-                await self._async_dispatch_due(now)
-                await self._runtime.scheduler.async_reconcile(reason="timer")
+            await self._async_dispatch_due(now)
+            # Keep a deliberate grace period between a missed deadline and
+            # scheduler expiration. This protects against early/late HA timer
+            # callbacks and short event-loop stalls without double-delivery.
+            await self._runtime.scheduler.async_reconcile(
+                reason="startup" if startup else "timer",
+                expire_before_utc=now - _DISPATCH_GRACE,
+            )
             await self._async_materialize_today()
-            if startup:
-                # Runtime startup reconciliation intentionally owns genuinely missed
-                # slots. Newly materialized slots are always in the future.
-                await self._async_dispatch_due(datetime.now(UTC))
             await self._async_schedule_next()
 
     async def _async_materialize_today(self) -> None:
         for profile in await self._runtime.storage.repositories.profiles.async_list_active():
             try:
-                await self._runtime.scheduler.async_generate(profile_id=str(profile["profile_id"]))
+                await self._runtime.scheduler.async_generate(
+                    profile_id=str(profile["profile_id"]),
+                    expire_before_utc=datetime.now(UTC) - _DISPATCH_GRACE,
+                )
             except Exception:
                 _LOGGER.exception(
                     "LockLearn scheduler materialization failed for an active profile"
                 )
 
     async def _async_dispatch_due(self, now: datetime) -> None:
-        # Query by the persisted effective deadline. A deferred slot may have
-        # been scheduled well before its current deferred_until time.
         start = (now - _DISPATCH_GRACE).isoformat()
         end = (now + timedelta(seconds=1)).isoformat()
         due: list[dict[str, Any]] = []
@@ -100,13 +102,13 @@ class NotificationSchedulerDispatcher:
                     continue
                 due.append(slot)
 
+        if due:
+            _LOGGER.debug("LockLearn dispatcher found %d due slot(s)", len(due))
         due.sort(key=lambda slot: (self._effective_due(slot) or now, str(slot["slot_id"])))
         for slot in due:
             try:
                 await self._async_dispatch_slot(slot)
             except Exception:
-                # Leave the slot pending inside the short grace window so the next
-                # wake can retry. Reconciliation will eventually expire it as missed.
                 _LOGGER.exception("LockLearn scheduled notification dispatch failed")
 
     async def _async_dispatch_slot(self, slot: dict[str, Any]) -> None:
@@ -327,22 +329,24 @@ class NotificationSchedulerDispatcher:
                 if next_due is None or candidate < next_due:
                     next_due = candidate
 
-        delay = _MAINTENANCE_INTERVAL.total_seconds()
-        if next_due is not None:
-            delay = min(delay, max(0.0, (next_due - now).total_seconds()))
-        self._unsub = async_call_later(self._hass, delay, self._handle_wake)
+        maintenance_at = now + _MAINTENANCE_INTERVAL
+        wake_at = maintenance_at if next_due is None else min(maintenance_at, next_due)
+        _LOGGER.debug("LockLearn dispatcher armed for %s", wake_at.isoformat())
+        self._unsub = async_track_point_in_utc_time(self._hass, self._handle_wake, wake_at)
 
     async def _handle_wake(self, _now: datetime) -> None:
         self._unsub = None
+        _LOGGER.debug("LockLearn dispatcher wake fired at %s", _now.astimezone(UTC).isoformat())
         try:
             await self._async_cycle()
         except Exception:
             _LOGGER.exception("LockLearn notification dispatcher cycle failed")
             if not self._closed:
-                self._unsub = async_call_later(
+                retry_at = datetime.now(UTC) + _MAINTENANCE_INTERVAL
+                self._unsub = async_track_point_in_utc_time(
                     self._hass,
-                    _MAINTENANCE_INTERVAL.total_seconds(),
                     self._handle_wake,
+                    retry_at,
                 )
 
     @staticmethod
