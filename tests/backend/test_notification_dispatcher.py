@@ -22,6 +22,7 @@ class _SchedulerRepository:
     def __init__(self, slots: tuple[dict[str, Any], ...]) -> None:
         self.slots = slots
         self.calls: list[tuple[str, str, str]] = []
+        self.expire_calls: list[tuple[str, str]] = []
 
     async def async_list_slots(
         self,
@@ -61,6 +62,10 @@ class _SchedulerRepository:
             if isinstance(raw, str) and start <= datetime.fromisoformat(raw) < end:
                 result.append(slot)
         return tuple(result)
+
+    async def async_expire_before(self, *, before_utc: str, updated_at_utc: str) -> int:
+        self.expire_calls.append((before_utc, updated_at_utc))
+        return 0
 
 
 def _runtime(repository: _SchedulerRepository) -> Any:
@@ -274,7 +279,7 @@ async def test_dispatch_due_includes_normal_and_deferred_deadlines(
                 deferred_until=now - timedelta(seconds=10),
             ),
             _slot("future", now + timedelta(minutes=2)),
-            _slot("stale", now - timedelta(minutes=3)),
+            _slot("stale", now - timedelta(minutes=7)),
             _slot("sent", now - timedelta(seconds=5), status="sent"),
         )
     )
@@ -293,7 +298,35 @@ async def test_dispatch_due_includes_normal_and_deferred_deadlines(
     assert dispatched == ["normal", "deferred"]
     assert repository.calls
     query_start = datetime.fromisoformat(repository.calls[0][1])
-    assert query_start == now - timedelta(seconds=90)
+    assert query_start == now - timedelta(minutes=6)
+
+
+@pytest.mark.asyncio
+async def test_near_due_slot_is_guarded_from_materialization_reconciliation() -> None:
+    now = datetime(2026, 10, 4, 12, 0, tzinfo=UTC)
+    repository = _SchedulerRepository((_slot("near", now + timedelta(milliseconds=250)),))
+    dispatcher = NotificationSchedulerDispatcher(
+        cast(HomeAssistant, object()),
+        cast(Any, _runtime(repository)),
+    )
+
+    assert await dispatcher._async_has_guarded_pending(now) is True
+
+
+@pytest.mark.asyncio
+async def test_stale_expiration_starts_only_after_dispatch_grace() -> None:
+    now = datetime(2026, 10, 4, 12, 0, tzinfo=UTC)
+    repository = _SchedulerRepository(())
+    dispatcher = NotificationSchedulerDispatcher(
+        cast(HomeAssistant, object()),
+        cast(Any, _runtime(repository)),
+    )
+
+    await dispatcher._async_expire_stale(now)
+
+    assert repository.expire_calls == [
+        ((now - timedelta(minutes=6)).isoformat(), now.isoformat())
+    ]
 
 
 def test_effective_due_prefers_deferred_deadline() -> None:
