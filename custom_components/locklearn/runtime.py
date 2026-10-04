@@ -164,8 +164,6 @@ class LockLearnRuntime:
                 issue_clear_callback=clear_issue,
             )
             for bundled in bundled_datasets:
-                # DatasetManager already raises a persistent Repair. Keep HA usable
-                # and preserve the empty/last-known-good generation.
                 with suppress(Exception):
                     await datasets.async_install_bundled(bundled)
             await datasets.async_statuses()
@@ -355,7 +353,6 @@ class LockLearnRuntime:
                 datasets=datasets,
                 profile_transfers=ProfileTransferService(storage, transfer_store),
             )
-            await runtime.scheduler.async_reconcile(reason="startup")
             await runtime.scheduler_ha.async_start()
             await runtime.notification_ha.async_start()
             await runtime.ready_reminders.async_start()
