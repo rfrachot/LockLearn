@@ -13,9 +13,15 @@ All notable changes will be documented here.
 ### Changed
 - Treat `known_already` as calibration-pending rather than a permanent selection exclusion; only verified retrieval can settle it into normal review/relearning.
 - Define `session/availability` as an explainable projection of actual selector eligibility rather than a raw next-due timestamp.
+- Keep Learn readiness reminders subscribed across successive `scheduled_step`
+  cycles while preserving Quiz's one-shot behavior.
 
 
 ### Fixed
+- Dispatch deferred notification slots by their effective deadline, even when
+  their original scheduled timestamp is older than the runtime look-back.
+- Record scheduler delivery only after successful transport without re-running
+  send-time policy after the notification has already been delivered.
 - Keep calibration session starts aligned with their available sample: the shared
   selector now bypasses introduction-order constraints for the calibration
   pre-test, and question preparation accepts new cards for calibration while

@@ -769,13 +769,25 @@ class SchedulerService:
         *,
         slot_id: str,
         delivered_at_utc: datetime | None = None,
+        prepared: bool = False,
     ) -> dict[str, Any]:
-        """Record delivery-only receptivity features, never an SRS result."""
-        decision = await self.async_prepare_delivery(slot_id)
-        if not bool(decision["ready"]):
-            raise SchedulerValidationError(
-                f"slot is not receptive for delivery: {decision['reason']}"
-            )
+        """Record delivery-only receptivity features, never an SRS result.
+
+        ``prepared`` is used by the runtime dispatcher after the transport has
+        succeeded. Re-running send-time policy after a real delivery could
+        expire the slot because another notification became pending in the
+        meantime, leaving delivery and scheduler state inconsistent.
+        """
+        if not prepared:
+            decision = await self.async_prepare_delivery(slot_id)
+            if not bool(decision["ready"]):
+                raise SchedulerValidationError(
+                    f"slot is not receptive for delivery: {decision['reason']}"
+                )
+        else:
+            slot = await self._scheduler.async_get_slot(slot_id)
+            if slot is None or str(slot["status"]) not in {"scheduled", "deferred"}:
+                raise SchedulerValidationError("slot is not deliverable")
         slot = await self._scheduler.async_get_slot(slot_id)
         if slot is None:
             raise SchedulerValidationError("slot does not exist")

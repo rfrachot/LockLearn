@@ -37,6 +37,8 @@ async def test_setup_unload_and_reload_have_no_duplicate_panel(
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.LOADED
     assert DATA_RUNTIME in hass.data[DOMAIN]
+    dispatcher = hass.data[DOMAIN]["notification_dispatcher"]
+    assert dispatcher._unsub is not None
     assert {
         "load_runtime_dataset_definitions",
         "load_runtime_trust_store",
@@ -65,12 +67,16 @@ async def test_setup_unload_and_reload_have_no_duplicate_panel(
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     assert DATA_RUNTIME not in hass.data[DOMAIN]
+    assert "notification_dispatcher" not in hass.data[DOMAIN]
     assert PANEL_URL_PATH not in hass.data.get("frontend_panels", {})
 
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.LOADED
     assert PANEL_URL_PATH in hass.data["frontend_panels"]
+    reloaded_dispatcher = hass.data[DOMAIN]["notification_dispatcher"]
+    assert reloaded_dispatcher is not dispatcher
+    assert reloaded_dispatcher._unsub is not None
     reloaded_runtime = hass.data[DOMAIN][DATA_RUNTIME]
     reloaded_scheduler_time = await reloaded_runtime.storage.repositories.settings.async_get(
         "scheduler_time_state_v1"
@@ -83,6 +89,7 @@ async def test_setup_unload_and_reload_have_no_duplicate_panel(
     )
 
     assert await hass.config_entries.async_unload(entry.entry_id)
+    assert "notification_dispatcher" not in hass.data[DOMAIN]
 
 
 async def test_integrity_failure_creates_recovery_issue_without_runtime(

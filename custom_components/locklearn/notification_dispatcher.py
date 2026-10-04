@@ -16,8 +16,8 @@ from .notifications.delivery import NotificationDeliveryError
 from .notifications.interactions import NotificationStage
 from .notifications.renderers import (
     PANEL_URI,
-    NotificationRenderMode,
     NotificationRenderer,
+    NotificationRenderMode,
     RenderedNotification,
 )
 
@@ -28,7 +28,6 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 _DISPATCH_GRACE = timedelta(seconds=90)
-_DEFER_LOOKBACK = timedelta(days=1)
 _MAINTENANCE_INTERVAL = timedelta(minutes=5)
 _INTERACTION_TTL = timedelta(minutes=30)
 
@@ -82,14 +81,13 @@ class NotificationSchedulerDispatcher:
                 )
 
     async def _async_dispatch_due(self, now: datetime) -> None:
-        # Query by the persisted scheduled_for timestamp, then filter on the
-        # effective deferred deadline. A deferred slot may have been scheduled
-        # hours before its current deferred_until time.
-        start = (now - _DEFER_LOOKBACK).isoformat()
+        # Query by the persisted effective deadline. A deferred slot may have
+        # been scheduled well before its current deferred_until time.
+        start = (now - _DISPATCH_GRACE).isoformat()
         end = (now + timedelta(seconds=1)).isoformat()
         due: list[dict[str, Any]] = []
         for profile in await self._runtime.storage.repositories.profiles.async_list_active():
-            rows = await self._runtime.storage.repositories.scheduler.async_list_slots(
+            rows = await self._runtime.storage.repositories.scheduler.async_list_pending_slots(
                 profile_id=str(profile["profile_id"]),
                 start_utc=start,
                 end_utc=end,
@@ -156,7 +154,10 @@ class NotificationSchedulerDispatcher:
                 prompt=prompt,
             )
             await self._runtime.notification_delivery.async_send(rendered)
-            await self._runtime.scheduler.async_record_delivery(slot_id=slot_id)
+            await self._runtime.scheduler.async_record_delivery(
+                slot_id=slot_id,
+                prepared=True,
+            )
             await self._runtime.storage.repositories.scheduler.async_set_slot_status(
                 slot_id,
                 "consumed",
@@ -203,7 +204,10 @@ class NotificationSchedulerDispatcher:
             await self._runtime.notification_interactions.async_clear_tag(tag=tag)
             raise
 
-        await self._runtime.scheduler.async_record_delivery(slot_id=slot_id)
+        await self._runtime.scheduler.async_record_delivery(
+            slot_id=slot_id,
+            prepared=True,
+        )
         if rendered.mode is NotificationRenderMode.DIRECT_EXPOSURE:
             if selection_reason == "teaser_new":
                 await self._async_record_direct_teaser_exposure(
@@ -308,11 +312,10 @@ class NotificationSchedulerDispatcher:
         now = datetime.now(UTC)
         next_due: datetime | None = None
         horizon = now + timedelta(days=2)
-        start = now - _DEFER_LOOKBACK
         for profile in await self._runtime.storage.repositories.profiles.async_list_active():
-            slots = await self._runtime.storage.repositories.scheduler.async_list_slots(
+            slots = await self._runtime.storage.repositories.scheduler.async_list_pending_slots(
                 profile_id=str(profile["profile_id"]),
-                start_utc=start.isoformat(),
+                start_utc=now.isoformat(),
                 end_utc=horizon.isoformat(),
             )
             for slot in slots:

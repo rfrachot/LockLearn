@@ -4202,6 +4202,72 @@ class SchedulerRepository:
 
         return await self._storage._async_reader(read)
 
+    async def async_list_pending_slots(
+        self,
+        *,
+        profile_id: str,
+        start_utc: str,
+        end_utc: str,
+    ) -> tuple[dict[str, Any], ...]:
+        """List unsent slots by their effective delivery deadline."""
+
+        def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            rows = connection.execute(
+                """SELECT slot_id, profile_id, track_id, target_id, slot_type,
+                          scheduled_for_utc, deferred_until_utc, defer_reason,
+                          card_key, learning_item_id, prompt_facet_id,
+                          answer_facet_id, selection_reason, expired_reason,
+                          status, scheduler_config_version, seed,
+                          created_at_utc, updated_at_utc
+                   FROM scheduled_slots
+                   WHERE profile_id = ?
+                     AND status IN ('scheduled', 'deferred')
+                     AND CASE
+                             WHEN status = 'deferred'
+                                  AND deferred_until_utc IS NOT NULL
+                             THEN deferred_until_utc
+                             ELSE scheduled_for_utc
+                         END >= ?
+                     AND CASE
+                             WHEN status = 'deferred'
+                                  AND deferred_until_utc IS NOT NULL
+                             THEN deferred_until_utc
+                             ELSE scheduled_for_utc
+                         END < ?
+                   ORDER BY CASE
+                                WHEN status = 'deferred'
+                                     AND deferred_until_utc IS NOT NULL
+                                THEN deferred_until_utc
+                                ELSE scheduled_for_utc
+                            END,
+                            slot_id""",
+                (profile_id, start_utc, end_utc),
+            ).fetchall()
+            keys = (
+                "slot_id",
+                "profile_id",
+                "track_id",
+                "target_id",
+                "slot_type",
+                "scheduled_for_utc",
+                "deferred_until_utc",
+                "defer_reason",
+                "card_key",
+                "learning_item_id",
+                "prompt_facet_id",
+                "answer_facet_id",
+                "selection_reason",
+                "expired_reason",
+                "status",
+                "scheduler_config_version",
+                "seed",
+                "created_at_utc",
+                "updated_at_utc",
+            )
+            return tuple(dict(zip(keys, row, strict=True)) for row in rows)
+
+        return await self._storage._async_reader(read)
+
     async def async_next_slot(
         self,
         *,

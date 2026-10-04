@@ -198,9 +198,36 @@ async def test_learn_reminder_persists_and_rearms_after_next_step_changes() -> N
         availability.states = [_learning_wait("2026-09-30T20:30:00+00:00", available_now=8)]
         await service._refresh_learning_reminders()
         assert (
-            next(iter(settings.values.values()))["scheduled_for_utc"]
-            == "2026-09-30T20:30:00+00:00"
+            next(iter(settings.values.values()))["scheduled_for_utc"] == "2026-09-30T20:30:00+00:00"
         )
+
+        # The next distinct step is delivered once, while the subscription
+        # remains enabled for later cycles.
+        clock.current = datetime(2026, 9, 30, 20, 30, tzinfo=UTC)
+        assert await service.async_fire_due(reminder_key) == "sent"
+        assert len(delivery.rendered) == 2
+        persisted = next(iter(settings.values.values()))
+        assert persisted["last_sent_for_utc"] == "2026-09-30T20:30:00+00:00"
+        assert persisted["scheduled_for_utc"] is None
+
+        # A subsequent step survives service recreation and can be delivered
+        # without asking the learner to arm the reminder again.
+        availability.states = [_learning_wait("2026-09-30T20:40:00+00:00", available_now=8)]
+        await service._refresh_learning_reminders()
+        service.close()
+        restored = ReadyReminderService(
+            settings,
+            _Profiles(),
+            _Targets(),
+            cast(Any, availability),
+            cast(Any, delivery),
+            clock=clock,
+        )
+        await restored.async_start()
+        clock.current = datetime(2026, 9, 30, 20, 40, tzinfo=UTC)
+        assert await restored.async_fire_due(reminder_key) == "sent"
+        assert len(delivery.rendered) == 3
+        restored.close()
     finally:
         service.close()
 

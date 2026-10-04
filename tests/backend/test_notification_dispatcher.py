@@ -10,6 +10,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 
 from custom_components.locklearn.notification_dispatcher import NotificationSchedulerDispatcher
+from custom_components.locklearn.notifications.delivery import NotificationDeliveryError
 
 
 class _Profiles:
@@ -38,6 +39,29 @@ class _SchedulerRepository:
             if start <= datetime.fromisoformat(str(slot["scheduled_for_utc"])) < end
         )
 
+    async def async_list_pending_slots(
+        self,
+        *,
+        profile_id: str,
+        start_utc: str,
+        end_utc: str,
+    ) -> tuple[dict[str, Any], ...]:
+        self.calls.append((profile_id, start_utc, end_utc))
+        start = datetime.fromisoformat(start_utc)
+        end = datetime.fromisoformat(end_utc)
+        result = []
+        for slot in self.slots:
+            if str(slot.get("status")) not in {"scheduled", "deferred"}:
+                continue
+            raw = (
+                slot.get("deferred_until_utc")
+                if str(slot.get("status")) == "deferred"
+                else slot.get("scheduled_for_utc")
+            )
+            if isinstance(raw, str) and start <= datetime.fromisoformat(raw) < end:
+                result.append(slot)
+        return tuple(result)
+
 
 def _runtime(repository: _SchedulerRepository) -> Any:
     return SimpleNamespace(
@@ -48,6 +72,175 @@ def _runtime(repository: _SchedulerRepository) -> Any:
             )
         )
     )
+
+
+class _PipelineScheduler:
+    def __init__(self, slot: dict[str, Any], events: list[str]) -> None:
+        self.slot = slot
+        self.events = events
+        self.recorded: list[dict[str, Any]] = []
+
+    async def async_prepare_delivery(self, slot_id: str) -> dict[str, Any]:
+        assert slot_id == self.slot["slot_id"]
+        return {
+            "slot_id": slot_id,
+            "ready": self.slot["status"] in {"scheduled", "deferred"},
+        }
+
+    async def async_record_delivery(self, **kwargs: Any) -> dict[str, Any]:
+        assert kwargs["prepared"] is True
+        assert self.slot["status"] in {"scheduled", "deferred"}
+        self.events.append("record_delivery")
+        self.recorded.append(kwargs)
+        self.slot["status"] = "sent"
+        return {}
+
+
+class _PipelineSchedulerRepository:
+    def __init__(self, slot: dict[str, Any], events: list[str]) -> None:
+        self.slot = slot
+        self.events = events
+
+    async def async_get_slot(self, slot_id: str) -> dict[str, Any] | None:
+        return dict(self.slot) if slot_id == self.slot["slot_id"] else None
+
+    async def async_set_slot_status(
+        self, slot_id: str, status: str, *, updated_at_utc: str
+    ) -> bool:
+        del updated_at_utc
+        assert slot_id == self.slot["slot_id"]
+        self.events.append(f"status:{status}")
+        self.slot["status"] = status
+        return True
+
+
+class _PipelineInteractions:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+        self.cleared: list[str] = []
+
+    async def async_create(self, **kwargs: Any) -> Any:
+        self.events.append("create_interaction")
+        return SimpleNamespace(
+            interaction_id="interaction-1",
+            token="token-1",
+        )
+
+    async def async_clear_tag(self, *, tag: str) -> None:
+        self.events.append("clear_interaction")
+        self.cleared.append(tag)
+
+
+class _PipelineDelivery:
+    def __init__(self, events: list[str], *, fail: bool = False) -> None:
+        self.events = events
+        self.fail = fail
+        self.rendered: list[Any] = []
+
+    async def async_send(self, rendered: Any) -> object:
+        self.events.append("notify")
+        self.rendered.append(rendered)
+        if self.fail:
+            raise NotificationDeliveryError("test delivery failure")
+        return object()
+
+
+class _PipelineReviews:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+        self.recorded: list[dict[str, Any]] = []
+
+    async def async_record(self, **kwargs: Any) -> None:
+        self.events.append("review")
+        self.recorded.append(kwargs)
+
+
+def _pipeline_runtime(
+    *,
+    slot: dict[str, Any],
+    events: list[str],
+    fail_delivery: bool = False,
+    action_capable: bool = False,
+) -> tuple[Any, _PipelineScheduler, _PipelineDelivery, _PipelineReviews]:
+    scheduler = _PipelineScheduler(slot, events)
+    repository = _PipelineSchedulerRepository(slot, events)
+    delivery = _PipelineDelivery(events, fail=fail_delivery)
+    reviews = _PipelineReviews(events)
+    target = {
+        "target_id": "target-1",
+        "profile_id": "profile-1",
+        "device_registry_id": "device-1",
+        "platform": "android",
+        "enabled": True,
+        "capabilities": (
+            {"action_data": "supported", "visible_actions": 2} if action_capable else {}
+        ),
+        "lockscreen_visibility": "private",
+    }
+    runtime = SimpleNamespace(
+        scheduler=scheduler,
+        storage=SimpleNamespace(
+            repositories=SimpleNamespace(
+                scheduler=repository,
+                profiles=SimpleNamespace(
+                    async_get=lambda profile_id: _async_value(
+                        {"profile_id": profile_id, "name": "Learner"}
+                    ),
+                ),
+                notification_targets=SimpleNamespace(
+                    async_get=lambda target_id: _async_value(
+                        target if target_id == "target-1" else None
+                    ),
+                ),
+                progress=SimpleNamespace(
+                    async_get=lambda **kwargs: _async_value(None),
+                ),
+                tracks=SimpleNamespace(
+                    async_card_reference=lambda **kwargs: _async_value(
+                        SimpleNamespace(
+                            card_key="card-1",
+                            learning_item_id="item-1",
+                            prompt_facet_id="prompt-1",
+                            answer_facet_id="answer-1",
+                        )
+                    ),
+                ),
+            ),
+            content_generations=SimpleNamespace(
+                active_metadata=SimpleNamespace(generation_id="generation-1")
+            ),
+        ),
+        presentation=SimpleNamespace(
+            async_for_card=lambda **kwargs: _async_value(
+                {
+                    "prompt": {"blocks": [{"payload": {"text": "Prompt"}}]},
+                    "answer": {"blocks": [{"payload": {"text": "Answer"}}]},
+                }
+            ),
+        ),
+        notification_delivery=delivery,
+        notification_interactions=_PipelineInteractions(events),
+        review_policy=SimpleNamespace(policy_version="policy-1"),
+        reviews=reviews,
+    )
+    return runtime, scheduler, delivery, reviews
+
+
+async def _async_value(value: Any) -> Any:
+    return value
+
+
+def _pipeline_slot(*, slot_type: str = "learning") -> dict[str, Any]:
+    return {
+        "slot_id": "slot-1",
+        "profile_id": "profile-1",
+        "track_id": "track-1",
+        "target_id": "target-1",
+        "card_key": "card-1",
+        "slot_type": slot_type,
+        "selection_reason": "teaser_new",
+        "status": "scheduled",
+    }
 
 
 def _slot(
@@ -67,14 +260,16 @@ def _slot(
 
 
 @pytest.mark.asyncio
-async def test_dispatch_due_includes_normal_and_deferred_deadlines(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_dispatch_due_includes_normal_and_deferred_deadlines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     now = datetime(2026, 10, 4, 12, 0, tzinfo=UTC)
     repository = _SchedulerRepository(
         (
             _slot("normal", now - timedelta(seconds=20)),
             _slot(
                 "deferred",
-                now - timedelta(hours=4),
+                now - timedelta(days=3),
                 status="deferred",
                 deferred_until=now - timedelta(seconds=10),
             ),
@@ -95,27 +290,30 @@ async def test_dispatch_due_includes_normal_and_deferred_deadlines(monkeypatch: 
     monkeypatch.setattr(dispatcher, "_async_dispatch_slot", capture)
     await dispatcher._async_dispatch_due(now)
 
-    assert dispatched == ["deferred", "normal"]
+    assert dispatched == ["normal", "deferred"]
     assert repository.calls
     query_start = datetime.fromisoformat(repository.calls[0][1])
-    assert query_start <= now - timedelta(hours=4)
+    assert query_start == now - timedelta(seconds=90)
 
 
 def test_effective_due_prefers_deferred_deadline() -> None:
     scheduled = datetime(2026, 10, 4, 8, 0, tzinfo=UTC)
     deferred = datetime(2026, 10, 4, 12, 0, tzinfo=UTC)
 
-    assert NotificationSchedulerDispatcher._effective_due(
-        _slot("scheduled", scheduled)
-    ) == scheduled
-    assert NotificationSchedulerDispatcher._effective_due(
-        _slot(
-            "deferred",
-            scheduled,
-            status="deferred",
-            deferred_until=deferred,
+    assert (
+        NotificationSchedulerDispatcher._effective_due(_slot("scheduled", scheduled)) == scheduled
+    )
+    assert (
+        NotificationSchedulerDispatcher._effective_due(
+            _slot(
+                "deferred",
+                scheduled,
+                status="deferred",
+                deferred_until=deferred,
+            )
         )
-    ) == deferred
+        == deferred
+    )
 
 
 def test_facet_text_uses_first_renderable_text_block() -> None:
@@ -128,3 +326,72 @@ def test_facet_text_uses_first_renderable_text_block() -> None:
 
     assert NotificationSchedulerDispatcher._facet_text(facet) == "こんにちは"
     assert NotificationSchedulerDispatcher._facet_text({"blocks": []}) == "LockLearn"
+
+
+@pytest.mark.asyncio
+async def test_direct_teaser_records_exposure_only_after_success_and_is_idempotent() -> None:
+    events: list[str] = []
+    slot = _pipeline_slot()
+    runtime, scheduler, delivery, reviews = _pipeline_runtime(
+        slot=slot,
+        events=events,
+    )
+    dispatcher = NotificationSchedulerDispatcher(
+        cast(HomeAssistant, object()),
+        cast(Any, runtime),
+    )
+
+    await dispatcher._async_dispatch_slot(slot)
+    await dispatcher._async_dispatch_slot(slot)
+
+    assert events.index("notify") < events.index("record_delivery") < events.index("review")
+    assert delivery.rendered[0].pedagogical_signal == "exposure_only"
+    assert reviews.recorded[0]["retrieval_occurred"] is False
+    assert len(reviews.recorded) == 1
+    assert scheduler.slot["status"] == "consumed"
+
+
+@pytest.mark.asyncio
+async def test_failed_direct_teaser_delivery_does_not_create_introduction() -> None:
+    events: list[str] = []
+    slot = _pipeline_slot()
+    runtime, scheduler, _delivery, reviews = _pipeline_runtime(
+        slot=slot,
+        events=events,
+        fail_delivery=True,
+    )
+    dispatcher = NotificationSchedulerDispatcher(
+        cast(HomeAssistant, object()),
+        cast(Any, runtime),
+    )
+
+    with pytest.raises(NotificationDeliveryError):
+        await dispatcher._async_dispatch_slot(slot)
+
+    assert "notify" in events
+    assert "record_delivery" not in events
+    assert "review" not in events
+    assert reviews.recorded == []
+    assert scheduler.slot["status"] == "scheduled"
+
+
+@pytest.mark.asyncio
+async def test_actionable_delivery_keeps_interaction_after_success() -> None:
+    events: list[str] = []
+    slot = _pipeline_slot()
+    runtime, scheduler, delivery, _reviews = _pipeline_runtime(
+        slot=slot,
+        events=events,
+        action_capable=True,
+    )
+    dispatcher = NotificationSchedulerDispatcher(
+        cast(HomeAssistant, object()),
+        cast(Any, runtime),
+    )
+
+    await dispatcher._async_dispatch_slot(slot)
+
+    assert delivery.rendered[0].mode.value == "two_step_reveal"
+    assert events.index("create_interaction") < events.index("notify")
+    assert "clear_interaction" not in events
+    assert scheduler.slot["status"] == "sent"
