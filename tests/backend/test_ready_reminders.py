@@ -1,4 +1,4 @@
-"""Beta.5 one-shot readiness reminder contract tests."""
+"""Beta.5 persistent Learn and one-shot Quiz readiness reminder tests."""
 
 from __future__ import annotations
 
@@ -149,7 +149,7 @@ def _quiz_wait(when: str | None, *, available_now: int = 0) -> dict[str, Any]:
 
 
 @pytest.mark.asyncio
-async def test_learn_reminder_can_arm_while_new_session_is_already_available() -> None:
+async def test_learn_reminder_persists_and_rearms_after_next_step_changes() -> None:
     settings = _Settings()
     delivery = _Delivery()
     clock = _Clock(datetime(2026, 9, 30, 20, 0, tzinfo=UTC))
@@ -157,7 +157,6 @@ async def test_learn_reminder_can_arm_while_new_session_is_already_available() -
         [
             _learning_wait("2026-09-30T20:10:00+00:00", available_now=8),
             _learning_wait("2026-09-30T20:10:00+00:00", available_now=8),
-            {"available_now": 8, "next_available_at_utc": None, "blockers": []},
         ],
         prepared_states=("learning", "new", "new"),
     )
@@ -168,6 +167,60 @@ async def test_learn_reminder_can_arm_while_new_session_is_already_available() -
         cast(Any, availability),
         cast(Any, delivery),
         clock=clock,
+    )
+    try:
+        armed = await service.async_arm(
+            profile_id="profile-1",
+            track_id="track-1",
+            mode="learn",
+        )
+        assert armed["active"] is True
+        stored = next(iter(settings.values.values()))
+        reminder_key = f"ready_reminder:{stored['reminder_id']}"
+        service.close()
+
+        clock.current = datetime(2026, 9, 30, 20, 10, tzinfo=UTC)
+        assert await service.async_fire_due(reminder_key) == "sent"
+        assert len(delivery.rendered) == 1
+        persisted = next(iter(settings.values.values()))
+        assert persisted["scheduled_for_utc"] is None
+        assert persisted["last_sent_for_utc"] == "2026-09-30T20:10:00+00:00"
+        assert delivery.rendered[0].pedagogical_signal == "no_result"
+        assert delivery.rendered[0].message == "Ton prochain rappel d'apprentissage est dû."
+
+        # No user activity yet: the same due step must not create a duplicate.
+        availability.states = [_learning_wait("2026-09-30T20:10:00+00:00", available_now=8)]
+        await service._refresh_learning_reminders()
+        assert next(iter(settings.values.values()))["scheduled_for_utc"] is None
+        assert len(delivery.rendered) == 1
+
+        # After canonical learning progress advances, a distinct next step is armed.
+        availability.states = [_learning_wait("2026-09-30T20:30:00+00:00", available_now=8)]
+        await service._refresh_learning_reminders()
+        assert (
+            next(iter(settings.values.values()))["scheduled_for_utc"]
+            == "2026-09-30T20:30:00+00:00"
+        )
+    finally:
+        service.close()
+
+
+@pytest.mark.asyncio
+async def test_learn_reminder_can_arm_while_new_session_is_already_available() -> None:
+    settings = _Settings()
+    service = ReadyReminderService(
+        settings,
+        _Profiles(),
+        _Targets(),
+        cast(
+            Any,
+            _Availability(
+                [_learning_wait("2026-09-30T20:10:00+00:00", available_now=8)],
+                prepared_states=("learning", "new"),
+            ),
+        ),
+        cast(Any, _Delivery()),
+        clock=_Clock(datetime(2026, 9, 30, 20, 0, tzinfo=UTC)),
     )
     try:
         first = await service.async_arm(
@@ -183,16 +236,6 @@ async def test_learn_reminder_can_arm_while_new_session_is_already_available() -
         assert first["active"] is True
         assert second["active"] is True
         assert len(settings.values) == 1
-
-        stored = next(iter(settings.values.values()))
-        reminder_key = f"ready_reminder:{stored['reminder_id']}"
-        service.close()
-        clock.current = datetime(2026, 9, 30, 20, 10, tzinfo=UTC)
-        assert await service.async_fire_due(reminder_key) == "sent"
-        assert settings.values == {}
-        assert len(delivery.rendered) == 1
-        assert delivery.rendered[0].pedagogical_signal == "no_result"
-        assert delivery.rendered[0].message == "Ton prochain rappel d'apprentissage est dû."
     finally:
         service.close()
 
@@ -245,7 +288,7 @@ async def test_learn_reminder_moves_with_scheduled_step_and_can_cancel() -> None
 
 
 @pytest.mark.asyncio
-async def test_learn_reminder_does_not_fire_for_new_cards_only() -> None:
+async def test_learn_reminder_waits_when_only_new_cards_are_selectable() -> None:
     settings = _Settings()
     delivery = _Delivery()
     clock = _Clock(datetime(2026, 9, 30, 20, 0, tzinfo=UTC))
@@ -274,9 +317,10 @@ async def test_learn_reminder_does_not_fire_for_new_cards_only() -> None:
         reminder_key = f"ready_reminder:{stored['reminder_id']}"
         service.close()
         clock.current = datetime(2026, 9, 30, 20, 10, tzinfo=UTC)
-        assert await service.async_fire_due(reminder_key) == "cancelled"
+        assert await service.async_fire_due(reminder_key) == "waiting"
         assert delivery.rendered == []
-        assert settings.values == {}
+        assert len(settings.values) == 1
+        assert next(iter(settings.values.values()))["scheduled_for_utc"] is None
     finally:
         service.close()
 
