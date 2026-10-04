@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 _DISPATCH_GRACE = timedelta(seconds=90)
+_DEFER_LOOKBACK = timedelta(days=1)
 _MAINTENANCE_INTERVAL = timedelta(minutes=5)
 _INTERACTION_TTL = timedelta(minutes=30)
 
@@ -66,8 +67,8 @@ class NotificationSchedulerDispatcher:
                 await self._runtime.scheduler.async_reconcile(reason="timer")
             await self._async_materialize_today()
             if startup:
-                # Startup reconciliation intentionally owns genuinely missed slots.
-                # Newly materialized slots are always in the future.
+                # Runtime startup reconciliation intentionally owns genuinely missed
+                # slots. Newly materialized slots are always in the future.
                 await self._async_dispatch_due(datetime.now(UTC))
             await self._async_schedule_next()
 
@@ -81,7 +82,10 @@ class NotificationSchedulerDispatcher:
                 )
 
     async def _async_dispatch_due(self, now: datetime) -> None:
-        start = (now - _DISPATCH_GRACE).isoformat()
+        # Query by the persisted scheduled_for timestamp, then filter on the
+        # effective deferred deadline. A deferred slot may have been scheduled
+        # hours before its current deferred_until time.
+        start = (now - _DEFER_LOOKBACK).isoformat()
         end = (now + timedelta(seconds=1)).isoformat()
         due: list[dict[str, Any]] = []
         for profile in await self._runtime.storage.repositories.profiles.async_list_active():
@@ -166,6 +170,7 @@ class NotificationSchedulerDispatcher:
             shared_device=bool(target.get("shared_device")),
             values=dict(target.get("capabilities") or {}),
         )
+        tag = f"locklearn-slot-{slot_id}"
         interaction = await self._runtime.notification_interactions.async_create(
             profile_id=profile_id,
             target_id=str(target_id),
@@ -173,7 +178,7 @@ class NotificationSchedulerDispatcher:
             card_key=str(card_key),
             stage=NotificationStage.PROMPT,
             expires_at=datetime.now(UTC) + _INTERACTION_TTL,
-            tag=f"locklearn-slot-{slot_id}",
+            tag=tag,
             payload={
                 "slot_id": slot_id,
                 "kind": "learning",
@@ -184,7 +189,7 @@ class NotificationSchedulerDispatcher:
             profile_id=profile_id,
             profile_name=str(profile.get("name") or "LockLearn"),
             target_id=str(target_id),
-            tag=f"locklearn-slot-{slot_id}",
+            tag=tag,
             prompt=prompt,
             answer=answer,
             token=interaction.token,
@@ -195,9 +200,7 @@ class NotificationSchedulerDispatcher:
         try:
             await self._runtime.notification_delivery.async_send(rendered)
         except NotificationDeliveryError:
-            await self._runtime.notification_interactions.async_clear_tag(
-                tag=f"locklearn-slot-{slot_id}"
-            )
+            await self._runtime.notification_interactions.async_clear_tag(tag=tag)
             raise
 
         await self._runtime.scheduler.async_record_delivery(slot_id=slot_id)
@@ -209,9 +212,7 @@ class NotificationSchedulerDispatcher:
                     card_key=str(card_key),
                     notification_id=interaction.interaction_id,
                 )
-            await self._runtime.notification_interactions.async_clear_tag(
-                tag=f"locklearn-slot-{slot_id}"
-            )
+            await self._runtime.notification_interactions.async_clear_tag(tag=tag)
             await self._runtime.storage.repositories.scheduler.async_set_slot_status(
                 slot_id,
                 "consumed",
@@ -307,10 +308,11 @@ class NotificationSchedulerDispatcher:
         now = datetime.now(UTC)
         next_due: datetime | None = None
         horizon = now + timedelta(days=2)
+        start = now - _DEFER_LOOKBACK
         for profile in await self._runtime.storage.repositories.profiles.async_list_active():
             slots = await self._runtime.storage.repositories.scheduler.async_list_slots(
                 profile_id=str(profile["profile_id"]),
-                start_utc=now.isoformat(),
+                start_utc=start.isoformat(),
                 end_utc=horizon.isoformat(),
             )
             for slot in slots:
