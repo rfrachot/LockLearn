@@ -45,9 +45,9 @@ class NotificationSchedulerDispatcher:
         self._closed = False
 
     async def async_start(self) -> None:
-        """Materialize today's slots, dispatch anything due, then arm the next wake."""
+        """Dispatch recoverable slots before any scheduler reconciliation."""
         self._closed = False
-        await self._async_cycle(startup=True)
+        await self._async_cycle()
 
     def close(self) -> None:
         """Cancel the next HA timer."""
@@ -56,29 +56,50 @@ class NotificationSchedulerDispatcher:
             self._unsub()
             self._unsub = None
 
-    async def _async_cycle(self, *, startup: bool = False) -> None:
+    async def _async_cycle(self) -> None:
         if self._closed:
             return
         async with self._lock:
             now = datetime.now(UTC)
             await self._async_dispatch_due(now)
-            # Keep a deliberate grace period between a missed deadline and
-            # scheduler expiration. This protects against early/late HA timer
-            # callbacks and short event-loop stalls without double-delivery.
-            await self._runtime.scheduler.async_reconcile(
-                reason="startup" if startup else "timer",
-                expire_before_utc=now - _DISPATCH_GRACE,
-            )
-            await self._async_materialize_today()
+            await self._async_expire_stale(now)
+            if not await self._async_has_guarded_pending(now):
+                await self._async_materialize_today()
             await self._async_schedule_next()
 
+    async def _async_expire_stale(self, now: datetime) -> None:
+        """Expire only slots older than the dispatcher recovery window."""
+        cutoff = now - _DISPATCH_GRACE
+        expired = await self._runtime.storage.repositories.scheduler.async_expire_before(
+            before_utc=cutoff.isoformat(),
+            updated_at_utc=now.isoformat(),
+        )
+        if expired:
+            _LOGGER.debug(
+                "LockLearn dispatcher expired %d slot(s) older than grace cutoff %s",
+                expired,
+                cutoff.isoformat(),
+            )
+
+    async def _async_has_guarded_pending(self, now: datetime) -> bool:
+        """Protect due/near-due slots from generate() reconciliation races."""
+        start = (now - _DISPATCH_GRACE).isoformat()
+        end = (now + _MAINTENANCE_INTERVAL).isoformat()
+        for profile in await self._runtime.storage.repositories.profiles.async_list_active():
+            slots = await self._runtime.storage.repositories.scheduler.async_list_pending_slots(
+                profile_id=str(profile["profile_id"]),
+                start_utc=start,
+                end_utc=end,
+            )
+            if slots:
+                return True
+        return False
+
     async def _async_materialize_today(self) -> None:
+        """Refresh materialized future work only when no deadline is at risk."""
         for profile in await self._runtime.storage.repositories.profiles.async_list_active():
             try:
-                await self._runtime.scheduler.async_generate(
-                    profile_id=str(profile["profile_id"]),
-                    expire_before_utc=datetime.now(UTC) - _DISPATCH_GRACE,
-                )
+                await self._runtime.scheduler.async_generate(profile_id=str(profile["profile_id"]))
             except Exception:
                 _LOGGER.exception(
                     "LockLearn scheduler materialization failed for an active profile"
@@ -109,6 +130,8 @@ class NotificationSchedulerDispatcher:
             try:
                 await self._async_dispatch_slot(slot)
             except Exception:
+                # The slot remains pending inside the grace window and the
+                # one-minute maintenance wake retries it before expiration.
                 _LOGGER.exception("LockLearn scheduled notification dispatch failed")
 
     async def _async_dispatch_slot(self, slot: dict[str, Any]) -> None:
