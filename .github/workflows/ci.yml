@@ -1,24 +1,42 @@
 name: CI
 
 on:
-  pull_request:
   push:
-    branches: [main]
+    branches:
+      - main
+      - "feat/**"
+      - "fix/**"
+      - "chore/**"
+      - "docs/**"
+      - "refactor/**"
+      - "test/**"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: locklearn-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Persistent caches belong to the dedicated LockLearn account. They are
+  # acceleration only; requirements-dev.txt and package-lock.json remain the
+  # dependency sources of truth.
+  PIP_CACHE_DIR: /home/ll-runner/.cache/pip
+  NPM_CONFIG_CACHE: /home/ll-runner/.cache/npm
+  PLAYWRIGHT_BROWSERS_PATH: /home/ll-runner/.cache/ms-playwright
+
 jobs:
   backend-quality:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, locklearn-dev]
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           check-latest: true
-          cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements-dev.txt
       - name: Backend format
@@ -74,14 +92,14 @@ jobs:
         run: python scripts/p6_7_scale_validation.py --hot-path-report-only
 
   dataset-contracts:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, locklearn-dev]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           check-latest: true
-          cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements-dev.txt
       - name: Schema and registry validation
@@ -116,14 +134,14 @@ jobs:
             home_assistant: "2026.9.3"
             frontend: "20260826.7"
     name: HA ${{ matrix.name }} (${{ matrix.home_assistant }})
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, locklearn-dev]
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
           check-latest: true
-          cache: pip
       - run: python -m pip install --upgrade pip
       - name: Install pinned Home Assistant lane
         run: >-
@@ -145,14 +163,14 @@ jobs:
 
   latest-home-assistant-smoke:
     name: HA latest stable smoke (2026.9.4)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, locklearn-dev]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           check-latest: true
-          cache: pip
       - run: python -m pip install --upgrade pip
       - name: Install latest stable Home Assistant
         run: >-
@@ -167,7 +185,8 @@ jobs:
         run: python scripts/p6_10_release_smoke.py
 
   frontend:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, locklearn-dev]
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: frontend
@@ -176,7 +195,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
-      - run: npm install
+      - run: npm ci
       - name: Frontend lint
         run: npm run lint
       - run: npm run typecheck
@@ -193,7 +212,8 @@ jobs:
       - run: git diff --exit-code -- ../custom_components/locklearn/frontend/locklearn-panel.js
 
   frontend-e2e:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, locklearn-dev]
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: frontend
@@ -202,8 +222,10 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
-      - run: npm install
-      - run: npx playwright install --with-deps chromium
+      - run: npm ci
+      # OS-level browser dependencies are provisioned on the VM. The browser
+      # binary itself lives in the dedicated persistent LockLearn cache.
+      - run: npx playwright install chromium
       - run: npm run test:e2e
       - name: Capture documentation screenshot
         run: npm run docs:screenshot
@@ -215,7 +237,8 @@ jobs:
           if-no-files-found: error
 
   home-assistant-validation:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, locklearn-dev]
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: home-assistant/actions/hassfest@master

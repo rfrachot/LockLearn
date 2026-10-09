@@ -26,16 +26,19 @@ on:
 permissions:
   contents: read
 
+env:
+  PIP_CACHE_DIR: /home/ll-runner/.cache/pip
+
 jobs:
   validate-and-check-sources:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, locklearn-dev]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           check-latest: true
-          cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements-dev.txt
       - run: python datasets/tools/validate_resources.py
@@ -43,20 +46,28 @@ jobs:
       - run: python datasets/tools/source_check.py
 
   manual-build:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_config != '' }}
+    # Signed publication is only allowed from the protected default branch.
+    # A workflow_dispatch from another trusted branch may still run the
+    # secret-free validation job above, but cannot reach this job.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_config != '' && github.ref == 'refs/heads/main' }}
     needs: validate-and-check-sources
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, locklearn-dev]
+    timeout-minutes: 45
+    environment: dataset-release
     permissions:
       contents: write
     env:
       LOCKLEARN_DATASET_SIGNING_KEY_B64: ${{ secrets.LOCKLEARN_DATASET_SIGNING_KEY_B64 }}
+      BUILD_CONFIG: ${{ inputs.build_config }}
+      PREVIOUS_RELEASE_TAG: ${{ inputs.previous_release_tag }}
+      FIRST_RELEASE: ${{ inputs.first_release }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           check-latest: true
-          cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements-dev.txt
       - name: Require signing secret
@@ -65,7 +76,7 @@ jobs:
         if: ${{ inputs.release_tag != '' }}
         shell: bash
         run: |
-          if [ -z "${{ inputs.previous_release_tag }}" ] && [ "${{ inputs.first_release }}" != "true" ]; then
+          if [ -z "$PREVIOUS_RELEASE_TAG" ] && [ "$FIRST_RELEASE" != "true" ]; then
             echo "A release requires previous_release_tag, or first_release=true for the initial publication."
             exit 1
           fi
@@ -76,7 +87,10 @@ jobs:
         shell: bash
         run: |
           mkdir -p datasets/staging/previous
-          gh release download "${{ inputs.previous_release_tag }}"             --pattern "*.zip"             --dir datasets/staging/previous
+          gh release download "$PREVIOUS_RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "*.zip" \
+            --dir datasets/staging/previous
           count="$(find datasets/staging/previous -maxdepth 1 -type f -name '*.zip' | wc -l)"
           test "$count" -eq 1
       - name: Build signed artifact
@@ -84,11 +98,15 @@ jobs:
         shell: bash
         run: |
           args=()
-          if [ -n "${{ inputs.previous_release_tag }}" ]; then
+          if [ -n "$PREVIOUS_RELEASE_TAG" ]; then
             previous="$(find datasets/staging/previous -maxdepth 1 -type f -name '*.zip' -print -quit)"
             args+=(--previous "$previous")
           fi
-          result="$(python datasets/tools/build_dataset.py             "${{ inputs.build_config }}"             --output datasets/dist             --workspace datasets/staging/build             "${args[@]}")"
+          result="$(python datasets/tools/build_dataset.py \
+            "$BUILD_CONFIG" \
+            --output datasets/dist \
+            --workspace datasets/staging/build \
+            "${args[@]}")"
           echo "$result"
           publish="$(printf '%s' "$result" | python -c 'import json,sys; print(str(json.load(sys.stdin)["publish"]).lower())')"
           archive="$(printf '%s' "$result" | python -c 'import json,sys; print(json.load(sys.stdin)["archive"])')"
@@ -107,12 +125,13 @@ jobs:
         if: ${{ inputs.release_tag != '' && steps.build.outputs.publish == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "${{ inputs.release_tag }}"
-          "${{ steps.build.outputs.archive }}"
-          "${{ steps.build.outputs.checksum }}"
-          --title "${{ inputs.release_tag }}"
-          --generate-notes
+        run: |
+          gh release create "$RELEASE_TAG" \
+            "${{ steps.build.outputs.archive }}" \
+            "${{ steps.build.outputs.checksum }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$RELEASE_TAG" \
+            --generate-notes
       - name: Explain unchanged build
         if: ${{ inputs.release_tag != '' && steps.build.outputs.publish != 'true' }}
         run: echo "Canonical content is unchanged; GitHub Release creation is skipped."
