@@ -341,7 +341,6 @@ Environment=PIP_CACHE_DIR=${CACHE_ROOT}/pip
 Environment=NPM_CONFIG_CACHE=${CACHE_ROOT}/npm
 Environment=PLAYWRIGHT_BROWSERS_PATH=${CACHE_ROOT}/ms-playwright
 NoNewPrivileges=yes
-PrivateTmp=yes
 RestrictSUIDSGID=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 UMask=0077
