@@ -30,7 +30,7 @@ en file d'attente. Il n'existe aucun fallback `ubuntu-latest`.
 | Workspaces | `/home/ll-runner/actions/runner-{1,2}/_work` |
 | Services | `actions-runner-1.service`, `actions-runner-2.service` (user systemd) |
 | Caches | `/home/ll-runner/.cache/{pip,npm,ms-playwright}` |
-| Docker | aucun accès Docker accordé à LockLearn; Docker rootless ThermalTwin reste sous `tt-runner` |
+| Docker | Docker rootless privé à `ll-runner`, socket `/run/user/<uid>/docker.sock`; le Docker de `tt-runner` et le socket rootful restent hors périmètre |
 
 Deux runners constituent le point de départ. Ils partagent le CPU, la mémoire,
 le disque et l'I/O de la VM : ils ne constituent pas deux hôtes isolés. Les
@@ -38,10 +38,14 @@ benchmarks et les métriques de performance LockLearn sont donc des mesures de
 VM partagée et ne remplacent pas une référence matérielle dédiée.
 
 L'installation LockLearn ne lit pas `/home/tt-runner`, `/home/developer`, les
-répertoires ThermalTwin, les fichiers `.env`, les clés SSH, les tokens HA ou un
-socket Docker. `ll-runner` n'a pas de règle sudo et n'est pas membre du groupe
-`docker`. Les services utilisent un compte distinct, des workspaces distincts
-et `NoNewPrivileges`/protections systemd. Les connexions réseau sont sortantes
+répertoires ThermalTwin, les fichiers `.env`, les clés SSH ou les tokens HA.
+`ll-runner` n'a pas de règle sudo et n'est pas membre du groupe rootful
+`docker`. Les deux services runners héritent explicitement de
+`DOCKER_HOST=unix:///run/user/<uid>/docker.sock`; ils ne peuvent donc pas
+utiliser le socket `/var/run/docker.sock`. Le daemon rootless, son stockage et
+son socket appartiennent à `ll-runner` et sont distincts de ceux de `tt-runner`.
+Les services utilisent un compte distinct, des workspaces distincts et
+`NoNewPrivileges`/protections systemd. Les connexions réseau sont sortantes
 uniquement via le runner GitHub; aucun port entrant n'est ouvert.
 
 ## Événements et permissions GitHub
@@ -89,70 +93,41 @@ de fork sur ces runners.
 
 ## Installation et services
 
-L'installation initiale est volontairement explicite et ne met aucun jeton dans
-Git. Les commandes suivantes sont des exemples opératoires; remplacer
-`<version>` et générer un nouveau jeton d'enregistrement juste avant chaque
-installation :
+Le bootstrap auditable est versionné dans
+`scripts/bootstrap-self-hosted-ci.sh`. Il doit être exécuté une seule fois
+depuis une session SSH interactive, après revue, avec le `sudo` de la session :
 
 ```bash
-sudo useradd --create-home --home-dir /home/ll-runner --shell /usr/sbin/nologin ll-runner
-sudo passwd --lock ll-runner
-sudo loginctl enable-linger ll-runner
-sudo install -d -o ll-runner -g ll-runner -m 0750 /home/ll-runner/actions
-sudo install -d -o ll-runner -g ll-runner -m 0750 /home/ll-runner/.cache/{pip,npm,ms-playwright}
-
-runner_token="$(gh api -X POST repos/rfrachot/LockLearn/actions/runners/registration-token --jq .token)"
-sudo -u ll-runner -H env RUNNER_TOKEN="$runner_token" bash -c '
-  set -euo pipefail
-  mkdir -p "$HOME/actions/runner-1" && cd "$HOME/actions/runner-1"
-  curl -fL -o runner.tar.gz \
-    https://github.com/actions/runner/releases/download/v<version>/actions-runner-linux-x64-<version>.tar.gz
-  tar -xzf runner.tar.gz && rm runner.tar.gz
-  ./config.sh --unattended --url https://github.com/rfrachot/LockLearn \
-    --token "$RUNNER_TOKEN" \
-    --name locklearn-dev-1 --labels locklearn-dev --work _work --disableupdate
-'
-unset runner_token
+sudo ./scripts/bootstrap-self-hosted-ci.sh --repo rfrachot/LockLearn
 ```
 
-Chaque service user systemd est installé dans
-`~/.config/systemd/user/actions-runner-N.service` :
+Le script ne reçoit ni mot de passe sudo ni secret GitHub. Il utilise la session
+`gh` authentifiée de l'utilisateur qui a lancé `sudo`, demande des jetons
+d'enregistrement éphémères uniquement si un runner manque, les transmet en
+mémoire à `config.sh`, puis les efface. L'archive du runner est vérifiée par
+SHA-256 avant extraction. Une réexécution est sans effet sur les runners déjà
+enregistrés et refuse les installations partielles ou enregistrées vers un
+autre dépôt.
 
-```ini
-[Unit]
-Description=GitHub Actions runner LockLearn N
-After=network-online.target
-Wants=network-online.target
+Le script installe `ll-runner`, les plages `/etc/subuid`/`/etc/subgid`, les
+prérequis rootless et les bibliothèques système Chromium. Il ne met pas à jour,
+n'arrête pas, ne désactive pas et ne reconfigure pas le Docker existant. Le
+daemon rootless LockLearn est installé comme service utilisateur
+`docker.service` sous `ll-runner`, avec son propre stockage et
+`/run/user/<uid>/docker.sock`. Les services
+`actions-runner-{1,2}.service` en dépendent et fixent leur `DOCKER_HOST` sur ce
+socket. `ll-runner` reste hors des groupes `docker` et `sudo`.
 
-[Service]
-WorkingDirectory=%h/actions/runner-N
-ExecStart=%h/actions/runner-N/run.sh
-Restart=always
-RestartSec=10
-Nice=5
-NoNewPrivileges=yes
-PrivateTmp=yes
-ProtectSystem=full
-ProtectKernelTunables=yes
-ProtectKernelModules=yes
-ProtectControlGroups=yes
-RestrictSUIDSGID=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-UMask=0077
-
-[Install]
-WantedBy=default.target
-```
-
-Activer et vérifier :
+Vérifier après installation :
 
 ```bash
-systemctl --user daemon-reload
-systemctl --user enable --now actions-runner-1.service
-systemctl --user status actions-runner-1.service
-journalctl --user -u actions-runner-1.service --no-pager -n 100
+sudo -u ll-runner -H env XDG_RUNTIME_DIR=/run/user/$(id -u ll-runner) \
+  DOCKER_HOST=unix:///run/user/$(id -u ll-runner)/docker.sock \
+  docker info --format '{{.DockerRootDir}}'
+sudo -u ll-runner -H env XDG_RUNTIME_DIR=/run/user/$(id -u ll-runner) \
+  systemctl --user status docker.service actions-runner-{1,2}.service
 gh api repos/rfrachot/LockLearn/actions/runners \
-  --jq '.runners[]|[.name,.status,.busy]|@tsv'
+  --jq '.runners[]|[.name,.status,.busy,(.labels|map(.name)|join(","))]|@tsv'
 ```
 
 Les dépendances OS Chromium sont installées une fois par l'administrateur de la
@@ -163,7 +138,9 @@ cache `ll-runner`; il ne demande pas de sudo depuis un job GitHub.
 
 Les workflows utilisent les caches locaux `PIP_CACHE_DIR`,
 `NPM_CONFIG_CACHE` et `PLAYWRIGHT_BROWSERS_PATH`. Les caches GitHub Actions de
-`setup-python` ne sont pas utilisés. `requirements-dev.txt`, les versions HA
+`setup-python` ne sont pas utilisés. Chaque job Python crée un venv neuf sous
+`RUNNER_TEMP` après `setup-python`; aucun paquet Python ne s'installe dans le
+site global ou dans un autre job. `requirements-dev.txt`, les versions HA
 explicites, `frontend/package-lock.json` et `npm ci` restent les sources de
 reproductibilité.
 
@@ -181,16 +158,17 @@ du -sh /home/ll-runner/actions/*/_work 2>/dev/null
 du -sh /home/ll-runner/.cache/pip /home/ll-runner/.cache/npm /home/ll-runner/.cache/ms-playwright
 ```
 
-Ne jamais exécuter `docker system prune -af` sur la VM. LockLearn n'utilise pas
-Docker; toute maintenance Docker concerne exclusivement le compte qui possède
-le daemon et doit préserver ThermalTwin et le développement interactif. Les
-anciens workspaces LockLearn peuvent être supprimés seulement après inspection
-d'un runner arrêté et après confirmation qu'aucun job n'est actif.
+Ne jamais exécuter `docker system prune -af` sur la VM. Toute maintenance du
+daemon rootless LockLearn doit être lancée sous `ll-runner` et ne doit jamais
+viser le daemon ou les caches de ThermalTwin. Les anciens workspaces LockLearn
+peuvent être supprimés seulement après inspection d'un runner arrêté et après
+confirmation qu'aucun job n'est actif.
 
 ## Diagnostic, arrêt et retrait
 
 ```bash
 # depuis ll-runner avec XDG_RUNTIME_DIR=/run/user/$(id -u)
+systemctl --user status docker.service
 systemctl --user status actions-runner-{1,2}.service
 systemctl --user restart actions-runner-1.service
 systemctl --user stop actions-runner-{1,2}.service
@@ -203,6 +181,8 @@ Pour désactiver LockLearn sans toucher ThermalTwin :
 ```bash
 sudo -u ll-runner -H env XDG_RUNTIME_DIR=/run/user/$(id -u ll-runner) \
   systemctl --user disable --now actions-runner-{1,2}.service
+sudo -u ll-runner -H env XDG_RUNTIME_DIR=/run/user/$(id -u ll-runner) \
+  systemctl --user disable --now docker.service
 ```
 
 Pour un retrait propre, obtenir un jeton éphémère puis retirer chaque runner
@@ -230,16 +210,17 @@ ses caches ni ses workspaces.
 
 État relevé le 9 octobre 2026 :
 
-- branche `chore/self-hosted-ci`, commit poussé `f4b6cdd467a68eea379af9bc5466beae849cf876`;
+- branche `chore/self-hosted-ci`, commit poussé `c569c03` avant la correction de revue;
 - dépôt public, `GITHUB_TOKEN` par défaut en lecture, approbation des premiers
   contributeurs externes activée;
 - `main` protégée par une approbation, résolution des conversations et
   interdiction du force-push/suppression;
 - environnement `dataset-release` créé, lié aux branches protégées, avec revue
   obligatoire et auto-approbation interdite;
-- quatre runners ThermalTwin actifs sous `tt-runner`, aucun runner LockLearn
-  installé : le provisionnement root est `NON TESTÉ` et bloqué par le mot de
-  passe sudo manquant;
+- quatre runners ThermalTwin actifs sous `tt-runner`; leur daemon, leurs
+  services et leurs caches sont hors périmètre du bootstrap LockLearn;
+- bootstrap `ll-runner`, Docker rootless dédié et deux services LockLearn :
+  `NON TESTÉS` jusqu'à exécution interactive du script;
 - run CI `37980380168` : `queued` sur le label `locklearn-dev`, preuve qu'aucun
   fallback GitHub-hosted n'est utilisé; jobs normaux et durée de campagne :
   `NON TESTÉS` tant qu'un runner dédié n'est pas installé;
@@ -251,9 +232,11 @@ ses caches ni ses workspaces.
   `tt-runner`; aucun service ThermalTwin n'a été modifié.
 
 La campagne GitHub complète, le redémarrage d'un runner, le test d'isolement des
-répertoires et la non-régression ThermalTwin restent `NON TESTÉS` à cause du
-blocage root. Ils doivent être exécutés après l'installation de
-`ll-runner`/des deux services, puis ajoutés ici avec les URLs et mesures réelles.
+répertoires, la validation des venv par matrice et la non-régression ThermalTwin
+restent `NON TESTÉS` jusqu'à l'installation. Ils devront être ajoutés ici avec
+les URLs GitHub, les durées et les mesures réelles. La publication signée des
+datasets reste `NON TESTÉE` tant que la clé n'est pas disponible et ne bloque
+pas les jobs ordinaires.
 
 Une vérification non exécutée est `NON TESTÉE`, jamais `PASS`. Le rollback des
 workflows consiste à désactiver les services LockLearn, rétablir le dernier
