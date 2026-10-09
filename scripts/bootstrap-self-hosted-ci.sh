@@ -355,7 +355,13 @@ done
 
 as_runner systemctl --user daemon-reload
 for index in $(seq 1 "${RUNNER_COUNT}"); do
-  as_runner systemctl --user enable --now "actions-runner-${index}.service"
+  service="actions-runner-${index}.service"
+  as_runner systemctl --user enable "${service}"
+  if as_runner systemctl --user is-active --quiet "${service}"; then
+    as_runner systemctl --user restart "${service}"
+  else
+    as_runner systemctl --user start "${service}"
+  fi
 done
 
 log "auditing the resulting isolation"
