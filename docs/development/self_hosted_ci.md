@@ -51,8 +51,10 @@ les pushes vers `main`, `feat/**`, `fix/**`, `chore/**`, `docs/**`,
 `refactor/**` et `test/**`, ainsi que `workflow_dispatch`. Ces branches ne
 sont pas une autorisation GitHub en elles-mêmes : l'autorisation vient du droit
 d'écriture sur `rfrachot/LockLearn`. Le dépôt doit conserver une protection de
-`main` avec revue obligatoire et aucune écriture directe pour les contributeurs
-externes.
+`main` est protégée par revue obligatoire pour les pushes non administrateurs,
+résolution des conversations, interdiction du force-push et de la suppression.
+Les administrateurs peuvent encore publier directement en cas d'urgence; cette
+exception est volontairement réservée au mainteneur.
 
 Les permissions par défaut sont `contents: read`. Le job `manual-build` de
 `.github/workflows/datasets.yml` est le seul job demandant `contents: write`;
@@ -226,23 +228,32 @@ ses caches ni ses workspaces.
 
 ## Validation et état de cette migration
 
-État avant installation, relevé le 9 octobre 2026 : dépôt public avec droit
-administrateur pour le mainteneur; HEAD de développement `efa005e` sur
-`feat/beta5-final-polish-v05`; VM Ubuntu x86_64, 12 vCPU, 64 Gio RAM; quatre
-runners ThermalTwin actifs sous `tt-runner`; aucun runner LockLearn installé.
+État relevé le 9 octobre 2026 :
 
-La validation finale doit publier ici, après exécution réelle :
+- branche `chore/self-hosted-ci`, commit poussé `f4b6cdd467a68eea379af9bc5466beae849cf876`;
+- dépôt public, `GITHUB_TOKEN` par défaut en lecture, approbation des premiers
+  contributeurs externes activée;
+- `main` protégée par une approbation, résolution des conversations et
+  interdiction du force-push/suppression;
+- environnement `dataset-release` créé, lié aux branches protégées, avec revue
+  obligatoire et auto-approbation interdite;
+- quatre runners ThermalTwin actifs sous `tt-runner`, aucun runner LockLearn
+  installé : le provisionnement root est `NON TESTÉ` et bloqué par le mot de
+  passe sudo manquant;
+- run CI `37980380168` : `queued` sur le label `locklearn-dev`, preuve qu'aucun
+  fallback GitHub-hosted n'est utilisé; jobs normaux et durée de campagne :
+  `NON TESTÉS` tant qu'un runner dédié n'est pas installé;
+- validations locales au commit : Ruff format/check, mypy, ressources, schémas,
+  546 pytest, frontend lint/typecheck, 69 Vitest, no-polling, build et bundle;
+- secret `LOCKLEARN_DATASET_SIGNING_KEY_B64` absent du dépôt et de
+  l'environnement : publication signée `NON TESTÉE` et bloquée fail-closed;
+- ressources VM observées : 12 vCPU, environ 64 Gio RAM, Docker rootless sous
+  `tt-runner`; aucun service ThermalTwin n'a été modifié.
 
-- branche et SHA du commit de migration;
-- nombre de runners LockLearn et services actifs;
-- URLs des runs CI et durée de la campagne;
-- résultat de chaque job backend, dataset, frontend, E2E et HA;
-- preuve `runs-on` self-hosted et absence de compute GitHub-hosted;
-- résultat du test de file d'attente runner arrêté puis de son redémarrage;
-- statut de la protection fork et de l'environnement `dataset-release`;
-- statut de la signature dataset;
-- mesures CPU/RAM/disque et confirmation que ThermalTwin n'a pas été perturbé;
-- limites ou vérifications restées `NON TESTÉES`.
+La campagne GitHub complète, le redémarrage d'un runner, le test d'isolement des
+répertoires et la non-régression ThermalTwin restent `NON TESTÉS` à cause du
+blocage root. Ils doivent être exécutés après l'installation de
+`ll-runner`/des deux services, puis ajoutés ici avec les URLs et mesures réelles.
 
 Une vérification non exécutée est `NON TESTÉE`, jamais `PASS`. Le rollback des
 workflows consiste à désactiver les services LockLearn, rétablir le dernier
