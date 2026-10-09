@@ -343,9 +343,6 @@ Environment=PLAYWRIGHT_BROWSERS_PATH=${CACHE_ROOT}/ms-playwright
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=full
-ProtectKernelTunables=yes
-ProtectKernelModules=yes
-ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 UMask=0077
