@@ -45,8 +45,11 @@ répertoires ThermalTwin, les fichiers `.env`, les clés SSH ou les tokens HA.
 utiliser le socket `/var/run/docker.sock`. Le daemon rootless, son stockage et
 son socket appartiennent à `ll-runner` et sont distincts de ceux de `tt-runner`.
 Les services utilisent un compte distinct, des workspaces distincts et
-`NoNewPrivileges`/protections systemd. Les connexions réseau sont sortantes
-uniquement via le runner GitHub; aucun port entrant n'est ouvert.
+`NoNewPrivileges` et d'un compte sans privilège. Les restrictions systemd
+de namespaces/seccomp incompatibles avec un user manager non privilégié ne
+sont pas utilisées, afin que l'extraction des actions GitHub reste
+fonctionnelle. Les connexions réseau sont sortantes uniquement via le runner
+GitHub; aucun port entrant n'est ouvert.
 
 ## Événements et permissions GitHub
 
