@@ -7,10 +7,10 @@ import hashlib
 import json
 import os
 import uuid
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from ipaddress import ip_address
 from pathlib import Path
-from typing import AsyncIterator
 from urllib.parse import urljoin, urlsplit
 
 from aiohttp import ClientError, ClientResponse
