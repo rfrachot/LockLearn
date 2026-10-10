@@ -2241,6 +2241,7 @@ class ReviewEventsRepository:
         action_id: str,
         actor_user_id: str | None,
         action_at_utc: str,
+        outbox_context: dict[str, Any] | None = None,
     ) -> NotificationInteractionConsumeResult:
         """Commit token consumption and its canonical ReviewEvent atomically.
 
@@ -2351,6 +2352,20 @@ class ReviewEventsRepository:
                     return reject("replayed", disposition="replayed")
 
                 self._append_projection_in_connection(connection, event)
+                if outbox_context is not None:
+                    connection.execute(
+                        """UPDATE notification_event_outbox SET context_json = ?
+                           WHERE event_id = ? AND delivered_at_utc IS NULL""",
+                        (
+                            json.dumps(
+                                outbox_context,
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                                sort_keys=True,
+                            ),
+                            event.id,
+                        ),
+                    )
                 interaction["status"] = "consumed"
                 interaction["consumed_at_utc"] = action_at_utc
                 interaction["action_id"] = action_id
