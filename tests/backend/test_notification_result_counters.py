@@ -9,11 +9,15 @@ from custom_components.locklearn.storage import SQLiteStorage, StoragePaths
 
 
 async def test_notification_counters_preserve_reverse_event_semantics(tmp_path: Path) -> None:
-    storage = SQLiteStorage(StoragePaths(tmp_path / "state.db", tmp_path / "content" / "current.db"))
+    storage = SQLiteStorage(
+        StoragePaths(tmp_path / "state.db", tmp_path / "content" / "current.db")
+    )
     await storage.async_open()
     try:
+
         def seed(connection: object) -> None:
             from sqlite3 import Connection
+
             assert isinstance(connection, Connection)
             for index, (result, session) in enumerate(
                 (
@@ -37,14 +41,33 @@ async def test_notification_counters_preserve_reverse_event_semantics(tmp_path: 
                         timezone_name, utc_offset_minutes
                     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
-                        f"event-{index}", "p", "t", "item", "prompt", "answer", "card",
-                        "verified_mcq", "mcq", result, 0, 1, "medium", 1,
-                        "generation", 1, "{}", "{}", session,
+                        f"event-{index}",
+                        "p",
+                        "t",
+                        "item",
+                        "prompt",
+                        "answer",
+                        "card",
+                        "verified_mcq",
+                        "mcq",
+                        result,
+                        0,
+                        1,
+                        "medium",
+                        1,
+                        "generation",
+                        1,
+                        "{}",
+                        "{}",
+                        session,
                         datetime(2026, 10, 10, 10, index, tzinfo=UTC).isoformat(),
-                        "2026-10-10", "UTC", 0,
+                        "2026-10-10",
+                        "UTC",
+                        0,
                     ),
                 )
             connection.commit()
+
         await storage._async_writer(seed)
         results = await storage.repositories.review_events.async_notification_result_counters(
             profile_id="p", track_id="t", session_id="session-1"
