@@ -208,6 +208,7 @@ async def test_outbox_retries_after_emitter_failure(tmp_path: Path) -> None:
     finally:
         await storage.async_close()
 
+
 async def test_crash_after_commit_recovers_unfinalized_mobile_event(
     tmp_path: Path,
 ) -> None:
