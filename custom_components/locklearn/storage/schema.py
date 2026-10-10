@@ -392,6 +392,7 @@ CREATE TABLE IF NOT EXISTS notification_event_outbox (
     event_id TEXT PRIMARY KEY REFERENCES review_events(id) ON DELETE CASCADE,
     created_at_utc TEXT NOT NULL,
     payload_json TEXT,
+    context_json TEXT,
     delivered_at_utc TEXT,
     attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0)
 );

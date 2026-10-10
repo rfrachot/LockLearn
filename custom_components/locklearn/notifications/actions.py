@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
 from ..core.clock import Clock, SystemClock
@@ -20,6 +21,7 @@ from ..storage.repositories import (
     ReviewEventsRepository,
     TracksRepository,
 )
+from .outbox import NotificationEventOutbox
 from .interactions import (
     NotificationActionDisposition,
     NotificationInteractionService,
@@ -69,6 +71,7 @@ class NotificationActionProcessor:
         clock: Clock | None = None,
         mastery_threshold: float = 0.75,
         reveal_service: NotificationRevealService | None = None,
+        event_outbox: NotificationEventOutbox | None = None,
     ) -> None:
         self._interactions = interactions
         self._profiles = profiles
@@ -87,6 +90,7 @@ class NotificationActionProcessor:
         self._learning = LearningStateMachine(clock=self._clock)
         self._mastery_threshold = mastery_threshold
         self._reveal_service = reveal_service
+        self._event_outbox = event_outbox
 
     async def async_handle_mobile_action(
         self,
@@ -322,6 +326,14 @@ class NotificationActionProcessor:
                 token=atomic_token,
                 action_id=semantic,
                 actor_user_id=actor_user_id,
+                outbox_context={
+                    "identity": identity,
+                    "interaction_id": str(interaction["interaction_id"]),
+                    "before_stats": before_stats,
+                    "before_profile_stats": before_profile_stats,
+                }
+                if self._event_outbox is not None
+                else None,
             )
             if result_claim.disposition is not NotificationActionDisposition.CONSUMED:
                 return None
@@ -573,7 +585,12 @@ class NotificationActionProcessor:
             "source_language": None if track is None else track.get("source_language"),
             "target_language": None if track is None else track.get("target_language"),
         }
-        self._event_emitter("locklearn_answered", payload)
+        events: list[tuple[str, dict[str, Any]]] = []
+
+        def emit(name: str, data: dict[str, Any]) -> None:
+            events.append((name, data))
+
+        emit("locklearn_answered", payload)
 
         if event.mode == SignalMode.VERIFIED_MCQ.value:
             event_name = {
@@ -582,19 +599,19 @@ class NotificationActionProcessor:
                 "idk": "locklearn_quiz_idk",
             }.get(event.result)
             if event_name is not None:
-                self._event_emitter(event_name, payload)
+                emit(event_name, payload)
 
         pre_state = str(event.pre_state_snapshot.get("state"))
         post_state = str(event.post_state_snapshot.get("state"))
         if pre_state != "relearning" and post_state == "relearning":
-            self._event_emitter("locklearn_card_entered_relearning", payload)
+            emit("locklearn_card_entered_relearning", payload)
         if pre_state != "leech" and post_state == "leech":
-            self._event_emitter("locklearn_leech_detected", payload)
+            emit("locklearn_leech_detected", payload)
 
         pre_mastery = float(event.pre_state_snapshot.get("mastery", 0.0))
         post_mastery = float(event.post_state_snapshot.get("mastery", 0.0))
         if pre_mastery < self._mastery_threshold <= post_mastery:
-            self._event_emitter("locklearn_card_mastery_threshold_reached", payload)
+            emit("locklearn_card_mastery_threshold_reached", payload)
 
         if (
             event.mode == SignalMode.VERIFIED_MCQ.value
@@ -603,16 +620,64 @@ class NotificationActionProcessor:
             and expected_answer_id is not None
             and answer_id != expected_answer_id
         ):
-            self._event_emitter("locklearn_confusion_detected", payload)
+            emit("locklearn_confusion_detected", payload)
 
         before_status = str(before_stats["streak"]["today"]["status"])
         after_status = str(after_stats["streak"]["today"]["status"])
         if before_status != "success" and after_status == "success":
-            self._event_emitter("locklearn_track_goal_reached", payload)
+            emit("locklearn_track_goal_reached", payload)
         before_profile_status = str(before_profile_stats["streak"]["today"]["status"])
         after_profile_status = str(after_profile_stats["streak"]["today"]["status"])
         if before_profile_status != "success" and after_profile_status == "success":
-            self._event_emitter("locklearn_daily_goal_reached", payload)
+            emit("locklearn_daily_goal_reached", payload)
+        if self._event_outbox is not None:
+            await self._event_outbox.async_publish(str(event.id), tuple(events))
+        else:
+            for name, data in events:
+                self._event_emitter(name, data)
+
+    async def async_recover_outbox(self) -> None:
+        """Rebuild unfinalized notifications from durable review intent on startup."""
+        if self._event_outbox is None:
+            return
+        for pending in await self._event_outbox.async_unfinalized():
+            context = pending.get("context")
+            if not isinstance(context, dict):
+                continue
+            identity = context.get("identity")
+            before_stats = context.get("before_stats")
+            before_profile_stats = context.get("before_profile_stats")
+            if not isinstance(identity, dict) or not isinstance(before_stats, dict):
+                continue
+            if not isinstance(before_profile_stats, dict):
+                continue
+            after_stats = await self._stats.async_get(
+                profile_id=str(pending["profile_id"]),
+                track_id=str(pending["track_id"]),
+            )
+            after_profile_stats = await self._stats.async_get(
+                profile_id=str(pending["profile_id"]),
+            )
+            event = SimpleNamespace(
+                id=pending["event_id"],
+                session_id=pending["session_id"],
+                mode=pending["mode"],
+                result=pending["result"],
+                pre_state_snapshot=pending["pre_state_snapshot"],
+                post_state_snapshot=pending["post_state_snapshot"],
+            )
+            await self._emit_committed_events(
+                interaction={"interaction_id": context["interaction_id"]},
+                identity={str(k): str(v) for k, v in identity.items()},
+                event=event,
+                before_stats=before_stats,
+                after_stats=after_stats,
+                before_profile_stats=before_profile_stats,
+                after_profile_stats=after_profile_stats,
+                answer_id=pending["answer_id"],
+                expected_answer_id=pending["expected_answer_id"],
+            )
+        await self._event_outbox.async_drain()
 
     async def _result_counters(
         self,

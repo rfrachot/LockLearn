@@ -51,6 +51,7 @@ from .notifications.actions import NotificationActionProcessor
 from .notifications.delivery import NotificationDeliveryService
 from .notifications.ha_bridge import NotificationHomeAssistantBridge
 from .notifications.interactions import NotificationInteractionService
+from .notifications.outbox import NotificationEventOutbox
 from .notifications.reveal import NotificationRevealService
 from .notifications.warnings import NotificationWarningService
 from .profile_transfer import ProfileTransferService, ProfileTransferStore
@@ -261,6 +262,10 @@ class LockLearnRuntime:
                 notification_interactions,
                 notification_delivery,
             )
+            notification_outbox = NotificationEventOutbox(
+                storage,
+                emitter=lambda name, data: hass.bus.async_fire(name, data),
+            )
             notification_actions = NotificationActionProcessor(
                 notification_interactions,
                 storage.repositories.profiles,
@@ -281,6 +286,7 @@ class LockLearnRuntime:
                     data,
                 ),
                 reveal_service=notification_reveal,
+                event_outbox=notification_outbox,
             )
             notification_ha = NotificationHomeAssistantBridge(
                 hass,
@@ -364,6 +370,7 @@ class LockLearnRuntime:
                 profile_transfers=ProfileTransferService(storage, transfer_store),
             )
             await runtime.scheduler_ha.async_start()
+            await runtime.notification_actions.async_recover_outbox()
             await runtime.notification_ha.async_start()
             await runtime.ready_reminders.async_start()
             return runtime
