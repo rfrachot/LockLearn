@@ -8,6 +8,9 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock
+
+from aiohttp.abc import ResolveResult
 
 import pytest
 
@@ -17,7 +20,7 @@ from custom_components.locklearn.datasets.manager import (
 )
 from custom_components.locklearn.datasets.transport import (
     HomeAssistantDatasetTransport,
-    _public_socket_factory,
+    _PublicResolver,
 )
 
 
@@ -31,9 +34,7 @@ class _Body:
 
 
 class _Response:
-    def __init__(
-        self, status: int, *, location: str | None = None, body: bytes = b"{}"
-    ) -> None:
+    def __init__(self, status: int, *, location: str | None = None, body: bytes = b"{}") -> None:
         self.status = status
         self.headers = {} if location is None else {"Location": location}
         self.content_length: int | None = len(body)
@@ -109,19 +110,13 @@ async def test_catalog_redirect_rejects_unsafe_destinations_without_fetch(
 
 
 async def test_catalog_rejects_redirect_loops_and_unapproved_initial_url() -> None:
-    transport, session = _transport(
-        *(_Response(302, location="/again") for _ in range(4))
-    )
+    transport, session = _transport(*(_Response(302, location="/again") for _ in range(4)))
     with pytest.raises(DatasetDiscoveryError, match="safely"):
-        await transport.async_get_json(
-            "https://catalog.example.org/catalog", maximum_bytes=1024
-        )
+        await transport.async_get_json("https://catalog.example.org/catalog", maximum_bytes=1024)
     assert len(session.calls) == 4
     other, no_requests = _transport()
     with pytest.raises(DatasetDiscoveryError, match="safely"):
-        await other.async_get_json(
-            "https://evil.example.net/catalog", maximum_bytes=1024
-        )
+        await other.async_get_json("https://evil.example.net/catalog", maximum_bytes=1024)
     assert not no_requests.calls
 
 
@@ -151,17 +146,59 @@ async def test_artifact_allowed_redirect_keeps_sha256(tmp_path: Path) -> None:
     assert destination.read_bytes() == payload
     assert len(session.calls) == 2
 
+
 @pytest.mark.parametrize(
     "address",
     ["127.0.0.1", "10.0.0.1", "169.254.169.254", "::1", "fc00::1", "fe80::1"],
 )
-def test_connector_refuses_resolved_private_peer(address: str) -> None:
-    addr_info: Any = (socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, 443))
+async def test_resolver_refuses_non_public_peer(address: str) -> None:
+    delegate = AsyncMock()
+    delegate.resolve.return_value = [
+        ResolveResult(
+            hostname="cdn.example.org",
+            host=address,
+            port=443,
+            family=socket.AF_INET,
+            proto=6,
+            flags=0,
+        )
+    ]
+    resolver = _PublicResolver(delegate=cast(Any, delegate))
     with pytest.raises(OSError, match="non-public"):
-        _public_socket_factory(addr_info)
+        await resolver.resolve("cdn.example.org", 443)
+    delegate.resolve.assert_awaited_once()
 
 
-def test_connector_accepts_public_peer() -> None:
-    addr_info: Any = (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))
-    with _public_socket_factory(addr_info) as stream:
-        assert isinstance(stream, socket.socket)
+async def test_resolver_rejects_mixed_public_and_private_dns_answers() -> None:
+    delegate = AsyncMock()
+    delegate.resolve.return_value = [
+        ResolveResult(
+            hostname="cdn.example.org",
+            host=ip,
+            port=443,
+            family=socket.AF_INET,
+            proto=6,
+            flags=0,
+        )
+        for ip in ("8.8.8.8", "127.0.0.1")
+    ]
+    resolver = _PublicResolver(delegate=cast(Any, delegate))
+    with pytest.raises(OSError, match="non-public"):
+        await resolver.resolve("cdn.example.org", 443)
+
+
+async def test_resolver_accepts_public_peer() -> None:
+    delegate = AsyncMock()
+    expected = [
+        ResolveResult(
+            hostname="cdn.example.org",
+            host="8.8.8.8",
+            port=443,
+            family=socket.AF_INET,
+            proto=6,
+            flags=0,
+        )
+    ]
+    delegate.resolve.return_value = expected
+    resolver = _PublicResolver(delegate=cast(Any, delegate))
+    assert await resolver.resolve("cdn.example.org", 443) == expected

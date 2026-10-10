@@ -14,7 +14,9 @@ from ipaddress import ip_address
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
-from aiohttp import AddrInfoType, ClientError, ClientResponse, ClientSession, TCPConnector
+from aiohttp import ClientError, ClientResponse, ClientSession, TCPConnector
+from aiohttp.abc import AbstractResolver, ResolveResult
+from aiohttp.resolver import DefaultResolver
 from homeassistant.core import HomeAssistant
 
 from .manager import DatasetDiscoveryError, DatasetInstallError
@@ -57,18 +59,35 @@ def _validate_https_endpoint(url: str, allowed_hosts: frozenset[str]) -> None:
         raise DatasetURLPolicyError("dataset URL must not target a local hostname")
 
 
+class _PublicResolver(AbstractResolver):
+    """Pass only validated public DNS results to aiohttp's TCP connector."""
 
-def _public_socket_factory(addr_info: AddrInfoType) -> socket.socket:
-    """Refuse resolved private peers before any TCP socket opens."""
-    family, sock_type, protocol, _, address = addr_info
-    ip = ip_address(address[0])
-    if not ip.is_global:
-        raise OSError("dataset endpoint resolved to a non-public IP address")
-    return socket.socket(family=family, type=sock_type, proto=protocol)
+    def __init__(self, delegate: AbstractResolver | None = None) -> None:
+        self._delegate = delegate or DefaultResolver()
+
+    async def resolve(
+        self,
+        host: str,
+        port: int = 0,
+        family: socket.AddressFamily = socket.AF_INET,
+    ) -> list[ResolveResult]:
+        results = await self._delegate.resolve(host, port, family)
+        if not results:
+            raise OSError("dataset hostname resolved to no addresses")
+        try:
+            all_public = all(ip_address(str(row["host"])).is_global for row in results)
+        except ValueError as err:
+            raise OSError("dataset DNS resolver returned an invalid IP") from err
+        if not all_public:
+            raise OSError("dataset endpoint resolved to a non-public IP address")
+        return results
+
+    async def close(self) -> None:
+        await self._delegate.close()
 
 
 class HomeAssistantDatasetTransport:
-    """Perform bounded HTTPS GETs using Home Assistant's shared aiohttp session."""
+    """Perform bounded HTTPS GETs with an isolated SSRF-safe aiohttp session."""
 
     def __init__(
         self,
@@ -81,7 +100,7 @@ class HomeAssistantDatasetTransport:
         self._owns_session = session is None
         self._session = session or ClientSession(
             connector=TCPConnector(
-                socket_factory=_public_socket_factory,
+                resolver=_PublicResolver(),
                 use_dns_cache=False,
                 force_close=True,
                 limit_per_host=2,
