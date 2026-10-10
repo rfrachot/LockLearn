@@ -427,7 +427,8 @@ async def test_mobile_commit_failure_rolls_back_token_and_event(
         ):
             with pytest.raises(RuntimeError, match="simulated SQLite failure"):
                 await processor.async_handle_mobile_action(
-                    action_id=action, actor_user_id="owner-user",
+                    action_id=action,
+                    actor_user_id="owner-user",
                 )
         still_pending = await storage.repositories.notification_interactions.async_get_by_token(
             interaction.token,
@@ -442,7 +443,8 @@ async def test_mobile_commit_failure_rolls_back_token_and_event(
         assert not emitted
 
         recovered = await processor.async_handle_mobile_action(
-            action_id=action, actor_user_id="owner-user",
+            action_id=action,
+            actor_user_id="owner-user",
         )
         assert recovered is not None
         assert recovered.review_event_id == "event-action"
