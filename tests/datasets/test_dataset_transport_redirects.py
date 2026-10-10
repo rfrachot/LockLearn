@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
 from unittest.mock import patch
 
 import pytest
 
-from custom_components.locklearn.datasets.manager import DatasetDiscoveryError, DatasetInstallError
+from custom_components.locklearn.datasets.manager import (
+    DatasetDiscoveryError,
+    DatasetInstallError,
+)
 from custom_components.locklearn.datasets.transport import HomeAssistantDatasetTransport
 
 
@@ -18,13 +21,15 @@ class _Body:
     def __init__(self, payload: bytes) -> None:
         self.payload = payload
 
-    async def iter_chunked(self, chunk_size: int) -> Any:
+    async def iter_chunked(self, chunk_size: int) -> AsyncIterator[bytes]:
         assert chunk_size > 0
         yield self.payload
 
 
 class _Response:
-    def __init__(self, status: int, *, location: str | None = None, body: bytes = b"{}") -> None:
+    def __init__(
+        self, status: int, *, location: str | None = None, body: bytes = b"{}"
+    ) -> None:
         self.status = status
         self.headers = {} if location is None else {"Location": location}
         self.content_length: int | None = len(body)
@@ -103,13 +108,17 @@ async def test_catalog_redirect_rejects_unsafe_destinations_without_fetch(
 
 
 async def test_catalog_rejects_redirect_loops_and_unapproved_initial_url() -> None:
-    transport, session = _transport(*[_Response(302, location="/again") for _ in range(4)])
+    transport, session = _transport(*(_Response(302, location="/again") for _ in range(4)))
     with pytest.raises(DatasetDiscoveryError, match="safely"):
-        await transport.async_get_json("https://catalog.example.org/catalog", maximum_bytes=1024)
+        await transport.async_get_json(
+            "https://catalog.example.org/catalog", maximum_bytes=1024
+        )
     assert len(session.calls) == 4
     other, no_requests = _transport()
     with pytest.raises(DatasetDiscoveryError, match="safely"):
-        await other.async_get_json("https://evil.example.net/catalog", maximum_bytes=1024)
+        await other.async_get_json(
+            "https://evil.example.net/catalog", maximum_bytes=1024
+        )
     assert not no_requests.calls
 
 
