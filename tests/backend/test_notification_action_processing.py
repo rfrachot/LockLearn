@@ -400,6 +400,7 @@ async def test_new_teaser_idk_is_introduction_not_failure(tmp_path: Path) -> Non
     finally:
         await storage.async_close()
 
+
 async def test_mobile_commit_failure_rolls_back_token_and_event(
     tmp_path: Path,
 ) -> None:
