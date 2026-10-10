@@ -2258,12 +2258,15 @@ class ReviewEventsRepository:
                     (token,),
                 ).fetchone()
                 interaction = (
-                    None if row is None
+                    None
+                    if row is None
                     else NotificationInteractionsRepository._interaction_dict(row)
                 )
                 profile_id = None if interaction is None else str(interaction["profile_id"])
 
-                def reject(reason: str, *, disposition: str) -> NotificationInteractionConsumeResult:
+                def reject(
+                    reason: str, *, disposition: str
+                ) -> NotificationInteractionConsumeResult:
                     NotificationInteractionsRepository._audit_action(
                         connection,
                         event_type="notification_action_rejected",
