@@ -87,6 +87,7 @@ class LockLearnRuntime:
     stats: StatsService
     reviews: ReviewEventService
     notification_actions: NotificationActionProcessor
+    notification_outbox: NotificationEventOutbox
     notification_delivery: NotificationDeliveryService
     notification_ha: NotificationHomeAssistantBridge
     notification_interactions: NotificationInteractionService
@@ -357,6 +358,7 @@ class LockLearnRuntime:
                 stats=stats,
                 reviews=reviews,
                 notification_actions=notification_actions,
+                notification_outbox=notification_outbox,
                 notification_delivery=notification_delivery,
                 notification_ha=notification_ha,
                 notification_interactions=notification_interactions,
@@ -371,6 +373,7 @@ class LockLearnRuntime:
             )
             await runtime.scheduler_ha.async_start()
             await runtime.notification_actions.async_recover_outbox()
+            runtime.notification_outbox.start(runtime.notification_actions.async_recover_outbox)
             await runtime.notification_ha.async_start()
             await runtime.ready_reminders.async_start()
             return runtime
@@ -382,6 +385,7 @@ class LockLearnRuntime:
     async def async_close(self) -> None:
         """Cancel callbacks/operations, then drain and close SQLite."""
         self.notification_ha.close()
+        await self.notification_outbox.async_close()
         self.ready_reminders.close()
         self.scheduler_ha.close()
         self.sessions.close()

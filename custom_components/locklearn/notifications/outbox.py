@@ -6,7 +6,8 @@ import asyncio
 import json
 import logging
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from typing import Any
 
 from ..storage.database import SQLiteStorage
@@ -23,6 +24,33 @@ class NotificationEventOutbox:
         self._storage = storage
         self._emitter = emitter
         self._drain_lock = asyncio.Lock()
+        self._replay_task: asyncio.Task[None] | None = None
+
+    def start(self, replay: Callable[[], Awaitable[None]]) -> None:
+        """Retry undelivered events while the HA config entry stays loaded."""
+        if self._replay_task is not None:
+            return
+
+        async def run() -> None:
+            while True:
+                await asyncio.sleep(60)
+                try:
+                    await replay()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    _LOGGER.exception("LockLearn HA event outbox retry failed")
+
+        self._replay_task = asyncio.create_task(run())
+
+    async def async_close(self) -> None:
+        """Stop retry operations before SQLite is closed."""
+        task = self._replay_task
+        self._replay_task = None
+        if task is not None:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
 
     async def async_publish(
         self, event_id: str, events: tuple[tuple[str, dict[str, Any]], ...]
