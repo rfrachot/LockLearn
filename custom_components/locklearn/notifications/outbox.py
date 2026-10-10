@@ -140,7 +140,9 @@ class NotificationEventOutbox:
                     _LOGGER.exception("LockLearn HA event outbox delivery failed")
                     return
 
-                def acknowledge(connection: sqlite3.Connection) -> None:
+                def acknowledge(
+                    connection: sqlite3.Connection, event_id: str = event_id
+                ) -> None:
                     try:
                         connection.execute("BEGIN IMMEDIATE")
                         connection.execute(
