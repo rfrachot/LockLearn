@@ -191,6 +191,7 @@ class LockLearnRuntime:
             notification_interactions = NotificationInteractionService(
                 storage.repositories.notification_interactions,
                 acl,
+                review_events=storage.repositories.review_events,
             )
             notification_selection = NotificationSelectionService(
                 storage.repositories.tracks,

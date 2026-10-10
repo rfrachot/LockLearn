@@ -96,10 +96,29 @@ class NotificationActionProcessor:
         if decoded is None:
             return None
         token, semantic = decoded
-        claim = await self._interactions.async_consume_action(
-            token=token,
-            action_id=semantic,
-            actor_user_id=actor_user_id,
+        # Answer actions are prepared read-only. Their tokens are consumed only
+        # in the same SQLite transaction that appends the canonical ReviewEvent.
+        prepared = semantic in {"known", "review"} or semantic.startswith("choice_")
+        if semantic == "idk":
+            raw = await self._interactions.async_prepare_answer(
+                token=token,
+                actor_user_id=actor_user_id,
+            )
+            prepared = bool(
+                raw.interaction is not None
+                and (raw.interaction.get("payload") or {}).get("selection_reason") != "teaser_new"
+            )
+        claim = (
+            await self._interactions.async_prepare_answer(
+                token=token,
+                actor_user_id=actor_user_id,
+            )
+            if prepared
+            else await self._interactions.async_consume_action(
+                token=token,
+                action_id=semantic,
+                actor_user_id=actor_user_id,
+            )
         )
         if not claim.may_apply_pedagogical_result or claim.interaction is None:
             return NotificationActionOutcome(claim.disposition)
@@ -107,7 +126,8 @@ class NotificationActionProcessor:
         interaction = claim.interaction
         interaction_id = str(interaction["interaction_id"])
         payload = dict(interaction.get("payload") or {})
-        await self._record_receptivity(payload)
+        if not prepared:
+            await self._record_receptivity(payload)
 
         if semantic == "reveal" or (
             semantic == "idk" and payload.get("selection_reason") == "teaser_new"
@@ -124,12 +144,16 @@ class NotificationActionProcessor:
             interaction=interaction,
             payload=payload,
             semantic=semantic,
+            atomic_token=token if prepared else None,
+            actor_user_id=actor_user_id,
         )
+        if event is not None and prepared:
+            await self._record_receptivity(payload)
         return NotificationActionOutcome(
-            claim.disposition,
+            claim.disposition if event is not None else NotificationActionDisposition.REPLAYED,
             interaction_id=interaction_id,
-            review_event_id=event.id,
-            pedagogical_applied=True,
+            review_event_id=None if event is None else event.id,
+            pedagogical_applied=event is not None,
         )
 
     async def _record_receptivity(self, payload: dict[str, Any]) -> None:
@@ -189,7 +213,9 @@ class NotificationActionProcessor:
         interaction: dict[str, Any],
         payload: dict[str, Any],
         semantic: str,
-    ) -> Any:
+        atomic_token: str | None = None,
+        actor_user_id: str | None = None,
+    ) -> Any | None:
         identity = await self._identity(interaction)
         pre = await self._progress.async_get(
             profile_id=identity["profile_id"],
@@ -270,7 +296,17 @@ class NotificationActionProcessor:
             scheduled_interval_days=scheduled_interval,
             elapsed_days=elapsed,
             notification_id=str(interaction["interaction_id"]),
+            persist=atomic_token is None,
         )
+        if atomic_token is not None:
+            result_claim = await self._interactions.async_commit_answer(
+                event=event,
+                token=atomic_token,
+                action_id=semantic,
+                actor_user_id=actor_user_id,
+            )
+            if result_claim.disposition is not NotificationActionDisposition.CONSUMED:
+                return None
         after_stats = await self._stats.async_get(
             profile_id=identity["profile_id"],
             track_id=identity["track_id"],
