@@ -160,7 +160,7 @@ async def test_committed_mobile_answer_publishes_and_acknowledges_outbox(
                 ("event-action",),
             ).fetchone()
             assert row is not None
-            return row
+            return (row[0], row[1])
 
         payload, delivered = await storage._async_reader(check)
         assert payload is not None
