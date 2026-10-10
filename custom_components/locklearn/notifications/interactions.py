@@ -170,6 +170,8 @@ class NotificationInteractionService:
         actor_user_id: str | None,
     ) -> NotificationActionResult:
         """Commit one prepared canonical result together with token consumption."""
+        if self._reviews is None:
+            raise NotificationInteractionValidationError("review repository unavailable")
         claimed = await self._reviews.async_commit_mobile_answer(
             event,
             token=token,
