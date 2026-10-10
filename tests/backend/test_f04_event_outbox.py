@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import UTC, datetime
-from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -209,9 +209,7 @@ async def test_crash_after_commit_recovers_unfinalized_mobile_event(
     tmp_path: Path,
 ) -> None:
     storage, processor, interactions, identity, _ = await _setup(tmp_path)
-    outbox = NotificationEventOutbox(
-        storage, emitter=lambda name, payload: None
-    )
+    outbox = NotificationEventOutbox(storage, emitter=lambda name, payload: None)
     processor._event_outbox = outbox
     emitted: list[tuple[str, str]] = []
     try:
