@@ -232,6 +232,43 @@ class NotificationRenderer:
             action_semantics={known: "known", review: "review"},
         )
 
+    def render_learning_exposure(
+        self,
+        *,
+        profile_id: str,
+        profile_name: str,
+        target_id: str,
+        tag: str,
+        answer: str,
+        capabilities: TargetCapabilities,
+        visibility: str = "private",
+        slot_type: str = "learning",
+        ttl_seconds: int = 1800,
+    ) -> RenderedNotification:
+        """Show feedback without granting a second assessment after 'I don't know'."""
+        data = self._base_data(
+            tag=tag,
+            slot_type=slot_type,
+            visibility=visibility,
+            ttl_seconds=ttl_seconds,
+        )
+        data["alert_once"] = True
+        return RenderedNotification(
+            profile_id=profile_id,
+            target_id=target_id,
+            tag=tag,
+            stage="revealed",
+            mode=NotificationRenderMode.DIRECT_EXPOSURE,
+            title=self._title(
+                "LockLearn",
+                profile_name=profile_name,
+                shared_device=capabilities.shared_device,
+            ),
+            message=answer,
+            data=data,
+            pedagogical_signal="exposure_only",
+        )
+
     def render_quiz_prompt(
         self,
         *,

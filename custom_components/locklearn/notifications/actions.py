@@ -25,6 +25,7 @@ from .interactions import (
     NotificationInteractionService,
 )
 from .renderers import decode_action_id
+from .reveal import NotificationRevealService
 
 EventEmitter = Callable[[str, dict[str, Any]], None]
 
@@ -67,6 +68,7 @@ class NotificationActionProcessor:
         event_emitter: EventEmitter,
         clock: Clock | None = None,
         mastery_threshold: float = 0.75,
+        reveal_service: NotificationRevealService | None = None,
     ) -> None:
         self._interactions = interactions
         self._profiles = profiles
@@ -84,6 +86,7 @@ class NotificationActionProcessor:
         self._clock = clock or SystemClock()
         self._learning = LearningStateMachine(clock=self._clock)
         self._mastery_threshold = mastery_threshold
+        self._reveal_service = reveal_service
 
     async def async_handle_mobile_action(
         self,
@@ -107,12 +110,26 @@ class NotificationActionProcessor:
         interaction = claim.interaction
         interaction_id = str(interaction["interaction_id"])
         payload = dict(interaction.get("payload") or {})
+        stage = str(interaction.get("stage"))
+        kind = str(payload.get("kind", "learning"))
+        if kind == "learning":
+            if not (
+                (stage == "prompt" and semantic in {"reveal", "idk"})
+                or (stage == "revealed" and semantic in {"known", "review"})
+            ):
+                raise NotificationActionError("action is not valid for notification stage")
+        elif kind == "quiz" and stage != "prompt":
+            raise NotificationActionError("quiz action is not valid for notification stage")
         await self._record_receptivity(payload)
 
-        if semantic == "reveal" or (
-            semantic == "idk" and payload.get("selection_reason") == "teaser_new"
-        ):
+        if kind == "learning" and stage == "prompt":
             event = await self._apply_introduction_if_needed(interaction, payload)
+            if self._reveal_service is not None:
+                await self._reveal_service.async_reveal(
+                    interaction, assessable=(semantic == "reveal")
+                )
+            elif semantic == "reveal":
+                raise NotificationActionError("second-stage notification service unavailable")
             return NotificationActionOutcome(
                 claim.disposition,
                 interaction_id=interaction_id,
