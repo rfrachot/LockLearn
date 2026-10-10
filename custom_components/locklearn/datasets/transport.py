@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import os
+import socket
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -13,9 +14,8 @@ from ipaddress import ip_address
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
-from aiohttp import ClientError, ClientResponse
+from aiohttp import AddrInfoType, ClientError, ClientResponse, ClientSession, TCPConnector
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .manager import DatasetDiscoveryError, DatasetInstallError
 
@@ -58,12 +58,42 @@ def _validate_https_endpoint(url: str, allowed_hosts: frozenset[str]) -> None:
 
 
 
+def _public_socket_factory(addr_info: AddrInfoType) -> socket.socket:
+    """Refuse resolved private peers before any TCP socket opens."""
+    family, sock_type, protocol, _, address = addr_info
+    ip = ip_address(address[0])
+    if not ip.is_global:
+        raise OSError("dataset endpoint resolved to a non-public IP address")
+    return socket.socket(family=family, type=sock_type, proto=protocol)
+
+
 class HomeAssistantDatasetTransport:
     """Perform bounded HTTPS GETs using Home Assistant's shared aiohttp session."""
 
-    def __init__(self, hass: HomeAssistant, *, allowed_hosts: frozenset[str]) -> None:
-        self._session = async_get_clientsession(hass)
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        *,
+        allowed_hosts: frozenset[str],
+        session: ClientSession | None = None,
+    ) -> None:
+        del hass
+        self._owns_session = session is None
+        self._session = session or ClientSession(
+            connector=TCPConnector(
+                socket_factory=_public_socket_factory,
+                use_dns_cache=False,
+                force_close=True,
+                limit_per_host=2,
+            ),
+            trust_env=False,
+        )
         self._allowed_hosts = frozenset(allowed_hosts)
+
+    async def async_close(self) -> None:
+        """Close the isolated safe connector when the HA runtime unloads."""
+        if self._owns_session:
+            await self._session.close()
 
     @asynccontextmanager
     async def _bounded_get(self, url: str) -> AsyncIterator[ClientResponse]:
