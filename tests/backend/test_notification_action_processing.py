@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from unittest.mock import patch
+
+import pytest
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -394,5 +397,60 @@ async def test_new_teaser_idk_is_introduction_not_failure(tmp_path: Path) -> Non
         assert events[0]["mode"] == "introduction"
         assert events[0]["retrieval_occurred"] is False
         assert all(name != "locklearn_answered" for name, _data in emitted)
+    finally:
+        await storage.async_close()
+
+async def test_mobile_commit_failure_rolls_back_token_and_event(
+    tmp_path: Path,
+) -> None:
+    storage, processor, interactions, identity, emitted = await _setup(tmp_path)
+    try:
+        interaction = await interactions.async_create(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            target_id="target-p48",
+            card_key=identity["card_key"],
+            stage="prompt",
+            expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
+            payload={
+                "kind": "quiz",
+                "option_ids": ["answer-correct", "answer-wrong"],
+                "expected_answer_id": "answer-correct",
+            },
+        )
+        action = encode_action_id(interaction.token, "choice_0")
+        repository_type = type(storage.repositories.review_events)
+        with patch.object(
+            repository_type,
+            "_rebuild_stats_day_in_connection",
+            side_effect=RuntimeError("simulated SQLite failure"),
+        ):
+            with pytest.raises(RuntimeError, match="simulated SQLite failure"):
+                await processor.async_handle_mobile_action(
+                    action_id=action, actor_user_id="owner-user",
+                )
+        still_pending = await storage.repositories.notification_interactions.async_get_by_token(
+            interaction.token,
+        )
+        assert still_pending is not None
+        assert still_pending["status"] == "pending"
+        persisted = await storage.repositories.review_events.async_list_scope_events(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+        )
+        assert [event["id"] for event in persisted] == ["event-seed"]
+        assert not emitted
+
+        recovered = await processor.async_handle_mobile_action(
+            action_id=action, actor_user_id="owner-user",
+        )
+        assert recovered is not None
+        assert recovered.review_event_id == "event-action"
+        assert recovered.pedagogical_applied is True
+        events = await storage.repositories.review_events.async_list_scope_events(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+        )
+        assert [event["id"] for event in events] == ["event-seed", "event-action"]
     finally:
         await storage.async_close()
