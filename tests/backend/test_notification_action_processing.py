@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from itertools import count
+from pathlib import Path
 from typing import Any, cast
 
 from custom_components.locklearn.core.acl import ProfileACLService
@@ -21,7 +21,7 @@ from custom_components.locklearn.notifications.interactions import (
     NotificationActionDisposition,
     NotificationInteractionService,
 )
-from custom_components.locklearn.notifications.renderers import encode_action_id, decode_action_id
+from custom_components.locklearn.notifications.renderers import decode_action_id, encode_action_id
 from custom_components.locklearn.notifications.reveal import NotificationRevealService
 from custom_components.locklearn.storage import (
     NotificationTargetRecord,
