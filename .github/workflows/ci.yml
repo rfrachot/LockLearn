@@ -24,10 +24,6 @@ env:
   # acceleration only; requirements-dev.txt and package-lock.json remain the
   # dependency sources of truth.
   PIP_CACHE_DIR: /home/ll-runner/.cache/pip
-  # npm and Playwright caches are job-local because npm refuses root-owned
-  # entries left by historical installations on persistent runners.
-  NPM_CONFIG_CACHE: ${{ runner.temp }}/locklearn-npm
-  PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/locklearn-ms-playwright
 
 jobs:
   backend-quality:
@@ -225,7 +221,10 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
-      - run: npm ci
+      - name: Install frontend dependencies
+        env:
+          NPM_CONFIG_CACHE: ${{ runner.temp }}/locklearn-npm
+        run: npm ci
       - name: Frontend lint
         run: npm run lint
       - run: npm run typecheck
@@ -252,12 +251,20 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
-      - run: npm ci
+      - name: Install frontend dependencies
+        env:
+          NPM_CONFIG_CACHE: ${{ runner.temp }}/locklearn-npm
+        run: npm ci
       # OS-level browser dependencies are provisioned on the VM. The browser
-      # binary itself lives in the dedicated persistent LockLearn cache.
-      - run: npx playwright install chromium
+      # binary itself lives in this job's private runner-temp cache.
+      - name: Install Playwright Chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/locklearn-ms-playwright
+        run: npx playwright install chromium
       - run: npm run test:e2e
       - name: Capture documentation screenshot
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/locklearn-ms-playwright
         run: npm run docs:screenshot
       - name: Upload documentation screenshot
         uses: actions/upload-artifact@v4

@@ -140,8 +140,9 @@ cache `ll-runner`; il ne demande pas de sudo depuis un job GitHub.
 ## Caches, concurrence et nettoyage
 
 Les workflows utilisent le cache pip persistant local `PIP_CACHE_DIR`; les
-caches npm et Playwright sont propres à chaque job sous `runner.temp`, afin
-qu'aucun fichier root-owned historique ne puisse contaminer un job frontend.
+caches npm et Playwright sont propres à chaque étape frontend sous
+`runner.temp`, afin qu'aucun fichier root-owned historique ne puisse
+contaminer un job frontend.
 Les caches GitHub Actions de `setup-python` ne sont pas utilisés. Chaque job
 Python crée un venv neuf sous `RUNNER_TEMP` après `setup-python`; aucun paquet
 Python ne s'installe dans le site global ou dans un autre job.
