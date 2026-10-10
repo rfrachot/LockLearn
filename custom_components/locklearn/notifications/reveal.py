@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Any
+from typing import Any, TypedDict
 
 from ..core.clock import Clock, SystemClock
 from ..core.presentation import CardPresentationService
@@ -14,6 +14,17 @@ from .interactions import NotificationInteractionService, NotificationStage
 from .renderers import NotificationRenderer
 
 _TTL = timedelta(minutes=30)
+
+
+class _LearningRevealArgs(TypedDict):
+    profile_id: str
+    profile_name: str
+    target_id: str
+    tag: str
+    answer: str
+    capabilities: TargetCapabilities
+    visibility: str
+    slot_type: str
 
 
 class NotificationRevealService:
@@ -78,7 +89,7 @@ class NotificationRevealService:
                     answer = value.strip()
                     break
         selection_reason = (interaction.get("payload") or {}).get("selection_reason")
-        common = {
+        common: _LearningRevealArgs = {
             "profile_id": profile_id,
             "profile_name": str(profile.get("name") or "LockLearn"),
             "target_id": target_id,
