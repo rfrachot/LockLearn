@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from itertools import count
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -23,7 +24,8 @@ from custom_components.locklearn.notifications.interactions import (
     NotificationActionDisposition,
     NotificationInteractionService,
 )
-from custom_components.locklearn.notifications.renderers import encode_action_id
+from custom_components.locklearn.notifications.renderers import decode_action_id, encode_action_id
+from custom_components.locklearn.notifications.reveal import NotificationRevealService
 from custom_components.locklearn.storage import (
     NotificationTargetRecord,
     SQLiteStorage,
@@ -224,12 +226,18 @@ async def _setup(
         storage.repositories.settings,
         clock=clock,
     )
+    sequence = count(1)
+    token_sequence = count(1)
     interactions = NotificationInteractionService(
         storage.repositories.notification_interactions,
         ProfileACLService(storage.repositories.profiles),
         clock=clock,
-        id_factory=lambda: "interaction-p48",
-        token_factory=lambda: "token-p48",
+        id_factory=lambda: (
+            "interaction-p48" if (next_id := next(sequence)) == 1 else f"interaction-p48-{next_id}"
+        ),
+        token_factory=lambda: (
+            "token-p48" if (next_token := next(token_sequence)) == 1 else f"token-p48-{next_token}"
+        ),
         review_events=storage.repositories.review_events,
     )
     emitted: list[tuple[str, dict[str, Any]]] = []
@@ -457,5 +465,120 @@ async def test_mobile_commit_failure_rolls_back_token_and_event(
             track_id=identity["track_id"],
         )
         assert [event["id"] for event in events] == ["event-seed", "event-action"]
+    finally:
+        await storage.async_close()
+
+
+async def test_prompt_reveal_delivers_fresh_answer_stage_and_then_records_known(
+    tmp_path: Path,
+) -> None:
+    storage, processor, interactions, identity, emitted = await _setup(tmp_path)
+    rendered: list[Any] = []
+
+    class Presentation:
+        async def async_for_card(self, **kwargs: Any) -> dict[str, Any]:
+            assert kwargs["card_key"] == identity["card_key"]
+            return {"answer": {"blocks": [{"payload": {"text": "Answer revealed"}}]}}
+
+    class Delivery:
+        async def async_send(self, notification: Any) -> None:
+            rendered.append(notification)
+
+    try:
+        processor._reveal_service = NotificationRevealService(
+            storage.repositories.profiles,
+            storage.repositories.notification_targets,
+            cast(Any, Presentation()),
+            interactions,
+            cast(Any, Delivery()),
+            clock=FixedClock(datetime(2026, 9, 24, 20, 0, tzinfo=UTC)),
+        )
+        prompt = await interactions.async_create(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            target_id="target-p48",
+            card_key=identity["card_key"],
+            tag="locklearn:slot-1",
+            stage="prompt",
+            expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
+            payload={"kind": "learning", "selection_reason": "review_due"},
+        )
+        first = await processor.async_handle_mobile_action(
+            action_id=encode_action_id(prompt.token, "reveal"),
+            actor_user_id="owner-user",
+        )
+        assert first is not None
+        assert first.disposition is NotificationActionDisposition.CONSUMED
+        assert first.pedagogical_applied is False
+        assert len(rendered) == 1
+        revealed = rendered[0]
+        assert revealed.stage == "revealed"
+        assert revealed.tag == prompt.tag
+        assert revealed.message == "Answer revealed"
+        assert revealed.data["alert_once"] is True
+        decoded_known = decode_action_id(revealed.data["actions"][0]["action"])
+        assert decoded_known is not None
+        known_token, known_action = decoded_known
+        assert known_action == "known"
+        assert known_token != prompt.token
+        second = await processor.async_handle_mobile_action(
+            action_id=encode_action_id(known_token, "known"),
+            actor_user_id="owner-user",
+        )
+        assert second is not None
+        assert second.disposition is NotificationActionDisposition.CONSUMED
+        assert second.pedagogical_applied is True
+        assert sum(name == "locklearn_answered" for name, _ in emitted) == 1
+        replay = await processor.async_handle_mobile_action(
+            action_id=encode_action_id(known_token, "known"),
+            actor_user_id="owner-user",
+        )
+        assert replay is not None
+        assert replay.disposition is NotificationActionDisposition.REPLAYED
+    finally:
+        await storage.async_close()
+
+
+async def test_idk_exposes_answer_without_grading_or_new_token(tmp_path: Path) -> None:
+    storage, processor, interactions, identity, emitted = await _setup(tmp_path)
+    sent: list[Any] = []
+
+    class Presentation:
+        async def async_for_card(self, **kwargs: Any) -> dict[str, Any]:
+            return {"answer": {"blocks": [{"payload": {"text": "Correct answer"}}]}}
+
+    class Delivery:
+        async def async_send(self, notification: Any) -> None:
+            sent.append(notification)
+
+    try:
+        processor._reveal_service = NotificationRevealService(
+            storage.repositories.profiles,
+            storage.repositories.notification_targets,
+            cast(Any, Presentation()),
+            interactions,
+            cast(Any, Delivery()),
+            clock=FixedClock(datetime(2026, 9, 24, 20, 0, tzinfo=UTC)),
+        )
+        prompt = await interactions.async_create(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            target_id="target-p48",
+            card_key=identity["card_key"],
+            tag="locklearn:slot-idk",
+            stage="prompt",
+            expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
+            payload={"kind": "learning", "selection_reason": "review_due"},
+        )
+        result = await processor.async_handle_mobile_action(
+            action_id=encode_action_id(prompt.token, "idk"),
+            actor_user_id="owner-user",
+        )
+        assert result is not None
+        assert result.pedagogical_applied is False
+        assert len(sent) == 1
+        assert sent[0].pedagogical_signal == "exposure_only"
+        assert "actions" not in sent[0].data
+        assert not emitted
     finally:
         await storage.async_close()

@@ -2801,6 +2801,92 @@ class ReviewEventsRepository:
 
         return await self._storage._async_reader(read)
 
+    async def async_notification_result_counters(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        session_id: str | None,
+    ) -> dict[str, int | float | None]:
+        """Read notification counters without materializing historical ReviewEvents.
+
+        Keyset pagination walks only the newest consecutive outcome run; the
+        existing track/created-at index supports descending retrieval. A
+        session's accuracy uses a database aggregate, never JSON snapshots.
+        """
+        positive = frozenset({"correct", "known", "knew", "easy", "hard"})
+        negative = frozenset({"wrong", "idk", "review", "again"})
+        batch_size = 64
+
+        def read(connection: sqlite3.Connection) -> dict[str, int | float | None]:
+            correct_run = 0
+            wrong_run = 0
+            cursor: tuple[str, str] | None = None
+            finished = False
+            while not finished:
+                if cursor is None:
+                    rows = connection.execute(
+                        """SELECT result, created_at_utc, id
+                           FROM review_events
+                           WHERE profile_id = ? AND track_id = ?
+                           ORDER BY created_at_utc DESC, id DESC
+                           LIMIT ?""",
+                        (profile_id, track_id, batch_size),
+                    ).fetchall()
+                else:
+                    rows = connection.execute(
+                        """SELECT result, created_at_utc, id
+                           FROM review_events
+                           WHERE profile_id = ? AND track_id = ?
+                             AND (created_at_utc < ?
+                                  OR (created_at_utc = ? AND id < ?))
+                           ORDER BY created_at_utc DESC, id DESC
+                           LIMIT ?""",
+                        (
+                            profile_id,
+                            track_id,
+                            cursor[0],
+                            cursor[0],
+                            cursor[1],
+                            batch_size,
+                        ),
+                    ).fetchall()
+                if not rows:
+                    break
+                for result, created_at_utc, event_id in rows:
+                    value = str(result)
+                    if value in positive and not wrong_run:
+                        correct_run += 1
+                    elif value in negative and not correct_run:
+                        wrong_run += 1
+                    else:
+                        finished = True
+                        break
+                    cursor = (str(created_at_utc), str(event_id))
+                if len(rows) < batch_size:
+                    break
+
+            accuracy: float | None = None
+            if session_id is not None:
+                totals = connection.execute(
+                    """SELECT COUNT(*),
+                              SUM(CASE WHEN result = 'correct' THEN 1 ELSE 0 END)
+                       FROM review_events
+                       WHERE profile_id = ? AND track_id = ? AND session_id = ?
+                         AND result IN ('correct', 'wrong', 'idk')""",
+                    (profile_id, track_id, session_id),
+                ).fetchone()
+                if totals is not None and int(totals[0]) > 0:
+                    accuracy = round(int(totals[1]) / int(totals[0]), 6)
+
+            return {
+                "consecutive_correct": correct_run,
+                "consecutive_wrong": wrong_run,
+                "session_accuracy": accuracy,
+            }
+
+        return await self._storage._async_reader(read)
+
     async def async_undone_event_ids(
         self,
         *,

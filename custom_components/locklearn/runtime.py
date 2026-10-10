@@ -51,6 +51,7 @@ from .notifications.actions import NotificationActionProcessor
 from .notifications.delivery import NotificationDeliveryService
 from .notifications.ha_bridge import NotificationHomeAssistantBridge
 from .notifications.interactions import NotificationInteractionService
+from .notifications.reveal import NotificationRevealService
 from .notifications.warnings import NotificationWarningService
 from .profile_transfer import ProfileTransferService, ProfileTransferStore
 from .scheduler_ha import SchedulerHomeAssistantBridge
@@ -247,6 +248,19 @@ class LockLearnRuntime:
                 storage.repositories.profiles,
                 scheduler,
             )
+            notification_delivery = NotificationDeliveryService(
+                hass,
+                storage.repositories.notification_targets,
+                issue_callback=report_issue,
+                issue_clear_callback=clear_issue,
+            )
+            notification_reveal = NotificationRevealService(
+                storage.repositories.profiles,
+                storage.repositories.notification_targets,
+                presentation,
+                notification_interactions,
+                notification_delivery,
+            )
             notification_actions = NotificationActionProcessor(
                 notification_interactions,
                 storage.repositories.profiles,
@@ -266,18 +280,13 @@ class LockLearnRuntime:
                     event_type,
                     data,
                 ),
+                reveal_service=notification_reveal,
             )
             notification_ha = NotificationHomeAssistantBridge(
                 hass,
                 notification_interactions,
                 notification_actions,
                 scheduler,
-            )
-            notification_delivery = NotificationDeliveryService(
-                hass,
-                storage.repositories.notification_targets,
-                issue_callback=report_issue,
-                issue_clear_callback=clear_issue,
             )
             ready_reminders = ReadyReminderService(
                 storage.repositories.settings,
