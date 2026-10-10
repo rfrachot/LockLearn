@@ -25,6 +25,7 @@ from .interactions import (
     NotificationInteractionService,
 )
 from .renderers import decode_action_id
+from .reveal import NotificationRevealService
 
 EventEmitter = Callable[[str, dict[str, Any]], None]
 
@@ -67,6 +68,7 @@ class NotificationActionProcessor:
         event_emitter: EventEmitter,
         clock: Clock | None = None,
         mastery_threshold: float = 0.75,
+        reveal_service: NotificationRevealService | None = None,
     ) -> None:
         self._interactions = interactions
         self._profiles = profiles
@@ -84,6 +86,7 @@ class NotificationActionProcessor:
         self._clock = clock or SystemClock()
         self._learning = LearningStateMachine(clock=self._clock)
         self._mastery_threshold = mastery_threshold
+        self._reveal_service = reveal_service
 
     async def async_handle_mobile_action(
         self,
@@ -96,10 +99,30 @@ class NotificationActionProcessor:
         if decoded is None:
             return None
         token, semantic = decoded
-        claim = await self._interactions.async_consume_action(
-            token=token,
-            action_id=semantic,
-            actor_user_id=actor_user_id,
+        # Answer actions are prepared read-only. Their tokens are consumed only
+        # in the same SQLite transaction that appends the canonical ReviewEvent.
+        prepared = semantic in {"known", "review"} or semantic.startswith("choice_")
+        if semantic == "idk":
+            raw = await self._interactions.async_prepare_answer(
+                token=token,
+                actor_user_id=actor_user_id,
+            )
+            prepared = bool(
+                raw.interaction is not None
+                and (raw.interaction.get("payload") or {}).get("kind", "learning") != "learning"
+                and (raw.interaction.get("payload") or {}).get("selection_reason") != "teaser_new"
+            )
+        claim = (
+            await self._interactions.async_prepare_answer(
+                token=token,
+                actor_user_id=actor_user_id,
+            )
+            if prepared
+            else await self._interactions.async_consume_action(
+                token=token,
+                action_id=semantic,
+                actor_user_id=actor_user_id,
+            )
         )
         if not claim.may_apply_pedagogical_result or claim.interaction is None:
             return NotificationActionOutcome(claim.disposition)
@@ -107,12 +130,27 @@ class NotificationActionProcessor:
         interaction = claim.interaction
         interaction_id = str(interaction["interaction_id"])
         payload = dict(interaction.get("payload") or {})
-        await self._record_receptivity(payload)
+        stage = str(interaction.get("stage"))
+        kind = str(payload.get("kind", "learning"))
+        if kind == "learning":
+            if not (
+                (stage == "prompt" and semantic in {"reveal", "idk"})
+                or (stage == "revealed" and semantic in {"known", "review"})
+            ):
+                raise NotificationActionError("action is not valid for notification stage")
+        elif kind == "quiz" and stage != "prompt":
+            raise NotificationActionError("quiz action is not valid for notification stage")
+        if not prepared:
+            await self._record_receptivity(payload)
 
-        if semantic == "reveal" or (
-            semantic == "idk" and payload.get("selection_reason") == "teaser_new"
-        ):
+        if kind == "learning" and stage == "prompt":
             event = await self._apply_introduction_if_needed(interaction, payload)
+            if self._reveal_service is not None:
+                await self._reveal_service.async_reveal(
+                    interaction, assessable=(semantic == "reveal")
+                )
+            elif semantic == "reveal":
+                raise NotificationActionError("second-stage notification service unavailable")
             return NotificationActionOutcome(
                 claim.disposition,
                 interaction_id=interaction_id,
@@ -124,12 +162,16 @@ class NotificationActionProcessor:
             interaction=interaction,
             payload=payload,
             semantic=semantic,
+            atomic_token=token if prepared else None,
+            actor_user_id=actor_user_id,
         )
+        if event is not None and prepared:
+            await self._record_receptivity(payload)
         return NotificationActionOutcome(
-            claim.disposition,
+            claim.disposition if event is not None else NotificationActionDisposition.REPLAYED,
             interaction_id=interaction_id,
-            review_event_id=event.id,
-            pedagogical_applied=True,
+            review_event_id=None if event is None else event.id,
+            pedagogical_applied=event is not None,
         )
 
     async def _record_receptivity(self, payload: dict[str, Any]) -> None:
@@ -189,7 +231,9 @@ class NotificationActionProcessor:
         interaction: dict[str, Any],
         payload: dict[str, Any],
         semantic: str,
-    ) -> Any:
+        atomic_token: str | None = None,
+        actor_user_id: str | None = None,
+    ) -> Any | None:
         identity = await self._identity(interaction)
         pre = await self._progress.async_get(
             profile_id=identity["profile_id"],
@@ -270,7 +314,17 @@ class NotificationActionProcessor:
             scheduled_interval_days=scheduled_interval,
             elapsed_days=elapsed,
             notification_id=str(interaction["interaction_id"]),
+            persist=atomic_token is None,
         )
+        if atomic_token is not None:
+            result_claim = await self._interactions.async_commit_answer(
+                event=event,
+                token=atomic_token,
+                action_id=semantic,
+                actor_user_id=actor_user_id,
+            )
+            if result_claim.disposition is not NotificationActionDisposition.CONSUMED:
+                return None
         after_stats = await self._stats.async_get(
             profile_id=identity["profile_id"],
             track_id=identity["track_id"],
@@ -568,38 +622,11 @@ class NotificationActionProcessor:
         session_id: str | None,
         stats: dict[str, Any],
     ) -> dict[str, Any]:
-        events = await self._review_events.async_list_scope_events(
+        result_counters = await self._review_events.async_notification_result_counters(
             profile_id=profile_id,
             track_id=track_id,
+            session_id=session_id,
         )
-        consecutive_correct = 0
-        consecutive_wrong = 0
-        for item in reversed(events):
-            result = str(item["result"])
-            if result in _POSITIVE_RESULTS:
-                if consecutive_wrong:
-                    break
-                consecutive_correct += 1
-                continue
-            if result in _NEGATIVE_RESULTS:
-                if consecutive_correct:
-                    break
-                consecutive_wrong += 1
-                continue
-            if consecutive_correct or consecutive_wrong:
-                break
-
-        session_accuracy: float | None = None
-        if session_id is not None:
-            session_events = [
-                item
-                for item in events
-                if item.get("session_id") == session_id
-                and str(item["result"]) in {"correct", "wrong", "idk"}
-            ]
-            if session_events:
-                correct = sum(str(item["result"]) == "correct" for item in session_events)
-                session_accuracy = round(correct / len(session_events), 6)
 
         today = stats["streak"]["today"]
         target = int(today["target"])
@@ -607,8 +634,8 @@ class NotificationActionProcessor:
             0.0 if target <= 0 else round(min(1.0, int(today["treated_due"]) / target), 6)
         )
         return {
-            "consecutive_correct": consecutive_correct,
-            "consecutive_wrong": consecutive_wrong,
-            "session_accuracy": session_accuracy,
+            "consecutive_correct": result_counters["consecutive_correct"],
+            "consecutive_wrong": result_counters["consecutive_wrong"],
+            "session_accuracy": result_counters["session_accuracy"],
             "daily_goal_progress": daily_goal_progress,
         }

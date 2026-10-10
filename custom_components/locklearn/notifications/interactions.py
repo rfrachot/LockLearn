@@ -15,6 +15,8 @@ from ..core.clock import Clock, SystemClock
 from ..storage.repositories import (
     NotificationInteractionRecord,
     NotificationInteractionsRepository,
+    ReviewEventRecord,
+    ReviewEventsRepository,
 )
 
 
@@ -64,8 +66,10 @@ class NotificationInteractionService:
         clock: Clock | None = None,
         id_factory: Callable[[], str] | None = None,
         token_factory: Callable[[], str] | None = None,
+        review_events: ReviewEventsRepository | None = None,
     ) -> None:
         self._repository = repository
+        self._reviews = review_events
         self._acl = acl
         self._clock = clock or SystemClock()
         self._id_factory = id_factory or (lambda: str(uuid4()))
@@ -132,6 +136,55 @@ class NotificationInteractionService:
         return await self._repository.async_clear_by_tag(
             tag=resolved_tag,
             cleared_at_utc=self._utc_iso("cleared_at", self._clock.now()),
+        )
+
+    async def async_prepare_answer(
+        self,
+        *,
+        token: str,
+        actor_user_id: str | None,
+    ) -> NotificationActionResult:
+        """Read an answer token without consuming it before its event exists."""
+        resolved_token = self._require_text("token", token)
+        interaction = await self._repository.async_get_by_token(resolved_token)
+        if interaction is None:
+            return NotificationActionResult(NotificationActionDisposition.NOT_FOUND)
+        if str(interaction["status"]) != "pending":
+            return NotificationActionResult(NotificationActionDisposition.REPLAYED)
+        if actor_user_id is not None:
+            allowed = await self._acl.async_can(
+                profile_id=str(interaction["profile_id"]),
+                ha_user_id=self._require_text("actor_user_id", actor_user_id),
+                permission=ProfilePermission.ANSWER,
+            )
+            if not allowed:
+                return NotificationActionResult(NotificationActionDisposition.FORBIDDEN)
+        return NotificationActionResult(NotificationActionDisposition.CONSUMED, interaction)
+
+    async def async_commit_answer(
+        self,
+        *,
+        event: ReviewEventRecord,
+        token: str,
+        action_id: str,
+        actor_user_id: str | None,
+    ) -> NotificationActionResult:
+        """Commit one prepared canonical result together with token consumption."""
+        if self._reviews is None:
+            raise NotificationInteractionValidationError("review repository unavailable")
+        claimed = await self._reviews.async_commit_mobile_answer(
+            event,
+            token=token,
+            action_id=action_id,
+            actor_user_id=actor_user_id,
+            action_at_utc=self._utc_iso("action_at", self._clock.now()),
+        )
+        disposition = NotificationActionDisposition(claimed.disposition)
+        return NotificationActionResult(
+            disposition,
+            interaction=claimed.interaction
+            if disposition is NotificationActionDisposition.CONSUMED
+            else None,
         )
 
     async def async_consume_action(

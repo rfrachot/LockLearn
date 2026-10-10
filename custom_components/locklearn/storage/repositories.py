@@ -2131,18 +2131,13 @@ class ReviewEventsRepository:
         )
         return True
 
-    async def async_append_with_projection(self, event: ReviewEventRecord) -> None:
-        """Append one event and materialize its post-state in one transaction."""
-        valid = await self._storage.async_validate_card_reference(
-            card_key=event.card_key,
-            learning_item_id=event.learning_item_id,
-            prompt_facet_id=event.prompt_facet_id,
-            answer_facet_id=event.answer_facet_id,
-        )
-        if not valid:
-            raise ContentReferenceError(f"unknown active card reference: {event.card_key}")
-        self._validate_projection_identity(event, event.post_state_snapshot)
-
+    @classmethod
+    def _append_projection_in_connection(
+        cls,
+        connection: sqlite3.Connection,
+        event: ReviewEventRecord,
+    ) -> None:
+        """Write the event, progress and daily stats inside the caller's transaction."""
         pre_json = json.dumps(
             event.pre_state_snapshot,
             ensure_ascii=False,
@@ -2155,65 +2150,81 @@ class ReviewEventsRepository:
             separators=(",", ":"),
             sort_keys=True,
         )
+        connection.execute(
+            """INSERT INTO review_events(
+                   id, profile_id, track_id, learning_item_id,
+                   prompt_facet_id, answer_facet_id, card_key, mode,
+                   question_type, result, answer_id, expected_answer_id,
+                   hint_used, retrieval_occurred, scheduled_interval_days,
+                   elapsed_days, grading_result, signal_quality,
+                   policy_version, dataset_generation, normalization_version,
+                   pre_state_snapshot, post_state_snapshot,
+                   presentation_to_answer_ms, delivery_to_action_ms,
+                   session_id, notification_id, created_at_utc, local_date,
+                   timezone_name, utc_offset_minutes
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                event.id,
+                event.profile_id,
+                event.track_id,
+                event.learning_item_id,
+                event.prompt_facet_id,
+                event.answer_facet_id,
+                event.card_key,
+                event.mode,
+                event.question_type,
+                event.result,
+                event.answer_id,
+                event.expected_answer_id,
+                int(event.hint_used),
+                int(event.retrieval_occurred),
+                event.scheduled_interval_days,
+                event.elapsed_days,
+                event.grading_result,
+                event.signal_quality,
+                event.policy_version,
+                event.dataset_generation,
+                event.normalization_version,
+                pre_json,
+                post_json,
+                event.presentation_to_answer_ms,
+                event.delivery_to_action_ms,
+                event.session_id,
+                event.notification_id,
+                event.created_at_utc,
+                event.local_date,
+                event.timezone_name,
+                event.utc_offset_minutes,
+            ),
+        )
+        cls._upsert_progress(connection, event.post_state_snapshot)
+        cls._rebuild_stats_day_in_connection(
+            connection,
+            profile_id=event.profile_id,
+            track_id=event.track_id,
+            local_date=event.local_date,
+        )
+
+    async def _async_validate_append(self, event: ReviewEventRecord) -> None:
+        valid = await self._storage.async_validate_card_reference(
+            card_key=event.card_key,
+            learning_item_id=event.learning_item_id,
+            prompt_facet_id=event.prompt_facet_id,
+            answer_facet_id=event.answer_facet_id,
+        )
+        if not valid:
+            raise ContentReferenceError(f"unknown active card reference: {event.card_key}")
+        self._validate_projection_identity(event, event.post_state_snapshot)
+
+    async def async_append_with_projection(self, event: ReviewEventRecord) -> None:
+        """Append one event and materialize its post-state in one transaction."""
+        await self._async_validate_append(event)
 
         def write(connection: sqlite3.Connection) -> None:
             try:
                 connection.execute("BEGIN IMMEDIATE")
-                connection.execute(
-                    """INSERT INTO review_events(
-                           id, profile_id, track_id, learning_item_id,
-                           prompt_facet_id, answer_facet_id, card_key, mode,
-                           question_type, result, answer_id, expected_answer_id,
-                           hint_used, retrieval_occurred, scheduled_interval_days,
-                           elapsed_days, grading_result, signal_quality,
-                           policy_version, dataset_generation, normalization_version,
-                           pre_state_snapshot, post_state_snapshot,
-                           presentation_to_answer_ms, delivery_to_action_ms,
-                           session_id, notification_id, created_at_utc, local_date,
-                           timezone_name, utc_offset_minutes
-                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        event.id,
-                        event.profile_id,
-                        event.track_id,
-                        event.learning_item_id,
-                        event.prompt_facet_id,
-                        event.answer_facet_id,
-                        event.card_key,
-                        event.mode,
-                        event.question_type,
-                        event.result,
-                        event.answer_id,
-                        event.expected_answer_id,
-                        int(event.hint_used),
-                        int(event.retrieval_occurred),
-                        event.scheduled_interval_days,
-                        event.elapsed_days,
-                        event.grading_result,
-                        event.signal_quality,
-                        event.policy_version,
-                        event.dataset_generation,
-                        event.normalization_version,
-                        pre_json,
-                        post_json,
-                        event.presentation_to_answer_ms,
-                        event.delivery_to_action_ms,
-                        event.session_id,
-                        event.notification_id,
-                        event.created_at_utc,
-                        event.local_date,
-                        event.timezone_name,
-                        event.utc_offset_minutes,
-                    ),
-                )
-                self._upsert_progress(connection, event.post_state_snapshot)
-                self._rebuild_stats_day_in_connection(
-                    connection,
-                    profile_id=event.profile_id,
-                    track_id=event.track_id,
-                    local_date=event.local_date,
-                )
+                self._append_projection_in_connection(connection, event)
                 connection.commit()
             except Exception:
                 if connection.in_transaction:
@@ -2221,6 +2232,145 @@ class ReviewEventsRepository:
                 raise
 
         await self._storage._async_writer(write)
+
+    async def async_commit_mobile_answer(
+        self,
+        event: ReviewEventRecord,
+        *,
+        token: str,
+        action_id: str,
+        actor_user_id: str | None,
+        action_at_utc: str,
+    ) -> NotificationInteractionConsumeResult:
+        """Commit token consumption and its canonical ReviewEvent atomically.
+
+        Concurrent duplicate claims cannot both succeed. Invalid content,
+        stale progress or failed persistence rolls back the claim entirely.
+        """
+        await self._async_validate_append(event)
+
+        def write(connection: sqlite3.Connection) -> NotificationInteractionConsumeResult:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    f"""SELECT {",".join(NotificationInteractionsRepository._SELECT_COLUMNS)}
+                        FROM notification_interactions WHERE token = ?""",
+                    (token,),
+                ).fetchone()
+                interaction = (
+                    None
+                    if row is None
+                    else NotificationInteractionsRepository._interaction_dict(row)
+                )
+                profile_id = None if interaction is None else str(interaction["profile_id"])
+
+                def reject(
+                    reason: str, *, disposition: str
+                ) -> NotificationInteractionConsumeResult:
+                    NotificationInteractionsRepository._audit_action(
+                        connection,
+                        event_type="notification_action_rejected",
+                        actor_user_id=actor_user_id,
+                        profile_id=profile_id,
+                        interaction=interaction,
+                        reason=reason,
+                        created_at_utc=action_at_utc,
+                    )
+                    connection.commit()
+                    return NotificationInteractionConsumeResult(disposition)
+
+                if interaction is None:
+                    return reject("unknown_token", disposition="not_found")
+                if interaction["status"] != "pending":
+                    return reject("replayed", disposition="replayed")
+
+                if actor_user_id is not None:
+                    role = connection.execute(
+                        """SELECT role FROM profile_members
+                           WHERE profile_id = ? AND ha_user_id = ?""",
+                        (profile_id, actor_user_id),
+                    ).fetchone()
+                    if role is None or str(role[0]) not in {"owner", "editor"}:
+                        return reject("user_context_forbidden", disposition="forbidden")
+
+                live = connection.execute(
+                    """SELECT CASE WHEN julianday(expires_at_utc) > julianday(?) THEN 1
+                                   ELSE 0 END
+                       FROM notification_interactions WHERE interaction_id = ?""",
+                    (action_at_utc, interaction["interaction_id"]),
+                ).fetchone()
+                if live is None or int(live[0]) != 1:
+                    connection.execute(
+                        """UPDATE notification_interactions SET status = 'expired'
+                           WHERE interaction_id = ? AND status = 'pending'""",
+                        (interaction["interaction_id"],),
+                    )
+                    interaction["status"] = "expired"
+                    return reject("expired", disposition="expired")
+
+                if (
+                    interaction["interaction_id"] != event.notification_id
+                    or interaction["profile_id"] != event.profile_id
+                    or interaction["track_id"] != event.track_id
+                    or interaction["card_key"] != event.card_key
+                    or interaction["stage"] not in {"prompt", "revealed"}
+                ):
+                    raise StateRepositoryError("notification action and review identity mismatch")
+
+                # A second token for the same card must never overwrite a
+                # newer, independently committed progress projection.
+                row = connection.execute(
+                    """SELECT state, seen_count, verified_correct_count,
+                              verified_wrong_count, self_known_count,
+                              self_review_count, updated_at_utc
+                       FROM progress WHERE profile_id = ? AND track_id = ?
+                         AND card_key = ?""",
+                    (event.profile_id, event.track_id, event.card_key),
+                ).fetchone()
+                before = event.pre_state_snapshot
+                expected = (
+                    before.get("state"),
+                    before.get("seen_count"),
+                    before.get("verified_correct_count"),
+                    before.get("verified_wrong_count"),
+                    before.get("self_known_count"),
+                    before.get("self_review_count"),
+                    before.get("updated_at_utc"),
+                )
+                if row is None or tuple(row) != expected:
+                    raise StateRepositoryError("stale notification review progress snapshot")
+
+                cursor = connection.execute(
+                    """UPDATE notification_interactions
+                       SET status = 'consumed', consumed_at_utc = ?, action_id = ?
+                       WHERE interaction_id = ? AND status = 'pending'
+                         AND julianday(expires_at_utc) > julianday(?)""",
+                    (action_at_utc, action_id, interaction["interaction_id"], action_at_utc),
+                )
+                if cursor.rowcount != 1:
+                    return reject("replayed", disposition="replayed")
+
+                self._append_projection_in_connection(connection, event)
+                interaction["status"] = "consumed"
+                interaction["consumed_at_utc"] = action_at_utc
+                interaction["action_id"] = action_id
+                NotificationInteractionsRepository._audit_action(
+                    connection,
+                    event_type="notification_action_consumed",
+                    actor_user_id=actor_user_id,
+                    profile_id=profile_id,
+                    interaction=interaction,
+                    reason="consumed",
+                    created_at_utc=action_at_utc,
+                )
+                connection.commit()
+                return NotificationInteractionConsumeResult("consumed", interaction=interaction)
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        return await self._storage._async_writer(write)
 
     async def async_count_introductions(
         self,
@@ -2648,6 +2798,92 @@ class ReviewEventsRepository:
                 event["post_state_snapshot"] = json.loads(str(event["post_state_snapshot"]))
                 result.append(event)
             return tuple(result)
+
+        return await self._storage._async_reader(read)
+
+    async def async_notification_result_counters(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        session_id: str | None,
+    ) -> dict[str, int | float | None]:
+        """Read notification counters without materializing historical ReviewEvents.
+
+        Keyset pagination walks only the newest consecutive outcome run; the
+        existing track/created-at index supports descending retrieval. A
+        session's accuracy uses a database aggregate, never JSON snapshots.
+        """
+        positive = frozenset({"correct", "known", "knew", "easy", "hard"})
+        negative = frozenset({"wrong", "idk", "review", "again"})
+        batch_size = 64
+
+        def read(connection: sqlite3.Connection) -> dict[str, int | float | None]:
+            correct_run = 0
+            wrong_run = 0
+            cursor: tuple[str, str] | None = None
+            finished = False
+            while not finished:
+                if cursor is None:
+                    rows = connection.execute(
+                        """SELECT result, created_at_utc, id
+                           FROM review_events
+                           WHERE profile_id = ? AND track_id = ?
+                           ORDER BY created_at_utc DESC, id DESC
+                           LIMIT ?""",
+                        (profile_id, track_id, batch_size),
+                    ).fetchall()
+                else:
+                    rows = connection.execute(
+                        """SELECT result, created_at_utc, id
+                           FROM review_events
+                           WHERE profile_id = ? AND track_id = ?
+                             AND (created_at_utc < ?
+                                  OR (created_at_utc = ? AND id < ?))
+                           ORDER BY created_at_utc DESC, id DESC
+                           LIMIT ?""",
+                        (
+                            profile_id,
+                            track_id,
+                            cursor[0],
+                            cursor[0],
+                            cursor[1],
+                            batch_size,
+                        ),
+                    ).fetchall()
+                if not rows:
+                    break
+                for result, created_at_utc, event_id in rows:
+                    value = str(result)
+                    if value in positive and not wrong_run:
+                        correct_run += 1
+                    elif value in negative and not correct_run:
+                        wrong_run += 1
+                    else:
+                        finished = True
+                        break
+                    cursor = (str(created_at_utc), str(event_id))
+                if len(rows) < batch_size:
+                    break
+
+            accuracy: float | None = None
+            if session_id is not None:
+                totals = connection.execute(
+                    """SELECT COUNT(*),
+                              SUM(CASE WHEN result = 'correct' THEN 1 ELSE 0 END)
+                       FROM review_events
+                       WHERE profile_id = ? AND track_id = ? AND session_id = ?
+                         AND result IN ('correct', 'wrong', 'idk')""",
+                    (profile_id, track_id, session_id),
+                ).fetchone()
+                if totals is not None and int(totals[0]) > 0:
+                    accuracy = round(int(totals[1]) / int(totals[0]), 6)
+
+            return {
+                "consecutive_correct": correct_run,
+                "consecutive_wrong": wrong_run,
+                "session_accuracy": accuracy,
+            }
 
         return await self._storage._async_reader(read)
 
