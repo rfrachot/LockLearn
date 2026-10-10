@@ -122,7 +122,8 @@ class NotificationActionProcessor:
         interaction = claim.interaction
         interaction_id = str(interaction["interaction_id"])
         payload = dict(interaction.get("payload") or {})
-        await self._record_receptivity(payload)
+        if not prepared:
+            await self._record_receptivity(payload)
 
         if semantic == "reveal" or (
             semantic == "idk" and payload.get("selection_reason") == "teaser_new"
@@ -142,8 +143,10 @@ class NotificationActionProcessor:
             atomic_token=token if prepared else None,
             actor_user_id=actor_user_id,
         )
+        if event is not None and prepared:
+            await self._record_receptivity(payload)
         return NotificationActionOutcome(
-            claim.disposition,
+            claim.disposition if event is not None else NotificationActionDisposition.REPLAYED,
             interaction_id=interaction_id,
             review_event_id=None if event is None else event.id,
             pedagogical_applied=event is not None,
