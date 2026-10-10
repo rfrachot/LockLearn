@@ -180,7 +180,9 @@ class NotificationInteractionService:
         disposition = NotificationActionDisposition(claimed.disposition)
         return NotificationActionResult(
             disposition,
-            interaction=claimed.interaction if disposition is NotificationActionDisposition.CONSUMED else None,
+            interaction=claimed.interaction
+            if disposition is NotificationActionDisposition.CONSUMED
+            else None,
         )
 
     async def async_consume_action(
