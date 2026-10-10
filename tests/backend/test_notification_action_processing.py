@@ -229,8 +229,12 @@ async def _setup(
         storage.repositories.notification_interactions,
         ProfileACLService(storage.repositories.profiles),
         clock=clock,
-        id_factory=lambda: "interaction-p48" if (next_id := next(sequence)) == 1 else f"interaction-p48-{next_id}",
-        token_factory=lambda: "token-p48" if (next_token := next(token_sequence)) == 1 else f"token-p48-{next_token}",
+        id_factory=lambda: (
+            "interaction-p48" if (next_id := next(sequence)) == 1 else f"interaction-p48-{next_id}"
+        ),
+        token_factory=lambda: (
+            "token-p48" if (next_token := next(token_sequence)) == 1 else f"token-p48-{next_token}"
+        ),
     )
     emitted: list[tuple[str, dict[str, Any]]] = []
     processor = NotificationActionProcessor(
@@ -401,7 +405,9 @@ async def test_new_teaser_idk_is_introduction_not_failure(tmp_path: Path) -> Non
         await storage.async_close()
 
 
-async def test_prompt_reveal_delivers_fresh_answer_stage_and_then_records_known(tmp_path: Path) -> None:
+async def test_prompt_reveal_delivers_fresh_answer_stage_and_then_records_known(
+    tmp_path: Path,
+) -> None:
     storage, processor, interactions, identity, emitted = await _setup(tmp_path)
     rendered: list[Any] = []
 
