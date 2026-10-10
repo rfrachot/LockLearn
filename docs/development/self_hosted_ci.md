@@ -139,12 +139,14 @@ cache `ll-runner`; il ne demande pas de sudo depuis un job GitHub.
 
 ## Caches, concurrence et nettoyage
 
-Les workflows utilisent les caches locaux `PIP_CACHE_DIR`,
-`NPM_CONFIG_CACHE` et `PLAYWRIGHT_BROWSERS_PATH`. Les caches GitHub Actions de
-`setup-python` ne sont pas utilisés. Chaque job Python crée un venv neuf sous
-`RUNNER_TEMP` après `setup-python`; aucun paquet Python ne s'installe dans le
-site global ou dans un autre job. `requirements-dev.txt`, les versions HA
-explicites, `frontend/package-lock.json` et `npm ci` restent les sources de
+Les workflows utilisent le cache pip persistant local `PIP_CACHE_DIR`; les
+caches npm et Playwright sont propres à chaque job sous `runner.temp`, afin
+qu'aucun fichier root-owned historique ne puisse contaminer un job frontend.
+Les caches GitHub Actions de `setup-python` ne sont pas utilisés. Chaque job
+Python crée un venv neuf sous `RUNNER_TEMP` après `setup-python`; aucun paquet
+Python ne s'installe dans le site global ou dans un autre job.
+`requirements-dev.txt`, les versions HA explicites,
+`frontend/package-lock.json` et `npm ci` restent les sources de
 reproductibilité.
 
 Les jobs sont limités à deux exécutions simultanées par la capacité actuelle.
@@ -158,7 +160,7 @@ Observer l'espace avant tout nettoyage :
 ```bash
 df -h /
 du -sh /home/ll-runner/actions/*/_work 2>/dev/null
-du -sh /home/ll-runner/.cache/pip /home/ll-runner/.cache/npm /home/ll-runner/.cache/ms-playwright
+du -sh /home/ll-runner/.cache/pip
 ```
 
 Ne jamais exécuter `docker system prune -af` sur la VM. Toute maintenance du

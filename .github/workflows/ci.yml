@@ -24,8 +24,10 @@ env:
   # acceleration only; requirements-dev.txt and package-lock.json remain the
   # dependency sources of truth.
   PIP_CACHE_DIR: /home/ll-runner/.cache/pip
-  NPM_CONFIG_CACHE: /home/ll-runner/.cache/npm
-  PLAYWRIGHT_BROWSERS_PATH: /home/ll-runner/.cache/ms-playwright
+  # npm and Playwright caches are job-local because npm refuses root-owned
+  # entries left by historical installations on persistent runners.
+  NPM_CONFIG_CACHE: ${{ runner.temp }}/locklearn-npm
+  PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/locklearn-ms-playwright
 
 jobs:
   backend-quality:
