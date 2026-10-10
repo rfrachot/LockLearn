@@ -118,9 +118,8 @@ class NotificationActionProcessor:
                 or (stage == "revealed" and semantic in {"known", "review"})
             ):
                 raise NotificationActionError("action is not valid for notification stage")
-        elif kind == "quiz":
-            if stage != "prompt":
-                raise NotificationActionError("quiz action is not valid for notification stage")
+        elif kind == "quiz" and stage != "prompt":
+            raise NotificationActionError("quiz action is not valid for notification stage")
         await self._record_receptivity(payload)
 
         if kind == "learning" and stage == "prompt":
