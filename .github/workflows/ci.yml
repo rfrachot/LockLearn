@@ -261,7 +261,10 @@ jobs:
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/locklearn-ms-playwright
         run: npx playwright install chromium
-      - run: npm run test:e2e
+      - name: Run frontend E2E tests
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/locklearn-ms-playwright
+        run: npm run test:e2e
       - name: Capture documentation screenshot
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/locklearn-ms-playwright
