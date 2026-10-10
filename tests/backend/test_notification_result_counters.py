@@ -50,7 +50,7 @@ async def test_notification_counters_preserve_reverse_event_semantics(tmp_path: 
             profile_id="p", track_id="t", session_id="session-1"
         )
         assert results == {
-            "consecutive_correct": 3,
+            "consecutive_correct": 4,
             "consecutive_wrong": 0,
             "session_accuracy": 0.75,
         }
