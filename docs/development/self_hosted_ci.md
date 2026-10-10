@@ -214,35 +214,25 @@ ses caches ni ses workspaces.
 
 ## Validation et état de cette migration
 
-État relevé le 9 octobre 2026 :
+État relevé le 10 octobre 2026 :
 
-- branche `chore/self-hosted-ci`, commit poussé `c569c03` avant la correction de revue;
-- dépôt public, `GITHUB_TOKEN` par défaut en lecture, approbation des premiers
-  contributeurs externes activée;
-- `main` protégée par une approbation, résolution des conversations et
-  interdiction du force-push/suppression;
-- environnement `dataset-release` créé, lié aux branches protégées, avec revue
-  obligatoire et auto-approbation interdite;
-- quatre runners ThermalTwin actifs sous `tt-runner`; leur daemon, leurs
-  services et leurs caches sont hors périmètre du bootstrap LockLearn;
-- bootstrap `ll-runner`, Docker rootless dédié et deux services LockLearn :
-  `NON TESTÉS` jusqu'à exécution interactive du script;
-- run CI `37980380168` : `queued` sur le label `locklearn-dev`, preuve qu'aucun
-  fallback GitHub-hosted n'est utilisé; jobs normaux et durée de campagne :
-  `NON TESTÉS` tant qu'un runner dédié n'est pas installé;
-- validations locales au commit : Ruff format/check, mypy, ressources, schémas,
-  546 pytest, frontend lint/typecheck, 69 Vitest, no-polling, build et bundle;
-- secret `LOCKLEARN_DATASET_SIGNING_KEY_B64` absent du dépôt et de
-  l'environnement : publication signée `NON TESTÉE` et bloquée fail-closed;
-- ressources VM observées : 12 vCPU, environ 64 Gio RAM, Docker rootless sous
-  `tt-runner`; aucun service ThermalTwin n'a été modifié.
-
-La campagne GitHub complète, le redémarrage d'un runner, le test d'isolement des
-répertoires, la validation des venv par matrice et la non-régression ThermalTwin
-restent `NON TESTÉS` jusqu'à l'installation. Ils devront être ajoutés ici avec
-les URLs GitHub, les durées et les mesures réelles. La publication signée des
-datasets reste `NON TESTÉE` tant que la clé n'est pas disponible et ne bloque
-pas les jobs ordinaires.
+- branche `chore/self-hosted-ci`; la validation réelle complète a été exécutée
+  sur `8164989` dans le [run GitHub `38008800110`](https://github.com/rfrachot/LockLearn/actions/runs/38008800110);
+- les 8 jobs ordinaires sont verts : backend, datasets, frontend, frontend E2E,
+  validation hassfest/HACS et les trois contrôles Home Assistant
+  (`2025.2.5`, `2026.9.3`, `2026.9.4`);
+- checkout et extraction des actions Docker passent sur les runners dédiés;
+  chaque job Python crée son venv sous `RUNNER_TEMP`; le cache pip reste
+  persistant sous `ll-runner`, tandis que npm/Playwright sont job-localisés;
+- `ll-runner` utilise Docker rootless sur son socket privé et n'est membre ni de
+  `docker` ni de `sudo`; les quatre runners ThermalTwin, leur daemon, leurs
+  services, caches et workspaces sont hors périmètre et n'ont pas été modifiés;
+- les validations locales au commit restent vertes : Ruff format/check, mypy,
+  ressources, schémas, 546 pytest, frontend lint/typecheck, 69 Vitest,
+  no-polling, build et bundle;
+- `LOCKLEARN_DATASET_SIGNING_KEY_B64` reste absent : la publication signée des
+  datasets est `NON TESTÉE` et ne bloque pas la CI ordinaire;
+- aucune fusion, publication ou release n'a été effectuée.
 
 Une vérification non exécutée est `NON TESTÉE`, jamais `PASS`. Le rollback des
 workflows consiste à désactiver les services LockLearn, rétablir le dernier
