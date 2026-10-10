@@ -421,11 +421,14 @@ async def test_mobile_commit_failure_rolls_back_token_and_event(
         )
         action = encode_action_id(interaction.token, "choice_0")
         repository_type = type(storage.repositories.review_events)
-        with patch.object(
-            repository_type,
-            "_rebuild_stats_day_in_connection",
-            side_effect=RuntimeError("simulated SQLite failure"),
-        ), pytest.raises(RuntimeError, match="simulated SQLite failure"):
+        with (
+            patch.object(
+                repository_type,
+                "_rebuild_stats_day_in_connection",
+                side_effect=RuntimeError("simulated SQLite failure"),
+            ),
+            pytest.raises(RuntimeError, match="simulated SQLite failure"),
+        ):
             await processor.async_handle_mobile_action(
                 action_id=action,
                 actor_user_id="owner-user",
