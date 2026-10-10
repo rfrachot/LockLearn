@@ -491,9 +491,9 @@ async def test_idk_exposes_answer_without_grading_or_new_token(tmp_path: Path) -
         processor._reveal_service = NotificationRevealService(
             storage.repositories.profiles,
             storage.repositories.notification_targets,
-            Presentation(),
+            cast(Any, Presentation()),
             interactions,
-            Delivery(),
+            cast(Any, Delivery()),
             clock=FixedClock(datetime(2026, 9, 24, 20, 0, tzinfo=UTC)),
         )
         prompt = await interactions.async_create(
