@@ -120,6 +120,7 @@ class NotificationEventOutbox:
         """Emit pending batches; errors retain the batch for future retry."""
         async with self._drain_lock:
             while True:
+
                 def read(connection: sqlite3.Connection) -> tuple[str, str] | None:
                     row = connection.execute(
                         """SELECT event_id, payload_json FROM notification_event_outbox

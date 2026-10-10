@@ -39,6 +39,7 @@ async def test_mobile_event_creates_atomic_outbox_intent(tmp_path: Path) -> None
     storage = SQLiteStorage(StoragePaths(tmp_path / "state.db", tmp_path / "content.db"))
     await storage.async_open()
     try:
+
         def commit(connection: sqlite3.Connection) -> None:
             connection.execute("BEGIN IMMEDIATE")
             _insert_mobile_event(connection, "mobile-1")
@@ -60,6 +61,7 @@ async def test_rolled_back_review_has_no_outbox_intent(tmp_path: Path) -> None:
     storage = SQLiteStorage(StoragePaths(tmp_path / "state.db", tmp_path / "content.db"))
     await storage.async_open()
     try:
+
         def fail(connection: sqlite3.Connection) -> None:
             try:
                 connection.execute("BEGIN IMMEDIATE")
@@ -119,6 +121,7 @@ async def test_existing_state_v5_migrates_without_replaying_old_events(tmp_path:
             connection.close()
     finally:
         await storage.async_close()
+
 
 async def test_committed_mobile_answer_publishes_and_acknowledges_outbox(
     tmp_path: Path,
@@ -228,7 +231,8 @@ async def test_crash_after_commit_recovers_unfinalized_mobile_event(
         )
         with (
             patch.object(
-                outbox, "async_publish",
+                outbox,
+                "async_publish",
                 side_effect=RuntimeError("crash between commit and event finalization"),
             ),
             pytest.raises(RuntimeError, match="crash between commit"),
@@ -254,9 +258,7 @@ async def test_crash_after_commit_recovers_unfinalized_mobile_event(
 
         recovering = NotificationEventOutbox(
             storage,
-            emitter=lambda name, payload: emitted.append(
-                (name, str(payload.get("event_id")))
-            ),
+            emitter=lambda name, payload: emitted.append((name, str(payload.get("event_id")))),
         )
         processor._event_outbox = recovering
         await processor.async_recover_outbox()
