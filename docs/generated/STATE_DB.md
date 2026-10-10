@@ -12,6 +12,7 @@ erDiagram
     profiles ||--o{ scheduler_config : references
     profiles ||--o{ tracks : references
     profiles ||--o{ user_annotations : references
+    review_events ||--o{ notification_event_outbox : references
     scheduled_slots ||--o{ receptivity_samples : references
     sessions ||--o{ session_answers : references
     sessions ||--o{ session_items : references
@@ -520,6 +521,23 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at_utc TEXT NOT NULL
 );
 ```
+
+### `notification_event_outbox`
+
+```sql
+CREATE TABLE IF NOT EXISTS notification_event_outbox (
+    event_id TEXT PRIMARY KEY REFERENCES review_events(id) ON DELETE CASCADE,
+    created_at_utc TEXT NOT NULL,
+    payload_json TEXT,
+    context_json TEXT,
+    delivered_at_utc TEXT,
+    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0)
+);
+```
+
+Indexes:
+
+- `notification_event_outbox_pending` on `delivered_at_utc, created_at_utc, event_id`
 
 ### `audit_events`
 
