@@ -108,7 +108,9 @@ async def test_catalog_redirect_rejects_unsafe_destinations_without_fetch(
 
 
 async def test_catalog_rejects_redirect_loops_and_unapproved_initial_url() -> None:
-    transport, session = _transport(*(_Response(302, location="/again") for _ in range(4)))
+    transport, session = _transport(
+        *(_Response(302, location="/again") for _ in range(4))
+    )
     with pytest.raises(DatasetDiscoveryError, match="safely"):
         await transport.async_get_json(
             "https://catalog.example.org/catalog", maximum_bytes=1024
