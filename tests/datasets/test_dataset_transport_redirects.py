@@ -10,9 +10,8 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
-from aiohttp.abc import ResolveResult
-
 import pytest
+from aiohttp.abc import ResolveResult
 
 from custom_components.locklearn.datasets.manager import (
     DatasetDiscoveryError,
