@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from custom_components.locklearn.const import DB_SCHEMA_VERSION
+from custom_components.locklearn.notifications.outbox import NotificationEventOutbox
+from custom_components.locklearn.notifications.renderers import encode_action_id
 from custom_components.locklearn.storage import SQLiteStorage, StoragePaths
 from custom_components.locklearn.storage.database import validate_state_database_file
 from custom_components.locklearn.storage.schema import STATE_SCHEMA
+from tests.backend.test_notification_action_processing import _setup
 
 
-def _insert_mobile_event(connection: sqlite3.Connection, event_id: str, *, mode: str = "verified_mcq") -> None:
+def _insert_mobile_event(
+    connection: sqlite3.Connection, event_id: str, *, mode: str = "verified_mcq"
+) -> None:
     connection.execute(
         """INSERT INTO review_events(
             id, profile_id, track_id, learning_item_id, prompt_facet_id,
@@ -110,5 +116,90 @@ async def test_existing_state_v5_migrates_without_replaying_old_events(tmp_path:
             ).fetchall() == [("new-mobile",)]
         finally:
             connection.close()
+    finally:
+        await storage.async_close()
+
+async def test_committed_mobile_answer_publishes_and_acknowledges_outbox(
+    tmp_path: Path,
+) -> None:
+    storage, processor, interactions, identity, _ = await _setup(tmp_path)
+    emitted: list[tuple[str, dict[str, object]]] = []
+    processor._event_outbox = NotificationEventOutbox(
+        storage,
+        emitter=lambda name, payload: emitted.append((name, payload)),
+    )
+    try:
+        interaction = await interactions.async_create(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            target_id="target-p48",
+            card_key=identity["card_key"],
+            stage="prompt",
+            expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
+            payload={
+                "kind": "quiz",
+                "option_ids": ["answer-correct", "answer-wrong"],
+                "expected_answer_id": "answer-correct",
+            },
+        )
+        result = await processor.async_handle_mobile_action(
+            action_id=encode_action_id(interaction.token, "choice_0"),
+            actor_user_id="owner-user",
+        )
+        assert result is not None and result.pedagogical_applied
+        assert [name for name, _ in emitted].count("locklearn_answered") == 1
+
+        def check(connection: sqlite3.Connection) -> tuple[str | None, str | None]:
+            row = connection.execute(
+                """SELECT payload_json, delivered_at_utc
+                   FROM notification_event_outbox WHERE event_id = ?""",
+                ("event-action",),
+            ).fetchone()
+            assert row is not None
+            return row
+
+        payload, delivered = await storage._async_reader(check)
+        assert payload is not None
+        assert delivered is not None
+    finally:
+        await storage.async_close()
+
+
+async def test_outbox_retries_after_emitter_failure(tmp_path: Path) -> None:
+    storage, processor, interactions, identity, _ = await _setup(tmp_path)
+    emitted: list[str] = []
+    attempts = 0
+
+    def flaky_emit(name: str, payload: dict[str, object]) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("simulated bus failure")
+        emitted.append(name)
+
+    outbox = NotificationEventOutbox(storage, emitter=flaky_emit)
+    processor._event_outbox = outbox
+    try:
+        interaction = await interactions.async_create(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            target_id="target-p48",
+            card_key=identity["card_key"],
+            stage="prompt",
+            expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
+            payload={
+                "kind": "quiz",
+                "option_ids": ["answer-correct", "answer-wrong"],
+                "expected_answer_id": "answer-correct",
+            },
+        )
+        result = await processor.async_handle_mobile_action(
+            action_id=encode_action_id(interaction.token, "choice_0"),
+            actor_user_id="owner-user",
+        )
+        assert result is not None and result.pedagogical_applied
+        assert not emitted
+        await outbox.async_drain()
+        assert emitted.count("locklearn_answered") == 1
     finally:
         await storage.async_close()

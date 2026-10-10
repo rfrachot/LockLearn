@@ -21,11 +21,11 @@ from ..storage.repositories import (
     ReviewEventsRepository,
     TracksRepository,
 )
-from .outbox import NotificationEventOutbox
 from .interactions import (
     NotificationActionDisposition,
     NotificationInteractionService,
 )
+from .outbox import NotificationEventOutbox
 from .renderers import decode_action_id
 from .reveal import NotificationRevealService
 
