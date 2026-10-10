@@ -227,6 +227,7 @@ async def _setup(
         clock=clock,
         id_factory=lambda: "interaction-p48",
         token_factory=lambda: "token-p48",
+        review_events=storage.repositories.review_events,
     )
     emitted: list[tuple[str, dict[str, Any]]] = []
     processor = NotificationActionProcessor(
