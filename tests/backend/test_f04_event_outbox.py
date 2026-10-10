@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import UTC, datetime
+from unittest.mock import patch
 from pathlib import Path
 
 import pytest
@@ -201,5 +202,68 @@ async def test_outbox_retries_after_emitter_failure(tmp_path: Path) -> None:
         assert not emitted
         await outbox.async_drain()
         assert emitted.count("locklearn_answered") == 1
+    finally:
+        await storage.async_close()
+
+async def test_crash_after_commit_recovers_unfinalized_mobile_event(
+    tmp_path: Path,
+) -> None:
+    storage, processor, interactions, identity, _ = await _setup(tmp_path)
+    outbox = NotificationEventOutbox(
+        storage, emitter=lambda name, payload: None
+    )
+    processor._event_outbox = outbox
+    emitted: list[tuple[str, str]] = []
+    try:
+        interaction = await interactions.async_create(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            target_id="target-p48",
+            card_key=identity["card_key"],
+            stage="prompt",
+            expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
+            payload={
+                "kind": "quiz",
+                "option_ids": ["answer-correct", "answer-wrong"],
+                "expected_answer_id": "answer-correct",
+            },
+        )
+        with (
+            patch.object(
+                outbox, "async_publish",
+                side_effect=RuntimeError("crash between commit and event finalization"),
+            ),
+            pytest.raises(RuntimeError, match="crash between commit"),
+        ):
+            await processor.async_handle_mobile_action(
+                action_id=encode_action_id(interaction.token, "choice_0"),
+                actor_user_id="owner-user",
+            )
+
+        def inspect(connection: sqlite3.Connection) -> tuple[int, str | None]:
+            event_count = connection.execute(
+                "SELECT COUNT(*) FROM review_events WHERE id = 'event-action'"
+            ).fetchone()[0]
+            outbox_row = connection.execute(
+                "SELECT context_json FROM notification_event_outbox WHERE event_id = 'event-action'"
+            ).fetchone()
+            assert outbox_row is not None
+            return int(event_count), outbox_row[0]
+
+        count, context_json = await storage._async_reader(inspect)
+        assert count == 1
+        assert context_json is not None
+
+        recovering = NotificationEventOutbox(
+            storage,
+            emitter=lambda name, payload: emitted.append(
+                (name, str(payload.get("event_id")))
+            ),
+        )
+        processor._event_outbox = recovering
+        await processor.async_recover_outbox()
+        assert emitted.count(("locklearn_answered", "event-action")) == 1
+        await processor.async_recover_outbox()
+        assert emitted.count(("locklearn_answered", "event-action")) == 1
     finally:
         await storage.async_close()
