@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from unittest.mock import patch
-
-import pytest
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
+
+import pytest
 
 from custom_components.locklearn.core.acl import ProfileACLService
 from custom_components.locklearn.core.profiles import ProfileService
@@ -425,12 +425,11 @@ async def test_mobile_commit_failure_rolls_back_token_and_event(
             repository_type,
             "_rebuild_stats_day_in_connection",
             side_effect=RuntimeError("simulated SQLite failure"),
-        ):
-            with pytest.raises(RuntimeError, match="simulated SQLite failure"):
-                await processor.async_handle_mobile_action(
-                    action_id=action,
-                    actor_user_id="owner-user",
-                )
+        ), pytest.raises(RuntimeError, match="simulated SQLite failure"):
+            await processor.async_handle_mobile_action(
+                action_id=action,
+                actor_user_id="owner-user",
+            )
         still_pending = await storage.repositories.notification_interactions.async_get_by_token(
             interaction.token,
         )
