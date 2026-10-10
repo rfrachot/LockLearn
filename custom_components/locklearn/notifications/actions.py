@@ -113,9 +113,11 @@ class NotificationActionProcessor:
         stage = str(interaction.get("stage"))
         kind = str(payload.get("kind", "learning"))
         if kind == "learning":
-            if (stage == "prompt" and semantic not in {"reveal", "idk"}) or (
-                stage == "revealed" and semantic not in {"known", "review"}
-            ) or stage not in {"prompt", "revealed"}:
+            if (
+                (stage == "prompt" and semantic not in {"reveal", "idk"})
+                or (stage == "revealed" and semantic not in {"known", "review"})
+                or stage not in {"prompt", "revealed"}
+            ):
                 raise NotificationActionError("action is not valid for notification stage")
         elif kind == "quiz":
             if stage != "prompt":
