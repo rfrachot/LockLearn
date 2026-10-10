@@ -88,7 +88,11 @@ class ProfileTransferStore:
         namespace = hashlib.sha256(config_dir.encode("utf-8")).hexdigest()[:16]
         temp_root = Path(tempfile.gettempdir()).resolve()
         config_root = Path(config_dir).resolve()
-        root = temp_root / "locklearn-private" / namespace
+        # The host /tmp is shared by users and may contain a namespace created
+        # by another UID. Keep each runtime's private transfer tree separate
+        # so a persistent runner cannot inherit an inaccessible root-owned
+        # directory from an administrator or another service account.
+        root = temp_root / f"locklearn-private-{os.getuid()}" / namespace
         try:
             root.resolve().relative_to(config_root)
         except ValueError:

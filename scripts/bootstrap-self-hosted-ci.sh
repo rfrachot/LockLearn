@@ -209,8 +209,12 @@ if ! subid_has_capacity /etc/subuid || ! subid_has_capacity /etc/subgid; then
 fi
 
 install -d -o "${RUNNER_USER}" -g "${RUNNER_USER}" -m 0750 "${RUNNER_ROOT}"
-install -d -o "${RUNNER_USER}" -g "${RUNNER_USER}" -m 0750 \
-  "${CACHE_ROOT}/pip" "${CACHE_ROOT}/npm" "${CACHE_ROOT}/ms-playwright"
+for cache_dir in "${CACHE_ROOT}/pip" "${CACHE_ROOT}/npm" "${CACHE_ROOT}/ms-playwright"; do
+  install -d -o "${RUNNER_USER}" -g "${RUNNER_USER}" -m 0750 "${cache_dir}"
+  # Persistent caches may contain files from an earlier administrator run.
+  # Repair ownership before exposing them to the unprivileged runner.
+  chown -R "${RUNNER_USER}:${RUNNER_USER}" "${cache_dir}"
+done
 
 RUNNER_UID="$(id -u "${RUNNER_USER}")"
 readonly RUNNER_UID
