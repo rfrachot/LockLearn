@@ -110,7 +110,8 @@ class NotificationActionProcessor:
             )
         claim = (
             await self._interactions.async_prepare_answer(
-                token=token, actor_user_id=actor_user_id,
+                token=token,
+                actor_user_id=actor_user_id,
             )
             if prepared
             else await self._interactions.async_consume_action(
