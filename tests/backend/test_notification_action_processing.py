@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from itertools import count
-from typing import Any
+from typing import Any, cast
 
 from custom_components.locklearn.core.acl import ProfileACLService
 from custom_components.locklearn.core.profiles import ProfileService
@@ -418,9 +418,9 @@ async def test_prompt_reveal_delivers_fresh_answer_stage_and_then_records_known(
         processor._reveal_service = NotificationRevealService(
             storage.repositories.profiles,
             storage.repositories.notification_targets,
-            Presentation(),
+            cast(Any, Presentation()),
             interactions,
-            Delivery(),
+            cast(Any, Delivery()),
             clock=FixedClock(datetime(2026, 9, 24, 20, 0, tzinfo=UTC)),
         )
         prompt = await interactions.async_create(
@@ -446,7 +446,9 @@ async def test_prompt_reveal_delivers_fresh_answer_stage_and_then_records_known(
         assert revealed.tag == prompt.tag
         assert revealed.message == "Answer revealed"
         assert revealed.data["alert_once"] is True
-        known_token, known_action = decode_action_id(revealed.data["actions"][0]["action"])
+        decoded_known = decode_action_id(revealed.data["actions"][0]["action"])
+        assert decoded_known is not None
+        known_token, known_action = decoded_known
         assert known_action == "known"
         assert known_token != prompt.token
         second = await processor.async_handle_mobile_action(
