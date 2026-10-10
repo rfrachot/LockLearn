@@ -6,29 +6,136 @@ import asyncio
 import hashlib
 import json
 import os
+import socket
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from ipaddress import ip_address
 from pathlib import Path
+from urllib.parse import urljoin, urlsplit
 
-from aiohttp import ClientError
+from aiohttp import ClientError, ClientResponse, ClientSession, TCPConnector
+from aiohttp.abc import AbstractResolver, ResolveResult
+from aiohttp.resolver import DefaultResolver
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .manager import DatasetDiscoveryError, DatasetInstallError
 
 _STREAM_CHUNK_SIZE = 1024 * 1024
+_MAX_REDIRECTS = 3
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+
+
+class DatasetURLPolicyError(ValueError):
+    """A URL or redirect destination violates the trusted dataset network boundary."""
+
+
+def _validate_https_endpoint(url: str, allowed_hosts: frozenset[str]) -> None:
+    """Fail closed before every network request, including each redirect hop."""
+    try:
+        parsed = urlsplit(url)
+        host = parsed.hostname
+        port = parsed.port
+    except ValueError as err:
+        raise DatasetURLPolicyError("dataset URL has an invalid authority") from err
+    if (
+        parsed.scheme != "https"
+        or host is None
+        or port not in (None, 443)
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+        or host != host.lower()
+        or host not in allowed_hosts
+    ):
+        raise DatasetURLPolicyError("dataset URL is outside the HTTPS host allowlist")
+    try:
+        ip_address(host)
+    except ValueError:
+        pass
+    else:
+        raise DatasetURLPolicyError("dataset URL must use a trusted hostname, not an IP address")
+    if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
+        raise DatasetURLPolicyError("dataset URL must not target a local hostname")
+
+
+class _PublicResolver(AbstractResolver):
+    """Pass only validated public DNS results to aiohttp's TCP connector."""
+
+    def __init__(self, delegate: AbstractResolver | None = None) -> None:
+        self._delegate = delegate or DefaultResolver()
+
+    async def resolve(
+        self,
+        host: str,
+        port: int = 0,
+        family: socket.AddressFamily = socket.AF_INET,
+    ) -> list[ResolveResult]:
+        results = await self._delegate.resolve(host, port, family)
+        if not results:
+            raise OSError("dataset hostname resolved to no addresses")
+        try:
+            all_public = all(ip_address(str(row["host"])).is_global for row in results)
+        except ValueError as err:
+            raise OSError("dataset DNS resolver returned an invalid IP") from err
+        if not all_public:
+            raise OSError("dataset endpoint resolved to a non-public IP address")
+        return results
+
+    async def close(self) -> None:
+        await self._delegate.close()
 
 
 class HomeAssistantDatasetTransport:
-    """Perform bounded HTTPS GETs using Home Assistant's shared aiohttp session."""
+    """Perform bounded HTTPS GETs with an isolated SSRF-safe aiohttp session."""
 
-    def __init__(self, hass: HomeAssistant) -> None:
-        self._session = async_get_clientsession(hass)
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        *,
+        allowed_hosts: frozenset[str],
+        session: ClientSession | None = None,
+    ) -> None:
+        del hass
+        self._owns_session = session is None
+        self._session = session or ClientSession(
+            connector=TCPConnector(
+                resolver=_PublicResolver(),
+                use_dns_cache=False,
+                force_close=True,
+                limit_per_host=2,
+            ),
+            trust_env=False,
+        )
+        self._allowed_hosts = frozenset(allowed_hosts)
+
+    async def async_close(self) -> None:
+        """Close the isolated safe connector when the HA runtime unloads."""
+        if self._owns_session:
+            await self._session.close()
+
+    @asynccontextmanager
+    async def _bounded_get(self, url: str) -> AsyncIterator[ClientResponse]:
+        """Follow only bounded, individually validated HTTPS redirects."""
+        current_url = url
+        for hop in range(_MAX_REDIRECTS + 1):
+            _validate_https_endpoint(current_url, self._allowed_hosts)
+            async with self._session.get(current_url, allow_redirects=False) as response:
+                if response.status in _REDIRECT_STATUSES:
+                    location = response.headers.get("Location")
+                    if not location or hop == _MAX_REDIRECTS:
+                        raise DatasetURLPolicyError("dataset redirect is missing or exceeds limit")
+                    current_url = urljoin(current_url, location)
+                    continue
+                response.raise_for_status()
+                yield response
+                return
+        raise DatasetURLPolicyError("dataset redirect exceeds limit")
 
     async def async_get_json(self, url: str, *, maximum_bytes: int) -> object:
         """Fetch bounded UTF-8 JSON without trusting remote size declarations."""
         try:
-            async with self._session.get(url) as response:
-                response.raise_for_status()
+            async with self._bounded_get(url) as response:
                 declared = response.content_length
                 if declared is not None and declared > maximum_bytes:
                     raise DatasetDiscoveryError("dataset catalog exceeds maximum size")
@@ -37,8 +144,8 @@ class HomeAssistantDatasetTransport:
                     data.extend(chunk)
                     if len(data) > maximum_bytes:
                         raise DatasetDiscoveryError("dataset catalog exceeds maximum size")
-        except ClientError as err:
-            raise DatasetDiscoveryError("cannot fetch dataset release catalog") from err
+        except (ClientError, DatasetURLPolicyError) as err:
+            raise DatasetDiscoveryError("cannot fetch dataset release catalog safely") from err
         try:
             return json.loads(bytes(data).decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as err:
@@ -59,8 +166,7 @@ class HomeAssistantDatasetTransport:
         try:
             await asyncio.to_thread(_truncate_file, temporary)
             try:
-                async with self._session.get(url) as response:
-                    response.raise_for_status()
+                async with self._bounded_get(url) as response:
                     declared = response.content_length
                     if declared is not None and declared > maximum_bytes:
                         raise DatasetInstallError("dataset artifact exceeds maximum size")
@@ -70,8 +176,8 @@ class HomeAssistantDatasetTransport:
                             raise DatasetInstallError("dataset artifact exceeds maximum size")
                         digest.update(chunk)
                         await asyncio.to_thread(_append_chunk, temporary, chunk)
-            except ClientError as err:
-                raise DatasetInstallError("cannot download dataset artifact") from err
+            except (ClientError, DatasetURLPolicyError) as err:
+                raise DatasetInstallError("cannot download dataset artifact safely") from err
             await asyncio.to_thread(_finalize_download, temporary, destination)
         except BaseException:
             temporary.unlink(missing_ok=True)
