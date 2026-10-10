@@ -380,6 +380,8 @@ class LockLearnRuntime:
             await runtime.ready_reminders.async_start()
             return runtime
         except Exception:
+            if "datasets" in locals():
+                await datasets.async_close()
             await transfer_store.async_close()
             await storage.async_close()
             raise
@@ -392,4 +394,5 @@ class LockLearnRuntime:
         self.sessions.close()
         await self.operations.async_close()
         await self.profile_transfers.store.async_close()
+        await self.datasets.async_close()
         await self.storage.async_close()

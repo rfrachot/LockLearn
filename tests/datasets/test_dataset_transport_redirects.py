@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import socket
 from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from typing import Any, cast
 
 import pytest
 
@@ -14,7 +15,10 @@ from custom_components.locklearn.datasets.manager import (
     DatasetDiscoveryError,
     DatasetInstallError,
 )
-from custom_components.locklearn.datasets.transport import HomeAssistantDatasetTransport
+from custom_components.locklearn.datasets.transport import (
+    HomeAssistantDatasetTransport,
+    _public_socket_factory,
+)
 
 
 class _Body:
@@ -57,14 +61,11 @@ class _Session:
 
 def _transport(*responses: _Response) -> tuple[HomeAssistantDatasetTransport, _Session]:
     session = _Session(list(responses))
-    with patch(
-        "custom_components.locklearn.datasets.transport.async_get_clientsession",
-        return_value=session,
-    ):
-        transport = HomeAssistantDatasetTransport(
-            SimpleNamespace(),  # type: ignore[arg-type]
-            allowed_hosts=frozenset({"catalog.example.org", "cdn.example.org"}),
-        )
+    transport = HomeAssistantDatasetTransport(
+        SimpleNamespace(),  # type: ignore[arg-type]
+        allowed_hosts=frozenset({"catalog.example.org", "cdn.example.org"}),
+        session=cast(Any, session),
+    )
     return transport, session
 
 
@@ -149,3 +150,18 @@ async def test_artifact_allowed_redirect_keeps_sha256(tmp_path: Path) -> None:
     assert checksum == hashlib.sha256(payload).hexdigest()
     assert destination.read_bytes() == payload
     assert len(session.calls) == 2
+
+@pytest.mark.parametrize(
+    "address",
+    ["127.0.0.1", "10.0.0.1", "169.254.169.254", "::1", "fc00::1", "fe80::1"],
+)
+def test_connector_refuses_resolved_private_peer(address: str) -> None:
+    addr_info: Any = (socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, 443))
+    with pytest.raises(OSError, match="non-public"):
+        _public_socket_factory(addr_info)
+
+
+def test_connector_accepts_public_peer() -> None:
+    addr_info: Any = (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))
+    with _public_socket_factory(addr_info) as stream:
+        assert isinstance(stream, socket.socket)

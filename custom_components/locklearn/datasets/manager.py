@@ -254,6 +254,12 @@ class DatasetManager:
         self._assets_root = storage.paths.content_root / "assets"
         self._downloads_root = storage.paths.content_staging_dir / "downloads"
 
+    async def async_close(self) -> None:
+        """Release a dedicated transport connection pool on runtime unload."""
+        close = getattr(self._transport, "async_close", None)
+        if close is not None:
+            await close()
+
     @property
     def definitions(self) -> tuple[DatasetDefinition, ...]:
         """Return deterministic official dataset definitions."""
