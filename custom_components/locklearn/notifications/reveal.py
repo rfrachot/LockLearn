@@ -37,9 +37,7 @@ class NotificationRevealService:
         self._clock = clock or SystemClock()
         self._renderer = NotificationRenderer()
 
-    async def async_reveal(
-        self, interaction: dict[str, Any], *, assessable: bool
-    ) -> None:
+    async def async_reveal(self, interaction: dict[str, Any], *, assessable: bool) -> None:
         """Send the answer; only a retrieval attempt receives self-assessment."""
         if interaction.get("stage") != NotificationStage.PROMPT.value:
             raise ValueError("only prompt-stage interactions can be revealed")
@@ -53,7 +51,8 @@ class NotificationRevealService:
         profile = await self._profiles.async_get(profile_id)
         target = await self._targets.async_get(target_id)
         if (
-            profile is None or target is None
+            profile is None
+            or target is None
             or str(target["profile_id"]) != profile_id
             or not bool(target.get("enabled"))
         ):
@@ -104,9 +103,7 @@ class NotificationRevealService:
             expires_at=self._clock.now() + _TTL,
             payload=dict(interaction.get("payload") or {}),
         )
-        rendered = self._renderer.render_learning_revealed(
-            **common, token=next_stage.token
-        )
+        rendered = self._renderer.render_learning_revealed(**common, token=next_stage.token)
         try:
             await self._delivery.async_send(rendered)
         except Exception:
