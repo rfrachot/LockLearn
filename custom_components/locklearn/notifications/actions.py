@@ -568,38 +568,11 @@ class NotificationActionProcessor:
         session_id: str | None,
         stats: dict[str, Any],
     ) -> dict[str, Any]:
-        events = await self._review_events.async_list_scope_events(
+        result_counters = await self._review_events.async_notification_result_counters(
             profile_id=profile_id,
             track_id=track_id,
+            session_id=session_id,
         )
-        consecutive_correct = 0
-        consecutive_wrong = 0
-        for item in reversed(events):
-            result = str(item["result"])
-            if result in _POSITIVE_RESULTS:
-                if consecutive_wrong:
-                    break
-                consecutive_correct += 1
-                continue
-            if result in _NEGATIVE_RESULTS:
-                if consecutive_correct:
-                    break
-                consecutive_wrong += 1
-                continue
-            if consecutive_correct or consecutive_wrong:
-                break
-
-        session_accuracy: float | None = None
-        if session_id is not None:
-            session_events = [
-                item
-                for item in events
-                if item.get("session_id") == session_id
-                and str(item["result"]) in {"correct", "wrong", "idk"}
-            ]
-            if session_events:
-                correct = sum(str(item["result"]) == "correct" for item in session_events)
-                session_accuracy = round(correct / len(session_events), 6)
 
         today = stats["streak"]["today"]
         target = int(today["target"])
@@ -607,8 +580,8 @@ class NotificationActionProcessor:
             0.0 if target <= 0 else round(min(1.0, int(today["treated_due"]) / target), 6)
         )
         return {
-            "consecutive_correct": consecutive_correct,
-            "consecutive_wrong": consecutive_wrong,
-            "session_accuracy": session_accuracy,
+            "consecutive_correct": result_counters["consecutive_correct"],
+            "consecutive_wrong": result_counters["consecutive_wrong"],
+            "session_accuracy": result_counters["session_accuracy"],
             "daily_goal_progress": daily_goal_progress,
         }
