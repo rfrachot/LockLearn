@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import TemplateError
@@ -156,7 +157,18 @@ class LockLearnRuntime:
             )
             datasets = DatasetManager(
                 storage=storage,
-                transport=HomeAssistantDatasetTransport(hass),
+                transport=HomeAssistantDatasetTransport(
+                    hass,
+                    allowed_hosts=frozenset(
+                        host
+                        for definition in dataset_definitions
+                        for host in (
+                            urlsplit(definition.catalog_url).hostname,
+                            *definition.artifact_hosts,
+                        )
+                        if host is not None
+                    ),
+                ),
                 definitions=dataset_definitions,
                 trust_store=trust_store,
                 policy=dataset_policy,
