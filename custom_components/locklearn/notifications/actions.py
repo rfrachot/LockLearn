@@ -101,7 +101,8 @@ class NotificationActionProcessor:
         prepared = semantic in {"known", "review"} or semantic.startswith("choice_")
         if semantic == "idk":
             raw = await self._interactions.async_prepare_answer(
-                token=token, actor_user_id=actor_user_id,
+                token=token,
+                actor_user_id=actor_user_id,
             )
             prepared = bool(
                 raw.interaction is not None
@@ -113,7 +114,9 @@ class NotificationActionProcessor:
             )
             if prepared
             else await self._interactions.async_consume_action(
-                token=token, action_id=semantic, actor_user_id=actor_user_id,
+                token=token,
+                action_id=semantic,
+                actor_user_id=actor_user_id,
             )
         )
         if not claim.may_apply_pedagogical_result or claim.interaction is None:
