@@ -3114,6 +3114,10 @@ async def ws_session_undo(
         is None
     ):
         return
+    snapshot = await runtime.sessions.async_get(msg["session_id"])
+    if snapshot is not None and snapshot.get("type") == "exam":
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, "Exam answers cannot be undone")
+        return
     try:
         state = await runtime.sessions.async_undo(
             msg["session_id"],
