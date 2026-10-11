@@ -5,6 +5,10 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- Begin the P7.1 exam experience: frozen MCQ questions, server-private scoring keys,
+  CAS answers, delayed correction, resumption and score/error review. This
+  draft remains unqualified until canonical retrieval observations and cooldown
+  are completed and independently tested.
 - Add a durable, crash-recoverable Home Assistant event outbox for assessable
   mobile answers, with atomic ReviewEvent intent persistence, deterministic
   historical replay and documented at-least-once delivery semantics.

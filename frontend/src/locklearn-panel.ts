@@ -5,6 +5,7 @@ import { interactiveAccessibilityStyles } from "./content-renderer";
 import { languageFallback, translate, type UiLanguage } from "./i18n";
 import "./learn-view";
 import "./quiz-view";
+import "./exam-view";
 import "./management-view";
 import "./dataset-view";
 import "./stats-view";
@@ -764,6 +765,14 @@ export class LockLearnPanel extends LitElement {
                       @locklearn-session-handoff-consumed=${this.clearSessionHandoff}
                       @locklearn-open-session=${this.openTargetedSession}
                     ></locklearn-quiz-view>`
+                  : this.activeRoute === "exam"
+                    ? html`<locklearn-exam-view
+                        .hass=${this.hass}
+                        .profile=${this.profiles.find(
+                          (profile) => profile.profile_id === this.selectedProfileId,
+                        )}
+                        .dashboard=${this.dashboard}
+                      ></locklearn-exam-view>`
                   : this.activeRoute === "stats"
                     ? html`<locklearn-stats-view
                         .hass=${this.hass}

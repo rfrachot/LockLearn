@@ -1396,3 +1396,54 @@ export async function startLeechSession(
     },
   });
 }
+
+export interface ExamResult {
+  correct: number;
+  total: number;
+  percentage: number;
+  questions: Array<{
+    question_id: string;
+    prompt: string;
+    context: string | null;
+    given: string | null;
+    correct: string;
+    result: "correct" | "wrong" | "idk";
+  }>;
+}
+
+export async function startExam(
+  hass: HomeAssistantLike, profileId: string, trackId: string, requestedCards: number,
+): Promise<SessionState> {
+  return hass.callWS<SessionState>({
+    type: "locklearn/exam/start", profile_id: profileId,
+    track_id: trackId, requested_cards: requestedCards,
+  });
+}
+
+export async function answerExam(
+  hass: HomeAssistantLike, session: SessionState, questionId: string,
+  selectedAnswerId: string | null,
+): Promise<SessionState> {
+  return hass.callWS<SessionState>({
+    type: "locklearn/exam/answer", session_id: session.id,
+    expected_version: session.version, question_id: questionId,
+    selected_answer_id: selectedAnswerId,
+  });
+}
+
+export async function finishExam(
+  hass: HomeAssistantLike, session: SessionState,
+): Promise<{session: SessionState; result: ExamResult}> {
+  return hass.callWS<{session: SessionState; result: ExamResult}>({
+    type: "locklearn/exam/finish",
+    session_id: session.id, expected_version: session.version,
+  });
+}
+
+export async function getExamResult(
+  hass: HomeAssistantLike, sessionId: string,
+): Promise<ExamResult> {
+  return hass.callWS<ExamResult>({
+    type: "locklearn/exam/result", session_id: sessionId,
+  });
+}
