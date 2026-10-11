@@ -54,6 +54,14 @@ class FakeReviews:
         self._introduced = introduced
         self.requested_dates: list[str] = []
 
+    async def async_recent_exam_retrieval_card_keys(
+        self, *, profile_id: str, track_id: str, since_utc: str
+    ) -> frozenset[str]:
+        assert profile_id == "profile-1"
+        assert track_id == "track-1"
+        assert since_utc
+        return frozenset()
+
     async def async_introduced_card_keys(
         self,
         *,
