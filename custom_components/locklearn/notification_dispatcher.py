@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -194,6 +195,10 @@ class NotificationSchedulerDispatcher:
             values=dict(target.get("capabilities") or {}),
         )
         tag = f"locklearn-slot-{slot_id}"
+        expected_answer_id = options[0].option_id
+        if hashlib.sha256(slot_id.encode("utf-8")).digest()[0] & 1:
+            options = (options[1], options[0])
+
         interaction = await self._runtime.notification_interactions.async_create(
             profile_id=profile_id,
             target_id=str(target_id),
@@ -298,7 +303,7 @@ class NotificationSchedulerDispatcher:
                 "slot_id": slot_id,
                 "kind": "quiz",
                 "option_ids": [option.option_id for option in options],
-                "expected_answer_id": options[0].option_id,
+                "expected_answer_id": expected_answer_id,
             },
         )
         rendered = self._renderer.render_quiz_prompt(
