@@ -18,8 +18,8 @@ from .notifications.interactions import NotificationStage
 from .notifications.renderers import (
     PANEL_URI,
     NotificationRenderer,
-    QuizOption,
     NotificationRenderMode,
+    QuizOption,
     RenderedNotification,
 )
 
@@ -183,7 +183,10 @@ class NotificationSchedulerDispatcher:
 
         if slot_type == "quiz":
             await self._async_dispatch_mobile_quiz(
-                fresh=fresh, profile=profile, target=target, prompt=prompt,
+                fresh=fresh,
+                profile=profile,
+                target=target,
+                prompt=prompt,
                 answer=answer,
             )
             return
@@ -195,9 +198,6 @@ class NotificationSchedulerDispatcher:
             values=dict(target.get("capabilities") or {}),
         )
         tag = f"locklearn-slot-{slot_id}"
-        expected_answer_id = options[0].option_id
-        if hashlib.sha256(slot_id.encode("utf-8")).digest()[0] & 1:
-            options = (options[1], options[0])
 
         interaction = await self._runtime.notification_interactions.async_create(
             profile_id=profile_id,
@@ -271,25 +271,35 @@ class NotificationSchedulerDispatcher:
             shared_device=bool(target.get("shared_device")),
             values=dict(target.get("capabilities") or {}),
         )
-        options: tuple[QuizOption, ...] = ()
+        options_and_answer: tuple[tuple[QuizOption, ...], str] | None = None
         if capabilities.action_data.value == "supported" and capabilities.visible_actions >= 3:
-            options = await self._async_quiz_options(
-                profile_id=profile_id, track_id=track_id,
-                card_key=str(fresh["card_key"]), correct_answer=answer,
+            options_and_answer = await self._async_quiz_options(
+                profile_id=profile_id,
+                track_id=track_id,
+                card_key=str(fresh["card_key"]),
+                correct_answer=answer,
+                presentation_key=slot_id,
             )
 
-        if len(options) != 2:
+        if options_and_answer is None:
             rendered = self._render_quiz_handoff(
-                profile=profile, target=target, slot_id=slot_id, prompt=prompt,
+                profile=profile,
+                target=target,
+                slot_id=slot_id,
+                prompt=prompt,
             )
             await self._runtime.notification_delivery.async_send(rendered)
             await self._runtime.scheduler.async_record_delivery(
-                slot_id=slot_id, prepared=True,
+                slot_id=slot_id,
+                prepared=True,
             )
             await self._runtime.storage.repositories.scheduler.async_set_slot_status(
-                slot_id, "consumed", updated_at_utc=datetime.now(UTC).isoformat(),
+                slot_id,
+                "consumed",
+                updated_at_utc=datetime.now(UTC).isoformat(),
             )
             return
+        options, expected_answer_id = options_and_answer
 
         interaction = await self._runtime.notification_interactions.async_create(
             profile_id=profile_id,
@@ -323,7 +333,8 @@ class NotificationSchedulerDispatcher:
             await self._runtime.notification_interactions.async_clear_tag(tag=tag)
             raise
         await self._runtime.scheduler.async_record_delivery(
-            slot_id=slot_id, prepared=True,
+            slot_id=slot_id,
+            prepared=True,
         )
 
     async def _async_quiz_options(
@@ -333,43 +344,73 @@ class NotificationSchedulerDispatcher:
         track_id: str,
         card_key: str,
         correct_answer: str,
-    ) -> tuple[QuizOption, ...]:
+        presentation_key: str,
+    ) -> tuple[tuple[QuizOption, ...], str] | None:
         """Build unambiguous choices without introducing unseen cards."""
         candidates = await self._runtime.storage.repositories.tracks.async_session_candidates(
-            profile_id=profile_id, track_id=track_id,
+            profile_id=profile_id,
+            track_id=track_id,
         )
         current = next(
             (item for item in candidates if str(item["card_key"]) == card_key),
             None,
         )
-        if current is None or current.get("state") == "new" or current.get("user_state") != "active":
-            return ()
-        expected_id = str(current["answer_facet_id"])
+        if (
+            current is None
+            or current.get("state") not in {"learning", "review", "relearning", "leech"}
+            or current.get("user_state") != "active"
+            or current.get("suspend_until_utc") is not None
+        ):
+            return None
+        raw_expected_id = current.get("answer_facet_id")
+        if not isinstance(raw_expected_id, str) or not raw_expected_id.strip():
+            return None
+        expected_id = raw_expected_id
         normalized = correct_answer.strip().casefold()
         if normalized in {"", "locklearn"}:
-            return ()
+            return None
         for candidate in sorted(candidates, key=lambda item: str(item["card_key"])):
             if (
                 candidate["card_key"] == card_key
-                or candidate.get("state") == "new"
+                or candidate.get("state") not in {"learning", "review", "relearning", "leech"}
                 or candidate.get("user_state") != "active"
                 or candidate.get("suspend_until_utc") is not None
+                or candidate.get("learning_item_id") == current.get("learning_item_id")
             ):
                 continue
-            candidate_id = str(candidate["answer_facet_id"])
+            raw_candidate_id = candidate.get("answer_facet_id")
+            if not isinstance(raw_candidate_id, str) or not raw_candidate_id.strip():
+                continue
+            candidate_id = raw_candidate_id
             if candidate_id == expected_id:
                 continue
+            current_confusables = set(current.get("confusable_group_ids") or ())
+            candidate_confusables = set(candidate.get("confusable_group_ids") or ())
+            if current_confusables & candidate_confusables and (
+                current.get("state") != "review" or candidate.get("state") != "review"
+            ):
+                continue
             presentation = await self._runtime.presentation.async_for_card(
-                track_id=track_id, card_key=str(candidate["card_key"]),
+                track_id=track_id,
+                card_key=str(candidate["card_key"]),
             )
             distractor = self._facet_text(presentation.get("answer"))
             if distractor.strip().casefold() in {"", "locklearn", normalized}:
                 continue
-            return (
+            options = [
                 QuizOption(option_id=expected_id, title=correct_answer),
                 QuizOption(option_id=candidate_id, title=distractor),
-            )
-        return ()
+            ]
+            # Mobile quiz has no persisted panel position counter. Derive a
+            # reproducible position from the immutable slot/presentation key
+            # so retries are stable while successive slots do not bias index 0.
+            digest = hashlib.sha256(
+                f"{presentation_key}|{card_key}|{candidate_id}".encode()
+            ).digest()
+            if digest[0] & 1:
+                options.reverse()
+            return tuple(options), expected_id
+        return None
 
     async def _async_record_direct_teaser_exposure(
         self,

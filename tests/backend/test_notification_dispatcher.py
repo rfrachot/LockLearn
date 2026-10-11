@@ -124,9 +124,11 @@ class _PipelineInteractions:
     def __init__(self, events: list[str]) -> None:
         self.events = events
         self.cleared: list[str] = []
+        self.created: list[dict[str, Any]] = []
 
     async def async_create(self, **kwargs: Any) -> Any:
         self.events.append("create_interaction")
+        self.created.append(dict(kwargs))
         return SimpleNamespace(
             interaction_id="interaction-1",
             token="token-1",
@@ -168,6 +170,7 @@ def _pipeline_runtime(
     fail_delivery: bool = False,
     action_capable: bool = False,
     quiz_capable: bool = False,
+    same_learning_item: bool = False,
 ) -> tuple[Any, _PipelineScheduler, _PipelineDelivery, _PipelineReviews]:
     scheduler = _PipelineScheduler(slot, events)
     repository = _PipelineSchedulerRepository(slot, events)
@@ -207,10 +210,20 @@ def _pipeline_runtime(
                 tracks=SimpleNamespace(
                     async_session_candidates=lambda **kwargs: _async_value(
                         (
-                            {"card_key": "card-1", "answer_facet_id": "answer-1",
-                             "state": "review", "user_state": "active"},
-                            {"card_key": "card-2", "answer_facet_id": "answer-2",
-                             "state": "review", "user_state": "active"},
+                            {
+                                "card_key": "card-1",
+                                "answer_facet_id": "answer-1",
+                                "learning_item_id": "item-1",
+                                "state": "review",
+                                "user_state": "active",
+                            },
+                            {
+                                "card_key": "card-2",
+                                "answer_facet_id": "answer-2",
+                                "learning_item_id": "item-1" if same_learning_item else "item-2",
+                                "state": "review",
+                                "user_state": "active",
+                            },
                         )
                     ),
                     async_card_reference=lambda **kwargs: _async_value(
@@ -231,8 +244,17 @@ def _pipeline_runtime(
             async_for_card=lambda **kwargs: _async_value(
                 {
                     "prompt": {"blocks": [{"payload": {"text": "Prompt"}}]},
-                    "answer": {"blocks": [{"payload": {"text":
-                        "Distractor" if kwargs.get("card_key") == "card-2" else "Answer"}}]},
+                    "answer": {
+                        "blocks": [
+                            {
+                                "payload": {
+                                    "text": "Distractor"
+                                    if kwargs.get("card_key") == "card-2"
+                                    else "Answer"
+                                }
+                            }
+                        ]
+                    },
                 }
             ),
         ),
@@ -248,9 +270,9 @@ async def _async_value(value: Any) -> Any:
     return value
 
 
-def _pipeline_slot(*, slot_type: str = "learning") -> dict[str, Any]:
+def _pipeline_slot(*, slot_type: str = "learning", slot_id: str = "slot-1") -> dict[str, Any]:
     return {
-        "slot_id": "slot-1",
+        "slot_id": slot_id,
         "profile_id": "profile-1",
         "track_id": "track-1",
         "target_id": "target-1",
@@ -566,6 +588,7 @@ async def test_actionable_delivery_keeps_interaction_after_success() -> None:
     assert "clear_interaction" not in events
     assert scheduler.slot["status"] == "sent"
 
+
 @pytest.mark.asyncio
 async def test_f06_actionable_quiz_emits_two_choices_and_idk() -> None:
     from custom_components.locklearn.notifications.renderers import decode_action_id
@@ -573,10 +596,13 @@ async def test_f06_actionable_quiz_emits_two_choices_and_idk() -> None:
     events: list[str] = []
     slot = _pipeline_slot(slot_type="quiz")
     runtime, scheduler, delivery, _ = _pipeline_runtime(
-        slot=slot, events=events, quiz_capable=True,
+        slot=slot,
+        events=events,
+        quiz_capable=True,
     )
     dispatcher = NotificationSchedulerDispatcher(
-        cast(HomeAssistant, object()), cast(Any, runtime),
+        cast(HomeAssistant, object()),
+        cast(Any, runtime),
     )
     await dispatcher._async_dispatch_slot(slot)
 
@@ -588,11 +614,87 @@ async def test_f06_actionable_quiz_emits_two_choices_and_idk() -> None:
     assert len(rendered.data["actions"]) == 3
     for index in range(2):
         assert decode_action_id(rendered.data["actions"][index]["action"]) == (
-            "token-1", f"choice_{index}",
+            "token-1",
+            f"choice_{index}",
         )
     assert decode_action_id(rendered.data["actions"][2]["action"]) == (
-        "token-1", "idk",
+        "token-1",
+        "idk",
     )
+
+
+@pytest.mark.asyncio
+async def test_f06_quiz_persists_authority_and_varies_correct_option_position() -> None:
+    from custom_components.locklearn.notification_dispatcher import (
+        NotificationSchedulerDispatcher,
+    )
+
+    positions: list[int] = []
+    for slot_id in ("slot-1", "slot-4"):
+        events: list[str] = []
+        slot = _pipeline_slot(slot_type="quiz", slot_id=slot_id)
+        runtime, _scheduler, delivery, _ = _pipeline_runtime(
+            slot=slot,
+            events=events,
+            quiz_capable=True,
+        )
+        dispatcher = NotificationSchedulerDispatcher(
+            cast(HomeAssistant, object()),
+            cast(Any, runtime),
+        )
+        await dispatcher._async_dispatch_slot(slot)
+        rendered = delivery.rendered[0]
+        expected = runtime.notification_interactions.created[0]["payload"]["expected_answer_id"]
+        positions.append(
+            next(
+                index
+                for index, option in enumerate(
+                    runtime.notification_interactions.created[0]["payload"]["option_ids"]
+                )
+                if option == expected
+            )
+        )
+        assert rendered.data["actions"][positions[-1]]["title"] == "Answer"
+    assert positions == [0, 1]
+
+
+@pytest.mark.asyncio
+async def test_f06_actionable_quiz_dispatch_is_idempotent() -> None:
+    events: list[str] = []
+    slot = _pipeline_slot(slot_type="quiz")
+    runtime, scheduler, delivery, _ = _pipeline_runtime(
+        slot=slot,
+        events=events,
+        quiz_capable=True,
+    )
+    dispatcher = NotificationSchedulerDispatcher(
+        cast(HomeAssistant, object()),
+        cast(Any, runtime),
+    )
+    await dispatcher._async_dispatch_slot(slot)
+    await dispatcher._async_dispatch_slot(slot)
+    assert scheduler.slot["status"] == "sent"
+    assert len(delivery.rendered) == 1
+
+
+@pytest.mark.asyncio
+async def test_f06_quiz_rejects_same_learning_item_as_distractor() -> None:
+    events: list[str] = []
+    slot = _pipeline_slot(slot_type="quiz")
+    runtime, scheduler, delivery, _ = _pipeline_runtime(
+        slot=slot,
+        events=events,
+        quiz_capable=True,
+        same_learning_item=True,
+    )
+    dispatcher = NotificationSchedulerDispatcher(
+        cast(HomeAssistant, object()),
+        cast(Any, runtime),
+    )
+    await dispatcher._async_dispatch_slot(slot)
+    assert scheduler.slot["status"] == "consumed"
+    assert delivery.rendered[0].mode.value == "panel_handoff"
+    assert "create_interaction" not in events
 
 
 @pytest.mark.asyncio
@@ -601,7 +703,8 @@ async def test_f06_quiz_falls_back_without_three_proven_actions() -> None:
     slot = _pipeline_slot(slot_type="quiz")
     runtime, scheduler, delivery, _ = _pipeline_runtime(slot=slot, events=events)
     dispatcher = NotificationSchedulerDispatcher(
-        cast(HomeAssistant, object()), cast(Any, runtime),
+        cast(HomeAssistant, object()),
+        cast(Any, runtime),
     )
     await dispatcher._async_dispatch_slot(slot)
     assert scheduler.slot["status"] == "consumed"
@@ -614,10 +717,14 @@ async def test_f06_failed_actionable_quiz_keeps_slot_unsent() -> None:
     events: list[str] = []
     slot = _pipeline_slot(slot_type="quiz")
     runtime, scheduler, _, _ = _pipeline_runtime(
-        slot=slot, events=events, fail_delivery=True, quiz_capable=True,
+        slot=slot,
+        events=events,
+        fail_delivery=True,
+        quiz_capable=True,
     )
     dispatcher = NotificationSchedulerDispatcher(
-        cast(HomeAssistant, object()), cast(Any, runtime),
+        cast(HomeAssistant, object()),
+        cast(Any, runtime),
     )
     with pytest.raises(NotificationDeliveryError):
         await dispatcher._async_dispatch_slot(slot)

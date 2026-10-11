@@ -265,6 +265,7 @@ async def test_duplicate_quiz_interaction_applies_and_emits_exactly_once(
 ) -> None:
     storage, processor, interactions, identity, emitted = await _setup(tmp_path)
     try:
+        answer_id = identity["answer_facet_id"]
         interaction = await interactions.async_create(
             profile_id=identity["profile_id"],
             track_id=identity["track_id"],
@@ -274,8 +275,8 @@ async def test_duplicate_quiz_interaction_applies_and_emits_exactly_once(
             expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
             payload={
                 "kind": "quiz",
-                "option_ids": ["answer-correct", "answer-wrong"],
-                "expected_answer_id": "answer-correct",
+                "option_ids": [answer_id, "answer-wrong"],
+                "expected_answer_id": answer_id,
             },
         )
         action = encode_action_id(interaction.token, "choice_0")
@@ -317,13 +318,8 @@ async def test_duplicate_quiz_interaction_applies_and_emits_exactly_once(
         await storage.async_close()
 
 
-async def test_untrusted_shared_device_quiz_cannot_cross_verified_gate(
-    tmp_path: Path,
-) -> None:
-    storage, processor, interactions, identity, _emitted = await _setup(
-        tmp_path,
-        shared_device=True,
-    )
+async def test_quiz_rejects_stale_expected_answer_identity(tmp_path: Path) -> None:
+    storage, processor, interactions, identity, _emitted = await _setup(tmp_path)
     try:
         interaction = await interactions.async_create(
             profile_id=identity["profile_id"],
@@ -334,8 +330,52 @@ async def test_untrusted_shared_device_quiz_cannot_cross_verified_gate(
             expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
             payload={
                 "kind": "quiz",
-                "option_ids": ["answer-correct", "answer-wrong"],
-                "expected_answer_id": "answer-correct",
+                "option_ids": ["answer-1", "answer-2"],
+                "expected_answer_id": "stale-answer",
+            },
+        )
+        with pytest.raises(ValueError, match="does not match CardDefinition"):
+            await processor.async_handle_mobile_action(
+                action_id=encode_action_id(interaction.token, "choice_0"),
+                actor_user_id="owner-user",
+            )
+
+        progress = await storage.repositories.progress.async_get(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            card_key=identity["card_key"],
+        )
+        assert progress is not None
+        assert progress["last_result"] == "correct"
+        events = await storage.repositories.review_events.async_list_scope_events(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+        )
+        assert [event["id"] for event in events] == ["event-seed"]
+    finally:
+        await storage.async_close()
+
+
+async def test_untrusted_shared_device_quiz_cannot_cross_verified_gate(
+    tmp_path: Path,
+) -> None:
+    storage, processor, interactions, identity, _emitted = await _setup(
+        tmp_path,
+        shared_device=True,
+    )
+    try:
+        answer_id = identity["answer_facet_id"]
+        interaction = await interactions.async_create(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            target_id="target-p48",
+            card_key=identity["card_key"],
+            stage="prompt",
+            expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
+            payload={
+                "kind": "quiz",
+                "option_ids": [answer_id, "answer-wrong"],
+                "expected_answer_id": answer_id,
             },
         )
         result = await processor.async_handle_mobile_action(
@@ -414,6 +454,7 @@ async def test_mobile_commit_failure_rolls_back_token_and_event(
 ) -> None:
     storage, processor, interactions, identity, emitted = await _setup(tmp_path)
     try:
+        answer_id = identity["answer_facet_id"]
         interaction = await interactions.async_create(
             profile_id=identity["profile_id"],
             track_id=identity["track_id"],
@@ -423,8 +464,8 @@ async def test_mobile_commit_failure_rolls_back_token_and_event(
             expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
             payload={
                 "kind": "quiz",
-                "option_ids": ["answer-correct", "answer-wrong"],
-                "expected_answer_id": "answer-correct",
+                "option_ids": [answer_id, "answer-wrong"],
+                "expected_answer_id": answer_id,
             },
         )
         action = encode_action_id(interaction.token, "choice_0")

@@ -78,6 +78,12 @@ Notification quiz is deliberately bounded to two answer choices plus
 I-don't-know when the target proves at least three visible actions. Larger MCQ or
 insufficient capability uses a panel handoff instead.
 
+The mobile choice order is deterministic per materialized slot but is not fixed:
+the backend persists the option identities and expected CardDefinition answer,
+and the action processor revalidates that identity before the atomic
+ReviewEvent/Progress/outbox commit. Distractors must be introduced, active,
+distinct-facet cards from another LearningItem with distinct rendered answers.
+
 Android channel names are separated for learning/teaser, quiz/review and
 relearning. Shared devices include the LockLearn Profile name in the visible
 title. Default visibility is private, including child/shared usage; visibility
