@@ -2081,13 +2081,13 @@ class ReviewEventsRepository:
                 and result in {"correct", "known", "knew", "easy", "hard"}
             ):
                 item["self_known"] += 1
-            if question_type in {"mcq", "cloze", "cloze_mcq"}:
+            if mode != "exam_retrieval" and question_type in {"mcq", "cloze", "cloze_mcq"}:
                 item["quiz_total"] += 1
             if question_type == "free_text":
                 item["free_text_total"] += 1
             if bool(row[6]):
                 item["hints_used"] += 1
-            if str(pre.get("state")) in {"review", "leech"} and retrieval:
+            if mode != "exam_retrieval" and str(pre.get("state")) in {"review", "leech"} and retrieval:
                 item["reviewed_cards"].add(str(post["card_key"]))
             if str(pre.get("state")) == "relearning" or str(post.get("state")) == "relearning":
                 item["relearning_cards"].add(str(post["card_key"]))
@@ -2409,6 +2409,23 @@ class ReviewEventsRepository:
                 (profile_id, track_id, local_date),
             ).fetchone()
             return 0 if row is None else int(row[0])
+
+        return await self._storage._async_reader(read)
+
+    async def async_recent_exam_retrieval_card_keys(
+        self, *, profile_id: str, track_id: str, since_utc: str
+    ) -> frozenset[str]:
+        """Neutral exam attempts suppress duplicate automatic reviews for 12 hours."""
+
+        def read(connection: sqlite3.Connection) -> frozenset[str]:
+            rows = connection.execute(
+                """SELECT DISTINCT card_key FROM review_events
+                   WHERE profile_id = ? AND track_id = ?
+                     AND mode = 'exam_retrieval' AND retrieval_occurred = 1
+                     AND created_at_utc >= ?""",
+                (profile_id, track_id, since_utc),
+            ).fetchall()
+            return frozenset(str(row[0]) for row in rows)
 
         return await self._storage._async_reader(read)
 
