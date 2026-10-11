@@ -31,6 +31,11 @@ describes the additional LockLearn authorization boundary enforced by the backen
 | `locklearn/datasets/list` | `ws_datasets_list` | authenticated | — | `cursor` | `ERR_INVALID_REQUEST` |
 | `locklearn/datasets/refresh` | `ws_datasets_refresh` | ha-admin | — | — | — |
 | `locklearn/difficulties/list` | `ws_difficulties_list` | profile-acl | `profile_id` | `track_id` | `ERR_NOT_FOUND` |
+| `locklearn/exam/answer` | `ws_exam_answer` | session-via-profile-acl | `session_id`, `expected_version`, `question_id`, `selected_answer_id` | — | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
+| `locklearn/exam/finish` | `ws_exam_finish` | session-via-profile-acl | `session_id`, `expected_version` | — | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
+| `locklearn/exam/history` | `ws_exam_history` | profile-acl | `profile_id` | `cursor` | `ERR_INVALID_REQUEST` |
+| `locklearn/exam/result` | `ws_exam_result` | session-via-profile-acl | `session_id` | — | `ERR_INVALID_REQUEST` |
+| `locklearn/exam/start` | `ws_exam_start` | profile-acl | `profile_id`, `track_id` | `content_types`, `pack_id`, `pack_version_id`, `levels`, `tags` | `ERR_INVALID_REQUEST` |
 | `locklearn/leeches/reactivate` | `ws_leeches_reactivate` | profile-acl | `profile_id`, `track_id`, `card_key` | — | `ERR_INVALID_REQUEST` |
 | `locklearn/notifications/unrecorded_responses` | `ws_notification_unrecorded_responses` | profile-acl | `profile_id` | — | `ERR_INVALID_REQUEST` |
 | `locklearn/operations/cancel` | `ws_operation_cancel` | operation-owner-or-admin | `operation_id` | — | `ERR_FORBIDDEN`, `ERR_NOT_FOUND` |
@@ -56,12 +61,12 @@ describes the additional LockLearn authorization boundary enforced by the backen
 | `locklearn/scheduler/preview` | `ws_scheduler_preview` | profile-acl | `profile_id` | `local_date` | `ERR_INVALID_REQUEST` |
 | `locklearn/session/answer` | `ws_session_answer` | session-via-profile-acl | `session_id`, `expected_version`, `question_id`, `answer` | — | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
 | `locklearn/session/availability` | `ws_session_availability` | profile-acl | `profile_id`, `track_id`, `session_type` | `settings` | `ERR_INVALID_REQUEST` |
-| `locklearn/session/complete` | `ws_session_complete` | session-via-profile-acl | `session_id`, `expected_version` | — | `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
+| `locklearn/session/complete` | `ws_session_complete` | session-via-profile-acl | `session_id`, `expected_version` | — | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
 | `locklearn/session/get` | `ws_session_get` | session-via-profile-acl | `session_id` | — | — |
 | `locklearn/session/pause` | `ws_session_pause` | session-via-profile-acl | `session_id`, `expected_version` | — | `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
 | `locklearn/session/start` | `ws_session_start` | profile-acl | `profile_id` | `track_id` | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND` |
 | `locklearn/session/subscribe` | `ws_session_subscribe` | session-via-profile-acl | `session_id` | — | — |
-| `locklearn/session/undo` | `ws_session_undo` | session-via-profile-acl | `session_id`, `expected_version` | — | `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
+| `locklearn/session/undo` | `ws_session_undo` | session-via-profile-acl | `session_id`, `expected_version` | — | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND`, `ERR_STALE_SESSION` |
 | `locklearn/stats/get` | `ws_stats_get` | profile-acl | `profile_id` | `track_id` | `ERR_INVALID_REQUEST` |
 | `locklearn/targets/create` | `ws_targets_create` | profile-acl | `profile_id`, `device_registry_id` | `friendly_name`, `capabilities`, `minimum_gap_seconds`, `maximum_notifications_per_hour`, `daily_push_budget` | `ERR_INVALID_REQUEST`, `ERR_NOT_FOUND` |
 | `locklearn/targets/discover` | `ws_targets_discover` | profile-acl | `profile_id` | `cursor` | `ERR_INVALID_REQUEST` |

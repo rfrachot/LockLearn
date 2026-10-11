@@ -1,15 +1,15 @@
-const pe = globalThis, Ce = pe.ShadowRoot && (pe.ShadyCSS === void 0 || pe.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, Pe = /* @__PURE__ */ Symbol(), We = /* @__PURE__ */ new WeakMap();
-let yt = class {
+const ge = globalThis, Re = ge.ShadowRoot && (ge.ShadyCSS === void 0 || ge.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, Ee = /* @__PURE__ */ Symbol(), Ke = /* @__PURE__ */ new WeakMap();
+let _t = class {
   constructor(e, t, i) {
-    if (this._$cssResult$ = !0, i !== Pe) throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");
+    if (this._$cssResult$ = !0, i !== Ee) throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");
     this.cssText = e, this.t = t;
   }
   get styleSheet() {
     let e = this.o;
     const t = this.t;
-    if (Ce && e === void 0) {
+    if (Re && e === void 0) {
       const i = t !== void 0 && t.length === 1;
-      i && (e = We.get(t)), e === void 0 && ((this.o = e = new CSSStyleSheet()).replaceSync(this.cssText), i && We.set(t, e));
+      i && (e = Ke.get(t)), e === void 0 && ((this.o = e = new CSSStyleSheet()).replaceSync(this.cssText), i && Ke.set(t, e));
     }
     return e;
   }
@@ -17,101 +17,101 @@ let yt = class {
     return this.cssText;
   }
 };
-const Ut = (a) => new yt(typeof a == "string" ? a : a + "", void 0, Pe), R = (a, ...e) => {
-  const t = a.length === 1 ? a[0] : e.reduce((i, s, n) => i + ((o) => {
-    if (o._$cssResult$ === !0) return o.cssText;
-    if (typeof o == "number") return o;
-    throw Error("Value passed to 'css' function must be a 'css' function result: " + o + ". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.");
-  })(s) + a[n + 1], a[0]);
-  return new yt(t, a, Pe);
-}, Ht = (a, e) => {
-  if (Ce) a.adoptedStyleSheets = e.map((t) => t instanceof CSSStyleSheet ? t : t.styleSheet);
+const Ot = (s) => new _t(typeof s == "string" ? s : s + "", void 0, Ee), N = (s, ...e) => {
+  const t = s.length === 1 ? s[0] : e.reduce((i, a, o) => i + ((n) => {
+    if (n._$cssResult$ === !0) return n.cssText;
+    if (typeof n == "number") return n;
+    throw Error("Value passed to 'css' function must be a 'css' function result: " + n + ". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.");
+  })(a) + s[o + 1], s[0]);
+  return new _t(t, s, Ee);
+}, Wt = (s, e) => {
+  if (Re) s.adoptedStyleSheets = e.map((t) => t instanceof CSSStyleSheet ? t : t.styleSheet);
   else for (const t of e) {
-    const i = document.createElement("style"), s = pe.litNonce;
-    s !== void 0 && i.setAttribute("nonce", s), i.textContent = t.cssText, a.appendChild(i);
+    const i = document.createElement("style"), a = ge.litNonce;
+    a !== void 0 && i.setAttribute("nonce", a), i.textContent = t.cssText, s.appendChild(i);
   }
-}, Ve = Ce ? (a) => a : (a) => a instanceof CSSStyleSheet ? ((e) => {
+}, Ge = Re ? (s) => s : (s) => s instanceof CSSStyleSheet ? ((e) => {
   let t = "";
   for (const i of e.cssRules) t += i.cssText;
-  return Ut(t);
-})(a) : a;
-const { is: Ft, defineProperty: jt, getOwnPropertyDescriptor: Ot, getOwnPropertyNames: Wt, getOwnPropertySymbols: Vt, getPrototypeOf: Bt } = Object, ve = globalThis, Be = ve.trustedTypes, Kt = Be ? Be.emptyScript : "", Gt = ve.reactiveElementPolyfillSupport, ee = (a, e) => a, me = { toAttribute(a, e) {
+  return Ot(t);
+})(s) : s;
+const { is: Vt, defineProperty: Bt, getOwnPropertyDescriptor: Kt, getOwnPropertyNames: Gt, getOwnPropertySymbols: Qt, getPrototypeOf: Yt } = Object, ye = globalThis, Qe = ye.trustedTypes, Zt = Qe ? Qe.emptyScript : "", Jt = ye.reactiveElementPolyfillSupport, ie = (s, e) => s, fe = { toAttribute(s, e) {
   switch (e) {
     case Boolean:
-      a = a ? Kt : null;
+      s = s ? Zt : null;
       break;
     case Object:
     case Array:
-      a = a == null ? a : JSON.stringify(a);
+      s = s == null ? s : JSON.stringify(s);
   }
-  return a;
-}, fromAttribute(a, e) {
-  let t = a;
+  return s;
+}, fromAttribute(s, e) {
+  let t = s;
   switch (e) {
     case Boolean:
-      t = a !== null;
+      t = s !== null;
       break;
     case Number:
-      t = a === null ? null : Number(a);
+      t = s === null ? null : Number(s);
       break;
     case Object:
     case Array:
       try {
-        t = JSON.parse(a);
+        t = JSON.parse(s);
       } catch {
         t = null;
       }
   }
   return t;
-} }, Re = (a, e) => !Ft(a, e), Ke = { attribute: !0, type: String, converter: me, reflect: !1, useDefault: !1, hasChanged: Re };
-Symbol.metadata ??= /* @__PURE__ */ Symbol("metadata"), ve.litPropertyMetadata ??= /* @__PURE__ */ new WeakMap();
-let B = class extends HTMLElement {
+} }, Le = (s, e) => !Vt(s, e), Ye = { attribute: !0, type: String, converter: fe, reflect: !1, useDefault: !1, hasChanged: Le };
+Symbol.metadata ??= /* @__PURE__ */ Symbol("metadata"), ye.litPropertyMetadata ??= /* @__PURE__ */ new WeakMap();
+let G = class extends HTMLElement {
   static addInitializer(e) {
     this._$Ei(), (this.l ??= []).push(e);
   }
   static get observedAttributes() {
     return this.finalize(), this._$Eh && [...this._$Eh.keys()];
   }
-  static createProperty(e, t = Ke) {
+  static createProperty(e, t = Ye) {
     if (t.state && (t.attribute = !1), this._$Ei(), this.prototype.hasOwnProperty(e) && ((t = Object.create(t)).wrapped = !0), this.elementProperties.set(e, t), !t.noAccessor) {
-      const i = /* @__PURE__ */ Symbol(), s = this.getPropertyDescriptor(e, i, t);
-      s !== void 0 && jt(this.prototype, e, s);
+      const i = /* @__PURE__ */ Symbol(), a = this.getPropertyDescriptor(e, i, t);
+      a !== void 0 && Bt(this.prototype, e, a);
     }
   }
   static getPropertyDescriptor(e, t, i) {
-    const { get: s, set: n } = Ot(this.prototype, e) ?? { get() {
+    const { get: a, set: o } = Kt(this.prototype, e) ?? { get() {
       return this[t];
-    }, set(o) {
-      this[t] = o;
+    }, set(n) {
+      this[t] = n;
     } };
-    return { get: s, set(o) {
-      const u = s?.call(this);
-      n?.call(this, o), this.requestUpdate(e, u, i);
+    return { get: a, set(n) {
+      const u = a?.call(this);
+      o?.call(this, n), this.requestUpdate(e, u, i);
     }, configurable: !0, enumerable: !0 };
   }
   static getPropertyOptions(e) {
-    return this.elementProperties.get(e) ?? Ke;
+    return this.elementProperties.get(e) ?? Ye;
   }
   static _$Ei() {
-    if (this.hasOwnProperty(ee("elementProperties"))) return;
-    const e = Bt(this);
+    if (this.hasOwnProperty(ie("elementProperties"))) return;
+    const e = Yt(this);
     e.finalize(), e.l !== void 0 && (this.l = [...e.l]), this.elementProperties = new Map(e.elementProperties);
   }
   static finalize() {
-    if (this.hasOwnProperty(ee("finalized"))) return;
-    if (this.finalized = !0, this._$Ei(), this.hasOwnProperty(ee("properties"))) {
-      const t = this.properties, i = [...Wt(t), ...Vt(t)];
-      for (const s of i) this.createProperty(s, t[s]);
+    if (this.hasOwnProperty(ie("finalized"))) return;
+    if (this.finalized = !0, this._$Ei(), this.hasOwnProperty(ie("properties"))) {
+      const t = this.properties, i = [...Gt(t), ...Qt(t)];
+      for (const a of i) this.createProperty(a, t[a]);
     }
     const e = this[Symbol.metadata];
     if (e !== null) {
       const t = litPropertyMetadata.get(e);
-      if (t !== void 0) for (const [i, s] of t) this.elementProperties.set(i, s);
+      if (t !== void 0) for (const [i, a] of t) this.elementProperties.set(i, a);
     }
     this._$Eh = /* @__PURE__ */ new Map();
     for (const [t, i] of this.elementProperties) {
-      const s = this._$Eu(t, i);
-      s !== void 0 && this._$Eh.set(s, t);
+      const a = this._$Eu(t, i);
+      a !== void 0 && this._$Eh.set(a, t);
     }
     this.elementStyles = this.finalizeStyles(this.styles);
   }
@@ -119,8 +119,8 @@ let B = class extends HTMLElement {
     const t = [];
     if (Array.isArray(e)) {
       const i = new Set(e.flat(1 / 0).reverse());
-      for (const s of i) t.unshift(Ve(s));
-    } else e !== void 0 && t.push(Ve(e));
+      for (const a of i) t.unshift(Ge(a));
+    } else e !== void 0 && t.push(Ge(e));
     return t;
   }
   static _$Eu(e, t) {
@@ -146,7 +146,7 @@ let B = class extends HTMLElement {
   }
   createRenderRoot() {
     const e = this.shadowRoot ?? this.attachShadow(this.constructor.shadowRootOptions);
-    return Ht(e, this.constructor.elementStyles), e;
+    return Wt(e, this.constructor.elementStyles), e;
   }
   connectedCallback() {
     this.renderRoot ??= this.createRenderRoot(), this.enableUpdating(!0), this._$EO?.forEach((e) => e.hostConnected?.());
@@ -160,31 +160,31 @@ let B = class extends HTMLElement {
     this._$AK(e, i);
   }
   _$ET(e, t) {
-    const i = this.constructor.elementProperties.get(e), s = this.constructor._$Eu(e, i);
-    if (s !== void 0 && i.reflect === !0) {
-      const n = (i.converter?.toAttribute !== void 0 ? i.converter : me).toAttribute(t, i.type);
-      this._$Em = e, n == null ? this.removeAttribute(s) : this.setAttribute(s, n), this._$Em = null;
+    const i = this.constructor.elementProperties.get(e), a = this.constructor._$Eu(e, i);
+    if (a !== void 0 && i.reflect === !0) {
+      const o = (i.converter?.toAttribute !== void 0 ? i.converter : fe).toAttribute(t, i.type);
+      this._$Em = e, o == null ? this.removeAttribute(a) : this.setAttribute(a, o), this._$Em = null;
     }
   }
   _$AK(e, t) {
-    const i = this.constructor, s = i._$Eh.get(e);
-    if (s !== void 0 && this._$Em !== s) {
-      const n = i.getPropertyOptions(s), o = typeof n.converter == "function" ? { fromAttribute: n.converter } : n.converter?.fromAttribute !== void 0 ? n.converter : me;
-      this._$Em = s;
-      const u = o.fromAttribute(t, n.type);
-      this[s] = u ?? this._$Ej?.get(s) ?? u, this._$Em = null;
+    const i = this.constructor, a = i._$Eh.get(e);
+    if (a !== void 0 && this._$Em !== a) {
+      const o = i.getPropertyOptions(a), n = typeof o.converter == "function" ? { fromAttribute: o.converter } : o.converter?.fromAttribute !== void 0 ? o.converter : fe;
+      this._$Em = a;
+      const u = n.fromAttribute(t, o.type);
+      this[a] = u ?? this._$Ej?.get(a) ?? u, this._$Em = null;
     }
   }
-  requestUpdate(e, t, i, s = !1, n) {
+  requestUpdate(e, t, i, a = !1, o) {
     if (e !== void 0) {
-      const o = this.constructor;
-      if (s === !1 && (n = this[e]), i ??= o.getPropertyOptions(e), !((i.hasChanged ?? Re)(n, t) || i.useDefault && i.reflect && n === this._$Ej?.get(e) && !this.hasAttribute(o._$Eu(e, i)))) return;
+      const n = this.constructor;
+      if (a === !1 && (o = this[e]), i ??= n.getPropertyOptions(e), !((i.hasChanged ?? Le)(o, t) || i.useDefault && i.reflect && o === this._$Ej?.get(e) && !this.hasAttribute(n._$Eu(e, i)))) return;
       this.C(e, t, i);
     }
     this.isUpdatePending === !1 && (this._$ES = this._$EP());
   }
-  C(e, t, { useDefault: i, reflect: s, wrapped: n }, o) {
-    i && !(this._$Ej ??= /* @__PURE__ */ new Map()).has(e) && (this._$Ej.set(e, o ?? t ?? this[e]), n !== !0 || o !== void 0) || (this._$AL.has(e) || (this.hasUpdated || i || (t = void 0), this._$AL.set(e, t)), s === !0 && this._$Em !== e && (this._$Eq ??= /* @__PURE__ */ new Set()).add(e));
+  C(e, t, { useDefault: i, reflect: a, wrapped: o }, n) {
+    i && !(this._$Ej ??= /* @__PURE__ */ new Map()).has(e) && (this._$Ej.set(e, n ?? t ?? this[e]), o !== !0 || n !== void 0) || (this._$AL.has(e) || (this.hasUpdated || i || (t = void 0), this._$AL.set(e, t)), a === !0 && this._$Em !== e && (this._$Eq ??= /* @__PURE__ */ new Set()).add(e));
   }
   async _$EP() {
     this.isUpdatePending = !0;
@@ -203,13 +203,13 @@ let B = class extends HTMLElement {
     if (!this.isUpdatePending) return;
     if (!this.hasUpdated) {
       if (this.renderRoot ??= this.createRenderRoot(), this._$Ep) {
-        for (const [s, n] of this._$Ep) this[s] = n;
+        for (const [a, o] of this._$Ep) this[a] = o;
         this._$Ep = void 0;
       }
       const i = this.constructor.elementProperties;
-      if (i.size > 0) for (const [s, n] of i) {
-        const { wrapped: o } = n, u = this[s];
-        o !== !0 || this._$AL.has(s) || u === void 0 || this.C(s, void 0, n, u);
+      if (i.size > 0) for (const [a, o] of i) {
+        const { wrapped: n } = o, u = this[a];
+        n !== !0 || this._$AL.has(a) || u === void 0 || this.C(a, void 0, o, u);
       }
     }
     let e = !1;
@@ -246,70 +246,70 @@ let B = class extends HTMLElement {
   firstUpdated(e) {
   }
 };
-B.elementStyles = [], B.shadowRootOptions = { mode: "open" }, B[ee("elementProperties")] = /* @__PURE__ */ new Map(), B[ee("finalized")] = /* @__PURE__ */ new Map(), Gt?.({ ReactiveElement: B }), (ve.reactiveElementVersions ??= []).push("2.1.2");
-const Ee = globalThis, Ge = (a) => a, ge = Ee.trustedTypes, Qe = ge ? ge.createPolicy("lit-html", { createHTML: (a) => a }) : void 0, $t = "$lit$", L = `lit$${Math.random().toFixed(9).slice(2)}$`, wt = "?" + L, Qt = `<${wt}>`, U = document, ie = () => U.createComment(""), ae = (a) => a === null || typeof a != "object" && typeof a != "function", Le = Array.isArray, Zt = (a) => Le(a) || typeof a?.[Symbol.iterator] == "function", $e = `[ 	
-\f\r]`, Z = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, Ze = /-->/g, Ye = />/g, D = RegExp(`>|${$e}(?:([^\\s"'>=/]+)(${$e}*=${$e}*(?:[^ 	
-\f\r"'\`<>=]|("|')|))|$)`, "g"), Je = /'/g, Xe = /"/g, kt = /^(?:script|style|textarea|title)$/i, Yt = (a) => (e, ...t) => ({ _$litType$: a, strings: e, values: t }), r = Yt(1), K = /* @__PURE__ */ Symbol.for("lit-noChange"), l = /* @__PURE__ */ Symbol.for("lit-nothing"), et = /* @__PURE__ */ new WeakMap(), I = U.createTreeWalker(U, 129);
-function _t(a, e) {
-  if (!Le(a) || !a.hasOwnProperty("raw")) throw Error("invalid template strings array");
-  return Qe !== void 0 ? Qe.createHTML(e) : e;
+G.elementStyles = [], G.shadowRootOptions = { mode: "open" }, G[ie("elementProperties")] = /* @__PURE__ */ new Map(), G[ie("finalized")] = /* @__PURE__ */ new Map(), Jt?.({ ReactiveElement: G }), (ye.reactiveElementVersions ??= []).push("2.1.2");
+const Ne = globalThis, Ze = (s) => s, ve = Ne.trustedTypes, Je = ve ? ve.createPolicy("lit-html", { createHTML: (s) => s }) : void 0, xt = "$lit$", D = `lit$${Math.random().toFixed(9).slice(2)}$`, St = "?" + D, Xt = `<${St}>`, F = document, ae = () => F.createComment(""), re = (s) => s === null || typeof s != "object" && typeof s != "function", Me = Array.isArray, ei = (s) => Me(s) || typeof s?.[Symbol.iterator] == "function", we = `[ 	
+\f\r]`, J = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, Xe = /-->/g, et = />/g, H = RegExp(`>|${we}(?:([^\\s"'>=/]+)(${we}*=${we}*(?:[^ 	
+\f\r"'\`<>=]|("|')|))|$)`, "g"), tt = /'/g, it = /"/g, qt = /^(?:script|style|textarea|title)$/i, ti = (s) => (e, ...t) => ({ _$litType$: s, strings: e, values: t }), r = ti(1), Q = /* @__PURE__ */ Symbol.for("lit-noChange"), l = /* @__PURE__ */ Symbol.for("lit-nothing"), st = /* @__PURE__ */ new WeakMap(), U = F.createTreeWalker(F, 129);
+function Tt(s, e) {
+  if (!Me(s) || !s.hasOwnProperty("raw")) throw Error("invalid template strings array");
+  return Je !== void 0 ? Je.createHTML(e) : e;
 }
-const Jt = (a, e) => {
-  const t = a.length - 1, i = [];
-  let s, n = e === 2 ? "<svg>" : e === 3 ? "<math>" : "", o = Z;
+const ii = (s, e) => {
+  const t = s.length - 1, i = [];
+  let a, o = e === 2 ? "<svg>" : e === 3 ? "<math>" : "", n = J;
   for (let u = 0; u < t; u++) {
-    const d = a[u];
-    let h, $, m = -1, _ = 0;
-    for (; _ < d.length && (o.lastIndex = _, $ = o.exec(d), $ !== null); ) _ = o.lastIndex, o === Z ? $[1] === "!--" ? o = Ze : $[1] !== void 0 ? o = Ye : $[2] !== void 0 ? (kt.test($[2]) && (s = RegExp("</" + $[2], "g")), o = D) : $[3] !== void 0 && (o = D) : o === D ? $[0] === ">" ? (o = s ?? Z, m = -1) : $[1] === void 0 ? m = -2 : (m = o.lastIndex - $[2].length, h = $[1], o = $[3] === void 0 ? D : $[3] === '"' ? Xe : Je) : o === Xe || o === Je ? o = D : o === Ze || o === Ye ? o = Z : (o = D, s = void 0);
-    const E = o === D && a[u + 1].startsWith("/>") ? " " : "";
-    n += o === Z ? d + Qt : m >= 0 ? (i.push(h), d.slice(0, m) + $t + d.slice(m) + L + E) : d + L + (m === -2 ? u : E);
+    const d = s[u];
+    let h, $, m = -1, x = 0;
+    for (; x < d.length && (n.lastIndex = x, $ = n.exec(d), $ !== null); ) x = n.lastIndex, n === J ? $[1] === "!--" ? n = Xe : $[1] !== void 0 ? n = et : $[2] !== void 0 ? (qt.test($[2]) && (a = RegExp("</" + $[2], "g")), n = H) : $[3] !== void 0 && (n = H) : n === H ? $[0] === ">" ? (n = a ?? J, m = -1) : $[1] === void 0 ? m = -2 : (m = n.lastIndex - $[2].length, h = $[1], n = $[3] === void 0 ? H : $[3] === '"' ? it : tt) : n === it || n === tt ? n = H : n === Xe || n === et ? n = J : (n = H, a = void 0);
+    const M = n === H && s[u + 1].startsWith("/>") ? " " : "";
+    o += n === J ? d + Xt : m >= 0 ? (i.push(h), d.slice(0, m) + xt + d.slice(m) + D + M) : d + D + (m === -2 ? u : M);
   }
-  return [_t(a, n + (a[t] || "<?>") + (e === 2 ? "</svg>" : e === 3 ? "</math>" : "")), i];
+  return [Tt(s, o + (s[t] || "<?>") + (e === 2 ? "</svg>" : e === 3 ? "</math>" : "")), i];
 };
-class se {
+class ne {
   constructor({ strings: e, _$litType$: t }, i) {
-    let s;
+    let a;
     this.parts = [];
-    let n = 0, o = 0;
-    const u = e.length - 1, d = this.parts, [h, $] = Jt(e, t);
-    if (this.el = se.createElement(h, i), I.currentNode = this.el.content, t === 2 || t === 3) {
+    let o = 0, n = 0;
+    const u = e.length - 1, d = this.parts, [h, $] = ii(e, t);
+    if (this.el = ne.createElement(h, i), U.currentNode = this.el.content, t === 2 || t === 3) {
       const m = this.el.content.firstChild;
       m.replaceWith(...m.childNodes);
     }
-    for (; (s = I.nextNode()) !== null && d.length < u; ) {
-      if (s.nodeType === 1) {
-        if (s.hasAttributes()) for (const m of s.getAttributeNames()) if (m.endsWith($t)) {
-          const _ = $[o++], E = s.getAttribute(m).split(L), oe = /([.?@])?(.*)/.exec(_);
-          d.push({ type: 1, index: n, name: oe[2], strings: E, ctor: oe[1] === "." ? ei : oe[1] === "?" ? ti : oe[1] === "@" ? ii : be }), s.removeAttribute(m);
-        } else m.startsWith(L) && (d.push({ type: 6, index: n }), s.removeAttribute(m));
-        if (kt.test(s.tagName)) {
-          const m = s.textContent.split(L), _ = m.length - 1;
-          if (_ > 0) {
-            s.textContent = ge ? ge.emptyScript : "";
-            for (let E = 0; E < _; E++) s.append(m[E], ie()), I.nextNode(), d.push({ type: 2, index: ++n });
-            s.append(m[_], ie());
+    for (; (a = U.nextNode()) !== null && d.length < u; ) {
+      if (a.nodeType === 1) {
+        if (a.hasAttributes()) for (const m of a.getAttributeNames()) if (m.endsWith(xt)) {
+          const x = $[n++], M = a.getAttribute(m).split(D), ce = /([.?@])?(.*)/.exec(x);
+          d.push({ type: 1, index: o, name: ce[2], strings: M, ctor: ce[1] === "." ? ai : ce[1] === "?" ? ri : ce[1] === "@" ? ni : $e }), a.removeAttribute(m);
+        } else m.startsWith(D) && (d.push({ type: 6, index: o }), a.removeAttribute(m));
+        if (qt.test(a.tagName)) {
+          const m = a.textContent.split(D), x = m.length - 1;
+          if (x > 0) {
+            a.textContent = ve ? ve.emptyScript : "";
+            for (let M = 0; M < x; M++) a.append(m[M], ae()), U.nextNode(), d.push({ type: 2, index: ++o });
+            a.append(m[x], ae());
           }
         }
-      } else if (s.nodeType === 8) if (s.data === wt) d.push({ type: 2, index: n });
+      } else if (a.nodeType === 8) if (a.data === St) d.push({ type: 2, index: o });
       else {
         let m = -1;
-        for (; (m = s.data.indexOf(L, m + 1)) !== -1; ) d.push({ type: 7, index: n }), m += L.length - 1;
+        for (; (m = a.data.indexOf(D, m + 1)) !== -1; ) d.push({ type: 7, index: o }), m += D.length - 1;
       }
-      n++;
+      o++;
     }
   }
   static createElement(e, t) {
-    const i = U.createElement("template");
+    const i = F.createElement("template");
     return i.innerHTML = e, i;
   }
 }
-function G(a, e, t = a, i) {
-  if (e === K) return e;
-  let s = i !== void 0 ? t._$Co?.[i] : t._$Cl;
-  const n = ae(e) ? void 0 : e._$litDirective$;
-  return s?.constructor !== n && (s?._$AO?.(!1), n === void 0 ? s = void 0 : (s = new n(a), s._$AT(a, t, i)), i !== void 0 ? (t._$Co ??= [])[i] = s : t._$Cl = s), s !== void 0 && (e = G(a, s._$AS(a, e.values), s, i)), e;
+function Y(s, e, t = s, i) {
+  if (e === Q) return e;
+  let a = i !== void 0 ? t._$Co?.[i] : t._$Cl;
+  const o = re(e) ? void 0 : e._$litDirective$;
+  return a?.constructor !== o && (a?._$AO?.(!1), o === void 0 ? a = void 0 : (a = new o(s), a._$AT(s, t, i)), i !== void 0 ? (t._$Co ??= [])[i] = a : t._$Cl = a), a !== void 0 && (e = Y(s, a._$AS(s, e.values), a, i)), e;
 }
-class Xt {
+class si {
   constructor(e, t) {
     this._$AV = [], this._$AN = void 0, this._$AD = e, this._$AM = t;
   }
@@ -320,29 +320,29 @@ class Xt {
     return this._$AM._$AU;
   }
   u(e) {
-    const { el: { content: t }, parts: i } = this._$AD, s = (e?.creationScope ?? U).importNode(t, !0);
-    I.currentNode = s;
-    let n = I.nextNode(), o = 0, u = 0, d = i[0];
+    const { el: { content: t }, parts: i } = this._$AD, a = (e?.creationScope ?? F).importNode(t, !0);
+    U.currentNode = a;
+    let o = U.nextNode(), n = 0, u = 0, d = i[0];
     for (; d !== void 0; ) {
-      if (o === d.index) {
+      if (n === d.index) {
         let h;
-        d.type === 2 ? h = new re(n, n.nextSibling, this, e) : d.type === 1 ? h = new d.ctor(n, d.name, d.strings, this, e) : d.type === 6 && (h = new ai(n, this, e)), this._$AV.push(h), d = i[++u];
+        d.type === 2 ? h = new oe(o, o.nextSibling, this, e) : d.type === 1 ? h = new d.ctor(o, d.name, d.strings, this, e) : d.type === 6 && (h = new oi(o, this, e)), this._$AV.push(h), d = i[++u];
       }
-      o !== d?.index && (n = I.nextNode(), o++);
+      n !== d?.index && (o = U.nextNode(), n++);
     }
-    return I.currentNode = U, s;
+    return U.currentNode = F, a;
   }
   p(e) {
     let t = 0;
     for (const i of this._$AV) i !== void 0 && (i.strings !== void 0 ? (i._$AI(e, i, t), t += i.strings.length - 2) : i._$AI(e[t])), t++;
   }
 }
-class re {
+class oe {
   get _$AU() {
     return this._$AM?._$AU ?? this._$Cv;
   }
-  constructor(e, t, i, s) {
-    this.type = 2, this._$AH = l, this._$AN = void 0, this._$AA = e, this._$AB = t, this._$AM = i, this.options = s, this._$Cv = s?.isConnected ?? !0;
+  constructor(e, t, i, a) {
+    this.type = 2, this._$AH = l, this._$AN = void 0, this._$AA = e, this._$AB = t, this._$AM = i, this.options = a, this._$Cv = a?.isConnected ?? !0;
   }
   get parentNode() {
     let e = this._$AA.parentNode;
@@ -356,7 +356,7 @@ class re {
     return this._$AB;
   }
   _$AI(e, t = this) {
-    e = G(this, e, t), ae(e) ? e === l || e == null || e === "" ? (this._$AH !== l && this._$AR(), this._$AH = l) : e !== this._$AH && e !== K && this._(e) : e._$litType$ !== void 0 ? this.$(e) : e.nodeType !== void 0 ? this.T(e) : Zt(e) ? this.k(e) : this._(e);
+    e = Y(this, e, t), re(e) ? e === l || e == null || e === "" ? (this._$AH !== l && this._$AR(), this._$AH = l) : e !== this._$AH && e !== Q && this._(e) : e._$litType$ !== void 0 ? this.$(e) : e.nodeType !== void 0 ? this.T(e) : ei(e) ? this.k(e) : this._(e);
   }
   O(e) {
     return this._$AA.parentNode.insertBefore(e, this._$AB);
@@ -365,63 +365,63 @@ class re {
     this._$AH !== e && (this._$AR(), this._$AH = this.O(e));
   }
   _(e) {
-    this._$AH !== l && ae(this._$AH) ? this._$AA.nextSibling.data = e : this.T(U.createTextNode(e)), this._$AH = e;
+    this._$AH !== l && re(this._$AH) ? this._$AA.nextSibling.data = e : this.T(F.createTextNode(e)), this._$AH = e;
   }
   $(e) {
-    const { values: t, _$litType$: i } = e, s = typeof i == "number" ? this._$AC(e) : (i.el === void 0 && (i.el = se.createElement(_t(i.h, i.h[0]), this.options)), i);
-    if (this._$AH?._$AD === s) this._$AH.p(t);
+    const { values: t, _$litType$: i } = e, a = typeof i == "number" ? this._$AC(e) : (i.el === void 0 && (i.el = ne.createElement(Tt(i.h, i.h[0]), this.options)), i);
+    if (this._$AH?._$AD === a) this._$AH.p(t);
     else {
-      const n = new Xt(s, this), o = n.u(this.options);
-      n.p(t), this.T(o), this._$AH = n;
+      const o = new si(a, this), n = o.u(this.options);
+      o.p(t), this.T(n), this._$AH = o;
     }
   }
   _$AC(e) {
-    let t = et.get(e.strings);
-    return t === void 0 && et.set(e.strings, t = new se(e)), t;
+    let t = st.get(e.strings);
+    return t === void 0 && st.set(e.strings, t = new ne(e)), t;
   }
   k(e) {
-    Le(this._$AH) || (this._$AH = [], this._$AR());
+    Me(this._$AH) || (this._$AH = [], this._$AR());
     const t = this._$AH;
-    let i, s = 0;
-    for (const n of e) s === t.length ? t.push(i = new re(this.O(ie()), this.O(ie()), this, this.options)) : i = t[s], i._$AI(n), s++;
-    s < t.length && (this._$AR(i && i._$AB.nextSibling, s), t.length = s);
+    let i, a = 0;
+    for (const o of e) a === t.length ? t.push(i = new oe(this.O(ae()), this.O(ae()), this, this.options)) : i = t[a], i._$AI(o), a++;
+    a < t.length && (this._$AR(i && i._$AB.nextSibling, a), t.length = a);
   }
   _$AR(e = this._$AA.nextSibling, t) {
     for (this._$AP?.(!1, !0, t); e !== this._$AB; ) {
-      const i = Ge(e).nextSibling;
-      Ge(e).remove(), e = i;
+      const i = Ze(e).nextSibling;
+      Ze(e).remove(), e = i;
     }
   }
   setConnected(e) {
     this._$AM === void 0 && (this._$Cv = e, this._$AP?.(e));
   }
 }
-class be {
+class $e {
   get tagName() {
     return this.element.tagName;
   }
   get _$AU() {
     return this._$AM._$AU;
   }
-  constructor(e, t, i, s, n) {
-    this.type = 1, this._$AH = l, this._$AN = void 0, this.element = e, this.name = t, this._$AM = s, this.options = n, i.length > 2 || i[0] !== "" || i[1] !== "" ? (this._$AH = Array(i.length - 1).fill(new String()), this.strings = i) : this._$AH = l;
+  constructor(e, t, i, a, o) {
+    this.type = 1, this._$AH = l, this._$AN = void 0, this.element = e, this.name = t, this._$AM = a, this.options = o, i.length > 2 || i[0] !== "" || i[1] !== "" ? (this._$AH = Array(i.length - 1).fill(new String()), this.strings = i) : this._$AH = l;
   }
-  _$AI(e, t = this, i, s) {
-    const n = this.strings;
-    let o = !1;
-    if (n === void 0) e = G(this, e, t, 0), o = !ae(e) || e !== this._$AH && e !== K, o && (this._$AH = e);
+  _$AI(e, t = this, i, a) {
+    const o = this.strings;
+    let n = !1;
+    if (o === void 0) e = Y(this, e, t, 0), n = !re(e) || e !== this._$AH && e !== Q, n && (this._$AH = e);
     else {
       const u = e;
       let d, h;
-      for (e = n[0], d = 0; d < n.length - 1; d++) h = G(this, u[i + d], t, d), h === K && (h = this._$AH[d]), o ||= !ae(h) || h !== this._$AH[d], h === l ? e = l : e !== l && (e += (h ?? "") + n[d + 1]), this._$AH[d] = h;
+      for (e = o[0], d = 0; d < o.length - 1; d++) h = Y(this, u[i + d], t, d), h === Q && (h = this._$AH[d]), n ||= !re(h) || h !== this._$AH[d], h === l ? e = l : e !== l && (e += (h ?? "") + o[d + 1]), this._$AH[d] = h;
     }
-    o && !s && this.j(e);
+    n && !a && this.j(e);
   }
   j(e) {
     e === l ? this.element.removeAttribute(this.name) : this.element.setAttribute(this.name, e ?? "");
   }
 }
-class ei extends be {
+class ai extends $e {
   constructor() {
     super(...arguments), this.type = 3;
   }
@@ -429,7 +429,7 @@ class ei extends be {
     this.element[this.name] = e === l ? void 0 : e;
   }
 }
-class ti extends be {
+class ri extends $e {
   constructor() {
     super(...arguments), this.type = 4;
   }
@@ -437,20 +437,20 @@ class ti extends be {
     this.element.toggleAttribute(this.name, !!e && e !== l);
   }
 }
-class ii extends be {
-  constructor(e, t, i, s, n) {
-    super(e, t, i, s, n), this.type = 5;
+class ni extends $e {
+  constructor(e, t, i, a, o) {
+    super(e, t, i, a, o), this.type = 5;
   }
   _$AI(e, t = this) {
-    if ((e = G(this, e, t, 0) ?? l) === K) return;
-    const i = this._$AH, s = e === l && i !== l || e.capture !== i.capture || e.once !== i.once || e.passive !== i.passive, n = e !== l && (i === l || s);
-    s && this.element.removeEventListener(this.name, this, i), n && this.element.addEventListener(this.name, this, e), this._$AH = e;
+    if ((e = Y(this, e, t, 0) ?? l) === Q) return;
+    const i = this._$AH, a = e === l && i !== l || e.capture !== i.capture || e.once !== i.once || e.passive !== i.passive, o = e !== l && (i === l || a);
+    a && this.element.removeEventListener(this.name, this, i), o && this.element.addEventListener(this.name, this, e), this._$AH = e;
   }
   handleEvent(e) {
     typeof this._$AH == "function" ? this._$AH.call(this.options?.host ?? this.element, e) : this._$AH.handleEvent(e);
   }
 }
-class ai {
+class oi {
   constructor(e, t, i) {
     this.element = e, this.type = 6, this._$AN = void 0, this._$AM = t, this.options = i;
   }
@@ -458,22 +458,22 @@ class ai {
     return this._$AM._$AU;
   }
   _$AI(e) {
-    G(this, e);
+    Y(this, e);
   }
 }
-const si = Ee.litHtmlPolyfillSupport;
-si?.(se, re), (Ee.litHtmlVersions ??= []).push("3.3.3");
-const ri = (a, e, t) => {
+const li = Ne.litHtmlPolyfillSupport;
+li?.(ne, oe), (Ne.litHtmlVersions ??= []).push("3.3.3");
+const ci = (s, e, t) => {
   const i = t?.renderBefore ?? e;
-  let s = i._$litPart$;
-  if (s === void 0) {
-    const n = t?.renderBefore ?? null;
-    i._$litPart$ = s = new re(e.insertBefore(ie(), n), n, void 0, t ?? {});
+  let a = i._$litPart$;
+  if (a === void 0) {
+    const o = t?.renderBefore ?? null;
+    i._$litPart$ = a = new oe(e.insertBefore(ae(), o), o, void 0, t ?? {});
   }
-  return s._$AI(a), s;
+  return a._$AI(s), a;
 };
-const Me = globalThis;
-let T = class extends B {
+const De = globalThis;
+let z = class extends G {
   constructor() {
     super(...arguments), this.renderOptions = { host: this }, this._$Do = void 0;
   }
@@ -483,7 +483,7 @@ let T = class extends B {
   }
   update(e) {
     const t = this.render();
-    this.hasUpdated || (this.renderOptions.isConnected = this.isConnected), super.update(e), this._$Do = ri(t, this.renderRoot, this.renderOptions);
+    this.hasUpdated || (this.renderOptions.isConnected = this.isConnected), super.update(e), this._$Do = ci(t, this.renderRoot, this.renderOptions);
   }
   connectedCallback() {
     super.connectedCallback(), this._$Do?.setConnected(!0);
@@ -492,49 +492,49 @@ let T = class extends B {
     super.disconnectedCallback(), this._$Do?.setConnected(!1);
   }
   render() {
-    return K;
+    return Q;
   }
 };
-T._$litElement$ = !0, T.finalized = !0, Me.litElementHydrateSupport?.({ LitElement: T });
-const ni = Me.litElementPolyfillSupport;
-ni?.({ LitElement: T });
-(Me.litElementVersions ??= []).push("4.2.2");
-const oi = (a) => (e, t) => {
+z._$litElement$ = !0, z.finalized = !0, De.litElementHydrateSupport?.({ LitElement: z });
+const di = De.litElementPolyfillSupport;
+di?.({ LitElement: z });
+(De.litElementVersions ??= []).push("4.2.2");
+const ui = (s) => (e, t) => {
   t !== void 0 ? t.addInitializer(() => {
-    customElements.define(a, e);
-  }) : customElements.define(a, e);
+    customElements.define(s, e);
+  }) : customElements.define(s, e);
 };
-const li = { attribute: !0, type: String, converter: me, reflect: !1, hasChanged: Re }, ci = (a = li, e, t) => {
-  const { kind: i, metadata: s } = t;
-  let n = globalThis.litPropertyMetadata.get(s);
-  if (n === void 0 && globalThis.litPropertyMetadata.set(s, n = /* @__PURE__ */ new Map()), i === "setter" && ((a = Object.create(a)).wrapped = !0), n.set(t.name, a), i === "accessor") {
-    const { name: o } = t;
+const hi = { attribute: !0, type: String, converter: fe, reflect: !1, hasChanged: Le }, pi = (s = hi, e, t) => {
+  const { kind: i, metadata: a } = t;
+  let o = globalThis.litPropertyMetadata.get(a);
+  if (o === void 0 && globalThis.litPropertyMetadata.set(a, o = /* @__PURE__ */ new Map()), i === "setter" && ((s = Object.create(s)).wrapped = !0), o.set(t.name, s), i === "accessor") {
+    const { name: n } = t;
     return { set(u) {
       const d = e.get.call(this);
-      e.set.call(this, u), this.requestUpdate(o, d, a, !0, u);
+      e.set.call(this, u), this.requestUpdate(n, d, s, !0, u);
     }, init(u) {
-      return u !== void 0 && this.C(o, void 0, a, u), u;
+      return u !== void 0 && this.C(n, void 0, s, u), u;
     } };
   }
   if (i === "setter") {
-    const { name: o } = t;
+    const { name: n } = t;
     return function(u) {
-      const d = this[o];
-      e.call(this, u), this.requestUpdate(o, d, a, !0, u);
+      const d = this[n];
+      e.call(this, u), this.requestUpdate(n, d, s, !0, u);
     };
   }
   throw Error("Unsupported decorator location: " + i);
 };
-function b(a) {
-  return (e, t) => typeof t == "object" ? ci(a, e, t) : ((i, s, n) => {
-    const o = s.hasOwnProperty(n);
-    return s.constructor.createProperty(n, i), o ? Object.getOwnPropertyDescriptor(s, n) : void 0;
-  })(a, e, t);
+function f(s) {
+  return (e, t) => typeof t == "object" ? pi(s, e, t) : ((i, a, o) => {
+    const n = a.hasOwnProperty(o);
+    return a.constructor.createProperty(o, i), n ? Object.getOwnPropertyDescriptor(a, o) : void 0;
+  })(s, e, t);
 }
-function c(a) {
-  return b({ ...a, state: !0, attribute: !1 });
+function c(s) {
+  return f({ ...s, state: !0, attribute: !1 });
 }
-const Ne = R`
+const Ie = N`
   .content-block {
     min-width: 0;
     max-width: 100%;
@@ -577,7 +577,7 @@ const Ne = R`
     font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
     overflow-wrap: anywhere;
   }
-`, H = R`
+`, j = N`
   :where(button, a, input, select, textarea):focus-visible {
     outline: 3px solid var(--primary-color, currentColor);
     outline-offset: 2px;
@@ -599,59 +599,59 @@ const Ne = R`
     order: 2;
   }
 `;
-function di(a, e) {
-  const t = a.ruby_segments;
+function mi(s, e) {
+  const t = s.ruby_segments;
   if (!Array.isArray(t) || t.length === 0) return null;
   const i = [];
-  for (const s of t) {
-    if (typeof s != "object" || s === null) return null;
-    const n = s;
-    if (typeof n.text != "string" || n.text === "") return null;
-    const o = n.reading === void 0 || n.reading === null ? null : typeof n.reading == "string" && n.reading !== "" ? n.reading : void 0;
-    if (o === void 0) return null;
-    i.push({ text: n.text, reading: o });
+  for (const a of t) {
+    if (typeof a != "object" || a === null) return null;
+    const o = a;
+    if (typeof o.text != "string" || o.text === "") return null;
+    const n = o.reading === void 0 || o.reading === null ? null : typeof o.reading == "string" && o.reading !== "" ? o.reading : void 0;
+    if (n === void 0) return null;
+    i.push({ text: o.text, reading: n });
   }
-  return i.map((s) => s.text).join("") !== e ? null : i;
+  return i.map((a) => a.text).join("") !== e ? null : i;
 }
-function ui(a) {
-  return r`${a.map(
+function gi(s) {
+  return r`${s.map(
     (e) => e.reading === null ? e.text : r`<ruby>${e.text}<rp>(</rp><rt>${e.reading}</rt><rp>)</rp></ruby>`
   )}`;
 }
-function xt(a, e = 0) {
-  if (e > 16 || typeof a != "object" || a === null) return l;
-  const t = a;
+function At(s, e = 0) {
+  if (e > 16 || typeof s != "object" || s === null) return l;
+  const t = s;
   if ((t.type === "text" || t.type === "inline_code") && typeof t.text == "string")
     return t.type === "inline_code" ? r`<code>${t.text}</code>` : t.text;
   if (t.type === "line_break") return r`<br />`;
   if (t.type === "ruby" && typeof t.text == "string" && t.text !== "" && typeof t.reading == "string" && t.reading !== "")
     return r`<ruby>${t.text}<rp>(</rp><rt>${t.reading}</rt><rp>)</rp></ruby>`;
   if ((t.type === "paragraph" || t.type === "emphasis" || t.type === "strong") && Array.isArray(t.children)) {
-    const i = t.children.map((s) => xt(s, e + 1));
+    const i = t.children.map((a) => At(a, e + 1));
     return t.type === "paragraph" ? r`<p>${i}</p>` : t.type === "emphasis" ? r`<em>${i}</em>` : r`<strong>${i}</strong>`;
   }
   return l;
 }
-function hi(a) {
-  const e = a.payload.text;
+function fi(s) {
+  const e = s.payload.text;
   if (typeof e == "string" && e !== "") {
-    const t = di(a.payload, e);
-    return t === null ? e : ui(t);
+    const t = mi(s.payload, e);
+    return t === null ? e : gi(t);
   }
-  return a.kind === "rich_text" && a.payload.type === "document" && Array.isArray(a.payload.children) ? r`${a.payload.children.map((t) => xt(t, 1))}` : l;
+  return s.kind === "rich_text" && s.payload.type === "document" && Array.isArray(s.payload.children) ? r`${s.payload.children.map((t) => At(t, 1))}` : l;
 }
-function De(a, e = !1) {
-  const t = hi(a);
+function He(s, e = !1) {
+  const t = fi(s);
   return t === l ? l : r`
     <div
       class="content-block ${e ? "primary-content" : ""}"
-      lang=${a.language_tag ?? l}
+      lang=${s.language_tag ?? l}
     >
       ${t}
     </div>
   `;
 }
-const tt = ["en", "fr"], it = {
+const at = ["en", "fr"], rt = {
   en: {
     "app.title": "LockLearn",
     "state.loading": "Loading LockLearn…",
@@ -1549,41 +1549,41 @@ const tt = ["en", "fr"], it = {
     "nav.settings": "Réglages"
   }
 };
-function Q(a) {
-  const e = a.trim().toLowerCase().replaceAll("_", "-");
-  if (tt.includes(e))
+function Z(s) {
+  const e = s.trim().toLowerCase().replaceAll("_", "-");
+  if (at.includes(e))
     return e;
   const t = e.split("-", 1)[0];
-  return tt.includes(t) ? t : "en";
+  return at.includes(t) ? t : "en";
 }
-function F(a, e) {
-  return it[a][e] ?? it.en[e];
+function O(s, e) {
+  return rt[s][e] ?? rt.en[e];
 }
-const N = 3;
-class St extends Error {
+const I = 3;
+class zt extends Error {
   constructor(e, t, i) {
     super(
       `LockLearn frontend protocol ${e} does not match backend protocol ${t}`
     ), this.frontendProtocol = e, this.backendProtocol = t, this.backendVersion = i;
   }
 }
-async function pi(a) {
-  const e = await a.callWS({
+async function vi(s) {
+  const e = await s.callWS({
     type: "locklearn/bootstrap"
   });
-  if (e.frontend_protocol !== N)
-    throw new St(
-      N,
+  if (e.frontend_protocol !== I)
+    throw new zt(
+      I,
       e.frontend_protocol,
       e.backend_version
     );
   return e;
 }
-async function at(a) {
+async function nt(s) {
   const e = [];
   let t = null;
   do {
-    const i = await a.callWS({
+    const i = await s.callWS({
       type: "locklearn/profiles/list",
       limit: 100,
       ...t === null ? {} : { cursor: t }
@@ -1592,110 +1592,110 @@ async function at(a) {
   } while (t !== null);
   return e;
 }
-async function ne(a, e, t = {}) {
+async function le(s, e, t = {}) {
   const i = [];
-  let s = null;
+  let a = null;
   do {
-    const n = await a.callWS({
+    const o = await s.callWS({
       type: e,
       limit: 100,
       ...t,
-      ...s === null ? {} : { cursor: s }
+      ...a === null ? {} : { cursor: a }
     });
-    i.push(...n.items), s = n.cursor;
-  } while (s !== null);
+    i.push(...o.items), a = o.cursor;
+  } while (a !== null);
   return i;
 }
-async function mi(a, e, t, i) {
-  return a.callWS({
+async function bi(s, e, t, i) {
+  return s.callWS({
     type: "locklearn/profiles/create",
     name: e,
     preset: t,
     timezone: i
   });
 }
-async function st(a, e, t) {
-  return a.callWS({
+async function ot(s, e, t) {
+  return s.callWS({
     type: "locklearn/profiles/update",
     profile_id: e,
     ...t
   });
 }
-async function rt(a, e, t, i) {
-  await a.callWS({
+async function lt(s, e, t, i) {
+  await s.callWS({
     type: "locklearn/profiles/delete",
     profile_id: e,
     action: t,
     ...i === void 0 ? {} : { confirmation: i }
   });
 }
-async function gi(a, e) {
-  return a.callWS({
+async function yi(s, e) {
+  return s.callWS({
     type: "locklearn/profiles/members",
     profile_id: e
   });
 }
-async function fi(a, e) {
-  return a.callWS({
+async function $i(s, e) {
+  return s.callWS({
     type: "locklearn/profiles/share_targets",
     profile_id: e
   });
 }
-async function nt(a, e, t, i) {
-  await a.callWS({
+async function ct(s, e, t, i) {
+  await s.callWS({
     type: "locklearn/profiles/share",
     profile_id: e,
     target_user_id: t,
     role: i
   });
 }
-async function vi(a, e, t) {
-  await a.callWS({
+async function ki(s, e, t) {
+  await s.callWS({
     type: "locklearn/profiles/share",
     profile_id: e,
     target_user_id: t,
     remove: !0
   });
 }
-async function qt(a, e) {
-  return ne(a, "locklearn/tracks/list", {
+async function Ct(s, e) {
+  return le(s, "locklearn/tracks/list", {
     profile_id: e
   });
 }
-async function Ie(a, e) {
-  return ne(a, "locklearn/targets/list", {
+async function Ue(s, e) {
+  return le(s, "locklearn/targets/list", {
     profile_id: e
   });
 }
-async function bi(a, e) {
-  return ne(a, "locklearn/targets/discover", {
+async function wi(s, e) {
+  return le(s, "locklearn/targets/discover", {
     profile_id: e
   });
 }
-async function yi(a, e, t) {
-  return a.callWS({
+async function _i(s, e, t) {
+  return s.callWS({
     type: "locklearn/targets/create",
     profile_id: e,
     device_registry_id: t
   });
 }
-async function $i(a, e, t, i) {
-  return a.callWS({
+async function xi(s, e, t, i) {
+  return s.callWS({
     type: "locklearn/targets/update",
     profile_id: e,
     target_id: t,
     ...i
   });
 }
-async function wi(a, e, t) {
-  return a.callWS({
+async function Si(s, e, t) {
+  return s.callWS({
     type: "locklearn/targets/test",
     profile_id: e,
     target_id: t
   });
 }
-async function ki(a, e, t) {
-  return a.callWS({
+async function qi(s, e, t) {
+  return s.callWS({
     type: "locklearn/stats/get",
     profile_id: e,
     recent_verified_limit: 30,
@@ -1704,40 +1704,40 @@ async function ki(a, e, t) {
     ...t ? { track_id: t } : {}
   });
 }
-async function _i(a, e, t) {
-  return (await a.callWS({
+async function Ti(s, e, t) {
+  return (await s.callWS({
     type: "locklearn/difficulties/list",
     profile_id: e,
     ...t ? { track_id: t } : {}
   })).items;
 }
-async function xi(a, e) {
-  return a.callWS({
+async function Ai(s, e) {
+  return s.callWS({
     type: "locklearn/tracks/create",
     ...e
   });
 }
-async function Si(a, e, t) {
-  return a.callWS({
+async function zi(s, e, t) {
+  return s.callWS({
     type: "locklearn/tracks/update",
     track_id: e,
     ...t
   });
 }
-async function qi(a, e) {
-  await a.callWS({
+async function Ci(s, e) {
+  await s.callWS({
     type: "locklearn/tracks/delete",
     track_id: e
   });
 }
-async function Ti(a) {
-  return ne(a, "locklearn/packs/list");
+async function Pi(s) {
+  return le(s, "locklearn/packs/list");
 }
-async function Ai(a) {
-  return ne(a, "locklearn/datasets/list");
+async function Ri(s) {
+  return le(s, "locklearn/datasets/list");
 }
-async function ot(a, e, t, i) {
-  return a.callWS({
+async function dt(s, e, t, i) {
+  return s.callWS({
     type: "locklearn/datasets/attributions",
     dataset_id: e,
     source_id: t,
@@ -1745,79 +1745,79 @@ async function ot(a, e, t, i) {
     ...i ? { cursor: i } : {}
   });
 }
-async function zi(a) {
-  return (await a.callWS({
+async function Ei(s) {
+  return (await s.callWS({
     type: "locklearn/datasets/refresh"
   })).items;
 }
-async function Ci(a, e, t) {
-  return a.callWS({
+async function Li(s, e, t) {
+  return s.callWS({
     type: "locklearn/datasets/install",
     dataset_id: e,
     ...t ? { version: t } : {}
   });
 }
-async function Pi(a, e, t) {
-  return a.callWS({
+async function Ni(s, e, t) {
+  return s.callWS({
     type: "locklearn/tracks/preview_pack_update",
     track_id: e,
     pack_version_id: t
   });
 }
-async function Ri(a, e, t) {
-  return a.callWS({
+async function Mi(s, e, t) {
+  return s.callWS({
     type: "locklearn/tracks/integrate_pack_update",
     track_id: e,
     pack_version_id: t
   });
 }
-function Tt(a, e, t) {
+function Pt(s, e, t) {
   return {
-    type: a,
+    type: s,
     track_id: e,
     ...t
   };
 }
-async function Ei(a, e, t) {
-  return a.callWS(
-    Tt("locklearn/tracks/plan_preview", e, t)
+async function Di(s, e, t) {
+  return s.callWS(
+    Pt("locklearn/tracks/plan_preview", e, t)
   );
 }
-async function lt(a, e, t) {
-  return a.callWS(
-    Tt("locklearn/tracks/plan_set", e, t)
+async function ut(s, e, t) {
+  return s.callWS(
+    Pt("locklearn/tracks/plan_set", e, t)
   );
 }
-async function Li(a, e) {
-  return a.callWS({
+async function Ii(s, e) {
+  return s.callWS({
     type: "locklearn/dashboard/get",
     profile_id: e
   });
 }
-async function ye(a, e, t, i, s = {}) {
-  return a.callWS({
+async function ke(s, e, t, i, a = {}) {
+  return s.callWS({
     type: "locklearn/session/availability",
     profile_id: e,
     track_id: t,
     session_type: i,
-    settings: s
+    settings: a
   });
 }
-async function Te(a, e, t, i, s = "mixed") {
-  return a.callWS({
+async function ze(s, e, t, i, a = "mixed") {
+  return s.callWS({
     type: "locklearn/session/start_v04",
     profile_id: e,
     track_id: t,
     session_type: "quiz",
     strategy: "default",
     settings: {
-      quiz_format: s,
+      quiz_format: a,
       option_count: 4
     }
   });
 }
-async function Mi(a, e, t, i = 20) {
-  return a.callWS({
+async function Hi(s, e, t, i = 20) {
+  return s.callWS({
     type: "locklearn/session/start_v04",
     profile_id: e,
     track_id: t,
@@ -1830,8 +1830,8 @@ async function Mi(a, e, t, i = 20) {
     }
   });
 }
-async function le(a, e, t, i) {
-  return a.callWS({
+async function de(s, e, t, i) {
+  return s.callWS({
     type: "locklearn/quiz/answer_v04",
     session_id: e.id,
     expected_version: e.version,
@@ -1839,18 +1839,18 @@ async function le(a, e, t, i) {
     answer: i
   });
 }
-async function Ni(a, e, t, i) {
-  return a.callWS({
+async function Ui(s, e, t, i) {
+  return s.callWS({
     type: "locklearn/quiz/evaluate",
     session_id: e,
     question_id: t,
     answer: i
   });
 }
-async function Di(a, e, t, i, s) {
-  if (typeof s.submitted_text != "string" || s.grading_policy_kind === void 0 || s.grading_policy_version === void 0 || s.normalization_version === void 0)
+async function Fi(s, e, t, i, a) {
+  if (typeof a.submitted_text != "string" || a.grading_policy_kind === void 0 || a.grading_policy_version === void 0 || a.normalization_version === void 0)
     throw new Error("free-text report metadata is incomplete");
-  return a.callWS({
+  return s.callWS({
     type: "locklearn/content/report",
     profile_id: e,
     track_id: t,
@@ -1858,48 +1858,48 @@ async function Di(a, e, t, i, s) {
     learning_item_id: i.learning_item_id,
     prompt_facet_id: i.prompt_facet_id,
     answer_facet_id: i.answer_facet_id,
-    submitted_text: s.submitted_text,
-    normalized_submission: s.normalized_submission ?? null,
-    grading_policy_kind: s.grading_policy_kind,
-    grading_policy_version: s.grading_policy_version,
-    normalization_version: s.normalization_version
+    submitted_text: a.submitted_text,
+    normalized_submission: a.normalized_submission ?? null,
+    grading_policy_kind: a.grading_policy_kind,
+    grading_policy_version: a.grading_policy_version,
+    normalization_version: a.normalization_version
   });
 }
-async function Ae(a, e, t, i, s = !1) {
-  return a.callWS({
+async function Ce(s, e, t, i, a = !1) {
+  return s.callWS({
     type: "locklearn/session/start_v04",
     profile_id: e,
     track_id: t,
     session_type: "learn",
     strategy: "default",
     settings: {
-      ...s ? { allow_early_learning: !0 } : {}
+      ...a ? { allow_early_learning: !0 } : {}
     }
   });
 }
-async function Ii(a, e, t, i) {
-  return a.callWS({
+async function ji(s, e, t, i) {
+  return s.callWS({
     type: "locklearn/calibration/followup/status",
     profile_id: e,
     track_id: t
   });
 }
-async function At(a, e, t, i) {
-  return a.callWS({
+async function Rt(s, e, t, i) {
+  return s.callWS({
     type: "locklearn/calibration/followup/start",
     profile_id: e,
     track_id: t,
     calibration_session_id: i
   });
 }
-async function M(a, e) {
-  return a.callWS({
+async function E(s, e) {
+  return s.callWS({
     type: "locklearn/session/get",
     session_id: e
   });
 }
-async function we(a, e, t, i) {
-  return a.callWS({
+async function _e(s, e, t, i) {
+  return s.callWS({
     type: "locklearn/session/answer_v04",
     session_id: e.id,
     expected_version: e.version,
@@ -1907,65 +1907,65 @@ async function we(a, e, t, i) {
     answer: i
   });
 }
-async function zt(a, e) {
-  return a.callWS({
+async function Et(s, e) {
+  return s.callWS({
     type: "locklearn/session/complete",
     session_id: e.id,
     expected_version: e.version
   });
 }
-async function Ct(a, e, t, i, s) {
-  return a.callWS({
+async function Lt(s, e, t, i, a) {
+  return s.callWS({
     type: "locklearn/progress/set_user_state",
     profile_id: e,
     track_id: t,
     card_key: i,
-    user_state: s
+    user_state: a
   });
 }
-async function Ui(a, e, t, i, s) {
-  return a.callWS({
+async function Oi(s, e, t, i, a) {
+  return s.callWS({
     type: "locklearn/cards/concerned/list",
     profile_id: e,
     track_id: t,
     filter: i,
-    mode: s
+    mode: a
   });
 }
-async function Pt(a, e, t, i) {
-  return a.callWS({
+async function Nt(s, e, t, i) {
+  return s.callWS({
     type: "locklearn/cards/learn_instead",
     profile_id: e,
     track_id: t,
     card_key: i
   });
 }
-async function Rt(a, e, t, i) {
-  return a.callWS({
+async function Mt(s, e, t, i) {
+  return s.callWS({
     type: "locklearn/reminders/ready/status",
     profile_id: e,
     track_id: t,
     mode: i
   });
 }
-async function Et(a, e, t, i) {
-  return a.callWS({
+async function Dt(s, e, t, i) {
+  return s.callWS({
     type: "locklearn/reminders/ready/arm",
     profile_id: e,
     track_id: t,
     mode: i
   });
 }
-async function Lt(a, e, t, i) {
-  return a.callWS({
+async function It(s, e, t, i) {
+  return s.callWS({
     type: "locklearn/reminders/ready/cancel",
     profile_id: e,
     track_id: t,
     mode: i
   });
 }
-async function Mt(a, e, t, i, s) {
-  return a.callWS({
+async function Ht(s, e, t, i, a) {
+  return s.callWS({
     type: "locklearn/content/report_question",
     profile_id: e,
     track_id: t,
@@ -1974,35 +1974,35 @@ async function Mt(a, e, t, i, s) {
     prompt_facet_id: i.prompt_facet_id,
     answer_facet_id: i.answer_facet_id,
     reason: "user_reported_question",
-    ...s === void 0 || s.trim() === "" ? {} : { message: s.trim() }
+    ...a === void 0 || a.trim() === "" ? {} : { message: a.trim() }
   });
 }
-async function Nt(a, e, t, i) {
-  return a.callWS({
+async function Ut(s, e, t, i) {
+  return s.callWS({
     type: "locklearn/annotations/create",
     profile_id: e,
     card_key: t,
     note: i.trim()
   });
 }
-async function Hi(a, e, t, i) {
-  return a.callWS({
+async function Wi(s, e, t, i) {
+  return s.callWS({
     type: "locklearn/annotations/update",
     profile_id: e,
     annotation_id: t,
     note: i.trim()
   });
 }
-async function Fi(a, e, t, i) {
-  return a.callWS({
+async function Vi(s, e, t, i) {
+  return s.callWS({
     type: "locklearn/leeches/reactivate",
     profile_id: e,
     track_id: t,
     card_key: i
   });
 }
-async function ji(a, e, t, i = 20) {
-  return a.callWS({
+async function Bi(s, e, t, i = 20) {
+  return s.callWS({
     type: "locklearn/session/start",
     profile_id: e,
     track_id: t,
@@ -2014,35 +2014,88 @@ async function ji(a, e, t, i = 20) {
     }
   });
 }
-var Oi = Object.defineProperty, Wi = Object.getOwnPropertyDescriptor, A = (a, e, t, i) => {
-  for (var s = i > 1 ? void 0 : i ? Wi(e, t) : e, n = a.length - 1, o; n >= 0; n--)
-    (o = a[n]) && (s = (i ? o(e, t, s) : o(s)) || s);
-  return i && s && Oi(e, t, s), s;
+async function Ki(s, e, t, i) {
+  return s.callWS({
+    type: "locklearn/exam/start",
+    profile_id: e,
+    track_id: t,
+    requested_cards: i.requestedCards,
+    ...i.contentTypes === void 0 ? {} : { content_types: i.contentTypes },
+    ...i.direction === void 0 ? {} : { direction: i.direction },
+    ...i.packId === void 0 ? {} : { pack_id: i.packId },
+    ...i.packVersionId === void 0 ? {} : { pack_version_id: i.packVersionId },
+    ...i.levels === void 0 ? {} : { levels: i.levels },
+    ...i.tags === void 0 ? {} : { tags: i.tags },
+    ...i.shuffle === void 0 ? {} : { shuffle: i.shuffle },
+    ...i.optionCount === void 0 ? {} : { option_count: i.optionCount }
+  });
+}
+async function Gi(s, e, t, i) {
+  return s.callWS({
+    type: "locklearn/exam/answer",
+    session_id: e.id,
+    expected_version: e.version,
+    question_id: t,
+    selected_answer_id: i
+  });
+}
+async function Qi(s, e) {
+  return s.callWS({
+    type: "locklearn/exam/finish",
+    session_id: e.id,
+    expected_version: e.version
+  });
+}
+async function ht(s, e) {
+  return s.callWS({
+    type: "locklearn/exam/result",
+    session_id: e
+  });
+}
+async function Yi(s, e) {
+  return s.callWS({
+    type: "locklearn/exam/history",
+    profile_id: e,
+    limit: 20
+  });
+}
+async function Zi(s, e, t) {
+  return s.callWS({
+    type: "locklearn/session/pause",
+    session_id: e.id,
+    expected_version: e.version,
+    paused: t
+  });
+}
+var Ji = Object.defineProperty, Xi = Object.getOwnPropertyDescriptor, C = (s, e, t, i) => {
+  for (var a = i > 1 ? void 0 : i ? Xi(e, t) : e, o = s.length - 1, n; o >= 0; o--)
+    (n = s[o]) && (a = (i ? n(e, t, a) : n(a)) || a);
+  return i && a && Ji(e, t, a), a;
 };
-let q = class extends T {
+let A = class extends z {
   constructor() {
     super(...arguments), this.profileId = "", this.trackId = "", this.filter = "current_waiting_context", this.mode = "learn", this.language = "en", this.timeZone = "UTC", this.cards = [], this.loading = !0, this.errorMessage = "";
   }
   connectedCallback() {
     super.connectedCallback(), this.refresh();
   }
-  updated(a) {
-    (a.has("profileId") || a.has("trackId") || a.has("filter") || a.has("mode")) && this.refresh();
+  updated(s) {
+    (s.has("profileId") || s.has("trackId") || s.has("filter") || s.has("mode")) && this.refresh();
   }
-  tr(a) {
-    return F(this.language, a);
+  tr(s) {
+    return O(this.language, s);
   }
   filterCopy() {
-    const a = this.language === "fr", i = {
+    const s = this.language === "fr", i = {
       known_pending: { en: ["Already-known cards to verify", "These cards were marked as already known and will be verified later."], fr: ["Cartes déjà connues à vérifier", "Ces cartes ont été marquées comme déjà connues et seront vérifiées plus tard."] },
       suspended: { en: ["Suspended cards", "These cards are excluded until you reactivate them."], fr: ["Cartes suspendues", "Ces cartes restent exclues tant que vous ne les réactivez pas."] },
       buried: { en: ["Cards temporarily set aside", "These cards are temporarily hidden from normal sessions."], fr: ["Cartes mises de côté temporairement", "Ces cartes sont temporairement retirées des sessions normales."] },
       prerequisite_support: { en: ["Prerequisites to learn first", "These prerequisite cards currently block other material."], fr: ["Prérequis à apprendre d’abord", "Ces cartes prérequises bloquent actuellement d’autres contenus."] },
       current_waiting_context: { en: ["Cards currently waiting", "These cards explain why the current mode is not ready yet."], fr: ["Cartes actuellement en attente", "Ces cartes expliquent pourquoi ce mode n’est pas encore disponible."] }
-    }[this.filter][a ? "fr" : "en"];
+    }[this.filter][s ? "fr" : "en"];
     return { title: i[0], body: i[1] };
   }
-  stateLabel(a) {
+  stateLabel(s) {
     const e = this.language === "fr";
     return ({
       known_already: ["Marked as already known", "Marquée comme déjà connue"],
@@ -2053,10 +2106,10 @@ let q = class extends T {
       learning: ["Learning", "En apprentissage"],
       review: ["Review", "En révision"],
       relearning: ["Relearning", "En réapprentissage"]
-    }[a] ?? ["Waiting", "En attente"])[e ? 1 : 0];
+    }[s] ?? ["Waiting", "En attente"])[e ? 1 : 0];
   }
-  horizonLabel(a) {
-    const e = new Date(a);
+  horizonLabel(s) {
+    const e = new Date(s);
     return Number.isNaN(e.getTime()) ? "" : new Intl.DateTimeFormat(this.language, {
       dateStyle: "medium",
       timeStyle: "short",
@@ -2067,16 +2120,16 @@ let q = class extends T {
     if (!(this.hass === void 0 || this.profileId === "" || this.trackId === "")) {
       this.loading = !0, this.errorMessage = "";
       try {
-        const a = await Ui(
+        const s = await Oi(
           this.hass,
           this.profileId,
           this.trackId,
           this.filter,
           this.mode
         );
-        this.cards = a.cards;
-      } catch (a) {
-        this.errorMessage = a instanceof Error ? a.message : String(a);
+        this.cards = s.cards;
+      } catch (s) {
+        this.errorMessage = s instanceof Error ? s.message : String(s);
       } finally {
         this.loading = !1;
       }
@@ -2088,11 +2141,11 @@ let q = class extends T {
       composed: !0
     }));
   }
-  async apply(a) {
+  async apply(s) {
     if (this.hass !== void 0) {
       this.loading = !0, this.errorMessage = "";
       try {
-        a.action === "learn_instead" ? await Pt(this.hass, this.profileId, this.trackId, a.card_key) : a.action === "reactivate" && await Ct(this.hass, this.profileId, this.trackId, a.card_key, "active"), await this.refresh(), this.dispatchEvent(new CustomEvent("locklearn-concerned-cards-changed", {
+        s.action === "learn_instead" ? await Nt(this.hass, this.profileId, this.trackId, s.card_key) : s.action === "reactivate" && await Lt(this.hass, this.profileId, this.trackId, s.card_key, "active"), await this.refresh(), this.dispatchEvent(new CustomEvent("locklearn-concerned-cards-changed", {
           bubbles: !0,
           composed: !0
         }));
@@ -2101,24 +2154,24 @@ let q = class extends T {
       }
     }
   }
-  renderCard(a) {
+  renderCard(s) {
     return r`
       <li>
         <div>
-          ${a.prompt.blocks.map((e, t) => De(e, t === 0))}
+          ${s.prompt.blocks.map((e, t) => He(e, t === 0))}
         </div>
         <div class="meta">
-          ${this.stateLabel(a.user_state)}
-          ${a.horizon_utc === null ? l : r` · ${this.horizonLabel(a.horizon_utc)}`}
+          ${this.stateLabel(s.user_state)}
+          ${s.horizon_utc === null ? l : r` · ${this.horizonLabel(s.horizon_utc)}`}
         </div>
-        ${a.action === null ? l : r`
+        ${s.action === null ? l : r`
               <div class="actions">
                 <button class="primary" @click=${() => {
-      this.apply(a);
+      this.apply(s);
     }} ?disabled=${this.loading}>
-                  ${a.action === "learn_instead" ? this.tr("cards.learnInstead") : this.tr("cards.reactivate")}
+                  ${s.action === "learn_instead" ? this.tr("cards.learnInstead") : this.tr("cards.reactivate")}
                 </button>
-                ${a.action === "learn_instead" ? r`<span class="meta">${this.language === "fr" ? "Annule le marquage « déjà connue » et remet cette carte dans l’apprentissage normal." : "Cancels the already-known mark and returns this card to normal learning."}</span>` : a.action === "reactivate" ? r`<span class="meta">${this.language === "fr" ? "Remet cette carte dans les sessions normales." : "Returns this card to normal sessions."}</span>` : l}
+                ${s.action === "learn_instead" ? r`<span class="meta">${this.language === "fr" ? "Annule le marquage « déjà connue » et remet cette carte dans l’apprentissage normal." : "Cancels the already-known mark and returns this card to normal learning."}</span>` : s.action === "reactivate" ? r`<span class="meta">${this.language === "fr" ? "Remet cette carte dans les sessions normales." : "Returns this card to normal sessions."}</span>` : l}
               </div>
             `}
       </li>
@@ -2135,15 +2188,15 @@ let q = class extends T {
         <p class="meta">${this.filterCopy().body}</p>
         ${this.loading && this.cards.length === 0 ? r`<p role="status">${this.tr("common.loading")}</p>` : l}
         ${this.errorMessage === "" ? l : r`<p class="error" role="alert">${this.errorMessage}</p>`}
-        ${!this.loading && this.cards.length === 0 ? r`<p>${this.tr("cards.noneConcerned")}</p>` : r`<ul>${this.cards.map((a) => this.renderCard(a))}</ul>`}
+        ${!this.loading && this.cards.length === 0 ? r`<p>${this.tr("cards.noneConcerned")}</p>` : r`<ul>${this.cards.map((s) => this.renderCard(s))}</ul>`}
       </section>
     `;
   }
 };
-q.styles = [
-  Ne,
-  H,
-  R`
+A.styles = [
+  Ie,
+  j,
+  N`
       :host {
         position: fixed;
         inset: 0;
@@ -2236,96 +2289,96 @@ q.styles = [
       }
     `
 ];
-A([
-  b({ attribute: !1 })
-], q.prototype, "hass", 2);
-A([
-  b()
-], q.prototype, "profileId", 2);
-A([
-  b()
-], q.prototype, "trackId", 2);
-A([
-  b()
-], q.prototype, "filter", 2);
-A([
-  b()
-], q.prototype, "mode", 2);
-A([
-  b()
-], q.prototype, "language", 2);
-A([
-  b()
-], q.prototype, "timeZone", 2);
-A([
+C([
+  f({ attribute: !1 })
+], A.prototype, "hass", 2);
+C([
+  f()
+], A.prototype, "profileId", 2);
+C([
+  f()
+], A.prototype, "trackId", 2);
+C([
+  f()
+], A.prototype, "filter", 2);
+C([
+  f()
+], A.prototype, "mode", 2);
+C([
+  f()
+], A.prototype, "language", 2);
+C([
+  f()
+], A.prototype, "timeZone", 2);
+C([
   c()
-], q.prototype, "cards", 2);
-A([
+], A.prototype, "cards", 2);
+C([
   c()
-], q.prototype, "loading", 2);
-A([
+], A.prototype, "loading", 2);
+C([
   c()
-], q.prototype, "errorMessage", 2);
-q = A([
-  oi("locklearn-concerned-cards")
-], q);
-function Vi(a) {
-  return a.sort(
+], A.prototype, "errorMessage", 2);
+A = C([
+  ui("locklearn-concerned-cards")
+], A);
+function es(s) {
+  return s.sort(
     (e, t) => e.track.priority - t.track.priority || t.availableNow - e.availableNow || e.track.track_id.localeCompare(t.track.track_id)
   );
 }
-async function ct(a, e, t, i) {
-  const s = await Promise.all(
-    t.map(async (n) => {
-      const o = await ye(
-        a,
+async function pt(s, e, t, i) {
+  const a = await Promise.all(
+    t.map(async (o) => {
+      const n = await ke(
+        s,
         e,
-        n.track_id,
+        o.track_id,
         i
       );
-      return { track: n, availableNow: o.available_now };
+      return { track: o, availableNow: n.available_now };
     })
   );
-  return Vi(s.filter((n) => n.availableNow > 0));
+  return es(a.filter((o) => o.availableNow > 0));
 }
-async function Dt(a, e, t, i) {
+async function Ft(s, e, t, i) {
   if (e === void 0 || t === "") return;
-  const s = e.tracks.find((_) => _.track_id === t);
-  if (s === void 0) return;
-  const n = i === "learn" ? "quiz" : "learn", o = e.profile.profile_id, u = await ye(
-    a,
-    o,
+  const a = e.tracks.find((x) => x.track_id === t);
+  if (a === void 0) return;
+  const o = i === "learn" ? "quiz" : "learn", n = e.profile.profile_id, u = await ke(
+    s,
+    n,
     t,
-    n
+    o
   );
   if (u.available_now > 0)
     return {
-      trackId: s.track_id,
-      trackName: s.name,
-      mode: n,
+      trackId: a.track_id,
+      trackName: a.name,
+      mode: o,
       availableNow: u.available_now
     };
-  const d = e.tracks.filter((_) => _.track_id !== t), h = await ct(a, o, d, i);
+  const d = e.tracks.filter((x) => x.track_id !== t), h = await pt(s, n, d, i);
   if (h.length > 0) {
-    const _ = h[0];
+    const x = h[0];
     return {
-      trackId: _.track.track_id,
-      trackName: _.track.name,
+      trackId: x.track.track_id,
+      trackName: x.track.name,
       mode: i,
-      availableNow: _.availableNow
+      availableNow: x.availableNow
     };
   }
-  const $ = await ct(a, o, d, n);
+  const $ = await pt(s, n, d, o);
   if ($.length === 0) return;
   const m = $[0];
   return {
     trackId: m.track.track_id,
     trackName: m.track.name,
-    mode: n,
+    mode: o,
     availableNow: m.availableNow
   };
 }
-const Bi = [
+const ts = [
   "home",
   "learn",
   "quiz",
@@ -2336,57 +2389,57 @@ const Bi = [
   "packs",
   "sources",
   "settings"
-], Ki = "home";
-function ke(a) {
-  const t = a.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean), i = t[0] === "locklearn" ? t[1] : t[0];
-  return Bi.includes(i) ? i : Ki;
+], is = "home";
+function xe(s) {
+  const t = s.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean), i = t[0] === "locklearn" ? t[1] : t[0];
+  return ts.includes(i) ? i : is;
 }
-function It(a) {
-  return a === "home" ? "/locklearn" : `/locklearn/${a}`;
+function jt(s) {
+  return s === "home" ? "/locklearn" : `/locklearn/${s}`;
 }
-function te(a) {
-  const e = It(a);
+function se(s) {
+  const e = jt(s);
   globalThis.location?.pathname !== e && (globalThis.history?.pushState({}, "", e), globalThis.dispatchEvent?.(new PopStateEvent("popstate")));
 }
-function dt(a) {
-  return a != null && ["learn", "learning", "bounded"].includes(a.session_type) && ["active", "paused"].includes(a.status);
+function mt(s) {
+  return s != null && ["learn", "learning", "bounded"].includes(s.session_type) && ["active", "paused"].includes(s.status);
 }
-function Gi(a) {
-  return a?.payload.selection?.progress_state === "new";
+function ss(s) {
+  return s?.payload.selection?.progress_state === "new";
 }
-function Qi(a) {
-  const e = a?.payload.available_at_utc;
+function as(s) {
+  const e = s?.payload.available_at_utc;
   if (typeof e != "string") return null;
   const t = Date.parse(e);
   return Number.isNaN(t) ? null : t;
 }
-function ut(a) {
-  return a !== void 0 && a.role !== "viewer";
+function gt(s) {
+  return s !== void 0 && s.role !== "viewer";
 }
-function Y(a) {
-  if (a === void 0) return null;
+function X(s) {
+  if (s === void 0) return null;
   let e;
-  for (const t of a.blockers) {
+  for (const t of s.blockers) {
     if (t.code !== "scheduled_step" || t.until_utc === null) continue;
     const i = Date.parse(t.until_utc);
     Number.isNaN(i) || (e === void 0 || i < e.timestamp) && (e = { raw: t.until_utc, timestamp: i });
   }
   return e?.raw ?? null;
 }
-function ht(a) {
-  return a === void 0 ? 0 : a.blockers.filter((e) => e.code === "scheduled_step").reduce((e, t) => e + t.count, 0);
+function ft(s) {
+  return s === void 0 ? 0 : s.blockers.filter((e) => e.code === "scheduled_step").reduce((e, t) => e + t.count, 0);
 }
-const Zi = 3, Yi = 5;
-function Ji(a) {
-  if (typeof a != "object" || a === null) return !1;
-  const e = a;
+const rs = 3, ns = 5;
+function os(s) {
+  if (typeof s != "object" || s === null) return !1;
+  const e = s;
   return e.kind === "learning" && e.action === "known_already";
 }
-function Xi(a) {
+function ls(s) {
   let e = 0, t = 0;
-  for (const [i, s] of a.entries()) {
-    if (Ji(s.answer)) {
-      if (e += 1, t += 1, t >= Zi || e >= Yi)
+  for (const [i, a] of s.entries()) {
+    if (os(a.answer)) {
+      if (e += 1, t += 1, t >= rs || e >= ns)
         return i;
       continue;
     }
@@ -2394,20 +2447,20 @@ function Xi(a) {
   }
   return null;
 }
-function ea(a) {
-  return a.length === 0 ? !1 : Xi(a) === a.length - 1;
+function cs(s) {
+  return s.length === 0 ? !1 : ls(s) === s.length - 1;
 }
-var ta = Object.defineProperty, g = (a, e, t, i) => {
-  for (var s = void 0, n = a.length - 1, o; n >= 0; n--)
-    (o = a[n]) && (s = o(e, t, s) || s);
-  return s && ta(e, t, s), s;
+var ds = Object.defineProperty, g = (s, e, t, i) => {
+  for (var a = void 0, o = s.length - 1, n; o >= 0; o--)
+    (n = s[o]) && (a = n(e, t, a) || a);
+  return a && ds(e, t, a), a;
 };
-function J() {
+function ee() {
   return globalThis.performance?.now() ?? Date.now();
 }
-const Ue = class Ue extends T {
+const Fe = class Fe extends z {
   constructor() {
-    super(...arguments), this.trackId = "", this.loading = !1, this.errorMessage = "", this.notice = "", this.revealed = !1, this.hintUsed = !1, this.pendingIdk = !1, this.mnemonic = "", this.reportMessage = "", this.forceEarlyCurrent = !1, this.submissionSlow = !1, this.knownNoticeVisible = !1, this.calibrationSetup = !1, this.calibrationSize = 20, this.hasNotificationTarget = !1, this.knownBulkGuardVisible = !1, this.questionStartedAt = J(), this.questionId = null, this.refreshOnReturn = () => {
+    super(...arguments), this.trackId = "", this.loading = !1, this.errorMessage = "", this.notice = "", this.revealed = !1, this.hintUsed = !1, this.pendingIdk = !1, this.mnemonic = "", this.reportMessage = "", this.forceEarlyCurrent = !1, this.submissionSlow = !1, this.knownNoticeVisible = !1, this.calibrationSetup = !1, this.calibrationSize = 20, this.hasNotificationTarget = !1, this.knownBulkGuardVisible = !1, this.questionStartedAt = ee(), this.questionId = null, this.refreshOnReturn = () => {
       document.visibilityState === "visible" && this.refreshAvailability();
     };
   }
@@ -2431,10 +2484,10 @@ const Ue = class Ue extends T {
   }
   locale() {
     const e = this.hass?.locale?.language ?? this.hass?.language ?? globalThis.navigator?.language ?? "en";
-    return Q(e);
+    return Z(e);
   }
   t(e) {
-    return F(this.locale(), e);
+    return O(this.locale(), e);
   }
   tracks() {
     return this.dashboard?.tracks ?? [];
@@ -2447,15 +2500,15 @@ const Ue = class Ue extends T {
     t instanceof HTMLSelectElement && (this.trackId = t.value, this.session = void 0, this.errorMessage = "", this.notice = "", this.resetQuestionUi(), this.refreshAvailability());
   }
   resetQuestionUi() {
-    this.clearAvailabilityTimer(), this.waitingUntil = void 0, this.revealed = !1, this.hintUsed = !1, this.pendingIdk = !1, this.pendingIdkLatency = void 0, this.mnemonic = "", this.reportMessage = "", this.notice = "", this.forceEarlyCurrent = !1, this.questionStartedAt = J(), this.questionId = this.session?.current_question?.question_id ?? null;
+    this.clearAvailabilityTimer(), this.waitingUntil = void 0, this.revealed = !1, this.hintUsed = !1, this.pendingIdk = !1, this.pendingIdkLatency = void 0, this.mnemonic = "", this.reportMessage = "", this.notice = "", this.forceEarlyCurrent = !1, this.questionStartedAt = ee(), this.questionId = this.session?.current_question?.question_id ?? null;
   }
   clearAvailabilityTimer() {
     this.availabilityTimer !== void 0 && (globalThis.clearTimeout(this.availabilityTimer), this.availabilityTimer = void 0);
   }
   scheduleCurrentQuestionAvailability() {
-    const e = Qi(this.session?.current_question);
+    const e = as(this.session?.current_question);
     e === null || e <= Date.now() || (this.waitingUntil = new Date(e).toISOString(), this.availabilityTimer = globalThis.setTimeout(() => {
-      this.availabilityTimer = void 0, this.waitingUntil = void 0, this.questionStartedAt = J();
+      this.availabilityTimer = void 0, this.waitingUntil = void 0, this.questionStartedAt = ee();
     }, e - Date.now()));
   }
   applySession(e) {
@@ -2468,25 +2521,25 @@ const Ue = class Ue extends T {
       return;
     }
     try {
-      this.availability = await ye(
+      this.availability = await ke(
         this.hass,
         this.profile.profile_id,
         this.trackId,
         "learn"
-      ), this.readyAlternative = this.availability.available_now === 0 ? await Dt(this.hass, this.dashboard, this.trackId, "learn") : void 0, this.reminder = await Rt(
+      ), this.readyAlternative = this.availability.available_now === 0 ? await Ft(this.hass, this.dashboard, this.trackId, "learn") : void 0, this.reminder = await Mt(
         this.hass,
         this.profile.profile_id,
         this.trackId,
         "learn"
-      ), this.hasNotificationTarget = (await Ie(this.hass, this.profile.profile_id)).some((i) => i.enabled), this.calibrationFollowup = await Ii(
+      ), this.hasNotificationTarget = (await Ue(this.hass, this.profile.profile_id)).some((i) => i.enabled), this.calibrationFollowup = await ji(
         this.hass,
         this.profile.profile_id,
         this.trackId
       ), this.nextDueTimer !== void 0 && globalThis.clearTimeout(this.nextDueTimer);
       const t = [
-        Y(this.availability),
+        X(this.availability),
         this.availability.next_available_at_utc
-      ].filter((i) => i !== null).map((i) => Date.parse(i)).filter((i) => !Number.isNaN(i) && i > Date.now()).sort((i, s) => i - s)[0];
+      ].filter((i) => i !== null).map((i) => Date.parse(i)).filter((i) => !Number.isNaN(i) && i > Date.now()).sort((i, a) => i - a)[0];
       if (t !== void 0) {
         const i = t - Date.now();
         i > 0 && i < 2147e6 && (this.nextDueTimer = globalThis.setTimeout(() => {
@@ -2503,14 +2556,14 @@ const Ue = class Ue extends T {
     this.loading = !0, this.errorMessage = "";
     try {
       if (e.mode === "learn") {
-        this.trackId = e.trackId, this.session = void 0, this.resetQuestionUi(), this.applySession(await Ae(
+        this.trackId = e.trackId, this.session = void 0, this.resetQuestionUi(), this.applySession(await Ce(
           this.hass,
           this.profile.profile_id,
           e.trackId
         )), await this.refreshAvailability();
         return;
       }
-      const t = await Te(
+      const t = await ze(
         this.hass,
         this.profile.profile_id,
         e.trackId
@@ -2537,10 +2590,10 @@ const Ue = class Ue extends T {
     return this.locale() === "fr" ? "Prochain rappel d’une carte déjà commencée" : "Next recall of a card already started";
   }
   continueCurrentEarly() {
-    this.clearAvailabilityTimer(), this.waitingUntil = void 0, this.forceEarlyCurrent = !0, this.questionStartedAt = J();
+    this.clearAvailabilityTimer(), this.waitingUntil = void 0, this.forceEarlyCurrent = !0, this.questionStartedAt = ee();
   }
   elapsedMs() {
-    return Math.max(0, Math.round(J() - this.questionStartedAt));
+    return Math.max(0, Math.round(ee() - this.questionStartedAt));
   }
   beginSubmissionWatch() {
     this.submissionSlow = !1, this.submissionTimer !== void 0 && globalThis.clearTimeout(this.submissionTimer), this.submissionTimer = globalThis.setTimeout(() => {
@@ -2553,7 +2606,7 @@ const Ue = class Ue extends T {
   async verifySubmission() {
     if (!(this.hass === void 0 || this.session === void 0))
       try {
-        const e = this.retryRequest?.session ?? this.session, t = await M(this.hass, e.id), i = t.version !== e.version || t.current_question?.question_id !== e.current_question?.question_id;
+        const e = this.retryRequest?.session ?? this.session, t = await E(this.hass, e.id), i = t.version !== e.version || t.current_question?.question_id !== e.current_question?.question_id;
         this.applySession(t), i ? (this.loading = !1, this.retryRequest = void 0, this.endSubmissionWatch(), this.notice = this.t("learn.answerApplied")) : (this.loading = !1, this.submissionSlow = !0, this.notice = this.t("learn.answerNotConfirmed"));
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
@@ -2564,12 +2617,12 @@ const Ue = class Ue extends T {
     const e = this.retryRequest;
     this.loading = !0, this.errorMessage = "";
     try {
-      const t = await M(this.hass, e.session.id);
+      const t = await E(this.hass, e.session.id);
       if (!(t.version === e.session.version && t.current_question?.question_id === e.questionId)) {
         this.applySession(t), this.retryRequest = void 0, this.endSubmissionWatch(), this.notice = this.t("learn.answerApplied");
         return;
       }
-      this.applySession(await we(
+      this.applySession(await _e(
         this.hass,
         e.session,
         e.questionId,
@@ -2585,7 +2638,7 @@ const Ue = class Ue extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "")) {
       this.loading = !0, this.errorMessage = "";
       try {
-        this.reminder = await Et(this.hass, this.profile.profile_id, this.trackId, "learn"), this.notice = this.t("learn.reminderArmed");
+        this.reminder = await Dt(this.hass, this.profile.profile_id, this.trackId, "learn"), this.notice = this.t("learn.reminderArmed");
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
       } finally {
@@ -2597,7 +2650,7 @@ const Ue = class Ue extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "")) {
       this.loading = !0;
       try {
-        this.reminder = await Lt(this.hass, this.profile.profile_id, this.trackId, "learn"), this.notice = this.t("learn.reminderCancelled");
+        this.reminder = await It(this.hass, this.profile.profile_id, this.trackId, "learn"), this.notice = this.t("learn.reminderCancelled");
       } finally {
         this.loading = !1;
       }
@@ -2619,7 +2672,7 @@ const Ue = class Ue extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "")) {
       this.loading = !0, this.errorMessage = "";
       try {
-        const e = await Mi(
+        const e = await Hi(
           this.hass,
           this.profile.profile_id,
           this.trackId,
@@ -2641,7 +2694,7 @@ const Ue = class Ue extends T {
     return `locklearn:known-bulk-guard:${e}`;
   }
   maybeShowKnownBulkGuard() {
-    if (this.session === void 0 || !ea(this.session.answers)) return;
+    if (this.session === void 0 || !cs(this.session.answers)) return;
     const e = this.bulkGuardStorageKey(this.session.id);
     globalThis.localStorage?.getItem(e) !== "shown" && (globalThis.localStorage?.setItem(e, "shown"), this.knownBulkGuardVisible = !0);
   }
@@ -2664,7 +2717,7 @@ const Ue = class Ue extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.session === void 0 || this.session.track_id === null || this.lastKnownCardKey === void 0)) {
       this.loading = !0;
       try {
-        await Pt(this.hass, this.profile.profile_id, this.session.track_id, this.lastKnownCardKey), this.lastKnownCardKey = void 0, this.knownNoticeVisible = !1, this.knownUndoTimer !== void 0 && globalThis.clearTimeout(this.knownUndoTimer), this.knownUndoTimer = void 0, this.notice = this.t("learn.knownUndone"), await this.refreshAvailability();
+        await Nt(this.hass, this.profile.profile_id, this.session.track_id, this.lastKnownCardKey), this.lastKnownCardKey = void 0, this.knownNoticeVisible = !1, this.knownUndoTimer !== void 0 && globalThis.clearTimeout(this.knownUndoTimer), this.knownUndoTimer = void 0, this.notice = this.t("learn.knownUndone"), await this.refreshAvailability();
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
       } finally {
@@ -2673,10 +2726,10 @@ const Ue = class Ue extends T {
     }
   }
   async start(e = !1) {
-    if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "" || !ut(this.profile))) {
+    if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "" || !gt(this.profile))) {
       this.loading = !0, this.errorMessage = "", this.notice = "";
       try {
-        const t = await Ae(
+        const t = await Ce(
           this.hass,
           this.profile.profile_id,
           this.trackId,
@@ -2693,10 +2746,10 @@ const Ue = class Ue extends T {
   }
   async resume() {
     const e = this.selectedTrack()?.last_session;
-    if (!(this.hass === void 0 || !dt(e))) {
+    if (!(this.hass === void 0 || !mt(e))) {
       this.loading = !0, this.errorMessage = "";
       try {
-        this.applySession(await M(this.hass, e.session_id)), await this.refreshAvailability();
+        this.applySession(await E(this.hass, e.session_id)), await this.refreshAvailability();
       } catch (t) {
         this.errorMessage = t instanceof Error ? t.message : String(t);
       } finally {
@@ -2707,19 +2760,19 @@ const Ue = class Ue extends T {
   async recover(e) {
     if (this.hass !== void 0 && this.session !== void 0)
       try {
-        this.applySession(await M(this.hass, this.session.id)), this.notice = this.t("learn.reloaded");
+        this.applySession(await E(this.hass, this.session.id)), this.notice = this.t("learn.reloaded");
         return;
       } catch {
       }
     this.errorMessage = e instanceof Error ? e.message : String(e);
   }
   async finalizeIfDone(e) {
-    return this.hass !== void 0 && e.status === "active" && e.current_question === null && e.question_count > 0 ? zt(this.hass, e) : e;
+    return this.hass !== void 0 && e.status === "active" && e.current_question === null && e.question_count > 0 ? Et(this.hass, e) : e;
   }
   async learningAction(e, t) {
     const i = this.session?.current_question;
     if (this.hass === void 0 || this.session === void 0 || i === null || i === void 0) return !1;
-    const s = this.session, n = {
+    const a = this.session, o = {
       kind: "learning",
       action: e,
       hint_used: this.hintUsed,
@@ -2727,20 +2780,20 @@ const Ue = class Ue extends T {
       ...this.forceEarlyCurrent ? { force_early: !0 } : {}
     };
     this.retryRequest = {
-      session: s,
+      session: a,
       questionId: i.question_id,
-      answer: n
+      answer: o
     }, this.loading = !0, this.errorMessage = "", this.beginSubmissionWatch();
     try {
-      const o = await we(
+      const n = await _e(
         this.hass,
-        s,
+        a,
         i.question_id,
-        n
+        o
       );
-      return this.retryRequest = void 0, this.applySession(await this.finalizeIfDone(o)), await this.refreshAvailability(), !0;
-    } catch (o) {
-      return await this.recover(o), !1;
+      return this.retryRequest = void 0, this.applySession(await this.finalizeIfDone(n)), await this.refreshAvailability(), !0;
+    } catch (n) {
+      return await this.recover(n), !1;
     } finally {
       this.loading = !1, this.endSubmissionWatch();
     }
@@ -2759,14 +2812,14 @@ const Ue = class Ue extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.session === void 0 || t === null || t === void 0 || this.session.track_id === null)) {
       this.loading = !0, this.errorMessage = "";
       try {
-        await Ct(
+        await Lt(
           this.hass,
           this.profile.profile_id,
           this.session.track_id,
           t.card_key,
           e
         );
-        const i = await we(
+        const i = await _e(
           this.hass,
           this.session,
           t.question_id,
@@ -2785,7 +2838,7 @@ const Ue = class Ue extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.session?.track_id === null || this.session === void 0 || e === null || e === void 0)) {
       this.loading = !0, this.errorMessage = "";
       try {
-        await Mt(
+        await Ht(
           this.hass,
           this.profile.profile_id,
           this.session.track_id,
@@ -2804,7 +2857,7 @@ const Ue = class Ue extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || e === null || e === void 0 || this.mnemonic.trim() === "")) {
       this.loading = !0, this.errorMessage = "";
       try {
-        await Nt(
+        await Ut(
           this.hass,
           this.profile.profile_id,
           e.card_key,
@@ -2818,7 +2871,7 @@ const Ue = class Ue extends T {
     }
   }
   renderReminderAction() {
-    return Y(this.availability) === null ? l : this.hasNotificationTarget ? this.reminder?.active ? r`<button @click=${() => {
+    return X(this.availability) === null ? l : this.hasNotificationTarget ? this.reminder?.active ? r`<button @click=${() => {
       this.cancelReminder();
     }} ?disabled=${this.loading}>
           ${this.t("learn.cancelReminder")}
@@ -2826,26 +2879,26 @@ const Ue = class Ue extends T {
       this.armReminder();
     }} ?disabled=${this.loading}>
           ${this.locale() === "fr" ? "Me prévenir pour ce rappel" : "Notify me for this recall"}
-        </button>` : r`<button @click=${() => te("settings")}>
+        </button>` : r`<button @click=${() => se("settings")}>
         ${this.t("learn.configureNotifications")}
       </button>`;
   }
   renderAvailabilitySummary() {
     const e = this.availability;
     if (e === void 0) return l;
-    const t = Y(e), i = ht(e), s = this.locale() === "fr";
+    const t = X(e), i = ft(e), a = this.locale() === "fr";
     return r`
       <div class="notice" role="status">
         <strong>${this.t("learn.readiness")}</strong>
         ${e.available_now > 0 ? r`<div>
-              ${s ? `Une nouvelle session de ${e.available_now} cartes est disponible.` : `A new session of ${e.available_now} cards is available.`}
+              ${a ? `Une nouvelle session de ${e.available_now} cartes est disponible.` : `A new session of ${e.available_now} cards is available.`}
             </div>` : r`<div>${this.t("learn.noCardsReady")}</div>`}
         <dl>
-          <dt>${s ? "Cartes restant à découvrir dans ce parcours" : "Cards left to discover in this Track"}</dt>
+          <dt>${a ? "Cartes restant à découvrir dans ce parcours" : "Cards left to discover in this Track"}</dt>
           <dd>${e.new_cards}</dd>
           <dt>${this.t("learn.startedCards")}</dt>
           <dd>${e.introduced_cards}</dd>
-          <dt>${s ? "Cartes commencées en attente de leur prochaine étape" : "Started cards waiting for their next step"}</dt>
+          <dt>${a ? "Cartes commencées en attente de leur prochaine étape" : "Started cards waiting for their next step"}</dt>
           <dd>${i}</dd>
           <dt>${this.t("learn.newQuotaRemaining")}</dt>
           <dd>${e.remaining_new_quota}</dd>
@@ -2872,12 +2925,12 @@ const Ue = class Ue extends T {
   }
   render() {
     if (this.profile === void 0) return l;
-    if (!ut(this.profile))
+    if (!gt(this.profile))
       return r`<section class="learn-card"><p>${this.t("learn.readOnly")}</p></section>`;
     const e = this.tracks();
     if (e.length === 0)
       return r`<section class="learn-card"><p>${this.t("learn.noTracks")}</p></section>`;
-    const t = this.selectedTrack(), i = dt(t?.last_session);
+    const t = this.selectedTrack(), i = mt(t?.last_session);
     return r`
       <section class="learn-shell">
         <div class="toolbar">
@@ -2885,9 +2938,9 @@ const Ue = class Ue extends T {
             <span>${this.t("learn.track")}</span>
             <select .value=${this.trackId} @change=${this.setTrack} ?disabled=${this.loading}>
               ${e.map(
-      (s) => r`
-                  <option value=${s.track_id}>
-                    ${s.name} · ${s.source_language} → ${s.target_language}
+      (a) => r`
+                  <option value=${a.track_id}>
+                    ${a.name} · ${a.source_language} → ${a.target_language}
                   </option>
                 `
     )}
@@ -2990,7 +3043,7 @@ const Ue = class Ue extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.calibrationFollowup?.source_session_id === null || this.calibrationFollowup?.source_session_id === void 0)) {
       this.loading = !0, this.errorMessage = "";
       try {
-        const e = await At(
+        const e = await Rt(
           this.hass,
           this.profile.profile_id,
           this.trackId,
@@ -3073,11 +3126,11 @@ const Ue = class Ue extends T {
   renderSession() {
     if (this.session === void 0) return l;
     if (this.session.question_count === 0) {
-      const e = Y(this.availability), t = this.availability?.next_available_at_utc ?? null, i = this.availability?.next_available_reason ?? null, s = (this.availability?.forceable_early ?? 0) > 0, n = this.availability?.available_now ?? 0;
-      return n > 0 ? r`
+      const e = X(this.availability), t = this.availability?.next_available_at_utc ?? null, i = this.availability?.next_available_reason ?? null, a = (this.availability?.forceable_early ?? 0) > 0, o = this.availability?.available_now ?? 0;
+      return o > 0 ? r`
           <section class="learn-card">
             <h2>${this.t("learn.readyTitle")}</h2>
-            <p>${this.locale() === "fr" ? `Une nouvelle session de ${n} cartes est disponible.` : `A new session of ${n} cards is available.`}</p>
+            <p>${this.locale() === "fr" ? `Une nouvelle session de ${o} cartes est disponible.` : `A new session of ${o} cards is available.`}</p>
             ${e === null ? l : r`
               <p><strong>${this.nextLearningRecallLabel()}:</strong> ${this.dueLabel(e)}</p>
               <div class="actions">${this.renderReminderAction()}</div>
@@ -3097,7 +3150,7 @@ const Ue = class Ue extends T {
             <dt>${this.locale() === "fr" ? "Cartes restant à découvrir dans ce parcours" : "Cards left to discover in this Track"}</dt>
             <dd>${this.availability?.new_cards ?? 0}</dd>
             <dt>${this.locale() === "fr" ? "Cartes commencées en attente de leur prochaine étape" : "Started cards waiting for their next step"}</dt>
-            <dd>${ht(this.availability)}</dd>
+            <dd>${ft(this.availability)}</dd>
             <dt>${this.t("learn.newQuotaRemaining")}</dt><dd>${this.availability?.remaining_new_quota ?? 0}</dd>
           </dl>
           ${e !== null ? r`<p><strong>${this.nextLearningRecallLabel()}:</strong> ${this.dueLabel(e)}</p>` : t === null ? r`<p class="muted">${this.t("learn.noExactTime")}</p>` : r`
@@ -3109,7 +3162,7 @@ const Ue = class Ue extends T {
                   </p>
                 `}
           ${this.renderReminderAction()}
-          ${s ? r`
+          ${a ? r`
             <p class="muted">
               ${(this.availability?.forceable_new ?? 0) > 0 ? this.t("learn.overrideNewHelp") : this.t("learn.continueEarlyHelp")}
             </p>
@@ -3123,7 +3176,7 @@ const Ue = class Ue extends T {
       `;
     }
     if (this.session.current_question === null || this.session.status === "completed") {
-      const e = Y(this.availability), t = this.availability?.next_available_at_utc ?? null, i = this.availability?.next_available_reason ?? null, s = (this.availability?.forceable_early ?? 0) > 0;
+      const e = X(this.availability), t = this.availability?.next_available_at_utc ?? null, i = this.availability?.next_available_reason ?? null, a = (this.availability?.forceable_early ?? 0) > 0;
       return r`
         <section class="learn-card">
           <h2>${this.t("learn.completed")}</h2>
@@ -3137,7 +3190,7 @@ const Ue = class Ue extends T {
               </p>
             `}
           <div class="actions">${this.renderReminderAction()}</div>
-          ${s ? r`
+          ${a ? r`
             <p class="muted">${this.t("learn.continueEarlyHelp")}</p>
             <button class="primary" @click=${() => {
         this.start(!0);
@@ -3153,12 +3206,12 @@ const Ue = class Ue extends T {
         </section>
       `;
     }
-    return this.waitingUntil !== void 0 ? this.renderWaiting(this.session.current_question) : Gi(this.session.current_question) ? this.renderIntroduction(this.session.current_question) : this.renderRetrieval(this.session.current_question);
+    return this.waitingUntil !== void 0 ? this.renderWaiting(this.session.current_question) : ss(this.session.current_question) ? this.renderIntroduction(this.session.current_question) : this.renderRetrieval(this.session.current_question);
   }
   renderWaiting(e) {
     const t = this.waitingUntil;
     if (t === void 0) return l;
-    const i = new Date(t), s = Number.isNaN(i.getTime()) ? "" : new Intl.DateTimeFormat(this.locale(), { timeStyle: "medium" }).format(i);
+    const i = new Date(t), a = Number.isNaN(i.getTime()) ? "" : new Intl.DateTimeFormat(this.locale(), { timeStyle: "medium" }).format(i);
     return r`
       <article class="learn-card" aria-live="polite">
         ${this.renderProgress(e)}
@@ -3166,7 +3219,7 @@ const Ue = class Ue extends T {
         <p>${this.t("learn.waitingBody")}</p>
         <p>
           ${this.t("learn.waitingUntil")}
-          <time datetime=${t}>${s}</time>
+          <time datetime=${t}>${a}</time>
         </p>
         <p class="muted">${this.t("learn.waitingExplain")}</p>
         <button class="primary" @click=${this.continueCurrentEarly} ?disabled=${this.loading}>
@@ -3192,7 +3245,7 @@ const Ue = class Ue extends T {
         <p>${this.t("learn.introductionHelp")}</p>
         <div class="content">
           ${t.introduction_blocks.map(
-      (i, s) => this.renderBlock(i, s === 0)
+      (i, a) => this.renderBlock(i, a === 0)
     )}
         </div>
         ${this.renderHintState(t.hint_blocks, t.mnemonic_blocks)}
@@ -3221,20 +3274,20 @@ const Ue = class Ue extends T {
         <div class="stage">${this.t("learn.prompt")}</div>
         <div class="content">
           ${t.context.flatMap(
-      (s) => s.blocks.map((n) => this.renderBlock(n, !1))
+      (a) => a.blocks.map((o) => this.renderBlock(o, !1))
     )}
-          ${t.prompt.blocks.map((s) => this.renderBlock(s, !0))}
+          ${t.prompt.blocks.map((a) => this.renderBlock(a, !0))}
         </div>
         ${this.hintUsed ? r`
               <div class="hint-state" role="status">
                 ${this.t("learn.hintUsed")}
-                ${i.map((s) => this.renderBlock(s, !1))}
+                ${i.map((a) => this.renderBlock(a, !1))}
               </div>
             ` : l}
         ${this.revealed ? r`
               <div class="answer">
                 <div class="stage">${this.t("learn.answer")}</div>
-                ${t.answer.blocks.map((s) => this.renderBlock(s, !0))}
+                ${t.answer.blocks.map((a) => this.renderBlock(a, !0))}
                 ${this.pendingIdk ? r`<p>${this.t("learn.feedbackIdk")}</p>` : l}
               </div>
             ` : l}
@@ -3288,7 +3341,7 @@ const Ue = class Ue extends T {
     return i.length === 0 ? l : r`
       <div class="hint-state" role="status">
         ${this.t("learn.hintUsed")}
-        ${i.map((s) => this.renderBlock(s, !1))}
+        ${i.map((a) => this.renderBlock(a, !1))}
       </div>
     `;
   }
@@ -3324,8 +3377,8 @@ const Ue = class Ue extends T {
             .value=${this.mnemonic}
             placeholder=${this.t("learn.mnemonicPlaceholder")}
             @input=${(i) => {
-      const s = i.currentTarget;
-      s instanceof HTMLTextAreaElement && (this.mnemonic = s.value);
+      const a = i.currentTarget;
+      a instanceof HTMLTextAreaElement && (this.mnemonic = a.value);
     }}
           ></textarea>
         </label>
@@ -3343,12 +3396,12 @@ const Ue = class Ue extends T {
     `;
   }
   renderBlock(e, t) {
-    return De(e, t);
+    return He(e, t);
   }
 };
-Ue.styles = R`
-    ${Ne}
-    ${H}
+Fe.styles = N`
+    ${Ie}
+    ${j}
 
     :host {
       display: block;
@@ -3596,18 +3649,18 @@ Ue.styles = R`
       }
     }
   `;
-let p = Ue;
+let p = Fe;
 g([
-  b({ attribute: !1 })
+  f({ attribute: !1 })
 ], p.prototype, "hass");
 g([
-  b({ attribute: !1 })
+  f({ attribute: !1 })
 ], p.prototype, "profile");
 g([
-  b({ attribute: !1 })
+  f({ attribute: !1 })
 ], p.prototype, "dashboard");
 g([
-  b({ attribute: !1 })
+  f({ attribute: !1 })
 ], p.prototype, "externalSession");
 g([
   c()
@@ -3688,32 +3741,32 @@ g([
   c()
 ], p.prototype, "calibrationFollowup");
 globalThis.customElements !== void 0 && customElements.get("locklearn-learn-view") === void 0 && customElements.define("locklearn-learn-view", p);
-function pt(a) {
-  return a != null && ["quiz", "calibration"].includes(a.session_type) && ["active", "paused"].includes(a.status);
+function vt(s) {
+  return s != null && ["quiz", "calibration"].includes(s.session_type) && ["active", "paused"].includes(s.status);
 }
-function mt(a) {
-  return a !== void 0 && a.role !== "viewer";
+function bt(s) {
+  return s !== void 0 && s.role !== "viewer";
 }
-function ia(a) {
-  return a?.payload.quiz;
+function us(s) {
+  return s?.payload.quiz;
 }
-function aa(a) {
-  return a?.format === "mcq" || a?.format === "cloze_mcq";
+function hs(s) {
+  return s?.format === "mcq" || s?.format === "cloze_mcq";
 }
-function gt(a) {
-  return a?.format === "free_text" && a.result === "wrong" && a.reportable && typeof a.submitted_text == "string" && a.grading_policy_kind !== void 0 && a.grading_policy_version !== void 0 && a.normalization_version !== void 0;
+function yt(s) {
+  return s?.format === "free_text" && s.result === "wrong" && s.reportable && typeof s.submitted_text == "string" && s.grading_policy_kind !== void 0 && s.grading_policy_version !== void 0 && s.normalization_version !== void 0;
 }
-var sa = Object.defineProperty, w = (a, e, t, i) => {
-  for (var s = void 0, n = a.length - 1, o; n >= 0; n--)
-    (o = a[n]) && (s = o(e, t, s) || s);
-  return s && sa(e, t, s), s;
+var ps = Object.defineProperty, k = (s, e, t, i) => {
+  for (var a = void 0, o = s.length - 1, n; o >= 0; o--)
+    (n = s[o]) && (a = n(e, t, a) || a);
+  return a && ps(e, t, a), a;
 };
-function _e() {
+function Se() {
   return globalThis.performance?.now() ?? Date.now();
 }
-const He = class He extends T {
+const je = class je extends z {
   constructor() {
-    super(...arguments), this.trackId = "", this.format = "mixed", this.loading = !1, this.errorMessage = "", this.notice = "", this.freeText = "", this.hintUsed = !1, this.submissionSlow = !1, this.hasNotificationTarget = !1, this.questionStartedAt = _e(), this.questionId = null, this.refreshOnReturn = () => {
+    super(...arguments), this.trackId = "", this.format = "mixed", this.loading = !1, this.errorMessage = "", this.notice = "", this.freeText = "", this.hintUsed = !1, this.submissionSlow = !1, this.hasNotificationTarget = !1, this.questionStartedAt = Se(), this.questionId = null, this.refreshOnReturn = () => {
       document.visibilityState === "visible" && this.refreshAvailability();
     };
   }
@@ -3735,10 +3788,10 @@ const He = class He extends T {
   }
   locale() {
     const e = this.hass?.locale?.language ?? this.hass?.language ?? globalThis.navigator?.language ?? "en";
-    return Q(e);
+    return Z(e);
   }
   t(e) {
-    return F(this.locale(), e);
+    return O(this.locale(), e);
   }
   tracks() {
     return this.dashboard?.tracks ?? [];
@@ -3755,7 +3808,7 @@ const He = class He extends T {
     t instanceof HTMLSelectElement && (this.format = t.value, this.session = void 0, this.errorMessage = "", this.resetQuestionUi());
   }
   resetQuestionUi() {
-    this.feedback = void 0, this.pendingAnswer = void 0, this.pendingSession = void 0, this.freeText = "", this.hintUsed = !1, this.notice = "", this.questionStartedAt = _e(), this.questionId = this.session?.current_question?.question_id ?? null;
+    this.feedback = void 0, this.pendingAnswer = void 0, this.pendingSession = void 0, this.freeText = "", this.hintUsed = !1, this.notice = "", this.questionStartedAt = Se(), this.questionId = this.session?.current_question?.question_id ?? null;
   }
   applySession(e) {
     const i = (e.current_question?.question_id ?? null) !== this.questionId;
@@ -3767,17 +3820,17 @@ const He = class He extends T {
       return;
     }
     try {
-      this.availability = await ye(
+      this.availability = await ke(
         this.hass,
         this.profile.profile_id,
         this.trackId,
         "quiz"
-      ), this.readyAlternative = this.availability.available_now === 0 ? await Dt(this.hass, this.dashboard, this.trackId, "quiz") : void 0, this.reminder = await Rt(
+      ), this.readyAlternative = this.availability.available_now === 0 ? await Ft(this.hass, this.dashboard, this.trackId, "quiz") : void 0, this.reminder = await Mt(
         this.hass,
         this.profile.profile_id,
         this.trackId,
         "quiz"
-      ), this.hasNotificationTarget = (await Ie(this.hass, this.profile.profile_id)).some((t) => t.enabled), this.nextDueTimer !== void 0 && globalThis.clearTimeout(this.nextDueTimer);
+      ), this.hasNotificationTarget = (await Ue(this.hass, this.profile.profile_id)).some((t) => t.enabled), this.nextDueTimer !== void 0 && globalThis.clearTimeout(this.nextDueTimer);
       const e = this.availability.next_available_at_utc;
       if (e !== null) {
         const t = Date.parse(e) - Date.now();
@@ -3795,7 +3848,7 @@ const He = class He extends T {
     this.loading = !0, this.errorMessage = "";
     try {
       if (e.mode === "quiz") {
-        this.trackId = e.trackId, this.session = void 0, this.resetQuestionUi(), this.applySession(await Te(
+        this.trackId = e.trackId, this.session = void 0, this.resetQuestionUi(), this.applySession(await ze(
           this.hass,
           this.profile.profile_id,
           e.trackId,
@@ -3804,7 +3857,7 @@ const He = class He extends T {
         )), await this.refreshAvailability();
         return;
       }
-      const t = await Ae(
+      const t = await Ce(
         this.hass,
         this.profile.profile_id,
         e.trackId
@@ -3831,7 +3884,7 @@ const He = class He extends T {
     return this.locale() === "fr" ? "Prochaine carte disponible pour un quiz" : "Next card available for a quiz";
   }
   elapsedMs() {
-    return Math.max(0, Math.round(_e() - this.questionStartedAt));
+    return Math.max(0, Math.round(Se() - this.questionStartedAt));
   }
   beginSubmissionWatch() {
     this.submissionSlow = !1, this.submissionTimer !== void 0 && globalThis.clearTimeout(this.submissionTimer), this.submissionTimer = globalThis.setTimeout(() => {
@@ -3844,7 +3897,7 @@ const He = class He extends T {
   async verifySubmission() {
     if (!(this.hass === void 0 || this.session === void 0))
       try {
-        const e = this.retryRequest?.session ?? this.session, t = await M(this.hass, e.id), i = t.version !== e.version || t.current_question?.question_id !== e.current_question?.question_id;
+        const e = this.retryRequest?.session ?? this.session, t = await E(this.hass, e.id), i = t.version !== e.version || t.current_question?.question_id !== e.current_question?.question_id;
         this.applySession(t), i ? (this.loading = !1, this.retryRequest = void 0, this.endSubmissionWatch(), this.notice = this.t("quiz.answerApplied")) : (this.loading = !1, this.submissionSlow = !0, this.notice = this.t("quiz.answerNotConfirmed"));
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
@@ -3855,18 +3908,18 @@ const He = class He extends T {
     const e = this.retryRequest;
     this.loading = !0, this.errorMessage = "";
     try {
-      const t = await M(this.hass, e.session.id);
+      const t = await E(this.hass, e.session.id);
       if (!(t.version === e.session.version && t.current_question?.question_id === e.questionId)) {
         this.applySession(t), this.retryRequest = void 0, this.endSubmissionWatch(), this.notice = this.t("quiz.answerApplied");
         return;
       }
-      const s = await le(
+      const a = await de(
         this.hass,
         e.session,
         e.questionId,
         e.answer
       );
-      this.feedback = s.feedback, this.pendingSession = s.session, this.retryRequest = void 0, this.retryRequest = void 0, this.endSubmissionWatch();
+      this.feedback = a.feedback, this.pendingSession = a.session, this.retryRequest = void 0, this.retryRequest = void 0, this.endSubmissionWatch();
     } catch (t) {
       await this.recover(t);
     } finally {
@@ -3877,7 +3930,7 @@ const He = class He extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "")) {
       this.loading = !0, this.errorMessage = "";
       try {
-        this.reminder = await Et(this.hass, this.profile.profile_id, this.trackId, "quiz"), this.notice = this.t("quiz.reminderArmed");
+        this.reminder = await Dt(this.hass, this.profile.profile_id, this.trackId, "quiz"), this.notice = this.t("quiz.reminderArmed");
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
       } finally {
@@ -3889,18 +3942,18 @@ const He = class He extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "")) {
       this.loading = !0;
       try {
-        this.reminder = await Lt(this.hass, this.profile.profile_id, this.trackId, "quiz"), this.notice = this.t("quiz.reminderCancelled");
+        this.reminder = await It(this.hass, this.profile.profile_id, this.trackId, "quiz"), this.notice = this.t("quiz.reminderCancelled");
       } finally {
         this.loading = !1;
       }
     }
   }
   async start() {
-    if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "" || !mt(this.profile))) {
+    if (!(this.hass === void 0 || this.profile === void 0 || this.trackId === "" || !bt(this.profile))) {
       this.loading = !0, this.errorMessage = "";
       try {
         this.applySession(
-          await Te(
+          await ze(
             this.hass,
             this.profile.profile_id,
             this.trackId,
@@ -3917,10 +3970,10 @@ const He = class He extends T {
   }
   async resume() {
     const e = this.selectedTrack()?.last_session;
-    if (!(this.hass === void 0 || !pt(e))) {
+    if (!(this.hass === void 0 || !vt(e))) {
       this.loading = !0, this.errorMessage = "";
       try {
-        this.applySession(await M(this.hass, e.session_id)), await this.refreshAvailability();
+        this.applySession(await E(this.hass, e.session_id)), await this.refreshAvailability();
       } catch (t) {
         this.errorMessage = t instanceof Error ? t.message : String(t);
       } finally {
@@ -3931,7 +3984,7 @@ const He = class He extends T {
   async recover(e) {
     if (this.hass !== void 0 && this.session !== void 0)
       try {
-        this.applySession(await M(this.hass, this.session.id)), this.notice = this.t("quiz.reloaded");
+        this.applySession(await E(this.hass, this.session.id)), this.notice = this.t("quiz.reloaded");
         return;
       } catch {
       }
@@ -3951,14 +4004,14 @@ const He = class He extends T {
     const i = this.enrichAnswer(e);
     this.loading = !0, this.errorMessage = "";
     try {
-      this.feedback = await Ni(
+      this.feedback = await Ui(
         this.hass,
         this.session.id,
         t.question_id,
         i
       ), this.pendingAnswer = i;
-    } catch (s) {
-      await this.recover(s);
+    } catch (a) {
+      await this.recover(a);
     } finally {
       this.loading = !1;
     }
@@ -3966,22 +4019,22 @@ const He = class He extends T {
   async submitDirect(e) {
     const t = this.session?.current_question;
     if (this.hass === void 0 || this.session === void 0 || t === null || t === void 0) return;
-    const i = this.enrichAnswer(e), s = this.session;
+    const i = this.enrichAnswer(e), a = this.session;
     this.retryRequest = {
-      session: s,
+      session: a,
       questionId: t.question_id,
       answer: i
     }, this.loading = !0, this.errorMessage = "", this.beginSubmissionWatch();
     try {
-      const n = await le(
+      const o = await de(
         this.hass,
-        s,
+        a,
         t.question_id,
         i
       );
-      this.feedback = n.feedback, this.pendingAnswer = void 0, this.pendingSession = n.session, this.retryRequest = void 0;
-    } catch (n) {
-      await this.recover(n);
+      this.feedback = o.feedback, this.pendingAnswer = void 0, this.pendingSession = o.session, this.retryRequest = void 0;
+    } catch (o) {
+      await this.recover(o);
     } finally {
       this.loading = !1, this.endSubmissionWatch();
     }
@@ -3996,32 +4049,32 @@ const He = class He extends T {
       answer: i
     }, this.loading = !0, this.errorMessage = "", this.beginSubmissionWatch();
     try {
-      const s = await le(
+      const a = await de(
         this.hass,
         t,
         e.question_id,
         i
       );
       if (this.feedback?.result === "correct") {
-        await this.advanceSession(s.session);
+        await this.advanceSession(a.session);
         return;
       }
-      this.feedback = s.feedback, this.pendingSession = s.session;
-    } catch (s) {
-      await this.recover(s);
+      this.feedback = a.feedback, this.pendingSession = a.session;
+    } catch (a) {
+      await this.recover(a);
     } finally {
       this.loading = !1, this.endSubmissionWatch();
     }
   }
   async advanceSession(e) {
     let t = e;
-    this.hass !== void 0 && t.status === "active" && t.current_question === null && t.question_count > 0 && (t = await zt(this.hass, t)), this.applySession(t), await this.refreshAvailability();
+    this.hass !== void 0 && t.status === "active" && t.current_question === null && t.question_count > 0 && (t = await Et(this.hass, t)), this.applySession(t), await this.refreshAvailability();
   }
   async startLearningAfterCalibration() {
     if (!(this.hass === void 0 || this.profile === void 0 || this.session?.track_id === null || this.session?.track_id === void 0)) {
       this.loading = !0, this.errorMessage = "";
       try {
-        const e = await At(
+        const e = await Rt(
           this.hass,
           this.profile.profile_id,
           this.session.track_id,
@@ -4053,10 +4106,10 @@ const He = class He extends T {
   }
   async acceptReportedFreeText() {
     const e = this.session?.current_question;
-    if (!(this.hass === void 0 || this.profile === void 0 || this.session === void 0 || this.session.track_id === null || e === null || e === void 0 || this.feedback === void 0 || this.pendingAnswer === void 0 || !gt(this.feedback))) {
+    if (!(this.hass === void 0 || this.profile === void 0 || this.session === void 0 || this.session.track_id === null || e === null || e === void 0 || this.feedback === void 0 || this.pendingAnswer === void 0 || !yt(this.feedback))) {
       this.loading = !0, this.errorMessage = "";
       try {
-        if ((await Di(
+        if ((await Fi(
           this.hass,
           this.profile.profile_id,
           this.session.track_id,
@@ -4067,13 +4120,13 @@ const He = class He extends T {
         const i = {
           ...this.pendingAnswer,
           should_be_accepted: !0
-        }, s = await le(
+        }, a = await de(
           this.hass,
           this.session,
           e.question_id,
           i
         );
-        await this.advanceSession(s.session), this.notice = this.t("quiz.reportAccepted");
+        await this.advanceSession(a.session), this.notice = this.t("quiz.reportAccepted");
       } catch (t) {
         await this.recover(t);
       } finally {
@@ -4086,7 +4139,7 @@ const He = class He extends T {
     if (!(this.hass === void 0 || this.profile === void 0 || this.session === void 0 || this.session.track_id === null || e === null || e === void 0)) {
       this.loading = !0, this.errorMessage = "";
       try {
-        await Mt(
+        await Ht(
           this.hass,
           this.profile.profile_id,
           this.session.track_id,
@@ -4116,16 +4169,16 @@ const He = class He extends T {
       this.cancelReminder();
     }} ?disabled=${this.loading}>${this.t("quiz.cancelReminder")}</button>` : r`<button @click=${() => {
       this.armReminder();
-    }} ?disabled=${this.loading}>${this.t("quiz.remindMe")}</button>` : r`<button @click=${() => te("settings")}>${this.t("quiz.configureNotifications")}</button>`;
+    }} ?disabled=${this.loading}>${this.t("quiz.remindMe")}</button>` : r`<button @click=${() => se("settings")}>${this.t("quiz.configureNotifications")}</button>`;
   }
   render() {
     if (this.profile === void 0) return l;
-    if (!mt(this.profile))
+    if (!bt(this.profile))
       return r`<section class="quiz-card"><p>${this.t("quiz.readOnly")}</p></section>`;
     const e = this.tracks();
     if (e.length === 0)
       return r`<section class="quiz-card"><p>${this.t("quiz.noTracks")}</p></section>`;
-    const t = this.selectedTrack(), i = pt(t?.last_session), s = i && t?.last_session?.session_type === "calibration";
+    const t = this.selectedTrack(), i = vt(t?.last_session), a = i && t?.last_session?.session_type === "calibration";
     return r`
       <section class="quiz-shell">
         <div class="toolbar">
@@ -4134,9 +4187,9 @@ const He = class He extends T {
               <span>${this.t("quiz.track")}</span>
               <select .value=${this.trackId} @change=${this.setTrack} ?disabled=${this.loading}>
                 ${e.map(
-      (n) => r`
-                    <option value=${n.track_id}>
-                      ${n.name} · ${n.source_language} → ${n.target_language}
+      (o) => r`
+                    <option value=${o.track_id}>
+                      ${o.name} · ${o.source_language} → ${o.target_language}
                     </option>
                   `
     )}
@@ -4154,7 +4207,7 @@ const He = class He extends T {
           </div>
           <div class="actions">
             ${this.session === void 0 && i ? r`<button class="primary" @click=${this.resume} ?disabled=${this.loading}>
-                  ${this.t(s ? "quiz.resumeCalibration" : "quiz.resume")}
+                  ${this.t(a ? "quiz.resumeCalibration" : "quiz.resume")}
                 </button>` : this.session === void 0 ? r`<button class="primary" @click=${() => {
       this.start();
     }} ?disabled=${this.loading}>
@@ -4162,7 +4215,7 @@ const He = class He extends T {
                 </button>` : l}
           </div>
           ${this.session === void 0 ? r`<p class="muted">
-            ${i ? this.t(s ? "quiz.resumeCalibrationHelp" : "quiz.resumeHelp") : this.t("quiz.startHelp")}
+            ${i ? this.t(a ? "quiz.resumeCalibrationHelp" : "quiz.resumeHelp") : this.t("quiz.startHelp")}
           </p>` : l}
         </div>
         ${this.session === void 0 && this.availability !== void 0 ? r`
@@ -4232,11 +4285,11 @@ const He = class He extends T {
   renderSession() {
     if (this.session === void 0) return l;
     if (this.session.question_count === 0) {
-      const t = this.availability?.introduced_cards ?? 0, i = this.availability?.next_available_at_utc ?? null, s = this.availability?.available_now ?? 0;
-      return s > 0 ? r`
+      const t = this.availability?.introduced_cards ?? 0, i = this.availability?.next_available_at_utc ?? null, a = this.availability?.available_now ?? 0;
+      return a > 0 ? r`
           <section class="quiz-card">
             <h2>${this.t("quiz.howItWorks")}</h2>
-            <p>${this.t("quiz.readyFromEmpty").replace("{count}", String(s))}</p>
+            <p>${this.t("quiz.readyFromEmpty").replace("{count}", String(a))}</p>
             <button class="primary" @click=${() => {
         this.start();
       }} ?disabled=${this.loading}>
@@ -4251,7 +4304,7 @@ const He = class He extends T {
           </p>
           <dl>
             <dt>${this.t("quiz.startedCards")}</dt><dd>${t}</dd>
-            <dt>${this.t("quiz.readyCards")}</dt><dd>${s}</dd>
+            <dt>${this.t("quiz.readyCards")}</dt><dd>${a}</dd>
           </dl>
           ${i === null ? r`<p class="muted">${this.t("quiz.noExactTime")}</p>` : r`
                 <p><strong>${this.nextQuizAvailableLabel()}:</strong> ${this.dueLabel(i)}</p>
@@ -4301,7 +4354,7 @@ const He = class He extends T {
         </section>
       `;
     }
-    const e = ia(this.session.current_question);
+    const e = us(this.session.current_question);
     return e === void 0 ? r`<section class="quiz-card"><p>${this.t("quiz.invalidQuestion")}</p></section>` : this.renderQuestion(this.session.current_question, e);
   }
   renderQuestion(e, t) {
@@ -4336,7 +4389,7 @@ const He = class He extends T {
     `;
   }
   renderInput(e) {
-    return aa(e) ? r`
+    return hs(e) ? r`
         <div class="options" aria-label=${this.t("quiz.answers")}>
           ${e.options.map(
       (t, i) => r`
@@ -4434,7 +4487,7 @@ const He = class He extends T {
               >
                 ${t.result === "wrong" ? this.t("quiz.showCorrection") : this.t("quiz.continue")}
               </button>`}
-          ${gt(t) ? r`<button
+          ${yt(t) ? r`<button
                 @click=${() => {
       this.acceptReportedFreeText();
     }}
@@ -4453,12 +4506,12 @@ const He = class He extends T {
     return e === "correct" ? this.t("quiz.correct") : e === "wrong" ? this.t("quiz.wrong") : e === "idk" ? this.t("quiz.idkFeedback") : this.t("quiz.unrecognized");
   }
   renderBlock(e) {
-    return De(e);
+    return He(e);
   }
 };
-He.styles = R`
-    ${Ne}
-    ${H}
+je.styles = N`
+    ${Ie}
+    ${j}
 
     :host {
       display: block;
@@ -4697,76 +4750,358 @@ He.styles = R`
       }
     }
   `;
-let v = He;
-w([
-  b({ attribute: !1 })
-], v.prototype, "hass");
-w([
-  b({ attribute: !1 })
-], v.prototype, "profile");
-w([
-  b({ attribute: !1 })
-], v.prototype, "dashboard");
-w([
-  b({ attribute: !1 })
-], v.prototype, "externalSession");
-w([
+let b = je;
+k([
+  f({ attribute: !1 })
+], b.prototype, "hass");
+k([
+  f({ attribute: !1 })
+], b.prototype, "profile");
+k([
+  f({ attribute: !1 })
+], b.prototype, "dashboard");
+k([
+  f({ attribute: !1 })
+], b.prototype, "externalSession");
+k([
   c()
-], v.prototype, "trackId");
-w([
+], b.prototype, "trackId");
+k([
   c()
-], v.prototype, "format");
-w([
+], b.prototype, "format");
+k([
   c()
-], v.prototype, "session");
-w([
+], b.prototype, "session");
+k([
   c()
-], v.prototype, "loading");
-w([
+], b.prototype, "loading");
+k([
   c()
-], v.prototype, "errorMessage");
-w([
+], b.prototype, "errorMessage");
+k([
   c()
-], v.prototype, "notice");
-w([
+], b.prototype, "notice");
+k([
   c()
-], v.prototype, "feedback");
-w([
+], b.prototype, "feedback");
+k([
   c()
-], v.prototype, "pendingAnswer");
-w([
+], b.prototype, "pendingAnswer");
+k([
   c()
-], v.prototype, "pendingSession");
-w([
+], b.prototype, "pendingSession");
+k([
   c()
-], v.prototype, "freeText");
-w([
+], b.prototype, "freeText");
+k([
   c()
-], v.prototype, "hintUsed");
-w([
+], b.prototype, "hintUsed");
+k([
   c()
-], v.prototype, "availability");
-w([
+], b.prototype, "availability");
+k([
   c()
-], v.prototype, "reminder");
-w([
+], b.prototype, "reminder");
+k([
   c()
-], v.prototype, "submissionSlow");
-w([
+], b.prototype, "submissionSlow");
+k([
   c()
-], v.prototype, "retryRequest");
-w([
+], b.prototype, "retryRequest");
+k([
   c()
-], v.prototype, "concernedFilter");
-w([
+], b.prototype, "concernedFilter");
+k([
   c()
-], v.prototype, "readyAlternative");
-w([
+], b.prototype, "readyAlternative");
+k([
   c()
-], v.prototype, "hasNotificationTarget");
-globalThis.customElements !== void 0 && customElements.get("locklearn-quiz-view") === void 0 && customElements.define("locklearn-quiz-view", v);
-const ra = (a) => (...e) => ({ _$litDirective$: a, values: e });
-let na = class {
+], b.prototype, "hasNotificationTarget");
+globalThis.customElements !== void 0 && customElements.get("locklearn-quiz-view") === void 0 && customElements.define("locklearn-quiz-view", b);
+var ms = Object.defineProperty, S = (s, e, t, i) => {
+  for (var a = void 0, o = s.length - 1, n; o >= 0; o--)
+    (n = s[o]) && (a = n(e, t, a) || a);
+  return a && ms(e, t, a), a;
+};
+const Oe = class Oe extends z {
+  constructor() {
+    super(...arguments), this.trackId = "", this.count = 20, this.contentTypes = [], this.direction = "any", this.packId = "", this.level = "", this.tags = "", this.shuffle = !0, this.optionCount = 4, this.history = [], this.busy = !1, this.error = "";
+  }
+  updated(e) {
+    e.has("profile") && (this.session = void 0, this.result = void 0, this.trackId = this.dashboard?.tracks[0]?.track_id ?? "", this.history = [], this.hass && this.profile && this.loadHistory(this.profile.profile_id)), e.has("dashboard") && !this.trackId && (this.trackId = this.dashboard?.tracks[0]?.track_id ?? "");
+  }
+  async loadHistory(e) {
+    try {
+      const t = await Yi(this.hass, e);
+      this.profile?.profile_id === e && (this.history = t.items);
+    } catch {
+    }
+  }
+  get fr() {
+    return (this.hass?.locale?.language ?? this.hass?.language ?? "en").toLowerCase().startsWith("fr");
+  }
+  async perform(e) {
+    if (!this.busy) {
+      this.busy = !0, this.error = "";
+      try {
+        await e();
+      } catch (t) {
+        this.error = t instanceof Error ? t.message : String(t);
+      } finally {
+        this.busy = !1;
+      }
+    }
+  }
+  begin() {
+    this.perform(async () => {
+      !this.hass || !this.profile || !this.trackId || (this.session = await Ki(this.hass, this.profile.profile_id, this.trackId, {
+        requestedCards: this.count,
+        contentTypes: this.contentTypes.length ? this.contentTypes : void 0,
+        direction: this.direction,
+        packId: this.packId.trim() || void 0,
+        levels: this.level.trim() ? [this.level.trim()] : void 0,
+        tags: this.tags.split(",").map((e) => e.trim()).filter(Boolean),
+        shuffle: this.shuffle,
+        optionCount: this.optionCount
+      }), this.result = void 0, await this.loadHistory(this.profile.profile_id));
+    });
+  }
+  pause() {
+    this.perform(async () => {
+      !this.hass || !this.session || this.session.status !== "active" || (this.session = await Zi(this.hass, this.session, !0));
+    });
+  }
+  resume() {
+    this.perform(async () => {
+      const e = this.dashboard?.tracks.find((t) => t.track_id === this.trackId)?.last_session;
+      !this.hass || e?.session_type !== "exam" || (this.session = await E(this.hass, e.session_id), this.session.status === "completed" && (this.result = await ht(this.hass, this.session.id)));
+    });
+  }
+  resumePaused() {
+    this.perform(async () => {
+      !this.hass || !this.session || this.session.status !== "paused" || (this.session = await this.hass.callWS({
+        type: "locklearn/session/pause",
+        session_id: this.session.id,
+        expected_version: this.session.version,
+        paused: !1
+      }));
+    });
+  }
+  openHistory(e) {
+    this.perform(async () => {
+      if (!this.hass) return;
+      const t = await E(this.hass, e.attempt_id);
+      this.session = t, this.result = e.status === "completed" ? await ht(this.hass, e.attempt_id) : void 0, t.track_id && (this.trackId = t.track_id);
+    });
+  }
+  answer(e) {
+    this.perform(async () => {
+      !this.hass || !this.session?.current_question || (this.session = await Gi(
+        this.hass,
+        this.session,
+        this.session.current_question.question_id,
+        e
+      ));
+    });
+  }
+  finish() {
+    this.perform(async () => {
+      if (!this.hass || !this.session) return;
+      const e = await Qi(this.hass, this.session);
+      this.session = e.session, this.result = e.result, await this.loadHistory(this.profile?.profile_id ?? "");
+    });
+  }
+  render() {
+    if (!this.profile) return r`<section>${this.fr ? "Aucun profil disponible." : "No profile available."}</section>`;
+    const e = this.dashboard?.tracks ?? [], t = e.find((n) => n.track_id === this.trackId)?.last_session, i = t?.session_type === "exam" && (t.status === "active" || t.status === "paused" || t.status === "completed"), a = this.session?.current_question, o = a?.payload.quiz;
+    return r`<section>
+      <h1>${this.fr ? "Examen" : "Exam"}</h1>
+      <p class="muted">${this.fr ? "Les réponses sont définitives. Le corrigé et le score apparaissent uniquement à la fin. Aucun changement direct des boxes SRS." : "Answers are final. Corrections and score appear only at the end. No direct SRS box promotion."}</p>
+      ${this.session ? this.result ? r`
+        <h2>${this.result.correct} / ${this.result.total} — ${this.result.percentage}%</h2>
+        <h3>${this.fr ? "Revoir mes erreurs" : "Review mistakes"}</h3>
+        ${this.result.questions.filter((n) => n.result !== "correct").map((n) => r`
+          <div class="weak">
+            <p><strong>${n.prompt}</strong></p>
+            <p>${this.fr ? "Votre réponse" : "Your answer"}: ${n.given ?? (this.fr ? "Je ne sais pas" : "I don't know")}</p>
+            <p>${this.fr ? "Bonne réponse" : "Correct answer"}: ${n.correct}</p>
+            ${n.context ? r`<p class="muted">${n.context}</p>` : l}
+          </div>
+        `)}
+        <button @click=${() => {
+      this.session = void 0, this.result = void 0;
+    }}>${this.fr ? "Retour" : "Back"}</button>
+      ` : this.session.status === "paused" ? r`
+        <p>${this.fr ? "Examen en pause." : "Exam paused."}</p>
+        <button @click=${this.resumePaused} ?disabled=${this.busy}>${this.fr ? "Reprendre" : "Resume"}</button>
+    ` : a && o ? r`
+        <p>${this.fr, "Question"} ${a.position + 1} / ${this.session.question_count}</p>
+        <div class="prompt">${o.prompt_text}</div>
+        <div class="choices">
+          ${o.options.map((n) => r`<button ?disabled=${this.busy || this.profile?.role === "viewer"}
+            @click=${() => this.answer(n.answer_id)}>${n.text}</button>`)}
+          <button ?disabled=${this.busy || this.profile?.role === "viewer"}
+            @click=${() => this.answer(null)}>${this.fr ? "Je ne sais pas" : "I don't know"}</button>
+        </div>
+        <p class="muted">${this.fr ? "Pas de correction avant la fin." : "No correction until the end."}</p>
+        <button @click=${this.pause} ?disabled=${this.busy}>${this.fr ? "Mettre en pause" : "Pause exam"}</button>
+      ` : r`
+        <p>${this.fr ? "Toutes les réponses sont enregistrées." : "All answers have been recorded."}</p>
+        <button @click=${this.finish} ?disabled=${this.busy || this.session?.status !== "active"}>
+          ${this.fr ? "Terminer et voir le score" : "Finish and see score"}
+        </button>
+      ` : r`
+        <label>${this.fr ? "Parcours" : "Track"}
+          <select .value=${this.trackId} @change=${(n) => {
+      this.trackId = n.target.value;
+    }}>
+            ${e.map((n) => r`<option value=${n.track_id}>${n.name}</option>`)}
+          </select>
+        </label>
+        <label>${this.fr ? "Nombre de questions" : "Number of questions"}
+          <select .value=${String(this.count)} @change=${(n) => {
+      this.count = Number(n.target.value);
+    }}>
+            ${[10, 20, 30, 40].map((n) => r`<option value=${n}>${n}</option>`)}
+          </select>
+        </label>
+        <fieldset>
+          <legend>${this.fr ? "Types de contenu" : "Content types"}</legend>
+          ${["vocabulary", "kanji", "grammar", "expression", "sentence"].map((n) => r`
+            <label><input type="checkbox" .checked=${this.contentTypes.includes(n)}
+              @change=${(u) => {
+      const d = u.target.checked;
+      this.contentTypes = d ? [...this.contentTypes, n] : this.contentTypes.filter((h) => h !== n);
+    }} /> ${n}</label>
+          `)}
+        </fieldset>
+        <label>${this.fr, "Direction"}
+          <select .value=${this.direction} @change=${(n) => {
+      this.direction = n.target.value;
+    }}>
+            <option value="any">${this.fr ? "Les deux" : "Any"}</option>
+            <option value="forward">${this.fr ? "Source → cible" : "Source → target"}</option>
+            <option value="reverse">${this.fr ? "Cible → source" : "Target → source"}</option>
+          </select>
+        </label>
+        <label>${this.fr ? "Pack (identifiant, optionnel)" : "Pack (optional id)"}
+          <input .value=${this.packId} @input=${(n) => {
+      this.packId = n.target.value;
+    }} />
+        </label>
+        <label>${this.fr ? "Niveau (tag level, optionnel)" : "Level (optional level tag)"}
+          <input .value=${this.level} @input=${(n) => {
+      this.level = n.target.value;
+    }} />
+        </label>
+        <label>${this.fr ? "Tags (séparés par des virgules)" : "Tags (comma-separated)"}
+          <input .value=${this.tags} @input=${(n) => {
+      this.tags = n.target.value;
+    }} />
+        </label>
+        <label><input type="checkbox" .checked=${this.shuffle}
+          @change=${(n) => {
+      this.shuffle = n.target.checked;
+    }} />
+          ${this.fr ? "Mélanger les questions" : "Shuffle questions"}</label>
+        <label>${this.fr ? "Nombre d'options par QCM" : "Options per MCQ"}
+          <select .value=${String(this.optionCount)} @change=${(n) => {
+      this.optionCount = Number(n.target.value);
+    }}>
+            ${[2, 3, 4, 5, 6].map((n) => r`<option value=${n}>${n}</option>`)}
+          </select>
+        </label>
+        ${this.profile.role === "viewer" ? l : r`
+          <button @click=${this.begin} ?disabled=${this.busy || !this.trackId}>${this.fr ? "Commencer l'examen" : "Start exam"}</button>
+        `}
+        ${i ? r`<button @click=${this.resume} ?disabled=${this.busy}>${this.fr ? "Reprendre / consulter" : "Resume / review"}</button>` : l}
+        ${this.history.length ? r`
+          <h2>${this.fr ? "Examens précédents" : "Previous exams"}</h2>
+          ${this.history.map((n) => r`<button class="history" @click=${() => this.openHistory(n)}>
+            ${new Date(n.started_at_utc).toLocaleString()} —
+            ${n.status === "completed" ? `${n.correct_count}/${n.question_count}` : n.status}
+          </button>`)}
+        ` : l}
+      `}
+      ${this.error ? r`<p class="error" role="alert">${this.error}</p>` : l}
+    </section>`;
+  }
+};
+Oe.styles = N`
+    :host { display: block; color: var(--primary-text-color); }
+    section { display: grid; gap: 16px; padding: clamp(16px, 4vw, 28px);
+      background: var(--card-background-color, var(--primary-background-color));
+      border-radius: 14px; max-width: 760px; margin-inline: auto; }
+    button, select, input { font: inherit; min-height: 44px; padding: 8px 12px;
+      border: 1px solid var(--divider-color); border-radius: 8px;
+      color: var(--primary-text-color); background: var(--secondary-background-color); }
+    button { text-align: left; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: default; }
+    .choices { display: grid; gap: 10px; }
+    fieldset { display: grid; gap: 6px; border: 1px solid var(--divider-color); border-radius: 8px; }
+    fieldset label { display: block; }
+    .history { font-size: .95rem; }
+    label { display: grid; gap: 6px; }
+    .prompt { font-size: clamp(1.4rem, 4vw, 2rem); text-align: center; padding: 22px 8px; }
+    .muted { color: var(--secondary-text-color); }
+    .error { color: var(--error-color); }
+    .weak { border-inline-start: 3px solid var(--warning-color); padding-inline: 12px; }
+  `;
+let w = Oe;
+S([
+  f({ attribute: !1 })
+], w.prototype, "hass");
+S([
+  f({ attribute: !1 })
+], w.prototype, "profile");
+S([
+  f({ attribute: !1 })
+], w.prototype, "dashboard");
+S([
+  c()
+], w.prototype, "trackId");
+S([
+  c()
+], w.prototype, "count");
+S([
+  c()
+], w.prototype, "contentTypes");
+S([
+  c()
+], w.prototype, "direction");
+S([
+  c()
+], w.prototype, "packId");
+S([
+  c()
+], w.prototype, "level");
+S([
+  c()
+], w.prototype, "tags");
+S([
+  c()
+], w.prototype, "shuffle");
+S([
+  c()
+], w.prototype, "optionCount");
+S([
+  c()
+], w.prototype, "session");
+S([
+  c()
+], w.prototype, "result");
+S([
+  c()
+], w.prototype, "history");
+S([
+  c()
+], w.prototype, "busy");
+S([
+  c()
+], w.prototype, "error");
+customElements.define("locklearn-exam-view", w);
+const gs = (s) => (...e) => ({ _$litDirective$: s, values: e });
+let fs = class {
   constructor(e) {
   }
   get _$AU() {
@@ -4782,42 +5117,42 @@ let na = class {
     return this.render(...t);
   }
 };
-const oa = {}, la = (a, e = oa) => a._$AH = e;
-const ce = ra(class extends na {
+const vs = {}, bs = (s, e = vs) => s._$AH = e;
+const ue = gs(class extends fs {
   constructor() {
     super(...arguments), this.key = l;
   }
-  render(a, e) {
-    return this.key = a, e;
+  render(s, e) {
+    return this.key = s, e;
   }
-  update(a, [e, t]) {
-    return e !== this.key && (la(a), this.key = e), t;
+  update(s, [e, t]) {
+    return e !== this.key && (bs(s), this.key = e), t;
   }
 });
-var ca = Object.defineProperty, y = (a, e, t, i) => {
-  for (var s = void 0, n = a.length - 1, o; n >= 0; n--)
-    (o = a[n]) && (s = o(e, t, s) || s);
-  return s && ca(e, t, s), s;
+var ys = Object.defineProperty, y = (s, e, t, i) => {
+  for (var a = void 0, o = s.length - 1, n; o >= 0; o--)
+    (n = s[o]) && (a = n(e, t, a) || a);
+  return a && ys(e, t, a), a;
 };
-function C(a, e, t) {
-  const i = Number.parseInt(String(a ?? ""), 10);
+function R(s, e, t) {
+  const i = Number.parseInt(String(s ?? ""), 10);
   return Number.isFinite(i) && i >= t ? i : e;
 }
-function xe(a, e) {
-  const t = String(a ?? "").trim();
+function qe(s, e) {
+  const t = String(s ?? "").trim();
   if (t === "") return null;
   const i = Number.parseInt(t, 10);
   return Number.isFinite(i) && i >= e ? i : null;
 }
-function O(a, e, t, i) {
-  const s = Number.parseFloat(String(a ?? ""));
-  return Number.isFinite(s) && s >= t && s <= i ? s : e;
+function V(s, e, t, i) {
+  const a = Number.parseFloat(String(s ?? ""));
+  return Number.isFinite(a) && a >= t && a <= i ? a : e;
 }
-function X(a) {
-  if (a instanceof Error && a.message) return a.message;
-  if (typeof a == "string") return a;
-  if (typeof a == "object" && a !== null) {
-    const e = a;
+function te(s) {
+  if (s instanceof Error && s.message) return s.message;
+  if (typeof s == "string") return s;
+  if (typeof s == "object" && s !== null) {
+    const e = s;
     if (typeof e.message == "string" && e.message) return e.message;
     if (typeof e.code == "string" && e.code) return e.code;
     try {
@@ -4826,29 +5161,29 @@ function X(a) {
       return "Unknown error";
     }
   }
-  return String(a);
+  return String(s);
 }
-function W(a, e) {
-  if (a === "ja-Latn")
+function B(s, e) {
+  if (s === "ja-Latn")
     return e === "fr" ? "Japonais (rōmaji)" : "Japanese (romaji)";
   try {
-    const t = a.split("-", 1)[0] ?? a;
-    return new Intl.DisplayNames([e], { type: "language" }).of(t) ?? a;
+    const t = s.split("-", 1)[0] ?? s;
+    return new Intl.DisplayNames([e], { type: "language" }).of(t) ?? s;
   } catch {
-    return a;
+    return s;
   }
 }
-function V(a, e) {
-  const t = a?.[e];
+function K(s, e) {
+  const t = s?.[e];
   return typeof t == "object" && t !== null ? t : {};
 }
-function da(a) {
-  return a === "owner";
+function $s(s) {
+  return s === "owner";
 }
-function ua(a) {
-  return a === "owner" || a === "editor";
+function ks(s) {
+  return s === "owner" || s === "editor";
 }
-const Fe = class Fe extends T {
+const We = class We extends z {
   constructor() {
     super(...arguments), this.route = "profiles", this.tracks = [], this.packs = [], this.notificationTargets = [], this.notificationCandidates = [], this.members = [], this.shareTargets = [], this.createTrackPackId = "", this.createTrackSource = "", this.forecasts = {}, this.forecastPlans = {}, this.packDiffTrack = "", this.packDiffTarget = "", this.loading = !1, this.errorMessage = "", this.notice = "", this.dirtyScopes = /* @__PURE__ */ new Set(), this.formResetVersions = {}, this.saveFeedback = {};
   }
@@ -4856,18 +5191,18 @@ const Fe = class Fe extends T {
     (e.has("profile") || e.has("route")) && this.load();
   }
   locale() {
-    return Q(
+    return Z(
       this.hass?.locale?.language ?? this.hass?.language ?? globalThis.navigator?.language ?? "en"
     );
   }
   t(e) {
-    return F(this.locale(), e);
+    return O(this.locale(), e);
   }
   isOwner() {
-    return da(this.profile?.role);
+    return $s(this.profile?.role);
   }
   canEditTrack() {
-    return ua(this.profile?.role);
+    return ks(this.profile?.role);
   }
   async load() {
     if (this.hass !== void 0) {
@@ -4878,14 +5213,14 @@ const Fe = class Fe extends T {
       this.loading = !0, this.errorMessage = "";
       try {
         [this.tracks, this.packs] = await Promise.all([
-          qt(this.hass, this.profile.profile_id),
-          Ti(this.hass)
-        ]), this.notificationTargets = this.canEditTrack() ? await Ie(this.hass, this.profile.profile_id) : [], this.notificationCandidates = this.isOwner() && this.route === "settings" ? await bi(this.hass, this.profile.profile_id) : [], this.packs.some((e) => e.pack_version_id === this.createTrackPackId) || (this.createTrackPackId = this.packs[0]?.pack_version_id ?? "", this.createTrackSource = ""), this.isOwner() && this.route === "profiles" ? [this.members, this.shareTargets] = await Promise.all([
-          gi(this.hass, this.profile.profile_id),
-          fi(this.hass, this.profile.profile_id)
+          Ct(this.hass, this.profile.profile_id),
+          Pi(this.hass)
+        ]), this.notificationTargets = this.canEditTrack() ? await Ue(this.hass, this.profile.profile_id) : [], this.notificationCandidates = this.isOwner() && this.route === "settings" ? await wi(this.hass, this.profile.profile_id) : [], this.packs.some((e) => e.pack_version_id === this.createTrackPackId) || (this.createTrackPackId = this.packs[0]?.pack_version_id ?? "", this.createTrackSource = ""), this.isOwner() && this.route === "profiles" ? [this.members, this.shareTargets] = await Promise.all([
+          yi(this.hass, this.profile.profile_id),
+          $i(this.hass, this.profile.profile_id)
         ]) : (this.members = [], this.shareTargets = []);
       } catch (e) {
-        this.errorMessage = X(e);
+        this.errorMessage = te(e);
       } finally {
         this.loading = !1;
       }
@@ -4949,33 +5284,33 @@ const Fe = class Fe extends T {
     this.clearSaveFeedback(e), this.submittingScope = e, this.loading = !0, this.errorMessage = "";
     try {
       await t(), this.clearScopeDirty(e), this.saveFeedback = { ...this.saveFeedback, [e]: "saved" }, await this.load(), this.notice = i, this.dispatchEvent(new CustomEvent("locklearn-refresh", { bubbles: !0, composed: !0 }));
-    } catch (s) {
-      this.saveFeedback = { ...this.saveFeedback, [e]: "error" }, this.errorMessage = X(s);
+    } catch (a) {
+      this.saveFeedback = { ...this.saveFeedback, [e]: "error" }, this.errorMessage = te(a);
     } finally {
       this.loading = !1, this.submittingScope = void 0;
     }
   }
   async saveTrackDetails(e, t) {
     if (this.hass === void 0 || !this.validateScope(t)) return !1;
-    const i = new FormData(t), s = V(e.settings, "scheduler"), n = e.content_weights ?? {}, o = i.getAll("notificationTarget").map(String), u = {
-      vocabulary: O(i.get("weightVocabulary"), Number(n.vocabulary ?? 1), 0, 100),
-      kanji: O(i.get("weightKanji"), Number(n.kanji ?? 1), 0, 100),
-      grammar: O(i.get("weightGrammar"), Number(n.grammar ?? 1), 0, 100),
-      expression: O(i.get("weightExpression"), Number(n.expression ?? 1), 0, 100)
+    const i = new FormData(t), a = K(e.settings, "scheduler"), o = e.content_weights ?? {}, n = i.getAll("notificationTarget").map(String), u = {
+      vocabulary: V(i.get("weightVocabulary"), Number(o.vocabulary ?? 1), 0, 100),
+      kanji: V(i.get("weightKanji"), Number(o.kanji ?? 1), 0, 100),
+      grammar: V(i.get("weightGrammar"), Number(o.grammar ?? 1), 0, 100),
+      expression: V(i.get("weightExpression"), Number(o.expression ?? 1), 0, 100)
     }, d = this.scopeKey(e.track_id, "details");
     return await this.mutateScope(
       d,
-      () => Si(this.hass, e.track_id, {
+      () => zi(this.hass, e.track_id, {
         name: String(i.get("name") ?? e.name),
         source_language: String(i.get("source") ?? e.source_language ?? "").trim(),
         target_language: String(i.get("target") ?? e.target_language ?? "").trim(),
         status: String(i.get("status") ?? e.status),
-        priority: C(i.get("priority"), e.priority, 1),
+        priority: R(i.get("priority"), e.priority, 1),
         content_weights: u,
         scheduler_settings: {
-          learning_count: C(i.get("learningCount"), Number(s.learning_count ?? 0), 0),
-          quiz_count: C(i.get("quizCount"), Number(s.quiz_count ?? 0), 0),
-          ...o.length === 0 ? {} : { target_ids: o }
+          learning_count: R(i.get("learningCount"), Number(a.learning_count ?? 0), 0),
+          quiz_count: R(i.get("quizCount"), Number(a.quiz_count ?? 0), 0),
+          ...n.length === 0 ? {} : { target_ids: n }
         }
       }),
       this.t("manage.saved")
@@ -4983,29 +5318,29 @@ const Fe = class Fe extends T {
   }
   async savePlanScope(e, t) {
     if (this.hass === void 0 || !this.validateScope(t)) return !1;
-    const i = this.scopeKey(e.track_id, "plan"), s = this.planFrom(t);
+    const i = this.scopeKey(e.track_id, "plan"), a = this.planFrom(t);
     return await this.mutateScope(
       i,
-      () => lt(this.hass, e.track_id, s),
+      () => ut(this.hass, e.track_id, a),
       this.t("manage.saved")
     ), !this.isScopeDirty(i);
   }
   async saveProfileSettings(e) {
     if (this.hass === void 0 || this.profile === void 0 || !this.validateScope(e)) return !1;
-    const t = this.profileSettingsScope(), i = new FormData(e), s = this.profile.settings ?? {}, n = V(s, "scheduler");
+    const t = this.profileSettingsScope(), i = new FormData(e), a = this.profile.settings ?? {}, o = K(a, "scheduler");
     return await this.mutateScope(
       t,
-      () => st(this.hass, this.profile.profile_id, {
+      () => ot(this.hass, this.profile.profile_id, {
         settings_patch: {
-          session_length_cards: C(i.get("session"), 20, 1),
-          max_new_per_day_cards: C(i.get("new"), 8, 0),
-          daily_push_budget: C(i.get("push"), 6, 0),
+          session_length_cards: R(i.get("session"), 20, 1),
+          max_new_per_day_cards: R(i.get("new"), 8, 0),
+          daily_push_budget: R(i.get("push"), 6, 0),
           quiet_hours: {
             start: String(i.get("quietStart") ?? "22:00"),
             end: String(i.get("quietEnd") ?? "08:00")
           },
           scheduler: {
-            ...n,
+            ...o,
             active_windows: [{
               start: String(i.get("activeStart") ?? "08:00"),
               end: String(i.get("activeEnd") ?? "20:00")
@@ -5018,23 +5353,23 @@ const Fe = class Fe extends T {
   }
   async saveNotificationTarget(e, t) {
     if (this.hass === void 0 || this.profile === void 0 || !this.validateScope(t)) return !1;
-    const i = this.targetScope(e.target_id), s = new FormData(t);
+    const i = this.targetScope(e.target_id), a = new FormData(t);
     return await this.mutateScope(
       i,
-      () => $i(
+      () => xi(
         this.hass,
         this.profile.profile_id,
         e.target_id,
         {
-          friendly_name: String(s.get("friendlyName") ?? "").trim(),
-          shared_device: s.get("sharedDevice") === "on",
+          friendly_name: String(a.get("friendlyName") ?? "").trim(),
+          shared_device: a.get("sharedDevice") === "on",
           lockscreen_visibility: String(
-            s.get("lockscreenVisibility") ?? "private"
+            a.get("lockscreenVisibility") ?? "private"
           ),
-          enabled: s.get("enabled") === "on",
-          minimum_gap_seconds: xe(s.get("minimumGap"), 0),
-          maximum_notifications_per_hour: xe(s.get("maxPerHour"), 1),
-          daily_push_budget: xe(s.get("targetBudget"), 0)
+          enabled: a.get("enabled") === "on",
+          minimum_gap_seconds: qe(a.get("minimumGap"), 0),
+          maximum_notifications_per_hour: qe(a.get("maxPerHour"), 1),
+          daily_push_budget: qe(a.get("targetBudget"), 0)
         }
       ),
       this.t("manage.notificationTargetUpdated")
@@ -5056,10 +5391,10 @@ const Fe = class Fe extends T {
         if ($ === void 0 || !await this.saveNotificationTarget($, i)) return !1;
         continue;
       }
-      const s = t.lastIndexOf(":");
-      if (s < 1) continue;
-      const n = t.slice(0, s), o = t.slice(s + 1), u = this.tracks.find((h) => h.track_id === n);
-      if (u === void 0 || !(o === "details" ? await this.saveTrackDetails(u, i) : o === "plan" ? await this.savePlanScope(u, i) : !1)) return !1;
+      const a = t.lastIndexOf(":");
+      if (a < 1) continue;
+      const o = t.slice(0, a), n = t.slice(a + 1), u = this.tracks.find((h) => h.track_id === o);
+      if (u === void 0 || !(n === "details" ? await this.saveTrackDetails(u, i) : n === "plan" ? await this.savePlanScope(u, i) : !1)) return !1;
     }
     return this.dirtyScopes.size === 0;
   }
@@ -5073,7 +5408,7 @@ const Fe = class Fe extends T {
     try {
       await e(), await this.load(), this.notice = t, this.dispatchEvent(new CustomEvent("locklearn-refresh", { bubbles: !0, composed: !0 }));
     } catch (i) {
-      this.errorMessage = X(i);
+      this.errorMessage = te(i);
     } finally {
       this.loading = !1;
     }
@@ -5120,7 +5455,7 @@ const Fe = class Fe extends T {
       e.preventDefault();
       const t = new FormData(e.currentTarget);
       this.hass === void 0 || this.profile === void 0 || this.mutate(
-        () => st(this.hass, this.profile.profile_id, {
+        () => ot(this.hass, this.profile.profile_id, {
           name: String(t.get("name") ?? "").trim(),
           timezone: String(t.get("timezone") ?? "").trim(),
           status: String(t.get("status") ?? "active")
@@ -5145,41 +5480,41 @@ const Fe = class Fe extends T {
     `;
   }
   renderSharing() {
-    const e = new Set(this.members.map((s) => s.ha_user_id)), t = this.shareTargets.filter((s) => !e.has(s.ha_user_id)), i = this.members.filter((s) => s.role === "owner").length;
+    const e = new Set(this.members.map((a) => a.ha_user_id)), t = this.shareTargets.filter((a) => !e.has(a.ha_user_id)), i = this.members.filter((a) => a.role === "owner").length;
     return r`
       <article class="card">
         <h2>${this.t("manage.sharing")}</h2>
         <p class="muted">${this.t("manage.sharingHelp")}</p>
         ${this.members.length === 0 ? r`<p>${this.t("manage.none")}</p>` : r`
-          <ul>${this.members.map((s) => r`<li>
-            ${s.name}
+          <ul>${this.members.map((a) => r`<li>
+            ${a.name}
             <select
               aria-label=${this.t("manage.role")}
-              .value=${s.role}
-              ?disabled=${s.role === "owner" && i === 1}
-              @change=${(n) => {
-      const o = n.currentTarget;
-      o instanceof HTMLSelectElement && this.changeMemberRole(s.ha_user_id, o.value);
+              .value=${a.role}
+              ?disabled=${a.role === "owner" && i === 1}
+              @change=${(o) => {
+      const n = o.currentTarget;
+      n instanceof HTMLSelectElement && this.changeMemberRole(a.ha_user_id, n.value);
     }}
             >
               <option value="viewer">viewer</option>
               <option value="editor">editor</option>
               <option value="owner">owner</option>
             </select>
-            ${s.role === "owner" && i === 1 ? l : r`
-              <button @click=${() => this.removeMember(s.ha_user_id)}>${this.t("manage.remove")}</button>`}
+            ${a.role === "owner" && i === 1 ? l : r`
+              <button @click=${() => this.removeMember(a.ha_user_id)}>${this.t("manage.remove")}</button>`}
           </li>`)}</ul>`}
         ${t.length === 0 ? l : r`
-          <form class="form-grid" @submit=${(s) => {
-      s.preventDefault();
-      const n = new FormData(s.currentTarget);
+          <form class="form-grid" @submit=${(a) => {
+      a.preventDefault();
+      const o = new FormData(a.currentTarget);
       this.addMember(
-        String(n.get("user") ?? ""),
-        String(n.get("role") ?? "viewer")
+        String(o.get("user") ?? ""),
+        String(o.get("role") ?? "viewer")
       );
     }}>
             <label>${this.t("manage.user")}<select name="user">
-              ${t.map((s) => r`<option value=${s.ha_user_id}>${s.name}</option>`)}
+              ${t.map((a) => r`<option value=${a.ha_user_id}>${a.name}</option>`)}
             </select></label>
             <label>${this.t("manage.role")}<select name="role">
               <option value="viewer">viewer</option><option value="editor">editor</option><option value="owner">owner</option>
@@ -5190,20 +5525,20 @@ const Fe = class Fe extends T {
     `;
   }
   async addMember(e, t) {
-    !e || this.hass === void 0 || this.profile === void 0 || await this.mutate(() => nt(this.hass, this.profile.profile_id, e, t), this.t("manage.saved"));
+    !e || this.hass === void 0 || this.profile === void 0 || await this.mutate(() => ct(this.hass, this.profile.profile_id, e, t), this.t("manage.saved"));
   }
   async removeMember(e) {
-    this.hass === void 0 || this.profile === void 0 || globalThis.confirm?.(this.t("manage.confirmRemoveMember")) && await this.mutate(() => vi(this.hass, this.profile.profile_id, e), this.t("manage.saved"));
+    this.hass === void 0 || this.profile === void 0 || globalThis.confirm?.(this.t("manage.confirmRemoveMember")) && await this.mutate(() => ki(this.hass, this.profile.profile_id, e), this.t("manage.saved"));
   }
   async changeMemberRole(e, t) {
     this.hass === void 0 || this.profile === void 0 || await this.mutate(
-      () => nt(this.hass, this.profile.profile_id, e, t),
+      () => ct(this.hass, this.profile.profile_id, e, t),
       this.t("manage.saved")
     );
   }
   async archiveProfile() {
     this.hass === void 0 || this.profile === void 0 || globalThis.confirm?.(this.t("manage.confirmArchiveProfile")) && await this.mutate(
-      () => rt(this.hass, this.profile.profile_id, "archive"),
+      () => lt(this.hass, this.profile.profile_id, "archive"),
       this.t("manage.archivedNotice")
     );
   }
@@ -5213,7 +5548,7 @@ const Fe = class Fe extends T {
       `${this.t("manage.confirmDeletePermanently")} ${e}`
     );
     t === e && await this.mutate(
-      () => rt(
+      () => lt(
         this.hass,
         this.profile.profile_id,
         "delete_permanently",
@@ -5230,7 +5565,7 @@ const Fe = class Fe extends T {
       e.preventDefault();
       const t = new FormData(e.currentTarget);
       this.hass !== void 0 && this.mutate(
-        () => mi(
+        () => bi(
           this.hass,
           String(t.get("name") ?? "").trim(),
           String(t.get("preset") ?? "standard"),
@@ -5268,23 +5603,23 @@ const Fe = class Fe extends T {
   targetLanguages(e, t) {
     return [...new Set(
       this.packDirections(e).filter((i) => i.source_language === t).map((i) => i.target_language)
-    )].sort((i, s) => i.localeCompare(s));
+    )].sort((i, a) => i.localeCompare(a));
   }
   renderTrack(e) {
-    const t = V(e.settings, "scheduler"), i = Array.isArray(t.target_ids) ? t.target_ids.map(String) : [], s = e.content_weights ?? {}, n = this.scopeKey(e.track_id, "details"), o = W(e.source_language ?? "", this.locale()), u = W(e.target_language ?? "", this.locale());
+    const t = K(e.settings, "scheduler"), i = Array.isArray(t.target_ids) ? t.target_ids.map(String) : [], a = e.content_weights ?? {}, o = this.scopeKey(e.track_id, "details"), n = B(e.source_language ?? "", this.locale()), u = B(e.target_language ?? "", this.locale());
     return r`
       <article class="card">
         <div class="track-summary">
           <h2>${e.name}</h2>
-          <p class="meta">${o} → ${u} · ${e.status === "active" ? this.t("manage.active") : e.status === "paused" ? this.t("manage.paused") : this.t("manage.archived")}</p>
+          <p class="meta">${n} → ${u} · ${e.status === "active" ? this.t("manage.active") : e.status === "paused" ? this.t("manage.paused") : this.t("manage.archived")}</p>
           <p class="meta">${this.t("manage.packVersion")}: ${e.pack_version_id ?? "—"}</p>
         </div>
         ${this.canEditTrack() ? r`
-          ${ce(`${n}:${this.formResetVersions[n] ?? 0}`, r`<form
+          ${ue(`${o}:${this.formResetVersions[o] ?? 0}`, r`<form
             class="track-form"
-            data-save-scope=${n}
-            @input=${() => this.markScopeDirty(n)}
-            @change=${() => this.markScopeDirty(n)}
+            data-save-scope=${o}
+            @input=${() => this.markScopeDirty(o)}
+            @change=${() => this.markScopeDirty(o)}
             @submit=${(d) => {
       d.preventDefault(), this.saveTrackDetails(e, d.currentTarget);
     }}>
@@ -5300,7 +5635,7 @@ const Fe = class Fe extends T {
               <label>${this.t("manage.sourceLanguage")}
                 <select name="source" .value=${e.source_language ?? ""} required>
                   ${this.sourceLanguages(e.pack_version_id ?? "").map((d) => r`
-                    <option value=${d}>${W(d, this.locale())}</option>
+                    <option value=${d}>${B(d, this.locale())}</option>
                   `)}
                 </select>
               </label>
@@ -5310,7 +5645,7 @@ const Fe = class Fe extends T {
       e.pack_version_id ?? "",
       e.source_language ?? ""
     ).map((d) => r`
-                    <option value=${d}>${W(d, this.locale())}</option>
+                    <option value=${d}>${B(d, this.locale())}</option>
                   `)}
                 </select>
               </label>
@@ -5322,10 +5657,10 @@ const Fe = class Fe extends T {
                 <p class="muted">${this.t("manage.advancedTrackSettingsHelp")}</p>
                 <div class="form-grid">
                   <label>${this.t("manage.priority")}<input name="priority" type="number" min="1" .value=${String(e.priority)} /></label>
-                  <label>${this.t("manage.weightVocabulary")}<input name="weightVocabulary" type="number" min="0" step=".1" .value=${String(s.vocabulary ?? 1)} /></label>
-                  <label>${this.t("manage.weightKanji")}<input name="weightKanji" type="number" min="0" step=".1" .value=${String(s.kanji ?? 1)} /></label>
-                  <label>${this.t("manage.weightGrammar")}<input name="weightGrammar" type="number" min="0" step=".1" .value=${String(s.grammar ?? 1)} /></label>
-                  <label>${this.t("manage.weightExpression")}<input name="weightExpression" type="number" min="0" step=".1" .value=${String(s.expression ?? 1)} /></label>
+                  <label>${this.t("manage.weightVocabulary")}<input name="weightVocabulary" type="number" min="0" step=".1" .value=${String(a.vocabulary ?? 1)} /></label>
+                  <label>${this.t("manage.weightKanji")}<input name="weightKanji" type="number" min="0" step=".1" .value=${String(a.kanji ?? 1)} /></label>
+                  <label>${this.t("manage.weightGrammar")}<input name="weightGrammar" type="number" min="0" step=".1" .value=${String(a.grammar ?? 1)} /></label>
+                  <label>${this.t("manage.weightExpression")}<input name="weightExpression" type="number" min="0" step=".1" .value=${String(a.expression ?? 1)} /></label>
                   <label>${this.t("manage.learningNotifications")}<input name="learningCount" type="number" min="0" .value=${String(t.learning_count ?? 0)} /></label>
                   <label>${this.t("manage.quizNotifications")}<input name="quizCount" type="number" min="0" .value=${String(t.quiz_count ?? 0)} /></label>
                   <label>${this.t("manage.notificationTargets")}
@@ -5341,21 +5676,21 @@ const Fe = class Fe extends T {
               </div>
             </details>
 
-            <p class="scope-state ${this.saveFeedback[n] === "error" ? "is-error" : ""}" role="status">
-              ${this.scopeFeedbackText(n)}
+            <p class="scope-state ${this.saveFeedback[o] === "error" ? "is-error" : ""}" role="status">
+              ${this.scopeFeedbackText(o)}
             </p>
-            <div class="scope-actions ${this.isScopeDirty(n) ? "is-dirty" : ""}">
+            <div class="scope-actions ${this.isScopeDirty(o) ? "is-dirty" : ""}">
               <button
                 class="primary"
                 type="submit"
-                ?disabled=${!this.isScopeDirty(n) || this.submittingScope === n}
+                ?disabled=${!this.isScopeDirty(o) || this.submittingScope === o}
               >
-                ${this.submittingScope === n ? this.t("form.saving") : this.t("form.save")}
+                ${this.submittingScope === o ? this.t("form.saving") : this.t("form.save")}
               </button>
               <button
                 type="button"
-                ?disabled=${!this.isScopeDirty(n) || this.submittingScope === n}
-                @click=${() => this.cancelScope(n)}
+                ?disabled=${!this.isScopeDirty(o) || this.submittingScope === o}
+                @click=${() => this.cancelScope(o)}
               >
                 ${this.t("form.cancel")}
               </button>
@@ -5379,21 +5714,21 @@ const Fe = class Fe extends T {
     `;
   }
   renderCreateTrack() {
-    const e = this.createTrackPackId || this.packs[0]?.pack_version_id || "", t = this.sourceLanguages(e), i = t.includes(this.createTrackSource) ? this.createTrackSource : t[0] ?? "", s = this.targetLanguages(e, i);
+    const e = this.createTrackPackId || this.packs[0]?.pack_version_id || "", t = this.sourceLanguages(e), i = t.includes(this.createTrackSource) ? this.createTrackSource : t[0] ?? "", a = this.targetLanguages(e, i);
     return r`
       <article class="card">
         <h2>${this.t("manage.createTrack")}</h2>
         ${this.packs.length === 0 ? r`<p>${this.t("manage.noPacks")}</p>` : r`
-          <form class="form-grid" @submit=${(n) => {
-      n.preventDefault();
-      const o = new FormData(n.currentTarget);
-      this.hass === void 0 || this.profile === void 0 || this.mutate(() => xi(this.hass, {
+          <form class="form-grid" @submit=${(o) => {
+      o.preventDefault();
+      const n = new FormData(o.currentTarget);
+      this.hass === void 0 || this.profile === void 0 || this.mutate(() => Ai(this.hass, {
         profile_id: this.profile.profile_id,
-        name: String(o.get("name") ?? "").trim(),
-        pack_version_id: String(o.get("pack") ?? ""),
-        source_language: String(o.get("source") ?? "").trim(),
-        target_language: String(o.get("target") ?? "").trim(),
-        priority: C(o.get("priority"), 1, 1)
+        name: String(n.get("name") ?? "").trim(),
+        pack_version_id: String(n.get("pack") ?? ""),
+        source_language: String(n.get("source") ?? "").trim(),
+        target_language: String(n.get("target") ?? "").trim(),
+        priority: R(n.get("priority"), 1, 1)
       }), this.t("manage.created"));
     }}>
             <label>${this.t("manage.name")}<input name="name" required /></label>
@@ -5401,13 +5736,13 @@ const Fe = class Fe extends T {
               <select
                 name="pack"
                 .value=${e}
-                @change=${(n) => {
-      const o = n.currentTarget;
-      o instanceof HTMLSelectElement && (this.createTrackPackId = o.value, this.createTrackSource = "");
+                @change=${(o) => {
+      const n = o.currentTarget;
+      n instanceof HTMLSelectElement && (this.createTrackPackId = n.value, this.createTrackSource = "");
     }}
               >
-                ${this.packs.map((n) => r`
-                  <option value=${n.pack_version_id}>${n.name} · ${n.version}</option>
+                ${this.packs.map((o) => r`
+                  <option value=${o.pack_version_id}>${o.name} · ${o.version}</option>
                 `)}
               </select>
             </label>
@@ -5419,27 +5754,27 @@ const Fe = class Fe extends T {
                   name="source"
                   .value=${i}
                   required
-                  @change=${(n) => {
-      const o = n.currentTarget;
-      o instanceof HTMLSelectElement && (this.createTrackSource = o.value);
+                  @change=${(o) => {
+      const n = o.currentTarget;
+      n instanceof HTMLSelectElement && (this.createTrackSource = n.value);
     }}
                 >
-                  ${t.map((n) => r`
-                    <option value=${n}>${W(n, this.locale())}</option>
+                  ${t.map((o) => r`
+                    <option value=${o}>${B(o, this.locale())}</option>
                   `)}
                 </select>
               </label>
               <label>${this.t("manage.targetLanguage")}
                 <select name="target" required>
-                  ${s.map((n) => r`
-                    <option value=${n}>${W(n, this.locale())}</option>
+                  ${a.map((o) => r`
+                    <option value=${o}>${B(o, this.locale())}</option>
                   `)}
                 </select>
               </label>
             `}
             <label>${this.t("manage.priority")}<input name="priority" type="number" min="1" value="1" /></label>
             <div class="actions">
-              <button class="primary" type="submit" ?disabled=${t.length === 0 || s.length === 0}>
+              <button class="primary" type="submit" ?disabled=${t.length === 0 || a.length === 0}>
                 ${this.t("manage.create")}
               </button>
             </div>
@@ -5448,38 +5783,38 @@ const Fe = class Fe extends T {
     `;
   }
   async removeTrack(e, t) {
-    this.hass !== void 0 && globalThis.confirm?.(`${this.t("manage.confirmDeleteTrack")} "${t}"?`) && await this.mutate(() => qi(this.hass, e), this.t("manage.trackDeleted"));
+    this.hass !== void 0 && globalThis.confirm?.(`${this.t("manage.confirmDeleteTrack")} "${t}"?`) && await this.mutate(() => Ci(this.hass, e), this.t("manage.trackDeleted"));
   }
   planFrom(e) {
     const t = new FormData(e);
     return {
-      max_new_per_day_cards: C(t.get("new"), 0, 0),
-      max_reviews_per_day_cards: C(t.get("reviews"), 50, 1),
-      max_notification_new_teasers: C(t.get("teasers"), 2, 0),
+      max_new_per_day_cards: R(t.get("new"), 0, 0),
+      max_reviews_per_day_cards: R(t.get("reviews"), 50, 1),
+      max_notification_new_teasers: R(t.get("teasers"), 2, 0),
       target_date: String(t.get("date") ?? "").trim() || null,
-      target_coverage: O(t.get("coverage"), 1, 0.01, 1),
-      target_retention: O(t.get("retention"), 0.9, 0.01, 1)
+      target_coverage: V(t.get("coverage"), 1, 0.01, 1),
+      target_retention: V(t.get("retention"), 0.9, 0.01, 1)
     };
   }
   renderPlan(e) {
-    const t = V(e.settings, "learning_plan"), i = this.scopeKey(e.track_id, "plan"), s = Number(this.profile?.settings?.max_new_per_day_cards ?? 8), n = this.forecasts[e.track_id];
+    const t = K(e.settings, "learning_plan"), i = this.scopeKey(e.track_id, "plan"), a = Number(this.profile?.settings?.max_new_per_day_cards ?? 8), o = this.forecasts[e.track_id];
     return r`
       <div class="stack">
         <p class="muted">${this.t("manage.planHelp")}</p>
-        ${ce(`${i}:${this.formResetVersions[i] ?? 0}`, r`<form
+        ${ue(`${i}:${this.formResetVersions[i] ?? 0}`, r`<form
           class="stack"
           data-save-scope=${i}
           @input=${() => this.markScopeDirty(i)}
           @change=${() => this.markScopeDirty(i)}
-          @submit=${(o) => {
-      if (o.preventDefault(), this.hass === void 0) return;
-      const u = o.currentTarget;
+          @submit=${(n) => {
+      if (n.preventDefault(), this.hass === void 0) return;
+      const u = n.currentTarget;
       if (!this.validateScope(u)) return;
       const d = this.planFrom(u);
-      this.loading = !0, this.errorMessage = "", Ei(this.hass, e.track_id, d).then((h) => {
+      this.loading = !0, this.errorMessage = "", Di(this.hass, e.track_id, d).then((h) => {
         this.forecasts = { ...this.forecasts, [e.track_id]: h }, this.forecastPlans = { ...this.forecastPlans, [e.track_id]: d };
       }).catch((h) => {
-        this.forecasts = { ...this.forecasts, [e.track_id]: void 0 }, this.errorMessage = `${this.t("manage.previewFailed")} ${X(h)}`;
+        this.forecasts = { ...this.forecasts, [e.track_id]: void 0 }, this.errorMessage = `${this.t("manage.previewFailed")} ${te(h)}`;
       }).finally(() => {
         this.loading = !1;
       });
@@ -5488,7 +5823,7 @@ const Fe = class Fe extends T {
           <div class="form-grid">
             <label>
               ${this.t("manage.newPerDay")}
-              <input name="new" type="number" min="0" .value=${String(t.max_new_per_day_cards ?? s)} />
+              <input name="new" type="number" min="0" .value=${String(t.max_new_per_day_cards ?? a)} />
               <span class="meta">${this.t("manage.newPerDayHelp")}</span>
             </label>
             <label>
@@ -5507,7 +5842,7 @@ const Fe = class Fe extends T {
             <div class="section-body form-grid">
               <label>
                 ${this.t("manage.notificationTeasers")}
-                <input name="teasers" type="number" min="0" .value=${String(t.max_notification_new_teasers ?? Math.min(2, s))} />
+                <input name="teasers" type="number" min="0" .value=${String(t.max_notification_new_teasers ?? Math.min(2, a))} />
                 <span class="meta">${this.t("manage.notificationTeasersHelp")}</span>
               </label>
               <label>
@@ -5531,8 +5866,8 @@ const Fe = class Fe extends T {
             <button
               class="primary"
               type="button"
-              @click=${(o) => {
-      const u = o.currentTarget.closest("form");
+              @click=${(n) => {
+      const u = n.currentTarget.closest("form");
       u instanceof HTMLFormElement && this.savePlanScope(e, u);
     }}
               ?disabled=${!this.isScopeDirty(i) || this.submittingScope === i}
@@ -5550,7 +5885,7 @@ const Fe = class Fe extends T {
             </button>
           </div>
         </form>`)}
-        ${n === void 0 ? l : this.renderForecast(e, n)}
+        ${o === void 0 ? l : this.renderForecast(e, o)}
       </div>
     `;
   }
@@ -5586,7 +5921,7 @@ const Fe = class Fe extends T {
           <summary>${this.t("manage.forecastMethod")}</summary>
           <div class="section-body"><p class="muted">${this.t("manage.forecastMethodHelp")}</p></div>
         </details>
-        ${t.warnings.length === 0 ? l : r`<ul>${t.warnings.map((s) => r`<li>${this.forecastWarning(s)}</li>`)}</ul>`}
+        ${t.warnings.length === 0 ? l : r`<ul>${t.warnings.map((a) => r`<li>${this.forecastWarning(a)}</li>`)}</ul>`}
         <div class="actions">
           <button class="primary" @click=${() => this.applyPlan(e)} ?disabled=${i}>
             ${this.t("manage.applyPlan")}
@@ -5601,7 +5936,7 @@ const Fe = class Fe extends T {
     const i = this.scopeKey(e.track_id, "plan");
     await this.mutateScope(
       i,
-      () => lt(this.hass, e.track_id, t),
+      () => ut(this.hass, e.track_id, t),
       this.t("manage.saved")
     );
   }
@@ -5617,8 +5952,8 @@ const Fe = class Fe extends T {
   }
   renderPackUpdates() {
     const e = this.tracks.flatMap((t) => {
-      const i = this.packs.find((s) => s.pack_version_id === t.pack_version_id);
-      return i === void 0 ? [] : this.packs.filter((s) => s.pack_id === i.pack_id && s.pack_version_id !== i.pack_version_id).map((s) => ({ track: t, pack: s }));
+      const i = this.packs.find((a) => a.pack_version_id === t.pack_version_id);
+      return i === void 0 ? [] : this.packs.filter((a) => a.pack_id === i.pack_id && a.pack_version_id !== i.pack_version_id).map((a) => ({ track: t, pack: a }));
     });
     return r`
       <article class="card">
@@ -5641,9 +5976,9 @@ const Fe = class Fe extends T {
     if (this.hass !== void 0) {
       this.loading = !0;
       try {
-        this.packDiff = await Pi(this.hass, e.track_id, t.pack_version_id), this.packDiffTrack = e.track_id, this.packDiffTarget = t.pack_version_id;
+        this.packDiff = await Ni(this.hass, e.track_id, t.pack_version_id), this.packDiffTrack = e.track_id, this.packDiffTarget = t.pack_version_id;
       } catch (i) {
-        this.errorMessage = X(i);
+        this.errorMessage = te(i);
       } finally {
         this.loading = !1;
       }
@@ -5653,7 +5988,7 @@ const Fe = class Fe extends T {
     if (this.hass === void 0 || !this.packDiffTrack || !this.packDiffTarget) return;
     const e = this.packDiffTrack, t = this.packDiffTarget;
     await this.mutate(
-      () => Ri(this.hass, e, t),
+      () => Mi(this.hass, e, t),
       this.t("manage.packIntegrated")
     ), this.errorMessage === "" && (this.packDiff = void 0, this.packDiffTrack = "", this.packDiffTarget = "");
   }
@@ -5673,9 +6008,9 @@ const Fe = class Fe extends T {
             ` : r`
               <form class="form-grid" @submit=${(t) => {
       t.preventDefault();
-      const i = new FormData(t.currentTarget), s = String(i.get("device") ?? "");
-      !s || this.hass === void 0 || this.profile === void 0 || this.mutate(
-        () => yi(this.hass, this.profile.profile_id, s),
+      const i = new FormData(t.currentTarget), a = String(i.get("device") ?? "");
+      !a || this.hass === void 0 || this.profile === void 0 || this.mutate(
+        () => _i(this.hass, this.profile.profile_id, a),
         this.t("manage.notificationTargetCreated")
       );
     }}>
@@ -5703,14 +6038,14 @@ const Fe = class Fe extends T {
           <div class="target-grid">
             ${this.notificationTargets.map((t) => {
       const i = this.targetScope(t.target_id);
-      return ce(`${i}:${this.formResetVersions[i] ?? 0}`, r`
+      return ue(`${i}:${this.formResetVersions[i] ?? 0}`, r`
               <form
                 class="target-card"
                 data-save-scope=${i}
                 @input=${() => this.markScopeDirty(i)}
                 @change=${() => this.markScopeDirty(i)}
-                @submit=${(s) => {
-        s.preventDefault(), this.saveNotificationTarget(t, s.currentTarget);
+                @submit=${(a) => {
+        a.preventDefault(), this.saveNotificationTarget(t, a.currentTarget);
       }}>
                 <div class="target-header">
                   <h3>${t.friendly_name}</h3>
@@ -5782,7 +6117,7 @@ const Fe = class Fe extends T {
                     type="button"
                     @click=${() => {
         this.hass === void 0 || this.profile === void 0 || this.mutate(
-          () => wi(
+          () => Si(
             this.hass,
             this.profile.profile_id,
             t.target_id
@@ -5803,16 +6138,16 @@ const Fe = class Fe extends T {
   }
   renderSettings() {
     if (!this.isOwner()) return r`<div class="card"><p>${this.t("manage.readOnly")}</p></div>`;
-    const e = this.profile?.settings ?? {}, t = V(e, "quiet_hours"), i = V(e, "scheduler"), s = Array.isArray(i.active_windows) ? i.active_windows : [], n = typeof s[0] == "object" && s[0] !== null ? s[0] : {}, o = this.profileSettingsScope();
+    const e = this.profile?.settings ?? {}, t = K(e, "quiet_hours"), i = K(e, "scheduler"), a = Array.isArray(i.active_windows) ? i.active_windows : [], o = typeof a[0] == "object" && a[0] !== null ? a[0] : {}, n = this.profileSettingsScope();
     return r`
       <article class="card">
         <h2>${this.t("manage.profileSettings")}</h2>
         <p class="muted">${this.t("manage.presetInitialOnly")}: ${this.profile?.preset}</p>
-        ${ce(`${o}:${this.formResetVersions[o] ?? 0}`, r`<form
+        ${ue(`${n}:${this.formResetVersions[n] ?? 0}`, r`<form
           class="form-grid"
-          data-save-scope=${o}
-          @input=${() => this.markScopeDirty(o)}
-          @change=${() => this.markScopeDirty(o)}
+          data-save-scope=${n}
+          @input=${() => this.markScopeDirty(n)}
+          @change=${() => this.markScopeDirty(n)}
           @submit=${(u) => {
       u.preventDefault(), this.saveProfileSettings(u.currentTarget);
     }}>
@@ -5821,23 +6156,23 @@ const Fe = class Fe extends T {
           <label>${this.t("manage.pushBudget")}<input name="push" type="number" min="0" .value=${String(e.daily_push_budget ?? 6)} /></label>
           <label>${this.t("manage.quietStart")}<input name="quietStart" type="time" .value=${String(t.start ?? "22:00")} /></label>
           <label>${this.t("manage.quietEnd")}<input name="quietEnd" type="time" .value=${String(t.end ?? "08:00")} /></label>
-          <label>${this.t("manage.activeStart")}<input name="activeStart" type="time" .value=${String(n.start ?? "08:00")} /></label>
-          <label>${this.t("manage.activeEnd")}<input name="activeEnd" type="time" .value=${String(n.end ?? "20:00")} /></label>
-          <p class="scope-state ${this.saveFeedback[o] === "error" ? "is-error" : ""}" role="status">
-            ${this.scopeFeedbackText(o)}
+          <label>${this.t("manage.activeStart")}<input name="activeStart" type="time" .value=${String(o.start ?? "08:00")} /></label>
+          <label>${this.t("manage.activeEnd")}<input name="activeEnd" type="time" .value=${String(o.end ?? "20:00")} /></label>
+          <p class="scope-state ${this.saveFeedback[n] === "error" ? "is-error" : ""}" role="status">
+            ${this.scopeFeedbackText(n)}
           </p>
-          <div class="scope-actions ${this.isScopeDirty(o) ? "is-dirty" : ""}">
+          <div class="scope-actions ${this.isScopeDirty(n) ? "is-dirty" : ""}">
             <button
               class="primary"
               type="submit"
-              ?disabled=${!this.isScopeDirty(o) || this.submittingScope === o}
+              ?disabled=${!this.isScopeDirty(n) || this.submittingScope === n}
             >
-              ${this.submittingScope === o ? this.t("form.saving") : this.t("form.save")}
+              ${this.submittingScope === n ? this.t("form.saving") : this.t("form.save")}
             </button>
             <button
               type="button"
-              ?disabled=${!this.isScopeDirty(o) || this.submittingScope === o}
-              @click=${() => this.cancelScope(o)}
+              ?disabled=${!this.isScopeDirty(n) || this.submittingScope === n}
+              @click=${() => this.cancelScope(n)}
             >
               ${this.t("form.cancel")}
             </button>
@@ -5848,8 +6183,8 @@ const Fe = class Fe extends T {
     `;
   }
 };
-Fe.styles = R`
-    ${H}
+We.styles = N`
+    ${j}
     :host, .stack, .grid, .card, .form-grid, .actions, label, input, select, button {
       box-sizing: border-box;
       min-width: 0;
@@ -5993,100 +6328,100 @@ Fe.styles = R`
       }
     }
   `;
-let f = Fe;
+let v = We;
 y([
-  b({ attribute: !1 })
-], f.prototype, "hass");
+  f({ attribute: !1 })
+], v.prototype, "hass");
 y([
-  b({ attribute: !1 })
-], f.prototype, "profile");
+  f({ attribute: !1 })
+], v.prototype, "profile");
 y([
-  b({ attribute: !1 })
-], f.prototype, "route");
-y([
-  c()
-], f.prototype, "tracks");
+  f({ attribute: !1 })
+], v.prototype, "route");
 y([
   c()
-], f.prototype, "packs");
+], v.prototype, "tracks");
 y([
   c()
-], f.prototype, "notificationTargets");
+], v.prototype, "packs");
 y([
   c()
-], f.prototype, "notificationCandidates");
+], v.prototype, "notificationTargets");
 y([
   c()
-], f.prototype, "members");
+], v.prototype, "notificationCandidates");
 y([
   c()
-], f.prototype, "shareTargets");
+], v.prototype, "members");
 y([
   c()
-], f.prototype, "createTrackPackId");
+], v.prototype, "shareTargets");
 y([
   c()
-], f.prototype, "createTrackSource");
+], v.prototype, "createTrackPackId");
 y([
   c()
-], f.prototype, "forecasts");
+], v.prototype, "createTrackSource");
 y([
   c()
-], f.prototype, "forecastPlans");
+], v.prototype, "forecasts");
 y([
   c()
-], f.prototype, "packDiff");
+], v.prototype, "forecastPlans");
 y([
   c()
-], f.prototype, "packDiffTrack");
+], v.prototype, "packDiff");
 y([
   c()
-], f.prototype, "packDiffTarget");
+], v.prototype, "packDiffTrack");
 y([
   c()
-], f.prototype, "loading");
+], v.prototype, "packDiffTarget");
 y([
   c()
-], f.prototype, "errorMessage");
+], v.prototype, "loading");
 y([
   c()
-], f.prototype, "notice");
+], v.prototype, "errorMessage");
 y([
   c()
-], f.prototype, "dirtyScopes");
+], v.prototype, "notice");
 y([
   c()
-], f.prototype, "formResetVersions");
+], v.prototype, "dirtyScopes");
 y([
   c()
-], f.prototype, "submittingScope");
+], v.prototype, "formResetVersions");
 y([
   c()
-], f.prototype, "saveFeedback");
-globalThis.customElements !== void 0 && customElements.get("locklearn-management-view") === void 0 && customElements.define("locklearn-management-view", f);
-var ha = Object.defineProperty, j = (a, e, t, i) => {
-  for (var s = void 0, n = a.length - 1, o; n >= 0; n--)
-    (o = a[n]) && (s = o(e, t, s) || s);
-  return s && ha(e, t, s), s;
+], v.prototype, "submittingScope");
+y([
+  c()
+], v.prototype, "saveFeedback");
+globalThis.customElements !== void 0 && customElements.get("locklearn-management-view") === void 0 && customElements.define("locklearn-management-view", v);
+var ws = Object.defineProperty, W = (s, e, t, i) => {
+  for (var a = void 0, o = s.length - 1, n; o >= 0; o--)
+    (n = s[o]) && (a = n(e, t, a) || a);
+  return a && ws(e, t, a), a;
 };
-function de(a) {
-  if (a === null) return null;
+function he(s) {
+  if (s === null) return null;
   try {
-    const e = new URL(a);
+    const e = new URL(s);
     return e.protocol === "https:" || e.protocol === "http:" ? e.href : null;
   } catch {
     return null;
   }
 }
-function pa(a) {
-  if (a < 1024) return `${a} B`;
+function _s(s) {
+  if (s < 1024) return `${s} B`;
   const e = ["KiB", "MiB", "GiB"];
-  let t = a / 1024, i = 0;
+  let t = s / 1024, i = 0;
   for (; t >= 1024 && i < e.length - 1; )
     t /= 1024, i += 1;
   return `${t.toFixed(t >= 10 ? 1 : 2)} ${e[i]}`;
 }
-const je = class je extends T {
+const Ve = class Ve extends z {
   constructor() {
     super(...arguments), this.admin = !1, this.datasets = [], this.loading = !1, this.errorMessage = "", this.notice = "", this.attributionPages = {};
   }
@@ -6097,18 +6432,18 @@ const je = class je extends T {
     e.has("hass") && this.hass !== void 0 && this.load();
   }
   locale() {
-    return Q(
+    return Z(
       this.hass?.locale?.language ?? this.hass?.language ?? globalThis.navigator?.language ?? "en"
     );
   }
   t(e) {
-    return F(this.locale(), e);
+    return O(this.locale(), e);
   }
   async load() {
     if (this.hass !== void 0) {
       this.loading = !0, this.errorMessage = "";
       try {
-        this.datasets = await Ai(this.hass);
+        this.datasets = await Ri(this.hass);
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
       } finally {
@@ -6120,7 +6455,7 @@ const je = class je extends T {
     if (!(this.hass === void 0 || !this.admin)) {
       this.loading = !0, this.errorMessage = "", this.notice = "";
       try {
-        this.datasets = await zi(this.hass), this.notice = this.t("datasets.refreshed");
+        this.datasets = await Ei(this.hass), this.notice = this.t("datasets.refreshed");
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
       } finally {
@@ -6132,7 +6467,7 @@ const je = class je extends T {
     if (!(this.hass === void 0 || !this.admin)) {
       this.loading = !0, this.errorMessage = "", this.notice = "";
       try {
-        const t = await Ci(this.hass, e.dataset_id, e.available_version);
+        const t = await Li(this.hass, e.dataset_id, e.available_version);
         this.datasets = t.statuses, this.notice = this.t("datasets.installed"), this.dispatchEvent(new CustomEvent("locklearn-refresh", { bubbles: !0, composed: !0 }));
       } catch (t) {
         this.errorMessage = t instanceof Error ? t.message : String(t);
@@ -6146,11 +6481,11 @@ const je = class je extends T {
   }
   async toggleAttributions(e, t) {
     if (this.hass === void 0) return;
-    const i = this.attributionKey(e, t), s = this.attributionPages[i];
-    if (s !== void 0) {
+    const i = this.attributionKey(e, t), a = this.attributionPages[i];
+    if (a !== void 0) {
       this.attributionPages = {
         ...this.attributionPages,
-        [i]: { ...s, expanded: !s.expanded }
+        [i]: { ...a, expanded: !a.expanded }
       };
       return;
     }
@@ -6159,13 +6494,13 @@ const je = class je extends T {
       [i]: { items: [], cursor: null, expanded: !0, loading: !0 }
     };
     try {
-      const n = await ot(this.hass, e, t);
+      const o = await dt(this.hass, e, t);
       this.attributionPages = {
         ...this.attributionPages,
-        [i]: { ...n, expanded: !0, loading: !1 }
+        [i]: { ...o, expanded: !0, loading: !1 }
       };
-    } catch (n) {
-      this.errorMessage = n instanceof Error ? n.message : String(n), this.attributionPages = {
+    } catch (o) {
+      this.errorMessage = o instanceof Error ? o.message : String(o), this.attributionPages = {
         ...this.attributionPages,
         [i]: { items: [], cursor: null, expanded: !0, loading: !1 }
       };
@@ -6173,32 +6508,32 @@ const je = class je extends T {
   }
   async loadMoreAttributions(e, t) {
     if (this.hass === void 0) return;
-    const i = this.attributionKey(e, t), s = this.attributionPages[i];
-    if (!(s === void 0 || s.cursor === null || s.loading)) {
+    const i = this.attributionKey(e, t), a = this.attributionPages[i];
+    if (!(a === void 0 || a.cursor === null || a.loading)) {
       this.attributionPages = {
         ...this.attributionPages,
-        [i]: { ...s, loading: !0 }
+        [i]: { ...a, loading: !0 }
       };
       try {
-        const n = await ot(
+        const o = await dt(
           this.hass,
           e,
           t,
-          s.cursor
+          a.cursor
         );
         this.attributionPages = {
           ...this.attributionPages,
           [i]: {
-            items: [...s.items, ...n.items],
-            cursor: n.cursor,
+            items: [...a.items, ...o.items],
+            cursor: o.cursor,
             expanded: !0,
             loading: !1
           }
         };
-      } catch (n) {
-        this.errorMessage = n instanceof Error ? n.message : String(n), this.attributionPages = {
+      } catch (o) {
+        this.errorMessage = o instanceof Error ? o.message : String(o), this.attributionPages = {
           ...this.attributionPages,
-          [i]: { ...s, loading: !1 }
+          [i]: { ...a, loading: !1 }
         };
       }
     }
@@ -6224,7 +6559,7 @@ const je = class je extends T {
     `;
   }
   renderDataset(e) {
-    const t = e.error !== null || e.stale_sources.length > 0, i = de(e.release_url);
+    const t = e.error !== null || e.stale_sources.length > 0, i = he(e.release_url);
     return r`
       <article class="card">
         <h2>${e.name}</h2>
@@ -6234,7 +6569,7 @@ const je = class je extends T {
           <dt>${this.t("datasets.availableVersion")}</dt><dd>${e.available_version ?? "—"}</dd>
           <dt>${this.t("datasets.sourceAge")}</dt>
           <dd>${e.source_age_days === null ? "—" : `${e.source_age_days} ${this.t("datasets.days")}`}</dd>
-          <dt>${this.t("datasets.disk")}</dt><dd>${pa(e.cache_bytes)}</dd>
+          <dt>${this.t("datasets.disk")}</dt><dd>${_s(e.cache_bytes)}</dd>
           <dt>${this.t("datasets.builtAt")}</dt><dd>${e.built_at_utc ?? "—"}</dd>
         </dl>
         ${t ? r`<div class="warning" role="status">
@@ -6251,25 +6586,25 @@ const je = class je extends T {
               </button>
             </div>` : l}
         <h3>${this.t("datasets.sources")}</h3>
-        ${e.sources.length === 0 ? r`<p class="muted">${this.t("datasets.noSources")}</p>` : r`<ul>${e.sources.map((s) => {
-      const n = de(s.homepage), o = this.attributionKey(e.dataset_id, s.source_id), u = this.attributionPages[o];
+        ${e.sources.length === 0 ? r`<p class="muted">${this.t("datasets.noSources")}</p>` : r`<ul>${e.sources.map((a) => {
+      const o = he(a.homepage), n = this.attributionKey(e.dataset_id, a.source_id), u = this.attributionPages[n];
       return r`
                 <li>
-                  <strong>${s.name}</strong> — ${s.provider}
-                  <div class="meta">${s.attribution_template}</div>
+                  <strong>${a.name}</strong> — ${a.provider}
+                  <div class="meta">${a.attribution_template}</div>
                   <div class="meta">
-                    ${this.t("datasets.upstream")}: ${s.upstream_version}
-                    ${s.upstream_date ? r` · ${s.upstream_date}` : l}
-                    · ${s.provenance_records} ${this.t("datasets.records")}
-                    ${s.modified_records > 0 ? r` · ${s.modified_records} ${this.t("datasets.modified")}` : l}
+                    ${this.t("datasets.upstream")}: ${a.upstream_version}
+                    ${a.upstream_date ? r` · ${a.upstream_date}` : l}
+                    · ${a.provenance_records} ${this.t("datasets.records")}
+                    ${a.modified_records > 0 ? r` · ${a.modified_records} ${this.t("datasets.modified")}` : l}
                   </div>
-                  ${n ? r`<a href=${n} target="_blank" rel="noopener noreferrer">${this.t("datasets.sourcePage")}</a>` : l}
-                  ${s.attribution_records > 0 ? r`
+                  ${o ? r`<a href=${o} target="_blank" rel="noopener noreferrer">${this.t("datasets.sourcePage")}</a>` : l}
+                  ${a.attribution_records > 0 ? r`
                         <div class="actions">
                           <button
                             type="button"
                             @click=${() => {
-        this.toggleAttributions(e.dataset_id, s.source_id);
+        this.toggleAttributions(e.dataset_id, a.source_id);
       }}
                           >
                             ${u?.expanded ? this.t("datasets.hideAttributions") : this.t("datasets.showAttributions")}
@@ -6295,7 +6630,7 @@ const je = class je extends T {
                                       type="button"
                                       ?disabled=${u.loading}
                                       @click=${() => {
-        this.loadMoreAttributions(e.dataset_id, s.source_id);
+        this.loadMoreAttributions(e.dataset_id, a.source_id);
       }}
                                     >
                                       ${this.t("datasets.loadMore")}
@@ -6306,24 +6641,24 @@ const je = class je extends T {
               `;
     })}</ul>`}
         <h3>${this.t("datasets.licenses")}</h3>
-        ${e.licenses.length === 0 ? r`<p class="muted">${this.t("datasets.noLicenses")}</p>` : r`<ul>${e.licenses.map((s) => r`
+        ${e.licenses.length === 0 ? r`<p class="muted">${this.t("datasets.noLicenses")}</p>` : r`<ul>${e.licenses.map((a) => r`
               <li>
-                <strong>${s.name}</strong>
-                <span class="meta">(${s.license_id} · ${s.license_scope})</span>
+                <strong>${a.name}</strong>
+                <span class="meta">(${a.license_id} · ${a.license_scope})</span>
                 <div class="meta">
-                  ${s.attribution_required ? this.t("datasets.attributionRequired") : this.t("datasets.attributionOptional")}
-                  · ${s.commercial_use_allowed ? this.t("datasets.commercialAllowed") : this.t("datasets.commercialBlocked")}
-                  ${s.share_alike ? r` · ${this.t("datasets.shareAlike")}` : l}
+                  ${a.attribution_required ? this.t("datasets.attributionRequired") : this.t("datasets.attributionOptional")}
+                  · ${a.commercial_use_allowed ? this.t("datasets.commercialAllowed") : this.t("datasets.commercialBlocked")}
+                  ${a.share_alike ? r` · ${this.t("datasets.shareAlike")}` : l}
                 </div>
-                ${de(s.source_url) ? r`<a href=${de(s.source_url)} target="_blank" rel="noopener noreferrer">${this.t("datasets.licensePage")}</a>` : l}
+                ${he(a.source_url) ? r`<a href=${he(a.source_url)} target="_blank" rel="noopener noreferrer">${this.t("datasets.licensePage")}</a>` : l}
               </li>
             `)}</ul>`}
       </article>
     `;
   }
 };
-je.styles = R`
-    ${H}
+Ve.styles = N`
+    ${j}
     :host, .stack, .grid, .card, .actions, button, a { box-sizing: border-box; min-width: 0; max-width: 100%; }
     :host { display: block; }
     .stack { display: grid; gap: 16px; }
@@ -6351,60 +6686,60 @@ je.styles = R`
       button { width: 100%; }
     }
   `;
-let P = je;
-j([
-  b({ attribute: !1 })
-], P.prototype, "hass");
-j([
-  b({ type: Boolean })
-], P.prototype, "admin");
-j([
+let L = Ve;
+W([
+  f({ attribute: !1 })
+], L.prototype, "hass");
+W([
+  f({ type: Boolean })
+], L.prototype, "admin");
+W([
   c()
-], P.prototype, "datasets");
-j([
+], L.prototype, "datasets");
+W([
   c()
-], P.prototype, "loading");
-j([
+], L.prototype, "loading");
+W([
   c()
-], P.prototype, "errorMessage");
-j([
+], L.prototype, "errorMessage");
+W([
   c()
-], P.prototype, "notice");
-j([
+], L.prototype, "notice");
+W([
   c()
-], P.prototype, "attributionPages");
-globalThis.customElements !== void 0 && customElements.get("locklearn-dataset-view") === void 0 && customElements.define("locklearn-dataset-view", P);
-var ma = Object.defineProperty, z = (a, e, t, i) => {
-  for (var s = void 0, n = a.length - 1, o; n >= 0; n--)
-    (o = a[n]) && (s = o(e, t, s) || s);
-  return s && ma(e, t, s), s;
+], L.prototype, "attributionPages");
+globalThis.customElements !== void 0 && customElements.get("locklearn-dataset-view") === void 0 && customElements.define("locklearn-dataset-view", L);
+var xs = Object.defineProperty, P = (s, e, t, i) => {
+  for (var a = void 0, o = s.length - 1, n; o >= 0; o--)
+    (n = s[o]) && (a = n(e, t, a) || a);
+  return a && xs(e, t, a), a;
 };
-function Se(a) {
-  return a === null ? "—" : `${Math.round(a * 100)}%`;
+function Te(s) {
+  return s === null ? "—" : `${Math.round(s * 100)}%`;
 }
-function ga(a, e = 14) {
+function Ss(s, e = 14) {
   if (e <= 0) return [];
   const t = /* @__PURE__ */ new Map();
-  for (const i of a) {
-    const s = t.get(i.local_date);
-    if (s === void 0) {
+  for (const i of s) {
+    const a = t.get(i.local_date);
+    if (a === void 0) {
       t.set(i.local_date, { ...i });
       continue;
     }
-    s.learning_exposures += i.learning_exposures, s.verified_retrievals += i.verified_retrievals, s.self_known += i.self_known, s.verified_correct += i.verified_correct, s.verified_wrong += i.verified_wrong, s.quiz_total += i.quiz_total, s.free_text_total += i.free_text_total, s.hints_used += i.hints_used, s.new_cards += i.new_cards, s.reviewed_cards += i.reviewed_cards, s.relearning_cards += i.relearning_cards, s.leech_cards += i.leech_cards, s.active_seconds += i.active_seconds;
+    a.learning_exposures += i.learning_exposures, a.verified_retrievals += i.verified_retrievals, a.self_known += i.self_known, a.verified_correct += i.verified_correct, a.verified_wrong += i.verified_wrong, a.quiz_total += i.quiz_total, a.free_text_total += i.free_text_total, a.hints_used += i.hints_used, a.new_cards += i.new_cards, a.reviewed_cards += i.reviewed_cards, a.relearning_cards += i.relearning_cards, a.leech_cards += i.leech_cards, a.active_seconds += i.active_seconds;
   }
-  return [...t.values()].sort((i, s) => i.local_date.localeCompare(s.local_date)).slice(-e).reverse();
+  return [...t.values()].sort((i, a) => i.local_date.localeCompare(a.local_date)).slice(-e).reverse();
 }
-function fa(a) {
+function qs(s) {
   return {
-    exposures: a.reduce((e, t) => e + t.learning_exposures, 0),
-    verifiedRetrievals: a.reduce((e, t) => e + t.verified_retrievals, 0)
+    exposures: s.reduce((e, t) => e + t.learning_exposures, 0),
+    verifiedRetrievals: s.reduce((e, t) => e + t.verified_retrievals, 0)
   };
 }
-function ue(a) {
-  return a?.role === "owner" || a?.role === "editor";
+function pe(s) {
+  return s?.role === "owner" || s?.role === "editor";
 }
-const Oe = class Oe extends T {
+const Be = class Be extends z {
   constructor() {
     super(...arguments), this.difficulties = [], this.tracks = [], this.selectedTrackId = "", this.loading = !1, this.errorMessage = "", this.notice = "", this.mnemonicEdits = {}, this.busyCardKey = null, this.loadGeneration = 0;
   }
@@ -6412,12 +6747,12 @@ const Oe = class Oe extends T {
     (e.has("hass") || e.has("profile")) && this.load();
   }
   locale() {
-    return Q(
+    return Z(
       this.hass?.locale?.language ?? this.hass?.language ?? globalThis.navigator?.language ?? "en"
     );
   }
   t(e) {
-    return F(this.locale(), e);
+    return O(this.locale(), e);
   }
   async load() {
     if (this.hass === void 0 || this.profile === void 0) {
@@ -6427,21 +6762,21 @@ const Oe = class Oe extends T {
     const e = ++this.loadGeneration, t = this.hass, i = this.profile.profile_id;
     this.loading = !0, this.errorMessage = "";
     try {
-      const s = (await qt(t, i)).filter(
+      const a = (await Ct(t, i)).filter(
         (h) => h.status === "active"
-      ), n = this.selectedTrackId && s.some((h) => h.track_id === this.selectedTrackId) ? this.selectedTrackId : "", [o, u] = await Promise.all([
-        ki(t, i, n || null),
-        _i(t, i, n || null)
+      ), o = this.selectedTrackId && a.some((h) => h.track_id === this.selectedTrackId) ? this.selectedTrackId : "", [n, u] = await Promise.all([
+        qi(t, i, o || null),
+        Ti(t, i, o || null)
       ]);
       if (e !== this.loadGeneration) return;
-      this.tracks = s, this.selectedTrackId = n, this.stats = o, this.difficulties = u;
+      this.tracks = a, this.selectedTrackId = o, this.stats = n, this.difficulties = u;
       const d = { ...this.mnemonicEdits };
       for (const h of u)
         d[h.card_key] === void 0 && (d[h.card_key] = h.annotations[0]?.note ?? "");
       this.mnemonicEdits = d;
-    } catch (s) {
+    } catch (a) {
       if (e !== this.loadGeneration) return;
-      this.errorMessage = s instanceof Error ? s.message : String(s);
+      this.errorMessage = a instanceof Error ? a.message : String(a);
     } finally {
       e === this.loadGeneration && (this.loading = !1);
     }
@@ -6454,13 +6789,13 @@ const Oe = class Oe extends T {
     i instanceof HTMLTextAreaElement && (this.mnemonicEdits = { ...this.mnemonicEdits, [e]: i.value });
   }
   async saveMnemonic(e) {
-    if (this.hass === void 0 || this.profile === void 0 || !ue(this.profile)) return;
+    if (this.hass === void 0 || this.profile === void 0 || !pe(this.profile)) return;
     const t = (this.mnemonicEdits[e.card_key] ?? "").trim();
     if (t) {
       this.busyCardKey = e.card_key, this.errorMessage = "", this.notice = "";
       try {
         const i = e.annotations[0];
-        i === void 0 ? await Nt(this.hass, this.profile.profile_id, e.card_key, t) : await Hi(
+        i === void 0 ? await Ut(this.hass, this.profile.profile_id, e.card_key, t) : await Wi(
           this.hass,
           this.profile.profile_id,
           i.annotation_id,
@@ -6474,10 +6809,10 @@ const Oe = class Oe extends T {
     }
   }
   async startTargetedSession(e) {
-    if (!(this.hass === void 0 || this.profile === void 0 || !ue(this.profile))) {
+    if (!(this.hass === void 0 || this.profile === void 0 || !pe(this.profile))) {
       this.busyCardKey = e.card_key, this.errorMessage = "", this.notice = "";
       try {
-        const t = await ji(
+        const t = await Bi(
           this.hass,
           this.profile.profile_id,
           e.track_id,
@@ -6498,10 +6833,10 @@ const Oe = class Oe extends T {
     }
   }
   async reactivate(e) {
-    if (!(this.hass === void 0 || this.profile === void 0 || !ue(this.profile) || !(globalThis.confirm?.(this.t("stats.reactivateConfirm")) ?? !0))) {
+    if (!(this.hass === void 0 || this.profile === void 0 || !pe(this.profile) || !(globalThis.confirm?.(this.t("stats.reactivateConfirm")) ?? !0))) {
       this.busyCardKey = e.card_key, this.errorMessage = "", this.notice = "";
       try {
-        await Fi(
+        await Vi(
           this.hass,
           this.profile.profile_id,
           e.track_id,
@@ -6540,7 +6875,7 @@ const Oe = class Oe extends T {
     `;
   }
   renderStats(e) {
-    const t = e.recent_verified_accuracy, i = e.calibration, s = ga(e.daily), n = fa(s);
+    const t = e.recent_verified_accuracy, i = e.calibration, a = Ss(e.daily), o = qs(a);
     return r`
       <section class="grid" aria-label=${this.t("stats.verifiedGroup")}>
         <article class="card metric verified">
@@ -6549,7 +6884,7 @@ const Oe = class Oe extends T {
         </article>
         <article class="card metric verified">
           <span>${this.t("stats.verifiedAccuracy")}</span>
-          <strong>${Se(t.accuracy)}</strong>
+          <strong>${Te(t.accuracy)}</strong>
           <div class="meta">${t.correct}/${t.total} · ${this.t("stats.verifiedOnly")}</div>
         </article>
         <article class="card metric verified">
@@ -6581,12 +6916,12 @@ const Oe = class Oe extends T {
         <div class="grid">
           <div class="metric">
             <span>${this.t("stats.exposures")}</span>
-            <strong>${n.exposures}</strong>
+            <strong>${o.exposures}</strong>
             <div class="meta">${this.t("stats.notAccuracy")}</div>
           </div>
           <div class="metric">
             <span>${this.t("stats.verifiedRetrievals")}</span>
-            <strong>${n.verifiedRetrievals}</strong>
+            <strong>${o.verifiedRetrievals}</strong>
             <div class="meta">${this.t("stats.countsAccuracy")}</div>
           </div>
         </div>
@@ -6603,7 +6938,7 @@ const Oe = class Oe extends T {
           ${this.stateMetric("stats.awaitingVerification", i.awaiting_verified_followup)}
           <div class="metric">
             <span>${this.t("stats.calibrationAccuracy")}</span>
-            <strong>${Se(i.later_verified_accuracy)}</strong>
+            <strong>${Te(i.later_verified_accuracy)}</strong>
           </div>
         </div>
       </article>
@@ -6611,7 +6946,7 @@ const Oe = class Oe extends T {
       <article class="card secondary">
         <h2>${this.t("stats.mastery")}</h2>
         <div class="metric">
-          <strong>${Se(e.mastery.value)}</strong>
+          <strong>${Te(e.mastery.value)}</strong>
           <div class="meta">${e.mastery.card_count} ${this.t("stats.cards")}</div>
         </div>
         <p>${this.t("stats.masteryExplain")}</p>
@@ -6621,42 +6956,42 @@ const Oe = class Oe extends T {
         <h2>${this.t("stats.difficulties")}</h2>
         ${this.difficulties.length === 0 ? r`<p class="muted">${this.t("stats.noDifficulties")}</p>` : r`<ul>
               ${this.difficulties.map(
-      (o) => r`
+      (n) => r`
                   <li>
-                    <strong>${o.card_key}</strong>
-                    — ${this.t("stats.leechScore")} ${o.leech_score}
+                    <strong>${n.card_key}</strong>
+                    — ${this.t("stats.leechScore")} ${n.leech_score}
                     <div class="meta">
-                      ${o.verified_correct_count} ${this.t("stats.correct")} ·
-                      ${o.verified_wrong_count} ${this.t("stats.wrong")} ·
-                      ${o.annotations.length > 0 ? this.t("stats.mnemonicPresent") : this.t("stats.mnemonicSuggested")}
+                      ${n.verified_correct_count} ${this.t("stats.correct")} ·
+                      ${n.verified_wrong_count} ${this.t("stats.wrong")} ·
+                      ${n.annotations.length > 0 ? this.t("stats.mnemonicPresent") : this.t("stats.mnemonicSuggested")}
                     </div>
-                    ${o.confusions.length === 0 ? l : r`<div class="meta">
-                          ${this.t("stats.confusions")}: ${o.confusions.map(
+                    ${n.confusions.length === 0 ? l : r`<div class="meta">
+                          ${this.t("stats.confusions")}: ${n.confusions.map(
         (u) => `${u.expected_answer_id}→${u.chosen_answer_id} ×${u.count}`
       ).join(", ")}
                         </div>`}
-                    ${o.annotations[0]?.note ? r`<p>${o.annotations[0].note}</p>` : l}
-                    ${ue(this.profile) ? r`
+                    ${n.annotations[0]?.note ? r`<p>${n.annotations[0].note}</p>` : l}
+                    ${pe(this.profile) ? r`
                           <label>
                             <span>${this.t("stats.personalMnemonic")}</span>
                             <textarea
-                              .value=${this.mnemonicEdits[o.card_key] ?? ""}
-                              @input=${(u) => this.editMnemonic(o.card_key, u)}
+                              .value=${this.mnemonicEdits[n.card_key] ?? ""}
+                              @input=${(u) => this.editMnemonic(n.card_key, u)}
                             ></textarea>
                           </label>
                           <div class="actions">
                             <button
                               ?disabled=${this.busyCardKey !== null}
                               @click=${() => {
-        this.saveMnemonic(o);
+        this.saveMnemonic(n);
       }}
                             >
-                              ${o.annotations.length > 0 ? this.t("stats.updateMnemonic") : this.t("stats.createMnemonic")}
+                              ${n.annotations.length > 0 ? this.t("stats.updateMnemonic") : this.t("stats.createMnemonic")}
                             </button>
                             <button
                               ?disabled=${this.busyCardKey !== null}
                               @click=${() => {
-        this.startTargetedSession(o);
+        this.startTargetedSession(n);
       }}
                             >
                               ${this.t("stats.targetedSession")}
@@ -6664,7 +6999,7 @@ const Oe = class Oe extends T {
                             <button
                               ?disabled=${this.busyCardKey !== null}
                               @click=${() => {
-        this.reactivate(o);
+        this.reactivate(n);
       }}
                             >
                               ${this.t("stats.reactivate")}
@@ -6681,13 +7016,13 @@ const Oe = class Oe extends T {
         <h2>${this.t("stats.confusions")}</h2>
         ${e.confusions.length === 0 ? r`<p class="muted">${this.t("stats.noConfusions")}</p>` : r`<ul>
               ${e.confusions.map(
-      (o) => r`
+      (n) => r`
                   <li>
-                    <strong>${o.card_key}</strong>
+                    <strong>${n.card_key}</strong>
                     <div class="meta">
-                      ${this.t("stats.expected")} ${o.expected_answer_id} →
-                      ${this.t("stats.chosen")} ${o.chosen_answer_id} ·
-                      ${o.count}×
+                      ${this.t("stats.expected")} ${n.expected_answer_id} →
+                      ${this.t("stats.chosen")} ${n.chosen_answer_id} ·
+                      ${n.count}×
                     </div>
                   </li>
                 `
@@ -6697,7 +7032,7 @@ const Oe = class Oe extends T {
 
       <article class="card">
         <h2>${this.t("stats.recentActivity")}</h2>
-        ${s.length === 0 ? r`<p class="muted">${this.t("stats.noActivity")}</p>` : r`<div class="table-wrap">
+        ${a.length === 0 ? r`<p class="muted">${this.t("stats.noActivity")}</p>` : r`<div class="table-wrap">
               <table>
                 <thead>
                   <tr>
@@ -6712,17 +7047,17 @@ const Oe = class Oe extends T {
                   </tr>
                 </thead>
                 <tbody>
-                  ${s.map(
-      (o) => r`
+                  ${a.map(
+      (n) => r`
                       <tr>
-                        <td>${o.local_date}</td>
-                        <td>${o.learning_exposures}</td>
-                        <td>${o.verified_retrievals}</td>
-                        <td>${o.verified_correct}</td>
-                        <td>${o.verified_wrong}</td>
-                        <td>${o.new_cards}</td>
-                        <td>${o.reviewed_cards}</td>
-                        <td>${o.relearning_cards}</td>
+                        <td>${n.local_date}</td>
+                        <td>${n.learning_exposures}</td>
+                        <td>${n.verified_retrievals}</td>
+                        <td>${n.verified_correct}</td>
+                        <td>${n.verified_wrong}</td>
+                        <td>${n.new_cards}</td>
+                        <td>${n.reviewed_cards}</td>
+                        <td>${n.relearning_cards}</td>
                       </tr>
                     `
     )}
@@ -6736,8 +7071,8 @@ const Oe = class Oe extends T {
     return r`<div class="metric"><span>${this.t(e)}</span><strong>${t}</strong></div>`;
   }
 };
-Oe.styles = R`
-    ${H}
+Be.styles = N`
+    ${j}
     :host, section, article, div, select { box-sizing: border-box; min-width: 0; max-width: 100%; }
     :host { display: block; }
     .stack { display: grid; gap: 18px; }
@@ -6775,42 +7110,42 @@ Oe.styles = R`
       .toolbar, label, select { width: 100%; }
     }
   `;
-let S = Oe;
-z([
-  b({ attribute: !1 })
-], S.prototype, "hass");
-z([
-  b({ attribute: !1 })
-], S.prototype, "profile");
-z([
+let T = Be;
+P([
+  f({ attribute: !1 })
+], T.prototype, "hass");
+P([
+  f({ attribute: !1 })
+], T.prototype, "profile");
+P([
   c()
-], S.prototype, "stats");
-z([
+], T.prototype, "stats");
+P([
   c()
-], S.prototype, "difficulties");
-z([
+], T.prototype, "difficulties");
+P([
   c()
-], S.prototype, "tracks");
-z([
+], T.prototype, "tracks");
+P([
   c()
-], S.prototype, "selectedTrackId");
-z([
+], T.prototype, "selectedTrackId");
+P([
   c()
-], S.prototype, "loading");
-z([
+], T.prototype, "loading");
+P([
   c()
-], S.prototype, "errorMessage");
-z([
+], T.prototype, "errorMessage");
+P([
   c()
-], S.prototype, "notice");
-z([
+], T.prototype, "notice");
+P([
   c()
-], S.prototype, "mnemonicEdits");
-z([
+], T.prototype, "mnemonicEdits");
+P([
   c()
-], S.prototype, "busyCardKey");
-globalThis.customElements !== void 0 && customElements.get("locklearn-stats-view") === void 0 && customElements.define("locklearn-stats-view", S);
-const ft = [
+], T.prototype, "busyCardKey");
+globalThis.customElements !== void 0 && customElements.get("locklearn-stats-view") === void 0 && customElements.define("locklearn-stats-view", T);
+const $t = [
   { route: "home", labelKey: "nav.home" },
   { route: "learn", labelKey: "nav.learn" },
   { route: "quiz", labelKey: "nav.quiz" },
@@ -6820,54 +7155,54 @@ const ft = [
   { route: "tracks", labelKey: "nav.tracks" },
   { route: "packs", labelKey: "nav.packs" },
   { route: "sources", labelKey: "nav.sources" }
-], va = [
+], Ts = [
   { route: "settings", labelKey: "nav.settings" }
 ];
-function ze(a) {
-  return a.length === 0 ? [] : new Set(a.map((t) => t.role)).has("owner") ? [...ft, ...va] : ft;
+function Pe(s) {
+  return s.length === 0 ? [] : new Set(s.map((t) => t.role)).has("owner") ? [...$t, ...Ts] : $t;
 }
-function he(a, e) {
-  return ze(e).some((t) => t.route === a);
+function me(s, e) {
+  return Pe(e).some((t) => t.route === s);
 }
-function ba(a) {
+function As(s) {
   return {
-    mine: a.filter((e) => e.role === "owner"),
-    shared: a.filter((e) => e.role !== "owner")
+    mine: s.filter((e) => e.role === "owner"),
+    shared: s.filter((e) => e.role !== "owner")
   };
 }
-function vt(a, e) {
+function kt(s, e) {
   const t = e.personal_profile?.profile_id;
-  if (t !== void 0 && a.some((s) => s.profile_id === t))
+  if (t !== void 0 && s.some((a) => a.profile_id === t))
     return t;
-  const i = a.find((s) => s.role === "owner");
-  return i !== void 0 ? i.profile_id : a[0]?.profile_id ?? null;
+  const i = s.find((a) => a.role === "owner");
+  return i !== void 0 ? i.profile_id : s[0]?.profile_id ?? null;
 }
-function ya(a) {
-  if (a === void 0) return { kind: "define" };
-  const e = typeof a.locklearnFrontendProtocol == "number" ? a.locklearnFrontendProtocol : null;
-  return e === N ? { kind: "reuse" } : {
+function zs(s) {
+  if (s === void 0) return { kind: "define" };
+  const e = typeof s.locklearnFrontendProtocol == "number" ? s.locklearnFrontendProtocol : null;
+  return e === I ? { kind: "reuse" } : {
     kind: "reload",
     existingProtocol: e,
-    frontendProtocol: N
+    frontendProtocol: I
   };
 }
-function $a(a, e, t) {
-  return !a && e && t;
+function Cs(s, e, t) {
+  return !s && e && t;
 }
-var wa = Object.defineProperty, x = (a, e, t, i) => {
-  for (var s = void 0, n = a.length - 1, o; n >= 0; n--)
-    (o = a[n]) && (s = o(e, t, s) || s);
-  return s && wa(e, t, s), s;
+var Ps = Object.defineProperty, q = (s, e, t, i) => {
+  for (var a = void 0, o = s.length - 1, n; o >= 0; o--)
+    (n = s[o]) && (a = n(e, t, a) || a);
+  return a && Ps(e, t, a), a;
 };
-const bt = "locklearn-hard-reload-required";
-async function ka(a, e) {
+const wt = "locklearn-hard-reload-required";
+async function Rs(s, e) {
   let t;
   try {
     return await Promise.race([
-      a,
-      new Promise((i, s) => {
+      s,
+      new Promise((i, a) => {
         t = globalThis.setTimeout(
-          () => s(new Error("LockLearn initial load timed out")),
+          () => a(new Error("LockLearn initial load timed out")),
           e
         );
       })
@@ -6876,14 +7211,14 @@ async function ka(a, e) {
     t !== void 0 && globalThis.clearTimeout(t);
   }
 }
-const fe = class fe extends T {
+const be = class be extends z {
   constructor() {
-    super(...arguments), this.status = "loading", this.activeRoute = ke(
+    super(...arguments), this.status = "loading", this.activeRoute = xe(
       globalThis.location?.pathname ?? "/locklearn"
     ), this.profiles = [], this.selectedProfileId = null, this.dashboardLoading = !1, this.dashboardError = "", this.errorMessage = "", this.managementDirty = !1, this.navigationSaving = !1, this.loadFailures = 0, this.diagnosticNotice = "", this.online = globalThis.navigator?.onLine ?? !0, this.loadGeneration = 0, this.dashboardGeneration = 0, this.initialLoadStarted = !1, this.handlePopState = () => {
-      const e = ke(globalThis.location?.pathname ?? "/locklearn"), t = he(e, this.profiles) ? e : "home";
+      const e = xe(globalThis.location?.pathname ?? "/locklearn"), t = me(e, this.profiles) ? e : "home";
       if (this.managementDirty && t !== this.activeRoute) {
-        this.pendingNavigation = { kind: "route", route: t }, globalThis.history?.replaceState({}, "", It(this.activeRoute)), this.requestUpdate();
+        this.pendingNavigation = { kind: "route", route: t }, globalThis.history?.replaceState({}, "", jt(this.activeRoute)), this.requestUpdate();
         return;
       }
       this.activeRoute = t;
@@ -6900,7 +7235,7 @@ const fe = class fe extends T {
     globalThis.removeEventListener?.("popstate", this.handlePopState), globalThis.removeEventListener?.("beforeunload", this.handleBeforeUnload), globalThis.removeEventListener?.("online", this.handleConnectivity), globalThis.removeEventListener?.("offline", this.handleConnectivity), super.disconnectedCallback();
   }
   updated(e) {
-    $a(
+    Cs(
       this.initialLoadStarted,
       e.has("hass"),
       this.hass !== void 0
@@ -6908,27 +7243,27 @@ const fe = class fe extends T {
   }
   locale() {
     const e = this.hass?.locale?.language ?? this.hass?.language ?? globalThis.navigator?.language ?? "en";
-    return Q(e);
+    return Z(e);
   }
   t(e) {
-    return F(this.locale(), e);
+    return O(this.locale(), e);
   }
   async load() {
     if (this.hass === void 0) return;
     const e = ++this.loadGeneration;
     this.status = "loading", this.errorMessage = "";
     try {
-      const { bootstrapState: t, profiles: i } = await ka((async () => {
-        const n = await pi(this.hass), o = await at(this.hass);
-        return { bootstrapState: n, profiles: o };
+      const { bootstrapState: t, profiles: i } = await Rs((async () => {
+        const o = await vi(this.hass), n = await nt(this.hass);
+        return { bootstrapState: o, profiles: n };
       })(), 1e4);
       if (e !== this.loadGeneration) return;
-      this.bootstrapState = t, this.profiles = i, this.selectedProfileId = vt(i, t);
-      const s = ke(globalThis.location?.pathname ?? t.panel_path);
-      this.activeRoute = he(s, i) ? s : "home", this.status = "ready", this.loadFailures = 0, this.diagnosticNotice = "", this.loadDashboard();
+      this.bootstrapState = t, this.profiles = i, this.selectedProfileId = kt(i, t);
+      const a = xe(globalThis.location?.pathname ?? t.panel_path);
+      this.activeRoute = me(a, i) ? a : "home", this.status = "ready", this.loadFailures = 0, this.diagnosticNotice = "", this.loadDashboard();
     } catch (t) {
       if (e !== this.loadGeneration) return;
-      if (t instanceof St) {
+      if (t instanceof zt) {
         this.bootstrapState = {
           frontend_protocol: t.backendProtocol,
           backend_version: t.backendVersion,
@@ -6943,7 +7278,7 @@ const fe = class fe extends T {
     }
   }
   selectRoute(e) {
-    if (!(!he(e, this.profiles) || e === this.activeRoute)) {
+    if (!(!me(e, this.profiles) || e === this.activeRoute)) {
       if (this.managementDirty) {
         this.pendingNavigation = { kind: "route", route: e };
         return;
@@ -6955,7 +7290,7 @@ const fe = class fe extends T {
     const t = e.currentTarget;
     if (!(t instanceof HTMLSelectElement)) return;
     const i = t.value;
-    if (!(!this.profiles.some((s) => s.profile_id === i) || i === this.selectedProfileId)) {
+    if (!(!this.profiles.some((a) => a.profile_id === i) || i === this.selectedProfileId)) {
       if (this.managementDirty) {
         this.pendingNavigation = { kind: "profile", profileId: i }, this.requestUpdate();
         return;
@@ -6965,7 +7300,7 @@ const fe = class fe extends T {
   }
   applyNavigation(e) {
     if (e.kind === "route") {
-      this.activeRoute = e.route, te(e.route);
+      this.activeRoute = e.route, se(e.route);
       return;
     }
     this.selectedProfileId = e.profileId, this.handoffSession = void 0, this.loadDashboard();
@@ -7003,7 +7338,7 @@ const fe = class fe extends T {
       return;
     this.handoffSession = t;
     const i = ["quiz", "calibration"].includes(t.type) ? "quiz" : "learn";
-    this.activeRoute = i, te(i);
+    this.activeRoute = i, se(i);
   }
   clearSessionHandoff() {
     this.handoffSession = void 0;
@@ -7011,8 +7346,8 @@ const fe = class fe extends T {
   async refreshManagement() {
     if (this.hass !== void 0)
       try {
-        const e = await at(this.hass), t = this.selectedProfileId;
-        this.profiles = e, this.selectedProfileId = t !== null && e.some((i) => i.profile_id === t) ? t : this.bootstrapState === void 0 ? e[0]?.profile_id ?? null : vt(e, this.bootstrapState), he(this.activeRoute, e) || (this.activeRoute = "home", te("home")), await this.loadDashboard();
+        const e = await nt(this.hass), t = this.selectedProfileId;
+        this.profiles = e, this.selectedProfileId = t !== null && e.some((i) => i.profile_id === t) ? t : this.bootstrapState === void 0 ? e[0]?.profile_id ?? null : kt(e, this.bootstrapState), me(this.activeRoute, e) || (this.activeRoute = "home", se("home")), await this.loadDashboard();
       } catch (e) {
         this.errorMessage = e instanceof Error ? e.message : String(e);
       }
@@ -7025,7 +7360,7 @@ const fe = class fe extends T {
     const e = ++this.dashboardGeneration;
     this.dashboardLoading = !0, this.dashboardError = "";
     try {
-      const t = await Li(this.hass, this.selectedProfileId);
+      const t = await Ii(this.hass, this.selectedProfileId);
       if (e !== this.dashboardGeneration) return;
       this.dashboard = t;
     } catch (t) {
@@ -7037,7 +7372,7 @@ const fe = class fe extends T {
   }
   async copyDiagnostic() {
     const e = [
-      `LockLearn frontend protocol: ${N}`,
+      `LockLearn frontend protocol: ${I}`,
       `route: ${this.activeRoute}`,
       `online: ${this.online}`,
       `failures: ${this.loadFailures}`,
@@ -7069,7 +7404,7 @@ const fe = class fe extends T {
               ${this.t("state.protocol.reload")}
             </button>
             <div class="meta">
-              frontend protocol ${N} · backend protocol
+              frontend protocol ${I} · backend protocol
               ${this.bootstrapState?.frontend_protocol ?? "?"} · backend
               ${this.bootstrapState?.backend_version ?? "?"}
             </div>
@@ -7099,7 +7434,7 @@ const fe = class fe extends T {
           </section>
         </main>
       `;
-    const e = ze(this.profiles), t = ba(this.profiles);
+    const e = Pe(this.profiles), t = As(this.profiles);
     return r`
       <div class="shell">
         <header>
@@ -7163,7 +7498,13 @@ const fe = class fe extends T {
                       .externalSession=${this.handoffSession}
                       @locklearn-session-handoff-consumed=${this.clearSessionHandoff}
                       @locklearn-open-session=${this.openTargetedSession}
-                    ></locklearn-quiz-view>` : this.activeRoute === "stats" ? r`<locklearn-stats-view
+                    ></locklearn-quiz-view>` : this.activeRoute === "exam" ? r`<locklearn-exam-view
+                        .hass=${this.hass}
+                        .profile=${this.profiles.find(
+      (i) => i.profile_id === this.selectedProfileId
+    )}
+                        .dashboard=${this.dashboard}
+                      ></locklearn-exam-view>` : this.activeRoute === "stats" ? r`<locklearn-stats-view
                         .hass=${this.hass}
                         .profile=${this.profiles.find(
       (i) => i.profile_id === this.selectedProfileId
@@ -7313,12 +7654,12 @@ const fe = class fe extends T {
     return r`<main><section class="state-card"><p>${e}</p></section></main>`;
   }
   routeLabel(e) {
-    const t = ze(this.profiles).find((i) => i.route === e);
+    const t = Pe(this.profiles).find((i) => i.route === e);
     return t === void 0 ? this.t("nav.home") : this.t(t.labelKey);
   }
 };
-fe.locklearnFrontendProtocol = N, fe.styles = R`
-    ${H}
+be.locklearnFrontendProtocol = I, be.styles = N`
+    ${j}
     :host {
       display: block;
       min-height: 100%;
@@ -7588,77 +7929,77 @@ fe.locklearnFrontendProtocol = N, fe.styles = R`
       }
     }
   `;
-let k = fe;
-x([
-  b({ attribute: !1 })
-], k.prototype, "hass");
-x([
+let _ = be;
+q([
+  f({ attribute: !1 })
+], _.prototype, "hass");
+q([
   c()
-], k.prototype, "status");
-x([
+], _.prototype, "status");
+q([
   c()
-], k.prototype, "activeRoute");
-x([
+], _.prototype, "activeRoute");
+q([
   c()
-], k.prototype, "bootstrapState");
-x([
+], _.prototype, "bootstrapState");
+q([
   c()
-], k.prototype, "profiles");
-x([
+], _.prototype, "profiles");
+q([
   c()
-], k.prototype, "selectedProfileId");
-x([
+], _.prototype, "selectedProfileId");
+q([
   c()
-], k.prototype, "dashboard");
-x([
+], _.prototype, "dashboard");
+q([
   c()
-], k.prototype, "dashboardLoading");
-x([
+], _.prototype, "dashboardLoading");
+q([
   c()
-], k.prototype, "dashboardError");
-x([
+], _.prototype, "dashboardError");
+q([
   c()
-], k.prototype, "errorMessage");
-x([
+], _.prototype, "errorMessage");
+q([
   c()
-], k.prototype, "handoffSession");
-x([
+], _.prototype, "handoffSession");
+q([
   c()
-], k.prototype, "managementDirty");
-x([
+], _.prototype, "managementDirty");
+q([
   c()
-], k.prototype, "pendingNavigation");
-x([
+], _.prototype, "pendingNavigation");
+q([
   c()
-], k.prototype, "navigationSaving");
-x([
+], _.prototype, "navigationSaving");
+q([
   c()
-], k.prototype, "loadFailures");
-x([
+], _.prototype, "loadFailures");
+q([
   c()
-], k.prototype, "diagnosticNotice");
-x([
+], _.prototype, "diagnosticNotice");
+q([
   c()
-], k.prototype, "online");
-function _a(a) {
-  if (typeof document > "u" || document.getElementById(bt) !== null) return;
+], _.prototype, "online");
+function Es(s) {
+  if (typeof document > "u" || document.getElementById(wt) !== null) return;
   const e = document.createElement("div");
-  e.id = bt, e.setAttribute("role", "alert"), e.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;padding:24px;background:var(--primary-background-color,#fff);color:var(--primary-text-color,#111);font-family:system-ui,sans-serif";
+  e.id = wt, e.setAttribute("role", "alert"), e.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;padding:24px;background:var(--primary-background-color,#fff);color:var(--primary-text-color,#111);font-family:system-ui,sans-serif";
   const t = document.createElement("div");
   t.style.cssText = "max-width:680px;padding:24px;border:1px solid var(--divider-color,#ddd);border-radius:12px;background:var(--card-background-color,#fff)";
   const i = document.createElement("h1");
   i.textContent = "LockLearn was updated";
-  const s = document.createElement("p");
-  s.textContent = "An older LockLearn panel is still loaded in this browser. Perform a full browser reload before continuing.";
-  const n = document.createElement("p");
-  n.textContent = `loaded protocol ${a ?? "unknown"} · current protocol ${N}`;
-  const o = document.createElement("button");
-  o.textContent = "Reload now", o.addEventListener("click", () => globalThis.location?.reload()), t.append(i, s, n, o), e.append(t), document.body.append(e);
+  const a = document.createElement("p");
+  a.textContent = "An older LockLearn panel is still loaded in this browser. Perform a full browser reload before continuing.";
+  const o = document.createElement("p");
+  o.textContent = `loaded protocol ${s ?? "unknown"} · current protocol ${I}`;
+  const n = document.createElement("button");
+  n.textContent = "Reload now", n.addEventListener("click", () => globalThis.location?.reload()), t.append(i, a, o, n), e.append(t), document.body.append(e);
 }
-const xa = customElements.get(
+const Ls = customElements.get(
   "locklearn-panel"
-), qe = ya(xa);
-qe.kind === "define" ? customElements.define("locklearn-panel", k) : qe.kind === "reload" && _a(qe.existingProtocol);
+), Ae = zs(Ls);
+Ae.kind === "define" ? customElements.define("locklearn-panel", _) : Ae.kind === "reload" && Es(Ae.existingProtocol);
 export {
-  k as LockLearnPanel
+  _ as LockLearnPanel
 };

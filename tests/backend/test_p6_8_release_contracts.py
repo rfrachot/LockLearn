@@ -67,6 +67,7 @@ PROFILE_GUARDED_COMMANDS = frozenset(
         "locklearn/session/availability",
         "locklearn/session/start",
         "locklearn/exam/start",
+        "locklearn/exam/history",
     }
 )
 TRACK_GUARDED_COMMANDS = frozenset(

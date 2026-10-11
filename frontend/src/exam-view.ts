@@ -1,8 +1,23 @@
 import { LitElement, css, html, nothing } from "lit";
 import { property, state } from "lit/decorators.js";
 
-import type { DashboardResponse, HomeAssistantLike, SessionState, VisibleProfile, ExamResult } from "./protocol";
-import { answerExam, finishExam, getExamResult, getSession, startExam } from "./protocol";
+import type {
+  DashboardResponse,
+  ExamAttemptSummary,
+  ExamResult,
+  HomeAssistantLike,
+  SessionState,
+  VisibleProfile,
+} from "./protocol";
+import {
+  answerExam,
+  finishExam,
+  getExamHistory,
+  getExamResult,
+  getSession,
+  setExamPaused,
+  startExam,
+} from "./protocol";
 
 export class LockLearnExamView extends LitElement {
   @property({ attribute: false }) hass?: HomeAssistantLike;
@@ -11,8 +26,16 @@ export class LockLearnExamView extends LitElement {
 
   @state() private trackId = "";
   @state() private count = 20;
+  @state() private contentTypes: string[] = [];
+  @state() private direction: "any" | "forward" | "reverse" = "any";
+  @state() private packId = "";
+  @state() private level = "";
+  @state() private tags = "";
+  @state() private shuffle = true;
+  @state() private optionCount = 4;
   @state() private session?: SessionState;
   @state() private result?: ExamResult;
+  @state() private history: ExamAttemptSummary[] = [];
   @state() private busy = false;
   @state() private error = "";
 
@@ -27,6 +50,9 @@ export class LockLearnExamView extends LitElement {
     button { text-align: left; cursor: pointer; }
     button:disabled { opacity: .55; cursor: default; }
     .choices { display: grid; gap: 10px; }
+    fieldset { display: grid; gap: 6px; border: 1px solid var(--divider-color); border-radius: 8px; }
+    fieldset label { display: block; }
+    .history { font-size: .95rem; }
     label { display: grid; gap: 6px; }
     .prompt { font-size: clamp(1.4rem, 4vw, 2rem); text-align: center; padding: 22px 8px; }
     .muted { color: var(--secondary-text-color); }
@@ -39,9 +65,20 @@ export class LockLearnExamView extends LitElement {
       this.session = undefined;
       this.result = undefined;
       this.trackId = this.dashboard?.tracks[0]?.track_id ?? "";
+      this.history = [];
+      if (this.hass && this.profile) void this.loadHistory(this.profile.profile_id);
     }
     if (changes.has("dashboard") && !this.trackId) {
       this.trackId = this.dashboard?.tracks[0]?.track_id ?? "";
+    }
+  }
+
+  private async loadHistory(profileId: string): Promise<void> {
+    try {
+      const response = await getExamHistory(this.hass!, profileId);
+      if (this.profile?.profile_id === profileId) this.history = response.items;
+    } catch {
+      // History is supplementary; the active/resumable session remains usable.
     }
   }
 
@@ -62,8 +99,25 @@ export class LockLearnExamView extends LitElement {
   private begin(): void {
     void this.perform(async () => {
       if (!this.hass || !this.profile || !this.trackId) return;
-      this.session = await startExam(this.hass, this.profile.profile_id, this.trackId, this.count);
+      this.session = await startExam(this.hass, this.profile.profile_id, this.trackId, {
+        requestedCards: this.count,
+        contentTypes: this.contentTypes.length ? this.contentTypes : undefined,
+        direction: this.direction,
+        packId: this.packId.trim() || undefined,
+        levels: this.level.trim() ? [this.level.trim()] : undefined,
+        tags: this.tags.split(",").map(tag => tag.trim()).filter(Boolean),
+        shuffle: this.shuffle,
+        optionCount: this.optionCount,
+      });
       this.result = undefined;
+      await this.loadHistory(this.profile.profile_id);
+    });
+  }
+
+  private pause(): void {
+    void this.perform(async () => {
+      if (!this.hass || !this.session || this.session.status !== "active") return;
+      this.session = await setExamPaused(this.hass, this.session, true);
     });
   }
 
@@ -90,6 +144,18 @@ export class LockLearnExamView extends LitElement {
     });
   }
 
+  private openHistory(attempt: ExamAttemptSummary): void {
+    void this.perform(async () => {
+      if (!this.hass) return;
+      const session = await getSession(this.hass, attempt.attempt_id);
+      this.session = session;
+      this.result = attempt.status === "completed"
+        ? await getExamResult(this.hass, attempt.attempt_id)
+        : undefined;
+      if (session.track_id) this.trackId = session.track_id;
+    });
+  }
+
   private answer(selectedAnswerId: string | null): void {
     void this.perform(async () => {
       if (!this.hass || !this.session?.current_question) return;
@@ -105,6 +171,7 @@ export class LockLearnExamView extends LitElement {
       const response = await finishExam(this.hass, this.session);
       this.session = response.session;
       this.result = response.result;
+      await this.loadHistory(this.profile?.profile_id ?? "");
     });
   }
 
@@ -133,10 +200,63 @@ export class LockLearnExamView extends LitElement {
             ${[10, 20, 30, 40].map(n => html`<option value=${n}>${n}</option>`)}
           </select>
         </label>
+        <fieldset>
+          <legend>${this.fr ? "Types de contenu" : "Content types"}</legend>
+          ${["vocabulary", "kanji", "grammar", "expression", "sentence"].map(type => html`
+            <label><input type="checkbox" .checked=${this.contentTypes.includes(type)}
+              @change=${(e: Event) => {
+                const checked = (e.target as HTMLInputElement).checked;
+                this.contentTypes = checked
+                  ? [...this.contentTypes, type]
+                  : this.contentTypes.filter(value => value !== type);
+              }} /> ${type}</label>
+          `)}
+        </fieldset>
+        <label>${this.fr ? "Direction" : "Direction"}
+          <select .value=${this.direction} @change=${(e: Event) => {
+            this.direction = (e.target as HTMLSelectElement).value as typeof this.direction;
+          }}>
+            <option value="any">${this.fr ? "Les deux" : "Any"}</option>
+            <option value="forward">${this.fr ? "Source → cible" : "Source → target"}</option>
+            <option value="reverse">${this.fr ? "Cible → source" : "Target → source"}</option>
+          </select>
+        </label>
+        <label>${this.fr ? "Pack (identifiant, optionnel)" : "Pack (optional id)"}
+          <input .value=${this.packId} @input=${(e: Event) => {
+            this.packId = (e.target as HTMLInputElement).value;
+          }} />
+        </label>
+        <label>${this.fr ? "Niveau (tag level, optionnel)" : "Level (optional level tag)"}
+          <input .value=${this.level} @input=${(e: Event) => {
+            this.level = (e.target as HTMLInputElement).value;
+          }} />
+        </label>
+        <label>${this.fr ? "Tags (séparés par des virgules)" : "Tags (comma-separated)"}
+          <input .value=${this.tags} @input=${(e: Event) => {
+            this.tags = (e.target as HTMLInputElement).value;
+          }} />
+        </label>
+        <label><input type="checkbox" .checked=${this.shuffle}
+          @change=${(e: Event) => { this.shuffle = (e.target as HTMLInputElement).checked; }} />
+          ${this.fr ? "Mélanger les questions" : "Shuffle questions"}</label>
+        <label>${this.fr ? "Nombre d'options par QCM" : "Options per MCQ"}
+          <select .value=${String(this.optionCount)} @change=${(e: Event) => {
+            this.optionCount = Number((e.target as HTMLSelectElement).value);
+          }}>
+            ${[2, 3, 4, 5, 6].map(n => html`<option value=${n}>${n}</option>`)}
+          </select>
+        </label>
         ${this.profile.role === "viewer" ? nothing : html`
           <button @click=${this.begin} ?disabled=${this.busy || !this.trackId}>${this.fr ? "Commencer l'examen" : "Start exam"}</button>
         `}
         ${resumable ? html`<button @click=${this.resume} ?disabled=${this.busy}>${this.fr ? "Reprendre / consulter" : "Resume / review"}</button>` : nothing}
+        ${this.history.length ? html`
+          <h2>${this.fr ? "Examens précédents" : "Previous exams"}</h2>
+          ${this.history.map(attempt => html`<button class="history" @click=${() => this.openHistory(attempt)}>
+            ${new Date(attempt.started_at_utc).toLocaleString()} —
+            ${attempt.status === "completed" ? `${attempt.correct_count}/${attempt.question_count}` : attempt.status}
+          </button>`)}
+        ` : nothing}
       ` : this.result ? html`
         <h2>${this.result.correct} / ${this.result.total} — ${this.result.percentage}%</h2>
         <h3>${this.fr ? "Revoir mes erreurs" : "Review mistakes"}</h3>
@@ -162,6 +282,7 @@ export class LockLearnExamView extends LitElement {
             @click=${() => this.answer(null)}>${this.fr ? "Je ne sais pas" : "I don't know"}</button>
         </div>
         <p class="muted">${this.fr ? "Pas de correction avant la fin." : "No correction until the end."}</p>
+        <button @click=${this.pause} ?disabled=${this.busy}>${this.fr ? "Mettre en pause" : "Pause exam"}</button>
       ` : html`
         <p>${this.fr ? "Toutes les réponses sont enregistrées." : "All answers have been recorded."}</p>
         <button @click=${this.finish} ?disabled=${this.busy || this.session?.status !== "active"}>

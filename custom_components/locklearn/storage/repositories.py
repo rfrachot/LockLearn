@@ -1346,6 +1346,8 @@ class TracksRepository:
                 """SELECT DISTINCT rule.card_key, card.learning_item_id,
                           card.prompt_facet_id, card.answer_facet_id,
                           item.content_type,
+                          pinned.pack_id, pinned.pack_version_id,
+                          prompt.language_tag, answer.language_tag,
                           COALESCE(progress.state, 'new') AS progress_state,
                           progress.next_due_at_utc, pack_item.position,
                           COALESCE(progress.user_state, 'active') AS user_state,
@@ -1356,7 +1358,13 @@ class TracksRepository:
                           progress.last_result,
                           COALESCE(progress.self_known_count, 0),
                           COALESCE(progress.verified_correct_count, 0),
-                          COALESCE(progress.verified_wrong_count, 0)
+                          COALESCE(progress.verified_wrong_count, 0),
+                          (SELECT group_concat(tag_id, '|') FROM (
+                               SELECT DISTINCT tagged.tag_id
+                               FROM content.learning_item_tags AS tagged
+                               WHERE tagged.learning_item_id = item.learning_item_id
+                               ORDER BY tagged.tag_id
+                           )) AS item_tags
                    FROM track_card_rules AS rule
                    JOIN content.card_definitions AS card
                      ON card.card_key = rule.card_key
@@ -1367,6 +1375,12 @@ class TracksRepository:
                    JOIN content.pack_items AS pack_item INDEXED BY pack_items_version_item
                      ON pack_item.pack_version_id = ?
                     AND pack_item.learning_item_id = item.learning_item_id
+                   JOIN content.pack_versions AS pinned
+                     ON pinned.pack_version_id = pack_item.pack_version_id
+                   JOIN content.facets AS prompt
+                     ON prompt.facet_id = card.prompt_facet_id
+                   JOIN content.facets AS answer
+                     ON answer.facet_id = card.answer_facet_id
                    LEFT JOIN progress
                      ON progress.profile_id = ?
                     AND progress.track_id = rule.track_id
@@ -1397,18 +1411,23 @@ class TracksRepository:
                     "prompt_facet_id": str(row[2]),
                     "answer_facet_id": str(row[3]),
                     "content_type": str(row[4]),
-                    "state": str(row[5]),
-                    "next_due_at_utc": None if row[6] is None else str(row[6]),
-                    "pack_position": int(row[7]),
-                    "user_state": str(row[8]),
-                    "suspend_until_utc": None if row[9] is None else str(row[9]),
-                    "difficulty_factor": float(row[10]),
-                    "last_verified_at_utc": None if row[11] is None else str(row[11]),
-                    "last_seen_at_utc": None if row[12] is None else str(row[12]),
-                    "last_result": None if row[13] is None else str(row[13]),
-                    "self_known_count": int(row[14]),
-                    "verified_correct_count": int(row[15]),
-                    "verified_wrong_count": int(row[16]),
+                    "pack_id": str(row[5]),
+                    "pack_version_id": str(row[6]),
+                    "prompt_language": None if row[7] is None else str(row[7]),
+                    "answer_language": None if row[8] is None else str(row[8]),
+                    "state": str(row[9]),
+                    "next_due_at_utc": None if row[10] is None else str(row[10]),
+                    "pack_position": int(row[11]),
+                    "user_state": str(row[12]),
+                    "suspend_until_utc": None if row[13] is None else str(row[13]),
+                    "difficulty_factor": float(row[14]),
+                    "last_verified_at_utc": None if row[15] is None else str(row[15]),
+                    "last_seen_at_utc": None if row[16] is None else str(row[16]),
+                    "last_result": None if row[17] is None else str(row[17]),
+                    "self_known_count": int(row[18]),
+                    "verified_correct_count": int(row[19]),
+                    "verified_wrong_count": int(row[20]),
+                    "tag_ids": tuple(str(value) for value in str(row[21]).split("|") if value),
                     "confusable_group_ids": tuple(confusable_by_item.get(str(row[1]), ())),
                 }
                 for row in rows
@@ -2087,7 +2106,11 @@ class ReviewEventsRepository:
                 item["free_text_total"] += 1
             if bool(row[6]):
                 item["hints_used"] += 1
-            if mode != "exam_retrieval" and str(pre.get("state")) in {"review", "leech"} and retrieval:
+            if (
+                mode != "exam_retrieval"
+                and str(pre.get("state")) in {"review", "leech"}
+                and retrieval
+            ):
                 item["reviewed_cards"].add(str(post["card_key"]))
             if str(pre.get("state")) == "relearning" or str(post.get("state")) == "relearning":
                 item["relearning_cards"].add(str(post["card_key"]))

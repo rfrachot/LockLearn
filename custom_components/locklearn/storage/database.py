@@ -770,8 +770,11 @@ class SQLiteStorage:
         strategy: str = "default",
         settings: dict[str, Any] | None = None,
         items: tuple[dict[str, Any], ...] = (),
+        exam_attempt: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Persist a configured session and its prepared question state."""
+        if exam_attempt is not None and session_type != "exam":
+            raise ValueError("exam_attempt requires an exam session")
         now = self._clock.now().isoformat()
         serialized_settings = json.dumps(
             settings or {},
@@ -827,6 +830,26 @@ class SQLiteStorage:
                         for position, item in enumerate(items)
                     ),
                 )
+                if exam_attempt is not None:
+                    connection.execute(
+                        """INSERT INTO exam_attempts(
+                               attempt_id, profile_id, track_id, status,
+                               settings_json, question_count, started_at_utc
+                           ) VALUES (?, ?, ?, 'active', ?, ?, ?)""",
+                        (
+                            session_id,
+                            profile_id,
+                            track_id,
+                            json.dumps(
+                                dict(exam_attempt["settings"]),
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                                sort_keys=True,
+                            ),
+                            len(items),
+                            now,
+                        ),
+                    )
                 connection.commit()
             except Exception:
                 if connection.in_transaction:
@@ -910,6 +933,57 @@ class SQLiteStorage:
             items = result["items"]
             result["current_question"] = items[position] if 0 <= position < len(items) else None
             return result
+
+        return await self._async_reader(read)
+
+    async def async_list_exam_attempts(
+        self,
+        profile_id: str,
+        *,
+        limit: int = 20,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Return bounded, private-safe exam history without active answer keys."""
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be within 1..100")
+        try:
+            offset = 0 if cursor is None else int(cursor)
+        except ValueError as err:
+            raise ValueError("invalid cursor") from err
+        if offset < 0:
+            raise ValueError("invalid cursor")
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any]:
+            rows = connection.execute(
+                """SELECT attempt.attempt_id, attempt.track_id, attempt.status,
+                          attempt.question_count, attempt.correct_count,
+                          attempt.started_at_utc, attempt.completed_at_utc,
+                          session.status AS session_status
+                   FROM exam_attempts AS attempt
+                   LEFT JOIN sessions AS session ON session.id = attempt.attempt_id
+                   WHERE attempt.profile_id = ?
+                   ORDER BY attempt.started_at_utc DESC, attempt.attempt_id DESC
+                   LIMIT ? OFFSET ?""",
+                (profile_id, limit + 1, offset),
+            ).fetchall()
+            has_next = len(rows) > limit
+            items = rows[:limit]
+            return {
+                "items": [
+                    {
+                        "attempt_id": str(row[0]),
+                        "track_id": None if row[1] is None else str(row[1]),
+                        "status": str(row[2]),
+                        "question_count": int(row[3]),
+                        "correct_count": int(row[4]),
+                        "started_at_utc": str(row[5]),
+                        "completed_at_utc": None if row[6] is None else str(row[6]),
+                        "session_status": None if row[7] is None else str(row[7]),
+                    }
+                    for row in items
+                ],
+                "cursor": str(offset + limit) if has_next else None,
+            }
 
         return await self._async_reader(read)
 
@@ -1258,6 +1332,8 @@ class SQLiteStorage:
         expected_version: int,
         question_id: str,
         answer: Any,
+        *,
+        allow_exam: bool = False,
     ) -> dict[str, Any]:
         """Apply an answer with atomic session/question CAS semantics."""
         now = self._clock.now().isoformat()
@@ -1267,14 +1343,17 @@ class SQLiteStorage:
             try:
                 connection.execute("BEGIN IMMEDIATE")
                 session = connection.execute(
-                    """SELECT status, version, current_position, question_count
+                    """SELECT type, status, version, current_position, question_count
                        FROM sessions WHERE id = ?""",
                     (session_id,),
                 ).fetchone()
                 if session is None:
                     connection.rollback()
                     raise SessionNotFoundError(session_id)
-                status, version, position, question_count = session
+                session_type, status, version, position, question_count = session
+                if str(session_type) == "exam" and not allow_exam:
+                    connection.rollback()
+                    raise ValueError("exam sessions require the exam answer endpoint")
                 if str(status) != "active" or int(version) != expected_version:
                     connection.rollback()
                     raise StaleSessionError(session_id)
@@ -1367,6 +1446,12 @@ class SQLiteStorage:
             placeholders = ",".join("?" for _ in allowed_source)
             try:
                 connection.execute("BEGIN IMMEDIATE")
+                session_type = connection.execute(
+                    "SELECT type FROM sessions WHERE id = ?", (session_id,)
+                ).fetchone()
+                if status == "completed" and session_type is not None and session_type[0] == "exam":
+                    connection.rollback()
+                    raise ValueError("exam sessions require locklearn/exam/finish")
                 cursor = connection.execute(
                     f"""UPDATE sessions
                         SET status = ?, version = version + 1,
@@ -1421,14 +1506,17 @@ class SQLiteStorage:
             try:
                 connection.execute("BEGIN IMMEDIATE")
                 session = connection.execute(
-                    """SELECT profile_id, status, version, current_position
+                    """SELECT profile_id, type, status, version, current_position
                        FROM sessions WHERE id = ?""",
                     (session_id,),
                 ).fetchone()
                 if session is None:
                     connection.rollback()
                     raise SessionNotFoundError(session_id)
-                profile_id, status, version, position = session
+                profile_id, session_type, status, version, position = session
+                if str(session_type) == "exam":
+                    connection.rollback()
+                    raise ValueError("exam answers cannot be undone")
                 if str(status) not in {"active", "paused"} or int(version) != expected_version:
                     connection.rollback()
                     raise StaleSessionError(session_id)
