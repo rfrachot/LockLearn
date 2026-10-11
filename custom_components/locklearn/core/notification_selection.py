@@ -41,6 +41,10 @@ class NotificationProfilesRepository(Protocol):
 
 
 class NotificationReviewRepository(Protocol):
+    async def async_recent_exam_retrieval_card_keys(
+        self, *, profile_id: str, track_id: str, since_utc: str
+    ) -> frozenset[str]: ...
+
     async def async_introduced_card_keys(
         self,
         *,
@@ -216,6 +220,14 @@ class NotificationSelectionService:
             candidate = _Candidate.from_row(row)
             if self._user_state_available(candidate, now=now):
                 candidates.append(candidate)
+        recent_exam_cards = await self._reviews.async_recent_exam_retrieval_card_keys(
+            profile_id=profile_id,
+            track_id=track_id,
+            since_utc=(now - timedelta(hours=12)).isoformat(),
+        )
+        candidates = [
+            candidate for candidate in candidates if candidate.card_key not in recent_exam_cards
+        ]
         candidates = await self._eligible_candidates(
             profile_id=profile_id,
             track_id=track_id,

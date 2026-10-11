@@ -25,6 +25,7 @@ from ..core.content import GradingOutcome, GradingPolicyKind
 from ..core.content_reports import ContentReportError
 from ..core.dashboard import DashboardServiceError
 from ..core.difficulties import DifficultyServiceError
+from ..core.exams import ExamError
 from ..core.grading import FreeTextGradingResult
 from ..core.integrity import IntegrityServiceError
 from ..core.learning_sessions import LearningSessionError
@@ -2619,6 +2620,215 @@ async def ws_session_availability(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "locklearn/exam/start",
+        vol.Required("profile_id"): str,
+        vol.Required("track_id"): str,
+        vol.Optional("requested_cards", default=20): vol.All(int, vol.Range(min=1, max=100)),
+        vol.Optional("content_types"): [str],
+        vol.Optional("direction", default="any"): vol.In(("any", "forward", "reverse")),
+        vol.Optional("pack_id"): str,
+        vol.Optional("pack_version_id"): str,
+        vol.Optional("levels"): [str],
+        vol.Optional("tags"): [str],
+        vol.Optional("shuffle", default=True): bool,
+        vol.Optional("option_count", default=4): vol.All(int, vol.Range(min=2, max=6)),
+    }
+)
+@websocket_api.async_response
+async def ws_exam_start(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        msg["profile_id"],
+        ProfilePermission.ANSWER,
+    ):
+        return
+    try:
+        result = await runtime.exams.async_start(
+            profile_id=msg["profile_id"],
+            track_id=msg["track_id"],
+            requested_cards=msg["requested_cards"],
+            content_types=msg.get("content_types"),
+            direction=msg["direction"],
+            pack_id=msg.get("pack_id"),
+            pack_version_id=msg.get("pack_version_id"),
+            levels=msg.get("levels"),
+            tags=msg.get("tags"),
+            shuffle=msg["shuffle"],
+            option_count=msg["option_count"],
+        )
+    except (ExamError, QuizSessionError, SessionValidationError) as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/exam/history",
+        vol.Required("profile_id"): str,
+        vol.Optional("limit", default=_DEFAULT_PAGE_LIMIT): vol.All(
+            int, vol.Range(min=1, max=_MAX_PAGE_LIMIT)
+        ),
+        vol.Optional("cursor"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_exam_history(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List prior attempts without returning any active answer key."""
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if not await _require_profile_permission(
+        runtime,
+        connection,
+        msg["id"],
+        msg["profile_id"],
+        ProfilePermission.READ,
+    ):
+        return
+    try:
+        result = await runtime.storage.async_list_exam_attempts(
+            msg["profile_id"],
+            limit=msg["limit"],
+            cursor=msg.get("cursor"),
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/exam/answer",
+        vol.Required("session_id"): str,
+        vol.Required("expected_version"): vol.All(int, vol.Range(min=1)),
+        vol.Required("question_id"): str,
+        vol.Required("selected_answer_id"): vol.Any(str, None),
+    }
+)
+@websocket_api.async_response
+async def ws_exam_answer(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _authorized_session(
+            runtime,
+            connection,
+            msg["id"],
+            msg["session_id"],
+            ProfilePermission.ANSWER,
+        )
+        is None
+    ):
+        return
+    try:
+        result = await runtime.exams.async_answer(
+            msg["session_id"],
+            msg["expected_version"],
+            msg["question_id"],
+            msg["selected_answer_id"],
+        )
+    except ExamError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    except SessionNotFoundError:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Exam session not found")
+        return
+    except StaleSessionError:
+        connection.send_error(msg["id"], ERR_STALE_SESSION, "Exam changed on another client")
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/exam/finish",
+        vol.Required("session_id"): str,
+        vol.Required("expected_version"): vol.All(int, vol.Range(min=1)),
+    }
+)
+@websocket_api.async_response
+async def ws_exam_finish(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _authorized_session(
+            runtime,
+            connection,
+            msg["id"],
+            msg["session_id"],
+            ProfilePermission.ANSWER,
+        )
+        is None
+    ):
+        return
+    try:
+        result = await runtime.exams.async_finish(
+            msg["session_id"],
+            msg["expected_version"],
+        )
+    except ExamError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    except SessionNotFoundError:
+        connection.send_error(msg["id"], ERR_NOT_FOUND, "Exam session not found")
+        return
+    except StaleSessionError:
+        connection.send_error(msg["id"], ERR_STALE_SESSION, "Exam changed on another client")
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "locklearn/exam/result",
+        vol.Required("session_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_exam_result(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    runtime = _require_runtime(hass, connection, msg["id"])
+    if runtime is None:
+        return
+    if (
+        await _authorized_session(
+            runtime,
+            connection,
+            msg["id"],
+            msg["session_id"],
+            ProfilePermission.READ,
+        )
+        is None
+    ):
+        return
+    try:
+        result = await runtime.exams.async_result(msg["session_id"])
+    except ExamError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "locklearn/session/start",
         vol.Required("profile_id"): str,
         vol.Optional("track_id"): str,
@@ -2651,6 +2861,8 @@ async def ws_session_start(
             connection.send_error(msg["id"], ERR_NOT_FOUND, "Track not found")
             return
     try:
+        if msg["session_type"] == "exam":
+            raise SessionValidationError("exam sessions require locklearn/exam/start")
         prepared_questions: tuple[SessionQuestion, ...] = ()
         if track_id is not None:
             selected = await runtime.session_selection.async_prepare(
@@ -2853,11 +3065,16 @@ async def ws_session_answer(
     )
     if authorized is None:
         return
-    if str(authorized.get("type")) == "quiz":
+    if str(authorized.get("type")) in {"quiz", "exam"}:
+        required_endpoint = (
+            "locklearn/exam/answer"
+            if str(authorized.get("type")) == "exam"
+            else "locklearn/quiz/answer"
+        )
         connection.send_error(
             msg["id"],
             ERR_INVALID_REQUEST,
-            "Quiz sessions must use locklearn/quiz/answer",
+            f"This session must use {required_endpoint}",
         )
         return
     try:
@@ -2884,6 +3101,9 @@ async def ws_session_answer(
         return
     except StaleSessionError:
         connection.send_error(msg["id"], ERR_STALE_SESSION, "The session changed on another client")
+        return
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     connection.send_result(msg["id"], await _with_fatigue_advice(runtime, state))
 
@@ -2955,6 +3175,10 @@ async def ws_session_complete(
         is None
     ):
         return
+    state_before = await runtime.sessions.async_get(msg["session_id"])
+    if state_before is not None and state_before.get("type") == "exam":
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, "Use locklearn/exam/finish")
+        return
     try:
         state = await runtime.sessions.async_complete(msg["session_id"], msg["expected_version"])
     except SessionNotFoundError:
@@ -2962,6 +3186,9 @@ async def ws_session_complete(
         return
     except StaleSessionError:
         connection.send_error(msg["id"], ERR_STALE_SESSION, "The session changed on another client")
+        return
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     connection.send_result(msg["id"], await _with_fatigue_advice(runtime, state))
 
@@ -2992,6 +3219,10 @@ async def ws_session_undo(
         is None
     ):
         return
+    snapshot = await runtime.sessions.async_get(msg["session_id"])
+    if snapshot is not None and snapshot.get("type") == "exam":
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, "Exam answers cannot be undone")
+        return
     try:
         state = await runtime.sessions.async_undo(
             msg["session_id"],
@@ -3003,6 +3234,9 @@ async def ws_session_undo(
         return
     except StaleSessionError:
         connection.send_error(msg["id"], ERR_STALE_SESSION, "No admissible session answer to undo")
+        return
+    except ValueError as err:
+        connection.send_error(msg["id"], ERR_INVALID_REQUEST, str(err))
         return
     connection.send_result(msg["id"], state)
 
@@ -3327,6 +3561,11 @@ COMMANDS = (
     ws_scheduler_preview,
     ws_session_availability,
     ws_session_start,
+    ws_exam_start,
+    ws_exam_history,
+    ws_exam_answer,
+    ws_exam_finish,
+    ws_exam_result,
     ws_session_get,
     ws_quiz_evaluate,
     ws_quiz_answer,

@@ -1396,3 +1396,102 @@ export async function startLeechSession(
     },
   });
 }
+
+export interface ExamResult {
+  correct: number;
+  total: number;
+  percentage: number;
+  questions: Array<{
+    question_id: string;
+    prompt: string;
+    context: string | null;
+    given: string | null;
+    correct: string;
+    result: "correct" | "wrong" | "idk";
+  }>;
+}
+
+export interface ExamStartOptions {
+  requestedCards: number;
+  contentTypes?: string[];
+  direction?: "any" | "forward" | "reverse";
+  packId?: string;
+  packVersionId?: string;
+  levels?: string[];
+  tags?: string[];
+  shuffle?: boolean;
+  optionCount?: number;
+}
+
+export interface ExamAttemptSummary {
+  attempt_id: string;
+  track_id: string | null;
+  status: "active" | "completed" | "abandoned";
+  question_count: number;
+  correct_count: number;
+  started_at_utc: string;
+  completed_at_utc: string | null;
+  session_status: string | null;
+}
+
+export async function startExam(
+  hass: HomeAssistantLike, profileId: string, trackId: string, options: ExamStartOptions,
+): Promise<SessionState> {
+  return hass.callWS<SessionState>({
+    type: "locklearn/exam/start", profile_id: profileId,
+    track_id: trackId, requested_cards: options.requestedCards,
+    ...(options.contentTypes === undefined ? {} : { content_types: options.contentTypes }),
+    ...(options.direction === undefined ? {} : { direction: options.direction }),
+    ...(options.packId === undefined ? {} : { pack_id: options.packId }),
+    ...(options.packVersionId === undefined ? {} : { pack_version_id: options.packVersionId }),
+    ...(options.levels === undefined ? {} : { levels: options.levels }),
+    ...(options.tags === undefined ? {} : { tags: options.tags }),
+    ...(options.shuffle === undefined ? {} : { shuffle: options.shuffle }),
+    ...(options.optionCount === undefined ? {} : { option_count: options.optionCount }),
+  });
+}
+
+export async function answerExam(
+  hass: HomeAssistantLike, session: SessionState, questionId: string,
+  selectedAnswerId: string | null,
+): Promise<SessionState> {
+  return hass.callWS<SessionState>({
+    type: "locklearn/exam/answer", session_id: session.id,
+    expected_version: session.version, question_id: questionId,
+    selected_answer_id: selectedAnswerId,
+  });
+}
+
+export async function finishExam(
+  hass: HomeAssistantLike, session: SessionState,
+): Promise<{session: SessionState; result: ExamResult}> {
+  return hass.callWS<{session: SessionState; result: ExamResult}>({
+    type: "locklearn/exam/finish",
+    session_id: session.id, expected_version: session.version,
+  });
+}
+
+export async function getExamResult(
+  hass: HomeAssistantLike, sessionId: string,
+): Promise<ExamResult> {
+  return hass.callWS<ExamResult>({
+    type: "locklearn/exam/result", session_id: sessionId,
+  });
+}
+
+export async function getExamHistory(
+  hass: HomeAssistantLike, profileId: string,
+): Promise<{ items: ExamAttemptSummary[]; cursor: string | null }> {
+  return hass.callWS({
+    type: "locklearn/exam/history", profile_id: profileId, limit: 20,
+  });
+}
+
+export async function setExamPaused(
+  hass: HomeAssistantLike, session: SessionState, paused: boolean,
+): Promise<SessionState> {
+  return hass.callWS<SessionState>({
+    type: "locklearn/session/pause", session_id: session.id,
+    expected_version: session.version, paused,
+  });
+}

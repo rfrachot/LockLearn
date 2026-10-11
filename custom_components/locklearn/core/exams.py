@@ -1,0 +1,514 @@
+"""P7.1: persistent closed-book MCQ exams with deferred correction."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from collections import defaultdict
+from hashlib import sha256
+from typing import Any
+from uuid import uuid4
+from zoneinfo import ZoneInfo
+
+from ..storage.database import SQLiteStorage, StaleSessionError
+from ..storage.repositories import ReviewEventsRepository
+from .clock import Clock, SystemClock
+from .quiz import QuizConstructionError
+from .quiz_sessions import QuizSessionService
+from .sessions import SessionQuestion, SessionService
+
+
+class ExamError(ValueError):
+    """An exam request violates the persistent exam contract."""
+
+
+_EXAM_DIRECTIONS = frozenset({"any", "forward", "reverse"})
+_MAX_FILTER_VALUES = 32
+
+
+class ExamService:
+    """Freeze questions and private answer keys; reveal only after final submit."""
+
+    def __init__(
+        self,
+        storage: SQLiteStorage,
+        sessions: SessionService,
+        quiz_sessions: QuizSessionService,
+        *,
+        clock: Clock | None = None,
+    ) -> None:
+        self._storage = storage
+        self._sessions = sessions
+        self._quiz_sessions = quiz_sessions
+        self._clock = clock or SystemClock()
+
+    async def async_start(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        requested_cards: int = 20,
+        content_types: list[str] | None = None,
+        direction: str = "any",
+        pack_id: str | None = None,
+        pack_version_id: str | None = None,
+        levels: list[str] | None = None,
+        tags: list[str] | None = None,
+        shuffle: bool = True,
+        option_count: int = 4,
+    ) -> dict[str, Any]:
+        if isinstance(requested_cards, bool) or not 1 <= requested_cards <= 100:
+            raise ExamError("requested_cards must be within 1..100")
+        content_types = self._filter_values(content_types, "content_types")
+        levels = self._filter_values(levels, "levels")
+        tags = self._filter_values(tags, "tags")
+        direction = direction.strip().lower()
+        if direction not in _EXAM_DIRECTIONS:
+            raise ExamError("direction must be any, forward or reverse")
+        if pack_id is not None and not pack_id.strip():
+            raise ExamError("pack_id must not be empty")
+        if pack_version_id is not None and not pack_version_id.strip():
+            raise ExamError("pack_version_id must not be empty")
+        if not isinstance(shuffle, bool):
+            raise ExamError("shuffle must be boolean")
+        if isinstance(option_count, bool) or not 2 <= option_count <= 6:
+            raise ExamError("option_count must be within 2..6")
+        track = await self._storage.repositories.tracks.async_get(track_id)
+        if track is None or str(track["profile_id"]) != profile_id:
+            raise ExamError("track does not belong to profile")
+        rows = await self._storage.repositories.tracks.async_session_candidates(
+            profile_id=profile_id,
+            track_id=track_id,
+        )
+        allowed = set(content_types) if content_types else None
+        allowed_levels = {value.casefold() for value in levels or ()}
+        allowed_tags = set(tags or ())
+        candidates = [
+            row
+            for row in rows
+            if row["state"] != "new"
+            and row.get("user_state", "active") == "active"
+            and row.get("suspend_until_utc") is None
+            and (allowed is None or row["content_type"] in allowed)
+            and (pack_id is None or row.get("pack_id") == pack_id)
+            and (pack_version_id is None or row.get("pack_version_id") == pack_version_id)
+            and self._matches_direction(row, track, direction)
+            and self._matches_levels(row, allowed_levels)
+            and allowed_tags.issubset(set(row.get("tag_ids", ())))
+        ]
+        session_id = uuid4().hex
+        # Stratify by content type, level and coarse difficulty. This avoids
+        # selecting by due date, box or error count alone.
+        groups: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+        for row in candidates:
+            groups[self._stratum(row)].append(row)
+        for group in groups.values():
+            group.sort(key=lambda row: self._ordering_key(row, session_id, shuffle))
+        ordered: list[dict[str, Any]] = []
+        used_items: set[str] = set()
+        while groups and len(ordered) < requested_cards:
+            for name in sorted(tuple(groups)):
+                group = groups[name]
+                while group and str(group[0]["learning_item_id"]) in used_items:
+                    group.pop(0)
+                if group:
+                    row = group.pop(0)
+                    ordered.append(row)
+                    used_items.add(str(row["learning_item_id"]))
+                if not group:
+                    del groups[name]
+                if len(ordered) >= requested_cards:
+                    break
+
+        catalog = await self._quiz_sessions._load_catalog(track_id)
+        questions: list[SessionQuestion] = []
+        private_keys: dict[str, dict[str, str]] = {}
+        for row in ordered:
+            meta = catalog.get(str(row["card_key"]))
+            if meta is None or not meta.answer_terms:
+                continue
+            presentation = await self._quiz_sessions._presentation.async_for_card(
+                track_id=track_id,
+                card_key=meta.card_key,
+            )
+            try:
+                question = self._quiz_sessions._build_choice_question(
+                    meta,
+                    catalog=catalog,
+                    state=str(row["state"]),
+                    presentation=presentation,
+                    cloze_prompt=None,
+                    quiz_format="mcq",
+                    option_count=option_count,
+                    presentation_index=len(questions),
+                )
+            except QuizConstructionError:
+                continue
+            question_id = f"exam-{len(questions) + 1}-{meta.card_key}"
+            payload = self._quiz_sessions._base_payload(
+                "mcq",
+                presentation=presentation,
+                meta=meta,
+            )
+            payload.update(
+                {
+                    "prompt_text": question.prompt_text,
+                    "context_hint": question.context_hint,
+                    "options": [
+                        {"answer_id": option.answer_id, "text": option.display_text}
+                        for option in question.options
+                    ],
+                    "reportable": False,
+                    "hint_blocks": [],
+                }
+            )
+            questions.append(
+                SessionQuestion(
+                    question_id=question_id,
+                    card_key=meta.card_key,
+                    learning_item_id=meta.learning_item_id,
+                    prompt_facet_id=meta.prompt_facet_id,
+                    answer_facet_id=meta.answer_facet_id,
+                    payload={"quiz": payload},
+                )
+            )
+            private_keys[question_id] = {
+                "answer_id": meta.canonical_answer.term_id,
+                "answer_text": meta.canonical_answer.text,
+            }
+        if not questions:
+            raise ExamError("no eligible questions with safe MCQ distractors")
+        session = await self._sessions.async_start(
+            profile_id,
+            track_id,
+            session_type="exam",
+            session_id=session_id,
+            strategy="balanced",
+            settings={
+                "requested_cards": requested_cards,
+                "content_types": content_types,
+                "direction": direction,
+                "pack_id": pack_id,
+                "pack_version_id": pack_version_id,
+                "levels": levels,
+                "tags": tags,
+                "shuffle": shuffle,
+                "option_count": option_count,
+            },
+            questions=tuple(questions),
+            exam_answer_keys=private_keys,
+        )
+        return session
+
+    @staticmethod
+    def _filter_values(values: list[str] | None, field: str) -> list[str] | None:
+        if values is None:
+            return None
+        if not isinstance(values, list) or len(values) > _MAX_FILTER_VALUES:
+            raise ExamError(f"{field} must contain at most {_MAX_FILTER_VALUES} values")
+        if not all(isinstance(value, str) and value.strip() for value in values):
+            raise ExamError(f"{field} must be a list of non-empty strings")
+        return list(dict.fromkeys(value.strip() for value in values))
+
+    @staticmethod
+    def _matches_direction(row: dict[str, Any], track: dict[str, Any], direction: str) -> bool:
+        if direction == "any":
+            return True
+        forward = row.get("prompt_language") == track.get("source_language") and row.get(
+            "answer_language"
+        ) == track.get("target_language")
+        reverse = row.get("prompt_language") == track.get("target_language") and row.get(
+            "answer_language"
+        ) == track.get("source_language")
+        return forward if direction == "forward" else reverse
+
+    @staticmethod
+    def _matches_levels(row: dict[str, Any], levels: set[str]) -> bool:
+        if not levels:
+            return True
+        row_levels = {
+            tag.casefold().rsplit(":", 1)[-1]
+            for tag in row.get("tag_ids", ())
+            if "level" in tag.casefold() or "jlpt" in tag.casefold()
+        }
+        return bool(row_levels & levels)
+
+    @staticmethod
+    def _stratum(row: dict[str, Any]) -> tuple[str, str, str]:
+        levels = sorted(
+            tag
+            for tag in row.get("tag_ids", ())
+            if "level" in tag.casefold() or "jlpt" in tag.casefold()
+        )
+        factor = float(row.get("difficulty_factor", 1.0))
+        difficulty = "easy" if factor < 0.95 else "hard" if factor > 1.05 else "standard"
+        return str(row["content_type"]), (levels[0] if levels else "unknown"), difficulty
+
+    @staticmethod
+    def _ordering_key(
+        row: dict[str, Any], seed: str, shuffle: bool
+    ) -> tuple[str, ...] | tuple[int, str]:
+        if shuffle:
+            return (sha256(f"{seed}:{row['card_key']}".encode()).hexdigest(),)
+        return (int(row["pack_position"]), str(row["card_key"]))
+
+    async def async_answer(
+        self,
+        session_id: str,
+        expected_version: int,
+        question_id: str,
+        selected_answer_id: str | None,
+    ) -> dict[str, Any]:
+        state = await self._sessions.async_get(session_id)
+        if state is None or state.get("type") != "exam":
+            raise ExamError("exam session not found")
+        current = state.get("current_question")
+        if (
+            state["status"] != "active"
+            or int(state["version"]) != expected_version
+            or not isinstance(current, dict)
+            or current["question_id"] != question_id
+        ):
+            raise StaleSessionError(session_id)
+        payload = current["payload"].get("quiz", {})
+        choices = {
+            item["answer_id"]
+            for item in payload.get("options", [])
+            if isinstance(item, dict) and isinstance(item.get("answer_id"), str)
+        }
+        if selected_answer_id is not None and selected_answer_id not in choices:
+            raise ExamError("selected answer does not belong to the frozen exam question")
+        # The writer transaction is CAS; concurrent clients cannot record twice.
+        return await self._sessions.async_answer(
+            session_id,
+            expected_version,
+            question_id,
+            {"selected_answer_id": selected_answer_id, "kind": "exam"},
+            allow_exam=True,
+        )
+
+    async def async_finish(self, session_id: str, expected_version: int) -> dict[str, Any]:
+        """Commit final score and status together; nothing is graded during answering."""
+        now = self._clock.now().isoformat()
+
+        def finish(connection: sqlite3.Connection) -> dict[str, Any]:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                session = connection.execute(
+                    """SELECT profile_id, track_id, status, version, question_count,
+                              current_position FROM sessions WHERE id = ? AND type = 'exam'""",
+                    (session_id,),
+                ).fetchone()
+                exam = connection.execute(
+                    "SELECT settings_json, status FROM exam_attempts WHERE attempt_id = ?",
+                    (session_id,),
+                ).fetchone()
+                if session is None or exam is None:
+                    raise ExamError("exam not found")
+                if (
+                    session[2] != "active"
+                    or exam[1] != "active"
+                    or int(session[3]) != expected_version
+                    or int(session[5]) != int(session[4])
+                ):
+                    raise StaleSessionError(session_id)
+                expected = json.loads(str(exam[0]))["expected"]
+                rows = connection.execute(
+                    """SELECT item.question_id, item.payload_json, answer.answer_json,
+                              item.card_key, item.learning_item_id, item.prompt_facet_id,
+                              item.answer_facet_id
+                       FROM session_items AS item
+                       JOIN session_answers AS answer
+                         ON answer.session_id = item.session_id
+                        AND answer.question_id = item.question_id
+                       WHERE item.session_id = ? ORDER BY item.position""",
+                    (session_id,),
+                ).fetchall()
+                if len(rows) != int(session[4]):
+                    raise ExamError("exam is not fully answered")
+                profile_row = connection.execute(
+                    "SELECT timezone FROM profiles WHERE profile_id = ?",
+                    (session[0],),
+                ).fetchone()
+                if profile_row is None:
+                    raise ExamError("exam profile no longer exists")
+                localized = self._clock.now().astimezone(ZoneInfo(str(profile_row[0])))
+                offset = localized.utcoffset()
+                offset_minutes = 0 if offset is None else int(offset.total_seconds() // 60)
+                results = []
+                correct_count = 0
+                for (
+                    question_id,
+                    payload_json,
+                    answer_json,
+                    card_key,
+                    item_id,
+                    prompt_id,
+                    answer_facet_id,
+                ) in rows:
+                    item = json.loads(str(payload_json))["quiz"]
+                    chosen = json.loads(str(answer_json)).get("selected_answer_id")
+                    key = expected[str(question_id)]
+                    correct = chosen == key["answer_id"]
+                    correct_count += int(correct)
+                    selected = next(
+                        (
+                            option["text"]
+                            for option in item["options"]
+                            if option["answer_id"] == chosen
+                        ),
+                        None,
+                    )
+                    progress_cols = ReviewEventsRepository._PROGRESS_COLUMNS
+                    progress_row = connection.execute(
+                        "SELECT "
+                        + ",".join(progress_cols)
+                        + " FROM progress WHERE profile_id = ? AND track_id = ? AND card_key = ?",
+                        (session[0], session[1], card_key),
+                    ).fetchone()
+                    if progress_row is None:
+                        raise ExamError("introduced exam card has no progress")
+                    snapshot = dict(zip(progress_cols, progress_row, strict=True))
+                    if (
+                        str(snapshot["learning_item_id"]) != str(item_id)
+                        or str(snapshot["prompt_facet_id"]) != str(prompt_id)
+                        or str(snapshot["answer_facet_id"]) != str(answer_facet_id)
+                    ):
+                        raise ExamError("exam card identity changed")
+                    audit_columns = (
+                        "id",
+                        "profile_id",
+                        "track_id",
+                        "learning_item_id",
+                        "prompt_facet_id",
+                        "answer_facet_id",
+                        "card_key",
+                        "mode",
+                        "question_type",
+                        "result",
+                        "answer_id",
+                        "expected_answer_id",
+                        "hint_used",
+                        "retrieval_occurred",
+                        "scheduled_interval_days",
+                        "elapsed_days",
+                        "grading_result",
+                        "signal_quality",
+                        "policy_version",
+                        "dataset_generation",
+                        "normalization_version",
+                        "pre_state_snapshot",
+                        "post_state_snapshot",
+                        "presentation_to_answer_ms",
+                        "delivery_to_action_ms",
+                        "session_id",
+                        "notification_id",
+                        "created_at_utc",
+                        "local_date",
+                        "timezone_name",
+                        "utc_offset_minutes",
+                    )
+                    frozen = json.dumps(snapshot, sort_keys=True)
+                    audit_values = (
+                        str(uuid4()),
+                        str(session[0]),
+                        str(session[1]),
+                        str(item_id),
+                        str(prompt_id),
+                        str(answer_facet_id),
+                        str(card_key),
+                        "exam_retrieval",
+                        "mcq",
+                        "correct" if correct else ("idk" if chosen is None else "wrong"),
+                        chosen,
+                        key["answer_id"],
+                        0,
+                        1,
+                        None,
+                        None,
+                        None,
+                        "none",
+                        int(snapshot["policy_version"]),
+                        str(snapshot["dataset_generation"]),
+                        snapshot["normalization_version"],
+                        frozen,
+                        frozen,
+                        None,
+                        None,
+                        session_id,
+                        None,
+                        now,
+                        localized.date().isoformat(),
+                        str(profile_row[0]),
+                        offset_minutes,
+                    )
+                    connection.execute(
+                        "INSERT INTO review_events ("
+                        + ",".join(audit_columns)
+                        + ") VALUES ("
+                        + ",".join("?" for _ in audit_columns)
+                        + ")",
+                        audit_values,
+                    )
+                    results.append(
+                        {
+                            "question_id": question_id,
+                            "prompt": item["prompt_text"],
+                            "context": item.get("context_hint"),
+                            "given": selected,
+                            "correct": key["answer_text"],
+                            "result": "correct"
+                            if correct
+                            else ("idk" if chosen is None else "wrong"),
+                        }
+                    )
+                summary = {
+                    "correct": correct_count,
+                    "total": len(results),
+                    "percentage": round(correct_count * 100 / len(results), 2),
+                    "questions": results,
+                }
+                connection.execute(
+                    """UPDATE sessions SET status = 'completed',
+                           version = version + 1, completed_at_utc = ?,
+                           last_activity_at_utc = ?
+                       WHERE id = ?""",
+                    (now, now, session_id),
+                )
+                connection.execute(
+                    """UPDATE exam_attempts SET status = 'completed', correct_count = ?,
+                           completed_at_utc = ?, result_json = ?
+                       WHERE attempt_id = ?""",
+                    (correct_count, now, json.dumps(summary), session_id),
+                )
+                connection.commit()
+                return summary
+            except Exception:
+                if connection.in_transaction:
+                    connection.rollback()
+                raise
+
+        result = await self._storage._async_writer(finish)
+        session = await self._sessions.async_get(session_id)
+        assert session is not None
+        self._sessions.publish(session_id, session)
+        return {"result": result, "session": session}
+
+    async def async_result(self, session_id: str) -> dict[str, Any]:
+        """Never disclose grade/answer keys while an exam remains open."""
+
+        def read(connection: sqlite3.Connection) -> dict[str, Any]:
+            row = connection.execute(
+                "SELECT status, result_json FROM exam_attempts WHERE attempt_id = ?",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                raise ExamError("exam not found")
+            if row[0] != "completed" or row[1] is None:
+                raise ExamError("exam result is unavailable until completion")
+            result = json.loads(str(row[1]))
+            if not isinstance(result, dict):
+                raise ExamError("exam result is corrupt")
+            return result
+
+        return await self._storage._async_reader(read)

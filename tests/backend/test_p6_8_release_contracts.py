@@ -66,6 +66,8 @@ PROFILE_GUARDED_COMMANDS = frozenset(
         "locklearn/scheduler/preview",
         "locklearn/session/availability",
         "locklearn/session/start",
+        "locklearn/exam/start",
+        "locklearn/exam/history",
     }
 )
 TRACK_GUARDED_COMMANDS = frozenset(
@@ -81,6 +83,9 @@ TRACK_GUARDED_COMMANDS = frozenset(
 SESSION_GUARDED_COMMANDS = frozenset(
     {
         "locklearn/session/get",
+        "locklearn/exam/answer",
+        "locklearn/exam/finish",
+        "locklearn/exam/result",
         "locklearn/quiz/evaluate",
         "locklearn/quiz/answer",
         "locklearn/session/answer",

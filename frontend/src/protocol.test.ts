@@ -38,11 +38,84 @@ import {
   updateCardAnnotation,
   updateNotificationTarget,
   evaluateQuizAnswer,
+  answerExam,
+  finishExam,
+  getExamHistory,
+  setExamPaused,
+  startExam,
   ProtocolMismatchError,
   type HomeAssistantLike,
 } from "./protocol";
 
 describe("frontend protocol", () => {
+  it("keeps exam setup filters and lifecycle on dedicated WebSocket contracts", async () => {
+    const messages: Record<string, unknown>[] = [];
+    const session = {
+      id: "exam-1",
+      version: 3,
+      type: "exam",
+      status: "active",
+      current_question: { question_id: "q1" },
+    } as never;
+    const hass: HomeAssistantLike = {
+      callWS: async <T>(message: Record<string, unknown>): Promise<T> => {
+        messages.push(message);
+        if (message.type === "locklearn/exam/history") {
+          return { items: [], cursor: null } as T;
+        }
+        if (message.type === "locklearn/exam/finish") {
+          return { session, result: { correct: 1, total: 1, percentage: 100, questions: [] } } as T;
+        }
+        return session as T;
+      },
+    };
+
+    await startExam(hass, "p1", "t1", {
+      requestedCards: 10,
+      contentTypes: ["vocabulary"],
+      direction: "reverse",
+      packId: "pack-1",
+      levels: ["n5"],
+      tags: ["food"],
+      shuffle: false,
+      optionCount: 5,
+    });
+    await answerExam(hass, session, "q1", "answer-1");
+    await setExamPaused(hass, session, true);
+    await finishExam(hass, session);
+    await getExamHistory(hass, "p1");
+
+    expect(messages).toEqual([
+      {
+        type: "locklearn/exam/start",
+        profile_id: "p1",
+        track_id: "t1",
+        requested_cards: 10,
+        content_types: ["vocabulary"],
+        direction: "reverse",
+        pack_id: "pack-1",
+        levels: ["n5"],
+        tags: ["food"],
+        shuffle: false,
+        option_count: 5,
+      },
+      {
+        type: "locklearn/exam/answer",
+        session_id: "exam-1",
+        expected_version: 3,
+        question_id: "q1",
+        selected_answer_id: "answer-1",
+      },
+      {
+        type: "locklearn/session/pause",
+        session_id: "exam-1",
+        expected_version: 3,
+        paused: true,
+      },
+      { type: "locklearn/exam/finish", session_id: "exam-1", expected_version: 3 },
+      { type: "locklearn/exam/history", profile_id: "p1", limit: 20 },
+    ]);
+  });
   it("bootstraps over Home Assistant WebSocket only", async () => {
     const messages: Record<string, unknown>[] = [];
     const hass: HomeAssistantLike = {

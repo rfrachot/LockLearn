@@ -18,6 +18,7 @@ from .core.acl import ProfileACLService
 from .core.content_reports import ContentReportService
 from .core.dashboard import DashboardService
 from .core.difficulties import DifficultyService
+from .core.exams import ExamService
 from .core.grading import FreeTextGrader
 from .core.integrity import IntegrityService
 from .core.learning_sessions import LearningSessionService
@@ -81,6 +82,7 @@ class LockLearnRuntime:
     difficulties: DifficultyService
     quiz: QuizEngine
     quiz_sessions: QuizSessionService
+    exams: ExamService
     review_policy: ReviewPolicyV1
     signal_policy: SignalPolicy
     selection: SelectionConstraintService
@@ -363,6 +365,7 @@ class LockLearnRuntime:
                 ),
                 quiz=quiz,
                 quiz_sessions=quiz_sessions,
+                exams=ExamService(storage, sessions, quiz_sessions),
                 review_policy=review_policy,
                 signal_policy=signal_policy,
                 selection=selection,

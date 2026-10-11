@@ -60,6 +60,8 @@ class SessionService:
         strategy: str = "default",
         settings: dict[str, Any] | None = None,
         questions: tuple[SessionQuestion, ...] = (),
+        session_id: str | None = None,
+        exam_answer_keys: dict[str, dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         """Start a persistent session with optional backend-prepared questions."""
         if not profile_id.strip():
@@ -70,6 +72,12 @@ class SessionService:
             raise SessionValidationError("strategy must not be empty")
         if len({question.question_id for question in questions}) != len(questions):
             raise SessionValidationError("question_id values must be unique")
+        if exam_answer_keys is not None and session_type != "exam":
+            raise SessionValidationError("exam answer keys require an exam session")
+        if exam_answer_keys is not None and set(exam_answer_keys) != {
+            question.question_id for question in questions
+        }:
+            raise SessionValidationError("exam answer keys must cover every question")
 
         if track_id is not None:
             track = await self._storage.repositories.tracks.async_get(track_id)
@@ -111,13 +119,16 @@ class SessionService:
             persisted_items.append(item)
 
         return await self._storage.async_create_session(
-            uuid4().hex,
+            uuid4().hex if session_id is None else session_id,
             profile_id,
             track_id,
             session_type=session_type,
             strategy=strategy,
             settings=settings,
             items=tuple(persisted_items),
+            exam_attempt=(
+                None if exam_answer_keys is None else {"settings": {"expected": exam_answer_keys}}
+            ),
         )
 
     async def async_get(self, session_id: str) -> dict[str, Any] | None:
@@ -130,6 +141,8 @@ class SessionService:
         expected_version: int,
         question_id: str,
         answer: Any,
+        *,
+        allow_exam: bool = False,
     ) -> dict[str, Any]:
         """Apply one CAS answer and publish the winning state."""
         state = await self._storage.async_answer_session(
@@ -137,6 +150,7 @@ class SessionService:
             expected_version,
             question_id,
             answer,
+            allow_exam=allow_exam,
         )
         self._publish(session_id, state)
         return state

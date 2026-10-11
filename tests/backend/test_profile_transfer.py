@@ -181,6 +181,16 @@ async def _seed_private_profile(storage: SQLiteStorage) -> None:
             (_NOW,),
         )
         connection.execute(
+            """INSERT INTO exam_attempts(
+                   attempt_id, profile_id, track_id, status, settings_json,
+                   question_count, started_at_utc
+               ) VALUES (
+                   'session-1', 'source-profile', 'source-track', 'active',
+                   '{"expected":{"question-1":{"answer_id":"answer-1"}}}', 1, ?
+               )""",
+            (_NOW,),
+        )
+        connection.execute(
             """INSERT INTO scheduled_slots(
                    slot_id, profile_id, track_id, slot_type, scheduled_for_utc,
                    status, scheduler_config_version, seed, created_at_utc,
@@ -235,6 +245,11 @@ async def test_export_import_round_trip_remaps_identity_and_preserves_tombstones
         assert consumed is not None
         _, archive = consumed
         assert await store.async_consume_export(transfer.token, "source-owner") is None
+        with zipfile.ZipFile(io.BytesIO(archive)) as archive_file:
+            exported_sessions = json.loads(archive_file.read("sessions.json"))
+        exported_exams = exported_sessions["exams"]
+        assert len(exported_exams) == 1
+        assert "expected" not in exported_exams[0]["settings_json"]
 
         uploaded = await store.async_store_import(
             owner_user_id="import-owner",
@@ -301,6 +316,10 @@ async def test_export_import_round_trip_remaps_identity_and_preserves_tombstones
                 "SELECT id, status FROM sessions WHERE profile_id = ?",
                 (imported_profile_id,),
             ).fetchone()
+            exam = connection.execute(
+                "SELECT status, result_json FROM exam_attempts WHERE profile_id = ?",
+                (imported_profile_id,),
+            ).fetchone()
             review = connection.execute(
                 """SELECT pre_state_snapshot, post_state_snapshot
                    FROM review_events WHERE profile_id = ?""",
@@ -315,6 +334,7 @@ async def test_export_import_round_trip_remaps_identity_and_preserves_tombstones
                 "rule_count": rule_count,
                 "weight_count": weight_count,
                 "session": session,
+                "exam": exam,
                 "review": review,
             }
 
@@ -337,6 +357,7 @@ async def test_export_import_round_trip_remaps_identity_and_preserves_tombstones
         assert values["rule_count"] == 1
         assert values["weight_count"] == 1
         assert session_values[1] == "paused"
+        assert values["exam"] == ("abandoned", None)
         assert json.loads(review_values[0]) == {"state": "learning"}
         assert json.loads(review_values[1]) == {"state": "review"}
     finally:

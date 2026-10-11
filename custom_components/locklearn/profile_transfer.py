@@ -26,7 +26,7 @@ from .const import CONTENT_SCHEMA_VERSION, DB_SCHEMA_VERSION, INTEGRATION_VERSIO
 from .core.profiles import ProfileValidationError, _validate_profile_settings
 from .storage import SQLiteStorage
 
-PROFILE_EXPORT_SCHEMA_VERSION = 1
+PROFILE_EXPORT_SCHEMA_VERSION = 2
 _EXPORT_TTL = timedelta(minutes=5)
 _IMPORT_TTL = timedelta(minutes=15)
 _MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
@@ -617,13 +617,29 @@ def _export_profile_rows(
                     item["payload_json"] = json.loads(str(item["payload_json"]))
                 for answer in answers:
                     answer["answer_json"] = json.loads(str(answer["answer_json"]))
+                exams = _select_dicts(
+                    connection,
+                    f"SELECT * FROM exam_attempts WHERE attempt_id IN ({placeholders}) ORDER BY started_at_utc, attempt_id",
+                    tuple(session_ids),
+                )
+                for exam in exams:
+                    settings = json.loads(str(exam["settings_json"]))
+                    if isinstance(settings, dict):
+                        # An active exam's private answer key must never cross
+                        # the export boundary before finalization.
+                        settings.pop("expected", None)
+                    exam["settings_json"] = settings
+                    if exam.get("result_json") is not None:
+                        exam["result_json"] = json.loads(str(exam["result_json"]))
             else:
                 items = []
                 answers = []
+                exams = []
             sessions_document = {
                 "sessions": sessions,
                 "items": items,
                 "answers": answers,
+                "exams": exams,
             }
     finally:
         connection.rollback()
@@ -777,7 +793,7 @@ def _read_archive(path: Path) -> dict[str, Any]:
             )
             manifest = _load_json(raw_manifest, "manifest.json")
             manifest = _require_object(manifest, "manifest")
-            if manifest.get("schema_version") != PROFILE_EXPORT_SCHEMA_VERSION:
+            if manifest.get("schema_version") not in {1, PROFILE_EXPORT_SCHEMA_VERSION}:
                 raise ProfileTransferError("unsupported profile export schema version")
             declared = _require_object(manifest.get("members"), "manifest.members")
             actual_payload_names = set(members) - {"manifest.json"}
@@ -968,7 +984,9 @@ def _validate_document(document: dict[str, Any]) -> None:
     sessions = document.get("sessions")
     if sessions is not None:
         obj = _require_object(sessions, "sessions")
-        for field in ("sessions", "items", "answers"):
+        for field in ("sessions", "items", "answers", "exams"):
+            if field == "exams" and field not in obj:
+                continue
             value = obj.get(field)
             if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
                 raise ProfileTransferError(f"sessions.{field} must be an array of objects")
@@ -987,7 +1005,8 @@ def _insert_row(
     quoted = ",".join(columns)
     values = [
         json.dumps(row[column], ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-        if (column.endswith("_json") or column in {"pre_state_snapshot", "post_state_snapshot"})
+        if row[column] is not None
+        and (column.endswith("_json") or column in {"pre_state_snapshot", "post_state_snapshot"})
         and not isinstance(row[column], str)
         else row[column]
         for column in columns
@@ -1046,7 +1065,8 @@ def _import_profile_rows(
     sessions = sessions_obj.get("sessions", [])
     items = sessions_obj.get("items", [])
     answers = sessions_obj.get("answers", [])
-    if not all(isinstance(value, list) for value in (sessions, items, answers)):
+    exams = sessions_obj.get("exams", [])
+    if not all(isinstance(value, list) for value in (sessions, items, answers, exams)):
         raise ProfileTransferError("invalid sessions document")
 
     source_profile_id = str(profile["profile_id"])
@@ -1249,6 +1269,35 @@ def _import_profile_rows(
             row.pop("id", None)
             row["session_id"] = session_map[source_session]
             _insert_row(connection, "session_answers", row, frozenset(answer_columns))
+
+        exam_columns = {
+            str(row[1]) for row in connection.execute("PRAGMA table_info(exam_attempts)").fetchall()
+        }
+        for raw in exams:
+            if not isinstance(raw, dict):
+                continue
+            source_attempt = str(raw.get("attempt_id", ""))
+            if source_attempt not in session_map:
+                continue
+            row = dict(raw)
+            row["attempt_id"] = session_map[source_attempt]
+            row["profile_id"] = new_profile_id
+            source_exam_track: object = row.get("track_id")
+            row["track_id"] = (
+                track_map.get(str(source_exam_track)) if source_exam_track is not None else None
+            )
+            if isinstance(row.get("settings_json"), dict):
+                row["settings_json"] = _strip_installation_bindings(row["settings_json"])
+            if row.get("status") == "active":
+                # Active answer keys are deliberately omitted from exports; an
+                # imported unfinished exam is therefore safely abandoned.
+                row["status"] = "abandoned"
+                row["result_json"] = None
+            elif isinstance(row.get("result_json"), dict):
+                row["result_json"] = json.dumps(
+                    row["result_json"], ensure_ascii=False, separators=(",", ":"), sort_keys=True
+                )
+            _insert_row(connection, "exam_attempts", row, frozenset(exam_columns))
 
         review_columns = {
             str(row[1]) for row in connection.execute("PRAGMA table_info(review_events)").fetchall()
