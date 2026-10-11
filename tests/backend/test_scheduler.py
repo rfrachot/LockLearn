@@ -1824,3 +1824,47 @@ async def test_scheduler_generation_records_internal_timing(tmp_path: Path) -> N
         assert metric["p95_ms"] is not None
     finally:
         await storage.async_close()
+
+@pytest.mark.parametrize(
+    ("entity_id", "previous", "current", "expected"),
+    (
+        ("binary_sensor.bed", "off", "on", True),
+        ("binary_sensor.bed", "on", "on", False),
+        ("input_boolean.routine", "off", "on", True),
+        ("person.learner", "not_home", "home", True),
+        ("person.learner", "work", "home", True),
+        ("person.learner", "home", "home", False),
+        ("device_tracker.phone", "not_home", "home", True),
+        ("device_tracker.phone", "home", "not_home", False),
+        ("person.learner", "unknown", "home", False),
+        ("device_tracker.phone", "unavailable", "home", False),
+        ("sensor.temperature", "off", "on", False),
+        ("person.learner", "not_home", "work", False),
+    ),
+)
+def test_routine_bridge_accepts_only_real_activation_edges(
+    entity_id: str, previous: str, current: str, expected: bool
+) -> None:
+    from types import SimpleNamespace
+
+    from custom_components.locklearn.scheduler_ha import SchedulerHomeAssistantBridge
+
+    assert (
+        SchedulerHomeAssistantBridge._is_activation_transition(
+            entity_id, SimpleNamespace(state=previous), SimpleNamespace(state=current)
+        )
+        is expected
+    )
+
+
+def test_routine_bridge_never_activates_on_initial_state() -> None:
+    from types import SimpleNamespace
+
+    from custom_components.locklearn.scheduler_ha import SchedulerHomeAssistantBridge
+
+    assert not SchedulerHomeAssistantBridge._is_activation_transition(
+        "person.learner", None, SimpleNamespace(state="home")
+    )
+    assert not SchedulerHomeAssistantBridge._is_activation_transition(
+        "binary_sensor.bed", None, SimpleNamespace(state="on")
+    )

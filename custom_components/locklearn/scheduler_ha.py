@@ -77,13 +77,34 @@ class SchedulerHomeAssistantBridge:
             self._handle_state_change,
         )
 
+    @staticmethod
+    def _is_activation_transition(
+        entity_id: str, old_state: Any, new_state: Any
+    ) -> bool:
+        """Trigger on real inactive-to-active transitions, never state refreshes.
+
+        Binary switches use `on`; HA person/device_tracker presence uses
+        `home`. Initial unknown/unavailable -> active is not an observed
+        transition and must not synthesize a routine.
+        """
+        domain = entity_id.partition(".")[0]
+        active = "home" if domain in {"person", "device_tracker"} else "on"
+        if domain not in {"binary_sensor", "input_boolean", "person", "device_tracker"}:
+            return False
+        if old_state is None or new_state is None:
+            return False
+        before = str(old_state.state).lower()
+        after = str(new_state.state).lower()
+        return (
+            after == active
+            and before not in {active, "unknown", "unavailable", ""}
+        )
+
     async def _handle_state_change(self, event: Event[Any]) -> None:
         entity_id = str(event.data.get("entity_id", "")).lower()
-        old_state = event.data.get("old_state")
-        new_state = event.data.get("new_state")
-        if new_state is None or str(new_state.state).lower() != "on":
-            return
-        if old_state is not None and str(old_state.state).lower() == "on":
+        if not self._is_activation_transition(
+            entity_id, event.data.get("old_state"), event.data.get("new_state")
+        ):
             return
         for profile_id, routine_type in self._routes.get(entity_id, ()):
             await self._async_trigger(profile_id, routine_type)

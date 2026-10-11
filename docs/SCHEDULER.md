@@ -116,8 +116,8 @@ Profiles may opt into routine entity hooks:
 }
 ```
 
-A transition to `on` creates a content-free routine slot while still honoring
-P4.3 Profile/target/device capacity and active-session suppression. The actual
+A genuine transition to `on` for binary sensors/input booleans, or to `home` for\n`person`/`device_tracker` presence entities, creates a content-free routine\nslot while still honoring
+P4.3 Profile/target/device capacity and active-session suppression. Initial\nstate restoration, `unknown`/`unavailable` transitions and attribute-only\nupdates do not fire routine slots. The actual
 same-day or previous-day CardDefinition is deliberately left to P4.5 send-time
 selection.
 
