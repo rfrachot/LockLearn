@@ -17,6 +17,7 @@ from .notifications.interactions import NotificationStage
 from .notifications.renderers import (
     PANEL_URI,
     NotificationRenderer,
+    QuizOption,
     NotificationRenderMode,
     RenderedNotification,
 )
@@ -180,21 +181,9 @@ class NotificationSchedulerDispatcher:
         selection_reason = str(fresh.get("selection_reason") or "")
 
         if slot_type == "quiz":
-            rendered = self._render_quiz_handoff(
-                profile=profile,
-                target=target,
-                slot_id=slot_id,
-                prompt=prompt,
-            )
-            await self._runtime.notification_delivery.async_send(rendered)
-            await self._runtime.scheduler.async_record_delivery(
-                slot_id=slot_id,
-                prepared=True,
-            )
-            await self._runtime.storage.repositories.scheduler.async_set_slot_status(
-                slot_id,
-                "consumed",
-                updated_at_utc=datetime.now(UTC).isoformat(),
+            await self._async_dispatch_mobile_quiz(
+                fresh=fresh, profile=profile, target=target, prompt=prompt,
+                answer=answer,
             )
             return
 
@@ -255,6 +244,127 @@ class NotificationSchedulerDispatcher:
                 "consumed",
                 updated_at_utc=datetime.now(UTC).isoformat(),
             )
+
+    async def _async_dispatch_mobile_quiz(
+        self,
+        *,
+        fresh: dict[str, Any],
+        profile: dict[str, Any],
+        target: dict[str, Any],
+        prompt: str,
+        answer: str,
+    ) -> None:
+        """Use bounded actionable quiz only with proved Companion capabilities."""
+        slot_id = str(fresh["slot_id"])
+        profile_id = str(profile["profile_id"])
+        track_id = str(fresh["track_id"])
+        target_id = str(target["target_id"])
+        tag = f"locklearn-slot-{slot_id}"
+        capabilities = TargetCapabilities.from_mapping(
+            device_registry_id=str(target["device_registry_id"]),
+            platform=str(target["platform"]),
+            shared_device=bool(target.get("shared_device")),
+            values=dict(target.get("capabilities") or {}),
+        )
+        options: tuple[QuizOption, ...] = ()
+        if capabilities.action_data.value == "supported" and capabilities.visible_actions >= 3:
+            options = await self._async_quiz_options(
+                profile_id=profile_id, track_id=track_id,
+                card_key=str(fresh["card_key"]), correct_answer=answer,
+            )
+
+        if len(options) != 2:
+            rendered = self._render_quiz_handoff(
+                profile=profile, target=target, slot_id=slot_id, prompt=prompt,
+            )
+            await self._runtime.notification_delivery.async_send(rendered)
+            await self._runtime.scheduler.async_record_delivery(
+                slot_id=slot_id, prepared=True,
+            )
+            await self._runtime.storage.repositories.scheduler.async_set_slot_status(
+                slot_id, "consumed", updated_at_utc=datetime.now(UTC).isoformat(),
+            )
+            return
+
+        interaction = await self._runtime.notification_interactions.async_create(
+            profile_id=profile_id,
+            target_id=target_id,
+            track_id=track_id,
+            card_key=str(fresh["card_key"]),
+            stage=NotificationStage.PROMPT,
+            expires_at=datetime.now(UTC) + _INTERACTION_TTL,
+            tag=tag,
+            payload={
+                "slot_id": slot_id,
+                "kind": "quiz",
+                "option_ids": [option.option_id for option in options],
+                "expected_answer_id": options[0].option_id,
+            },
+        )
+        rendered = self._renderer.render_quiz_prompt(
+            profile_id=profile_id,
+            profile_name=str(profile.get("name") or "LockLearn"),
+            target_id=target_id,
+            tag=tag,
+            prompt=prompt,
+            token=interaction.token,
+            options=options,
+            capabilities=capabilities,
+            visibility=str(target.get("lockscreen_visibility") or "private"),
+        )
+        try:
+            await self._runtime.notification_delivery.async_send(rendered)
+        except NotificationDeliveryError:
+            await self._runtime.notification_interactions.async_clear_tag(tag=tag)
+            raise
+        await self._runtime.scheduler.async_record_delivery(
+            slot_id=slot_id, prepared=True,
+        )
+
+    async def _async_quiz_options(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        card_key: str,
+        correct_answer: str,
+    ) -> tuple[QuizOption, ...]:
+        """Build unambiguous choices without introducing unseen cards."""
+        candidates = await self._runtime.storage.repositories.tracks.async_session_candidates(
+            profile_id=profile_id, track_id=track_id,
+        )
+        current = next(
+            (item for item in candidates if str(item["card_key"]) == card_key),
+            None,
+        )
+        if current is None or current.get("state") == "new" or current.get("user_state") != "active":
+            return ()
+        expected_id = str(current["answer_facet_id"])
+        normalized = correct_answer.strip().casefold()
+        if normalized in {"", "locklearn"}:
+            return ()
+        for candidate in sorted(candidates, key=lambda item: str(item["card_key"])):
+            if (
+                candidate["card_key"] == card_key
+                or candidate.get("state") == "new"
+                or candidate.get("user_state") != "active"
+                or candidate.get("suspend_until_utc") is not None
+            ):
+                continue
+            candidate_id = str(candidate["answer_facet_id"])
+            if candidate_id == expected_id:
+                continue
+            presentation = await self._runtime.presentation.async_for_card(
+                track_id=track_id, card_key=str(candidate["card_key"]),
+            )
+            distractor = self._facet_text(presentation.get("answer"))
+            if distractor.strip().casefold() in {"", "locklearn", normalized}:
+                continue
+            return (
+                QuizOption(option_id=expected_id, title=correct_answer),
+                QuizOption(option_id=candidate_id, title=distractor),
+            )
+        return ()
 
     async def _async_record_direct_teaser_exposure(
         self,
