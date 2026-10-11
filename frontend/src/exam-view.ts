@@ -78,6 +78,18 @@ export class LockLearnExamView extends LitElement {
     });
   }
 
+  private resumePaused(): void {
+    void this.perform(async () => {
+      if (!this.hass || !this.session || this.session.status !== "paused") return;
+      this.session = await this.hass.callWS<SessionState>({
+        type: "locklearn/session/pause",
+        session_id: this.session.id,
+        expected_version: this.session.version,
+        paused: false,
+      });
+    });
+  }
+
   private answer(selectedAnswerId: string | null): void {
     void this.perform(async () => {
       if (!this.hass || !this.session?.current_question) return;
@@ -137,7 +149,10 @@ export class LockLearnExamView extends LitElement {
           </div>
         `)}
         <button @click=${() => { this.session = undefined; this.result = undefined; }}>${this.fr ? "Retour" : "Back"}</button>
-      ` : question && quiz ? html`
+      ` : this.session.status === "paused" ? html`
+        <p>${this.fr ? "Examen en pause." : "Exam paused."}</p>
+        <button @click=${this.resumePaused} ?disabled=${this.busy}>${this.fr ? "Reprendre" : "Resume"}</button>
+    ` : question && quiz ? html`
         <p>${this.fr ? "Question" : "Question"} ${question.position + 1} / ${this.session.question_count}</p>
         <div class="prompt">${quiz.prompt_text}</div>
         <div class="choices">
