@@ -1393,6 +1393,11 @@ async def test_ha_entity_routine_bridge_triggers_on_transition_to_on(
         )
     )
     await runtime.scheduler_ha.async_refresh()
+    assert runtime.scheduler_ha.diagnostic_status() == {
+        "listener_active": True,
+        "configured_entity_count": 1,
+        "configured_routine_count": 1,
+    }
 
     hass.states.async_set("input_boolean.locklearn_bedtime", "off")
     await hass.async_block_till_done()
@@ -1416,6 +1421,11 @@ async def test_ha_entity_routine_bridge_triggers_on_transition_to_on(
     assert len(repeated) == 1
 
     assert await hass.config_entries.async_unload(entry.entry_id)
+    assert runtime.scheduler_ha.diagnostic_status() == {
+        "listener_active": False,
+        "configured_entity_count": 0,
+        "configured_routine_count": 0,
+    }
 
 
 async def test_skip_if_pending_expires_new_slot_without_srs_mutation(
@@ -1824,6 +1834,8 @@ async def test_scheduler_generation_records_internal_timing(tmp_path: Path) -> N
         assert metric["p95_ms"] is not None
     finally:
         await storage.async_close()
+
+
 @pytest.mark.parametrize(
     ("entity_id", "previous", "current", "expected"),
     (
