@@ -23,5 +23,8 @@
     "vite": "^7.0.0",
     "vitest": "^5.0.1",
     "@playwright/test": "^1.55.0"
+  },
+  "overrides": {
+    "source-map-js": "1.2.2"
   }
 }
