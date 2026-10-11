@@ -252,6 +252,10 @@ class NotificationActionProcessor:
         kind = str(payload.get("kind", "learning"))
         if kind == "quiz":
             result, answer_id, expected_answer_id = self._quiz_result(payload, semantic)
+            if expected_answer_id != identity["answer_facet_id"]:
+                raise NotificationActionError(
+                    "quiz interaction expected answer does not match CardDefinition"
+                )
             mode = SignalMode.VERIFIED_MCQ
             question_type = "mcq"
         elif kind == "learning":

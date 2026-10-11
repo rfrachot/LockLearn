@@ -78,6 +78,12 @@ Notification quiz is deliberately bounded to two answer choices plus
 I-don't-know when the target proves at least three visible actions. Larger MCQ or
 insufficient capability uses a panel handoff instead.
 
+The mobile choice order is deterministic per materialized slot but is not fixed:
+the backend persists the option identities and expected CardDefinition answer,
+and the action processor revalidates that identity before the atomic
+ReviewEvent/Progress/outbox commit. Distractors must be introduced, active,
+distinct-facet cards from another LearningItem with distinct rendered answers.
+
 Android channel names are separated for learning/teaser, quiz/review and
 relearning. Shared devices include the LockLearn Profile name in the visible
 title. Default visibility is private, including child/shared usage; visibility
@@ -118,3 +124,14 @@ write authority.
 
 `mobile_app_notification_cleared` may close the persistent interaction and
 scheduler/receptivity state but creates no pedagogical evidence.
+
+## F06 — bounded Companion quiz delivery
+
+Scheduled Quiz attempts a native Companion flow only when the target proves
+support for action data and at least three visible actions, and the current card
+and a distractor are both introduced, active cards in the same Track with
+distinct answer text and facet identity. It persists a single-use interaction
+and renders two choices plus IDK. The existing action pipeline commits canonical
+ReviewEvent and F04 outbox. Otherwise Quiz remains a panel handoff without
+pedagogical assessment. Failed delivery clears the pending interaction and
+does not mark the scheduler slot sent.

@@ -20,6 +20,16 @@ from custom_components.locklearn.storage.schema import STATE_SCHEMA
 from tests.backend.test_notification_action_processing import _setup
 
 
+def _quiz_payload(identity: dict[str, str]) -> dict[str, object]:
+    """Build the same authoritative option identity as the mobile renderer."""
+    answer_id = identity["answer_facet_id"]
+    return {
+        "kind": "quiz",
+        "option_ids": [answer_id, "answer-wrong"],
+        "expected_answer_id": answer_id,
+    }
+
+
 def _insert_mobile_event(
     connection: sqlite3.Connection, event_id: str, *, mode: str = "verified_mcq"
 ) -> None:
@@ -142,11 +152,7 @@ async def test_committed_mobile_answer_publishes_and_acknowledges_outbox(
             card_key=identity["card_key"],
             stage="prompt",
             expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
-            payload={
-                "kind": "quiz",
-                "option_ids": ["answer-correct", "answer-wrong"],
-                "expected_answer_id": "answer-correct",
-            },
+            payload=_quiz_payload(identity),
         )
         result = await processor.async_handle_mobile_action(
             action_id=encode_action_id(interaction.token, "choice_0"),
@@ -193,11 +199,7 @@ async def test_outbox_retries_after_emitter_failure(tmp_path: Path) -> None:
             card_key=identity["card_key"],
             stage="prompt",
             expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
-            payload={
-                "kind": "quiz",
-                "option_ids": ["answer-correct", "answer-wrong"],
-                "expected_answer_id": "answer-correct",
-            },
+            payload=_quiz_payload(identity),
         )
         result = await processor.async_handle_mobile_action(
             action_id=encode_action_id(interaction.token, "choice_0"),
@@ -226,11 +228,7 @@ async def test_crash_after_commit_recovers_unfinalized_mobile_event(
             card_key=identity["card_key"],
             stage="prompt",
             expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
-            payload={
-                "kind": "quiz",
-                "option_ids": ["answer-correct", "answer-wrong"],
-                "expected_answer_id": "answer-correct",
-            },
+            payload=_quiz_payload(identity),
         )
         with (
             patch.object(
@@ -292,11 +290,7 @@ async def test_recovery_uses_event_boundary_after_a_later_answer_commits(
             card_key=identity["card_key"],
             stage="prompt",
             expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
-            payload={
-                "kind": "quiz",
-                "option_ids": ["answer-correct", "answer-wrong"],
-                "expected_answer_id": "answer-correct",
-            },
+            payload=_quiz_payload(identity),
         )
         with (
             patch.object(
@@ -318,11 +312,7 @@ async def test_recovery_uses_event_boundary_after_a_later_answer_commits(
             card_key=identity["card_key"],
             stage="prompt",
             expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
-            payload={
-                "kind": "quiz",
-                "option_ids": ["answer-correct", "answer-wrong"],
-                "expected_answer_id": "answer-correct",
-            },
+            payload=_quiz_payload(identity),
         )
         second_result = await processor.async_handle_mobile_action(
             action_id=encode_action_id(second.token, "choice_1"),
@@ -399,11 +389,7 @@ async def test_concurrent_duplicate_mobile_actions_create_one_outbox_intent(
             card_key=identity["card_key"],
             stage="prompt",
             expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
-            payload={
-                "kind": "quiz",
-                "option_ids": ["answer-correct", "answer-wrong"],
-                "expected_answer_id": "answer-correct",
-            },
+            payload=_quiz_payload(identity),
         )
         results = await asyncio.gather(
             processor.async_handle_mobile_action(

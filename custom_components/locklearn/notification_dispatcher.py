@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -18,6 +19,7 @@ from .notifications.renderers import (
     PANEL_URI,
     NotificationRenderer,
     NotificationRenderMode,
+    QuizOption,
     RenderedNotification,
 )
 
@@ -180,21 +182,12 @@ class NotificationSchedulerDispatcher:
         selection_reason = str(fresh.get("selection_reason") or "")
 
         if slot_type == "quiz":
-            rendered = self._render_quiz_handoff(
+            await self._async_dispatch_mobile_quiz(
+                fresh=fresh,
                 profile=profile,
                 target=target,
-                slot_id=slot_id,
                 prompt=prompt,
-            )
-            await self._runtime.notification_delivery.async_send(rendered)
-            await self._runtime.scheduler.async_record_delivery(
-                slot_id=slot_id,
-                prepared=True,
-            )
-            await self._runtime.storage.repositories.scheduler.async_set_slot_status(
-                slot_id,
-                "consumed",
-                updated_at_utc=datetime.now(UTC).isoformat(),
+                answer=answer,
             )
             return
 
@@ -205,6 +198,7 @@ class NotificationSchedulerDispatcher:
             values=dict(target.get("capabilities") or {}),
         )
         tag = f"locklearn-slot-{slot_id}"
+
         interaction = await self._runtime.notification_interactions.async_create(
             profile_id=profile_id,
             target_id=str(target_id),
@@ -255,6 +249,168 @@ class NotificationSchedulerDispatcher:
                 "consumed",
                 updated_at_utc=datetime.now(UTC).isoformat(),
             )
+
+    async def _async_dispatch_mobile_quiz(
+        self,
+        *,
+        fresh: dict[str, Any],
+        profile: dict[str, Any],
+        target: dict[str, Any],
+        prompt: str,
+        answer: str,
+    ) -> None:
+        """Use bounded actionable quiz only with proved Companion capabilities."""
+        slot_id = str(fresh["slot_id"])
+        profile_id = str(profile["profile_id"])
+        track_id = str(fresh["track_id"])
+        target_id = str(target["target_id"])
+        tag = f"locklearn-slot-{slot_id}"
+        capabilities = TargetCapabilities.from_mapping(
+            device_registry_id=str(target["device_registry_id"]),
+            platform=str(target["platform"]),
+            shared_device=bool(target.get("shared_device")),
+            values=dict(target.get("capabilities") or {}),
+        )
+        options_and_answer: tuple[tuple[QuizOption, ...], str] | None = None
+        if capabilities.action_data.value == "supported" and capabilities.visible_actions >= 3:
+            options_and_answer = await self._async_quiz_options(
+                profile_id=profile_id,
+                track_id=track_id,
+                card_key=str(fresh["card_key"]),
+                correct_answer=answer,
+                presentation_key=slot_id,
+            )
+
+        if options_and_answer is None:
+            rendered = self._render_quiz_handoff(
+                profile=profile,
+                target=target,
+                slot_id=slot_id,
+                prompt=prompt,
+            )
+            await self._runtime.notification_delivery.async_send(rendered)
+            await self._runtime.scheduler.async_record_delivery(
+                slot_id=slot_id,
+                prepared=True,
+            )
+            await self._runtime.storage.repositories.scheduler.async_set_slot_status(
+                slot_id,
+                "consumed",
+                updated_at_utc=datetime.now(UTC).isoformat(),
+            )
+            return
+        options, expected_answer_id = options_and_answer
+
+        interaction = await self._runtime.notification_interactions.async_create(
+            profile_id=profile_id,
+            target_id=target_id,
+            track_id=track_id,
+            card_key=str(fresh["card_key"]),
+            stage=NotificationStage.PROMPT,
+            expires_at=datetime.now(UTC) + _INTERACTION_TTL,
+            tag=tag,
+            payload={
+                "slot_id": slot_id,
+                "kind": "quiz",
+                "option_ids": [option.option_id for option in options],
+                "expected_answer_id": expected_answer_id,
+            },
+        )
+        rendered = self._renderer.render_quiz_prompt(
+            profile_id=profile_id,
+            profile_name=str(profile.get("name") or "LockLearn"),
+            target_id=target_id,
+            tag=tag,
+            prompt=prompt,
+            token=interaction.token,
+            options=options,
+            capabilities=capabilities,
+            visibility=str(target.get("lockscreen_visibility") or "private"),
+        )
+        try:
+            await self._runtime.notification_delivery.async_send(rendered)
+        except NotificationDeliveryError:
+            await self._runtime.notification_interactions.async_clear_tag(tag=tag)
+            raise
+        await self._runtime.scheduler.async_record_delivery(
+            slot_id=slot_id,
+            prepared=True,
+        )
+
+    async def _async_quiz_options(
+        self,
+        *,
+        profile_id: str,
+        track_id: str,
+        card_key: str,
+        correct_answer: str,
+        presentation_key: str,
+    ) -> tuple[tuple[QuizOption, ...], str] | None:
+        """Build unambiguous choices without introducing unseen cards."""
+        candidates = await self._runtime.storage.repositories.tracks.async_session_candidates(
+            profile_id=profile_id,
+            track_id=track_id,
+        )
+        current = next(
+            (item for item in candidates if str(item["card_key"]) == card_key),
+            None,
+        )
+        if (
+            current is None
+            or current.get("state") not in {"learning", "review", "relearning", "leech"}
+            or current.get("user_state") != "active"
+            or current.get("suspend_until_utc") is not None
+        ):
+            return None
+        raw_expected_id = current.get("answer_facet_id")
+        if not isinstance(raw_expected_id, str) or not raw_expected_id.strip():
+            return None
+        expected_id = raw_expected_id
+        normalized = correct_answer.strip().casefold()
+        if normalized in {"", "locklearn"}:
+            return None
+        for candidate in sorted(candidates, key=lambda item: str(item["card_key"])):
+            if (
+                candidate["card_key"] == card_key
+                or candidate.get("state") not in {"learning", "review", "relearning", "leech"}
+                or candidate.get("user_state") != "active"
+                or candidate.get("suspend_until_utc") is not None
+                or candidate.get("learning_item_id") == current.get("learning_item_id")
+            ):
+                continue
+            raw_candidate_id = candidate.get("answer_facet_id")
+            if not isinstance(raw_candidate_id, str) or not raw_candidate_id.strip():
+                continue
+            candidate_id = raw_candidate_id
+            if candidate_id == expected_id:
+                continue
+            current_confusables = set(current.get("confusable_group_ids") or ())
+            candidate_confusables = set(candidate.get("confusable_group_ids") or ())
+            if current_confusables & candidate_confusables and (
+                current.get("state") != "review" or candidate.get("state") != "review"
+            ):
+                continue
+            presentation = await self._runtime.presentation.async_for_card(
+                track_id=track_id,
+                card_key=str(candidate["card_key"]),
+            )
+            distractor = self._facet_text(presentation.get("answer"))
+            if distractor.strip().casefold() in {"", "locklearn", normalized}:
+                continue
+            options = [
+                QuizOption(option_id=expected_id, title=correct_answer),
+                QuizOption(option_id=candidate_id, title=distractor),
+            ]
+            # Mobile quiz has no persisted panel position counter. Derive a
+            # reproducible position from the immutable slot/presentation key
+            # so retries are stable while successive slots do not bias index 0.
+            digest = hashlib.sha256(
+                f"{presentation_key}|{card_key}|{candidate_id}".encode()
+            ).digest()
+            if digest[0] & 1:
+                options.reverse()
+            return tuple(options), expected_id
+        return None
 
     async def _async_record_direct_teaser_exposure(
         self,
