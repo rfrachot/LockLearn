@@ -424,3 +424,70 @@ async def test_concurrent_duplicate_mobile_actions_create_one_outbox_intent(
         assert rows == [("event-action",)]
     finally:
         await storage.async_close()
+
+@pytest.mark.parametrize("invalid_first", (False, True))
+async def test_recovery_paginates_more_than_100_unfinalized_events(
+    tmp_path: Path, invalid_first: bool
+) -> None:
+    """Recover every page, even when a bad first row cannot be reconstructed."""
+    storage, processor, _, _, _ = await _setup(tmp_path, seed_progress=False)
+    event_ids = [f"backlog-{index:03d}" for index in range(205)]
+    emitted: list[tuple[str, str]] = []
+    reconstructed: list[str] = []
+    outbox = NotificationEventOutbox(
+        storage,
+        emitter=lambda name, payload: emitted.append((name, str(payload["event_id"]))),
+    )
+    processor._event_outbox = outbox
+    try:
+
+        def insert(connection: sqlite3.Connection) -> None:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                for event_id in event_ids:
+                    _insert_mobile_event(connection, event_id)
+                if invalid_first:
+                    connection.execute(
+                        """UPDATE notification_event_outbox SET context_json = ?
+                           WHERE event_id = ?""",
+                        ("{invalid-json", event_ids[0]),
+                    )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+
+        await storage._async_writer(insert)
+
+        async def finalize(*, event: Any, **_kwargs: Any) -> None:
+            reconstructed.append(str(event.id))
+            await outbox.async_publish(
+                str(event.id),
+                (("locklearn_answered", {"event_id": str(event.id)}),),
+            )
+
+        with patch.object(processor, "_emit_committed_events", side_effect=finalize):
+            await processor.async_recover_outbox()
+            await processor.async_recover_outbox()
+
+        expected = event_ids[1:] if invalid_first else event_ids
+        assert reconstructed == expected
+        assert emitted == [("locklearn_answered", event_id) for event_id in expected]
+        delivered = await storage._async_reader(
+            lambda connection: connection.execute(
+                """SELECT event_id FROM notification_event_outbox
+                   WHERE delivered_at_utc IS NOT NULL
+                   ORDER BY created_at_utc, event_id"""
+            ).fetchall()
+        )
+        assert delivered == [(event_id,) for event_id in expected]
+        remaining = await storage._async_reader(
+            lambda connection: connection.execute(
+                """SELECT event_id FROM notification_event_outbox
+                   WHERE delivered_at_utc IS NULL
+                   ORDER BY created_at_utc, event_id"""
+            ).fetchall()
+        )
+        assert remaining == ([(event_ids[0],)] if invalid_first else [])
+    finally:
+        await storage.async_close()

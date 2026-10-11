@@ -82,10 +82,25 @@ class NotificationEventOutbox:
         await self._storage._async_writer(store)
         await self.async_drain()
 
-    async def async_unfinalized(self) -> tuple[dict[str, Any], ...]:
-        """Find durable intents committed before their HA payload was generated."""
+    async def async_unfinalized(
+        self, *, after: tuple[str, str] | None = None
+    ) -> tuple[dict[str, Any], ...]:
+        """Read a bounded page of unfinalized intents after a stable ordering cursor."""
+
+        def decode_context(event_id: str, raw: str | None) -> dict[str, Any] | None:
+            if raw is None:
+                return None
+            try:
+                context = json.loads(raw)
+            except (TypeError, ValueError):
+                _LOGGER.error("Invalid outbox recovery JSON for event %s", event_id)
+                return None
+            return context if isinstance(context, dict) else None
 
         def read(connection: sqlite3.Connection) -> tuple[dict[str, Any], ...]:
+            parameters: tuple[str | None, str | None, str | None] = (
+                (None, None, None) if after is None else (after[0], after[0], after[1])
+            )
             rows = connection.execute(
                 """SELECT o.event_id, o.context_json, e.profile_id, e.track_id,
                           e.mode, e.result, e.session_id, e.answer_id,
@@ -94,13 +109,15 @@ class NotificationEventOutbox:
                    FROM notification_event_outbox AS o
                    JOIN review_events AS e ON e.id = o.event_id
                    WHERE o.delivered_at_utc IS NULL AND o.payload_json IS NULL
+                     AND (? IS NULL OR (o.created_at_utc, o.event_id) > (?, ?))
                    ORDER BY o.created_at_utc, o.event_id
-                   LIMIT 100"""
+                   LIMIT 100""",
+                parameters,
             ).fetchall()
             return tuple(
                 {
                     "event_id": row[0],
-                    "context": None if row[1] is None else json.loads(row[1]),
+                    "context": decode_context(str(row[0]), row[1]),
                     "profile_id": row[2],
                     "track_id": row[3],
                     "mode": row[4],

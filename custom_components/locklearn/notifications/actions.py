@@ -751,45 +751,51 @@ class NotificationActionProcessor:
         """Rebuild unfinalized notifications from durable review intent on startup."""
         if self._event_outbox is None:
             return
-        for pending in await self._event_outbox.async_unfinalized():
-            context = pending.get("context")
-            if not isinstance(context, dict):
-                _LOGGER.error(
-                    "LockLearn outbox event %s has invalid recovery context",
-                    pending["event_id"],
+        cursor: tuple[str, str] | None = None
+        while True:
+            pending_batch = await self._event_outbox.async_unfinalized(after=cursor)
+            if not pending_batch:
+                break
+            for pending in pending_batch:
+                cursor = (str(pending["created_at_utc"]), str(pending["event_id"]))
+                context = pending.get("context")
+                if not isinstance(context, dict):
+                    _LOGGER.error(
+                        "LockLearn outbox event %s has invalid recovery context",
+                        pending["event_id"],
+                    )
+                    continue
+                identity = context.get("identity")
+                interaction_id = context.get("interaction_id")
+                if not isinstance(identity, dict) or not isinstance(interaction_id, str):
+                    _LOGGER.error(
+                        "LockLearn outbox event %s cannot be reconstructed from its context",
+                        pending["event_id"],
+                    )
+                    continue
+                event = SimpleNamespace(
+                    id=pending["event_id"],
+                    session_id=pending["session_id"],
+                    mode=pending["mode"],
+                    result=pending["result"],
+                    created_at_utc=pending["created_at_utc"],
+                    pre_state_snapshot=pending["pre_state_snapshot"],
+                    post_state_snapshot=pending["post_state_snapshot"],
                 )
-                continue
-            identity = context.get("identity")
-            interaction_id = context.get("interaction_id")
-            if not isinstance(identity, dict) or not isinstance(interaction_id, str):
-                _LOGGER.error(
-                    "LockLearn outbox event %s cannot be reconstructed from its context",
-                    pending["event_id"],
+                await self._emit_committed_events(
+                    interaction={"interaction_id": interaction_id},
+                    identity={str(k): str(v) for k, v in identity.items()},
+                    event=event,
+                    before_stats={},
+                    after_stats={},
+                    before_profile_stats={},
+                    after_profile_stats={},
+                    answer_id=pending["answer_id"],
+                    expected_answer_id=pending["expected_answer_id"],
+                    delivery_context=(
+                        context.get("delivery") if isinstance(context.get("delivery"), dict) else None
+                    ),
                 )
-                continue
-            event = SimpleNamespace(
-                id=pending["event_id"],
-                session_id=pending["session_id"],
-                mode=pending["mode"],
-                result=pending["result"],
-                created_at_utc=pending["created_at_utc"],
-                pre_state_snapshot=pending["pre_state_snapshot"],
-                post_state_snapshot=pending["post_state_snapshot"],
-            )
-            await self._emit_committed_events(
-                interaction={"interaction_id": interaction_id},
-                identity={str(k): str(v) for k, v in identity.items()},
-                event=event,
-                before_stats={},
-                after_stats={},
-                before_profile_stats={},
-                after_profile_stats={},
-                answer_id=pending["answer_id"],
-                expected_answer_id=pending["expected_answer_id"],
-                delivery_context=(
-                    context.get("delivery") if isinstance(context.get("delivery"), dict) else None
-                ),
-            )
         await self._event_outbox.async_drain()
 
     async def _result_counters(
