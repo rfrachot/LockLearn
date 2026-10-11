@@ -8,17 +8,20 @@
   capture durable des métadonnées/réglages de livraison, contexte de trigger
   reconstructible, rollback strict si l’intention outbox manque, et tests des
   frontières commit/payload/émission/acquittement/concurrence/migration.
-- Validations locales finales : Ruff format/check, mypy (189 fichiers),
-  ressources, schémas, contrats docs, 559 pytest, smoke HA 2026.9.3, release
-  smoke, performance P6.8, scale hot-path, frontend lint/typecheck, 69
-  Vitest, no-polling, build et bundle — toutes vertes. Un avertissement ZIP
-  du test de profil hostile reste attendu.
+- Validations locales de cette passe : Ruff format/check, mypy (189 fichiers),
+  ressources, schémas, contrats docs, release smoke, 561 pytest, frontend
+  lint/typecheck, 69 Vitest, no-polling, build, bundle, 10 Playwright E2E et
+  capture de documentation — toutes vertes. Les deux scénarios de récupération
+  à 205 événements passent, avec et sans contexte initial invalide. Un
+  avertissement ZIP du test de profil hostile reste attendu.
 - Garantie réelle : persistance atomique de l’intention avec le résultat
   pédagogique et reprise at-least-once ; exactement une fois impossible à
   garantir entre publication HA et acquittement SQLite. Les consommateurs
   doivent dédupliquer par `event_id` + type d’événement.
-- Prochaine action : inspecter ce diff, créer le commit consolidé, pousser la
-  branche de la PR et suivre les huit jobs CI sur le SHA final. Ne pas fusionner.
+- Résidu connu : `npm audit` signale une vulnérabilité haute de développement
+  dans `source-map-js@1.2.1` via Vite/PostCSS; `npm audit --omit=dev` est propre.
+- Prochaine action : créer le commit consolidé, pousser la branche de la PR et
+  suivre les huit jobs CI sur le SHA final. Ne pas fusionner.
 
 ## Mission and branch
 

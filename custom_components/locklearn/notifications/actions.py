@@ -793,7 +793,9 @@ class NotificationActionProcessor:
                     answer_id=pending["answer_id"],
                     expected_answer_id=pending["expected_answer_id"],
                     delivery_context=(
-                        context.get("delivery") if isinstance(context.get("delivery"), dict) else None
+                        context.get("delivery")
+                        if isinstance(context.get("delivery"), dict)
+                        else None
                     ),
                 )
         await self._event_outbox.async_drain()

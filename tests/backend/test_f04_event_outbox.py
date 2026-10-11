@@ -425,6 +425,7 @@ async def test_concurrent_duplicate_mobile_actions_create_one_outbox_intent(
     finally:
         await storage.async_close()
 
+
 @pytest.mark.parametrize("invalid_first", (False, True))
 async def test_recovery_paginates_more_than_100_unfinalized_events(
     tmp_path: Path, invalid_first: bool
