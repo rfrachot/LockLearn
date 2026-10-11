@@ -1,5 +1,25 @@
 # AGENT_HANDOFF.md
 
+## Mission F04 — audit et correction consolidés (2026-10-11)
+
+- Branche : `docs/f04-event-outbox-contract`, PR #16 vers
+  `chore/self-hosted-ci`; aucun merge/tag/release effectué.
+- Corrections : reprise déterministe au point temporel du `ReviewEvent`,
+  capture durable des métadonnées/réglages de livraison, contexte de trigger
+  reconstructible, rollback strict si l’intention outbox manque, et tests des
+  frontières commit/payload/émission/acquittement/concurrence/migration.
+- Validations locales finales : Ruff format/check, mypy (189 fichiers),
+  ressources, schémas, contrats docs, 559 pytest, smoke HA 2026.9.3, release
+  smoke, performance P6.8, scale hot-path, frontend lint/typecheck, 69
+  Vitest, no-polling, build et bundle — toutes vertes. Un avertissement ZIP
+  du test de profil hostile reste attendu.
+- Garantie réelle : persistance atomique de l’intention avec le résultat
+  pédagogique et reprise at-least-once ; exactement une fois impossible à
+  garantir entre publication HA et acquittement SQLite. Les consommateurs
+  doivent dédupliquer par `event_id` + type d’événement.
+- Prochaine action : inspecter ce diff, créer le commit consolidé, pousser la
+  branche de la PR et suivre les huit jobs CI sur le SHA final. Ne pas fusionner.
+
 ## Mission and branch
 
 Beta.5 final qualification, tests and deployment on

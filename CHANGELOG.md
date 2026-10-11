@@ -5,6 +5,9 @@ All notable changes will be documented here.
 ## [Unreleased]
 
 ### Added
+- Add a durable, crash-recoverable Home Assistant event outbox for assessable
+  mobile answers, with atomic ReviewEvent intent persistence, deterministic
+  historical replay and documented at-least-once delivery semantics.
 - Add beta.5 field-polish follow-up: exact calibration remediation sessions, replay-safe resume reconciliation, deterministic per-session ordering variation, blocker copy and final Learn/Quiz UI polish.
 - Adopt the validated UX no-dead-end v0.3 contract for beta.5: verified quick calibration, effective availability blockers, one-shot readiness reminders, safe known-already verification/reversal, cross-track alternatives and retry-safe answer UX.
 - Add M1–M12 / D1–D2 implementation wireframes and ADRs for known-already semantics, effective selectability and waiting return mechanisms.

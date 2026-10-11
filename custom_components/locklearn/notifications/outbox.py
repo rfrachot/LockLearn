@@ -90,7 +90,7 @@ class NotificationEventOutbox:
                 """SELECT o.event_id, o.context_json, e.profile_id, e.track_id,
                           e.mode, e.result, e.session_id, e.answer_id,
                           e.expected_answer_id, e.pre_state_snapshot,
-                          e.post_state_snapshot
+                          e.post_state_snapshot, e.created_at_utc
                    FROM notification_event_outbox AS o
                    JOIN review_events AS e ON e.id = o.event_id
                    WHERE o.delivered_at_utc IS NULL AND o.payload_json IS NULL
@@ -110,6 +110,7 @@ class NotificationEventOutbox:
                     "expected_answer_id": row[8],
                     "pre_state_snapshot": json.loads(row[9]),
                     "post_state_snapshot": json.loads(row[10]),
+                    "created_at_utc": row[11],
                 }
                 for row in rows
             )

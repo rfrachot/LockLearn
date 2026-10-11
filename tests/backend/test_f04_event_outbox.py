@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -266,5 +268,159 @@ async def test_crash_after_commit_recovers_unfinalized_mobile_event(
         assert emitted.count(("locklearn_answered", "event-action")) == 1
         await processor.async_recover_outbox()
         assert emitted.count(("locklearn_answered", "event-action")) == 1
+    finally:
+        await storage.async_close()
+
+
+async def test_recovery_uses_event_boundary_after_a_later_answer_commits(
+    tmp_path: Path,
+) -> None:
+    storage, processor, interactions, identity, _ = await _setup(tmp_path)
+    emitted: list[tuple[str, dict[str, object]]] = []
+    outbox = NotificationEventOutbox(
+        storage,
+        emitter=lambda name, payload: emitted.append((name, dict(payload))),
+    )
+    processor._event_outbox = outbox
+    event_ids = iter(("event-a", "event-b"))
+    processor._reviews._id_factory = lambda: next(event_ids)
+    try:
+        first = await interactions.async_create(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            target_id="target-p48",
+            card_key=identity["card_key"],
+            stage="prompt",
+            expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
+            payload={
+                "kind": "quiz",
+                "option_ids": ["answer-correct", "answer-wrong"],
+                "expected_answer_id": "answer-correct",
+            },
+        )
+        with (
+            patch.object(
+                outbox,
+                "async_publish",
+                side_effect=RuntimeError("crash after event commit"),
+            ),
+            pytest.raises(RuntimeError, match="crash after event commit"),
+        ):
+            await processor.async_handle_mobile_action(
+                action_id=encode_action_id(first.token, "choice_0"),
+                actor_user_id="owner-user",
+            )
+
+        second = await interactions.async_create(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            target_id="target-p48",
+            card_key=identity["card_key"],
+            stage="prompt",
+            expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
+            payload={
+                "kind": "quiz",
+                "option_ids": ["answer-correct", "answer-wrong"],
+                "expected_answer_id": "answer-correct",
+            },
+        )
+        second_result = await processor.async_handle_mobile_action(
+            action_id=encode_action_id(second.token, "choice_1"),
+            actor_user_id="owner-user",
+        )
+        assert second_result is not None and second_result.pedagogical_applied
+
+        emitted.clear()
+        await processor.async_recover_outbox()
+        answered = next(
+            payload
+            for name, payload in emitted
+            if name == "locklearn_answered" and payload["event_id"] == "event-a"
+        )
+        assert answered["consecutive_correct"] == 2
+        assert answered["consecutive_wrong"] == 0
+    finally:
+        await storage.async_close()
+
+
+async def test_ack_failure_reemits_the_same_stable_batch(tmp_path: Path) -> None:
+    storage = SQLiteStorage(StoragePaths(tmp_path / "state.db", tmp_path / "content.db"))
+    await storage.async_open()
+    emitted: list[tuple[str, dict[str, object]]] = []
+    try:
+
+        def insert(connection: sqlite3.Connection) -> None:
+            _insert_mobile_event(connection, "ack-event")
+            connection.commit()
+
+        await storage._async_writer(insert)
+        outbox = NotificationEventOutbox(
+            storage,
+            emitter=lambda name, payload: emitted.append((name, dict(payload))),
+        )
+        original_writer = storage._async_writer
+        writer_calls = 0
+
+        async def fail_ack(operation: Any) -> Any:
+            nonlocal writer_calls
+            writer_calls += 1
+            if writer_calls == 2:
+                raise RuntimeError("crash before outbox acknowledgement")
+            return await original_writer(operation)
+
+        storage._async_writer = fail_ack  # type: ignore[method-assign]
+        with pytest.raises(RuntimeError, match="outbox acknowledgement"):
+            await outbox.async_publish(
+                "ack-event",
+                (("locklearn_answered", {"event_id": "ack-event"}),),
+            )
+        storage._async_writer = original_writer  # type: ignore[method-assign]
+
+        await outbox.async_drain()
+        assert emitted == [
+            ("locklearn_answered", {"event_id": "ack-event"}),
+            ("locklearn_answered", {"event_id": "ack-event"}),
+        ]
+    finally:
+        await storage.async_close()
+
+
+async def test_concurrent_duplicate_mobile_actions_create_one_outbox_intent(
+    tmp_path: Path,
+) -> None:
+    storage, processor, interactions, identity, _ = await _setup(tmp_path)
+    outbox = NotificationEventOutbox(storage, emitter=lambda name, payload: None)
+    processor._event_outbox = outbox
+    try:
+        interaction = await interactions.async_create(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+            target_id="target-p48",
+            card_key=identity["card_key"],
+            stage="prompt",
+            expires_at=datetime(2026, 9, 24, 20, 30, tzinfo=UTC),
+            payload={
+                "kind": "quiz",
+                "option_ids": ["answer-correct", "answer-wrong"],
+                "expected_answer_id": "answer-correct",
+            },
+        )
+        results = await asyncio.gather(
+            processor.async_handle_mobile_action(
+                action_id=encode_action_id(interaction.token, "choice_0"),
+                actor_user_id="owner-user",
+            ),
+            processor.async_handle_mobile_action(
+                action_id=encode_action_id(interaction.token, "choice_0"),
+                actor_user_id="owner-user",
+            ),
+        )
+        assert sum(result is not None and result.pedagogical_applied for result in results) == 1
+        rows = await storage._async_reader(
+            lambda connection: connection.execute(
+                "SELECT event_id FROM notification_event_outbox"
+            ).fetchall()
+        )
+        assert rows == [("event-action",)]
     finally:
         await storage.async_close()

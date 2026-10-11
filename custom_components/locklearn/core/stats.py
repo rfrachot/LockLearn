@@ -47,7 +47,12 @@ class StatsReviewRepository(Protocol):
         profile_id: str | None = None,
         track_id: str | None = None,
     ) -> tuple[dict[str, Any], ...]: ...
-    async def async_undone_event_ids(self, *, profile_id: str | None = None) -> frozenset[str]: ...
+    async def async_undone_event_ids(
+        self,
+        *,
+        profile_id: str | None = None,
+        before_created_at_utc: str | None = None,
+    ) -> frozenset[str]: ...
     async def async_stats_daily(
         self,
         *,
@@ -255,6 +260,73 @@ class StatsService:
             "confusions": list(confusions),
             "daily": [dict(row) for row in daily],
         }
+
+    async def async_notification_streak_at_event(
+        self,
+        *,
+        profile_id: str,
+        track_id: str | None,
+        event_id: str,
+        include_event: bool,
+        goal_fraction: float | None = None,
+        goal_minimum: int | None = None,
+        grace_days: int | None = None,
+    ) -> dict[str, Any]:
+        """Rebuild the notification goal state at one canonical event boundary.
+
+        Outbox recovery must not inspect the current dashboard state: later
+        answers, undos, or settings changes must not alter an older delivery.
+        Review events contain the snapshots needed by ``_streak`` to rebuild
+        the goal state without using mutable progress or current counters.
+        """
+        profile = await self._profiles.async_get(profile_id)
+        if profile is None:
+            raise StatsServiceError("profile does not exist")
+        events = await self._events.async_list_scope_events(
+            profile_id=profile_id,
+            track_id=track_id,
+        )
+        target = next((event for event in events if str(event["id"]) == event_id), None)
+        if target is None:
+            raise StatsServiceError("notification event does not exist")
+
+        target_created_at = str(target["created_at_utc"])
+
+        def is_in_boundary(event: dict[str, Any]) -> bool:
+            created_at = str(event["created_at_utc"])
+            event_key = str(event["id"])
+            if created_at < target_created_at:
+                return True
+            if created_at > target_created_at:
+                return False
+            if include_event:
+                return event_key <= event_id
+            return event_key < event_id
+
+        bounded_events = tuple(event for event in events if is_in_boundary(event))
+        undone = await self._events.async_undone_event_ids(
+            profile_id=profile_id,
+            before_created_at_utc=target_created_at,
+        )
+        effective_events = tuple(
+            event
+            for event in bounded_events
+            if str(event["id"]) not in undone and str(event["mode"]) != "undo_compensation"
+        )
+        if goal_fraction is None or goal_minimum is None or grace_days is None:
+            settings = dict(profile["settings"])
+            goal_fraction = self._setting_fraction(settings, "daily_due_goal_fraction", 0.8)
+            goal_minimum = self._setting_int(settings, "daily_due_goal_min_cards", 1, minimum=0)
+            grace_days = self._setting_int(settings, "streak_grace_days", 1, minimum=0)
+        return self._streak(
+            events=effective_events,
+            daily=(),
+            local_today=date.fromisoformat(str(target["local_date"])),
+            current_timezone=str(target["timezone_name"]),
+            goal_fraction=goal_fraction,
+            goal_minimum=goal_minimum,
+            grace_days=grace_days,
+        )
 
     async def _calibration(
         self,

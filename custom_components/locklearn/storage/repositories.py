@@ -2353,7 +2353,7 @@ class ReviewEventsRepository:
 
                 self._append_projection_in_connection(connection, event)
                 if outbox_context is not None:
-                    connection.execute(
+                    cursor = connection.execute(
                         """UPDATE notification_event_outbox SET context_json = ?
                            WHERE event_id = ? AND delivered_at_utc IS NULL""",
                         (
@@ -2366,6 +2366,10 @@ class ReviewEventsRepository:
                             event.id,
                         ),
                     )
+                    if cursor.rowcount != 1:
+                        raise StateRepositoryError(
+                            "mobile review event has no pending notification outbox intent"
+                        )
                 interaction["status"] = "consumed"
                 interaction["consumed_at_utc"] = action_at_utc
                 interaction["action_id"] = action_id
@@ -2822,6 +2826,9 @@ class ReviewEventsRepository:
         profile_id: str,
         track_id: str,
         session_id: str | None,
+        as_of_created_at_utc: str | None = None,
+        as_of_event_id: str | None = None,
+        include_as_of_event: bool = True,
     ) -> dict[str, int | float | None]:
         """Read notification counters without materializing historical ReviewEvents.
 
@@ -2839,14 +2846,30 @@ class ReviewEventsRepository:
             cursor: tuple[str, str] | None = None
             finished = False
             while not finished:
+                as_of_clause = ""
+                as_of_params: tuple[str, ...] = ()
+                if as_of_created_at_utc is not None and as_of_event_id is not None:
+                    comparator = "<=" if include_as_of_event else "<"
+                    tie_clause = (
+                        f"(created_at_utc < ? OR (created_at_utc = ? AND id {comparator} ?))"
+                    )
+                    as_of_clause = f" AND {tie_clause}"
+                    as_of_params = (
+                        as_of_created_at_utc,
+                        as_of_created_at_utc,
+                        as_of_event_id,
+                    )
                 if cursor is None:
                     rows = connection.execute(
                         """SELECT result, created_at_utc, id
                            FROM review_events
                            WHERE profile_id = ? AND track_id = ?
+                           """
+                        + as_of_clause
+                        + """
                            ORDER BY created_at_utc DESC, id DESC
                            LIMIT ?""",
-                        (profile_id, track_id, batch_size),
+                        (profile_id, track_id, *as_of_params, batch_size),
                     ).fetchall()
                 else:
                     rows = connection.execute(
@@ -2855,6 +2878,9 @@ class ReviewEventsRepository:
                            WHERE profile_id = ? AND track_id = ?
                              AND (created_at_utc < ?
                                   OR (created_at_utc = ? AND id < ?))
+                           """
+                        + as_of_clause
+                        + """
                            ORDER BY created_at_utc DESC, id DESC
                            LIMIT ?""",
                         (
@@ -2863,6 +2889,7 @@ class ReviewEventsRepository:
                             cursor[0],
                             cursor[0],
                             cursor[1],
+                            *as_of_params,
                             batch_size,
                         ),
                     ).fetchall()
@@ -2883,13 +2910,26 @@ class ReviewEventsRepository:
 
             accuracy: float | None = None
             if session_id is not None:
+                session_as_of_clause = ""
+                session_as_of_params: tuple[str, ...] = ()
+                if as_of_created_at_utc is not None and as_of_event_id is not None:
+                    comparator = "<=" if include_as_of_event else "<"
+                    session_as_of_clause = (
+                        f" AND (created_at_utc < ? OR (created_at_utc = ? AND id {comparator} ?))"
+                    )
+                    session_as_of_params = (
+                        as_of_created_at_utc,
+                        as_of_created_at_utc,
+                        as_of_event_id,
+                    )
                 totals = connection.execute(
                     """SELECT COUNT(*),
                               SUM(CASE WHEN result = 'correct' THEN 1 ELSE 0 END)
                        FROM review_events
                        WHERE profile_id = ? AND track_id = ? AND session_id = ?
-                         AND result IN ('correct', 'wrong', 'idk')""",
-                    (profile_id, track_id, session_id),
+                         AND result IN ('correct', 'wrong', 'idk')"""
+                    + session_as_of_clause,
+                    (profile_id, track_id, session_id, *session_as_of_params),
                 ).fetchone()
                 if totals is not None and int(totals[0]) > 0:
                     accuracy = round(int(totals[1]) / int(totals[0]), 6)
@@ -2906,23 +2946,25 @@ class ReviewEventsRepository:
         self,
         *,
         profile_id: str | None = None,
+        before_created_at_utc: str | None = None,
     ) -> frozenset[str]:
         """Return canonical ReviewEvent ids explicitly undone by compensation."""
 
         def read(connection: sqlite3.Connection) -> frozenset[str]:
-            if profile_id is None:
-                rows = connection.execute(
-                    """SELECT payload_json FROM audit_events
-                       WHERE event_type = 'progress_undo'
-                       ORDER BY id"""
-                ).fetchall()
-            else:
-                rows = connection.execute(
-                    """SELECT payload_json FROM audit_events
-                       WHERE event_type = 'progress_undo' AND profile_id = ?
-                       ORDER BY id""",
-                    (profile_id,),
-                ).fetchall()
+            clauses = ["event_type = 'progress_undo'"]
+            params: list[str] = []
+            if profile_id is not None:
+                clauses.append("profile_id = ?")
+                params.append(profile_id)
+            if before_created_at_utc is not None:
+                clauses.append("created_at_utc < ?")
+                params.append(before_created_at_utc)
+            rows = connection.execute(
+                f"""SELECT payload_json FROM audit_events
+                    WHERE {" AND ".join(clauses)}
+                    ORDER BY id""",
+                tuple(params),
+            ).fetchall()
             ids: set[str] = set()
             for (payload,) in rows:
                 decoded = json.loads(str(payload))

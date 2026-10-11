@@ -62,6 +62,14 @@ The generic answer event includes stable identifiers plus automation counters:
 
 Learned prompt/answer text and user-entered response are not included by default.
 
+For assessable mobile answers, these events first enter the durable SQLite
+outbox in the same transaction as the ReviewEvent and are retried after a
+temporary Home Assistant bus failure or runtime restart. Delivery is
+at-least-once: a crash after Home Assistant accepts an event but before the
+outbox acknowledgement can re-emit the same batch. The stable `event_id` plus
+event type is the consumer deduplication key; Home Assistant does not provide a
+transactional publish-and-ack boundary for exactly-once delivery.
+
 ## Authority rule
 
 Output events are observation only. Firing a fabricated `locklearn_answered`
