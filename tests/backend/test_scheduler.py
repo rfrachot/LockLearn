@@ -1824,7 +1824,6 @@ async def test_scheduler_generation_records_internal_timing(tmp_path: Path) -> N
         assert metric["p95_ms"] is not None
     finally:
         await storage.async_close()
-
 @pytest.mark.parametrize(
     ("entity_id", "previous", "current", "expected"),
     (

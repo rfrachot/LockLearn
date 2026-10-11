@@ -78,9 +78,7 @@ class SchedulerHomeAssistantBridge:
         )
 
     @staticmethod
-    def _is_activation_transition(
-        entity_id: str, old_state: Any, new_state: Any
-    ) -> bool:
+    def _is_activation_transition(entity_id: str, old_state: Any, new_state: Any) -> bool:
         """Trigger on real inactive-to-active transitions, never state refreshes.
 
         Binary switches use `on`; HA person/device_tracker presence uses
@@ -95,10 +93,7 @@ class SchedulerHomeAssistantBridge:
             return False
         before = str(old_state.state).lower()
         after = str(new_state.state).lower()
-        return (
-            after == active
-            and before not in {active, "unknown", "unavailable", ""}
-        )
+        return after == active and before not in {active, "unknown", "unavailable", ""}
 
     async def _handle_state_change(self, event: Event[Any]) -> None:
         entity_id = str(event.data.get("entity_id", "")).lower()
