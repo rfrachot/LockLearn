@@ -62,6 +62,19 @@ test("Learn and Quiz explain readiness before a session starts", async ({ page }
   await expect(page.getByText(/1 cards ready for quiz/)).toBeVisible();
 });
 
+test("Exam exposes closed-book setup options before starting", async ({ page }) => {
+  await page.getByRole("button", { name: "Exam", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Exam" })).toBeVisible();
+  await expect(page.getByText("Answers are final. Corrections and score appear only at the end.")).toBeVisible();
+  await expect(page.getByText("Content types", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Direction")).toBeVisible();
+  await expect(page.getByLabel("Pack (optional id)")).toBeVisible();
+  await expect(page.getByLabel("Level (optional level tag)")).toBeVisible();
+  await expect(page.getByLabel("Tags (comma-separated)")).toBeVisible();
+  await expect(page.getByLabel("Options per MCQ")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start exam" })).toBeVisible();
+});
+
 test("Undo of an already-known introduction uses the canonical reversal", async ({ page }) => {
   await page.getByRole("button", { name: "Learn", exact: true }).click();
   await page.getByRole("button", { name: "Start learning" }).click();
