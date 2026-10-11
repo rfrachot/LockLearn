@@ -388,6 +388,39 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at_utc TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS notification_event_outbox (
+    event_id TEXT PRIMARY KEY REFERENCES review_events(id) ON DELETE CASCADE,
+    created_at_utc TEXT NOT NULL,
+    payload_json TEXT,
+    context_json TEXT,
+    delivered_at_utc TEXT,
+    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0)
+);
+CREATE INDEX IF NOT EXISTS notification_event_outbox_pending
+ON notification_event_outbox(delivered_at_utc, created_at_utc, event_id);
+CREATE TRIGGER IF NOT EXISTS review_events_mobile_outbox
+AFTER INSERT ON review_events
+WHEN NEW.notification_id IS NOT NULL
+ AND NEW.mode IN ('self_assessment_after_retrieval', 'verified_mcq')
+BEGIN
+    INSERT INTO notification_event_outbox(event_id, created_at_utc, context_json)
+    VALUES (
+        NEW.id,
+        NEW.created_at_utc,
+        json_object(
+            'identity', json_object(
+                'profile_id', NEW.profile_id,
+                'track_id', NEW.track_id,
+                'learning_item_id', NEW.learning_item_id,
+                'prompt_facet_id', NEW.prompt_facet_id,
+                'answer_facet_id', NEW.answer_facet_id,
+                'card_key', NEW.card_key
+            ),
+            'interaction_id', NEW.notification_id
+        )
+    );
+END;
+
 CREATE TABLE IF NOT EXISTS audit_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_type TEXT NOT NULL,
@@ -423,6 +456,7 @@ STATE_REQUIRED_TABLES = frozenset(
         "stats_daily",
         "settings",
         "audit_events",
+        "notification_event_outbox",
     }
 )
 
@@ -448,6 +482,7 @@ STATE_REQUIRED_INDEXES = frozenset(
         "notification_interactions_profile_created",
         "receptivity_samples_profile_hour",
         "stats_daily_profile_date",
+        "notification_event_outbox_pending",
     }
 )
 

@@ -168,6 +168,7 @@ class NotificationInteractionService:
         token: str,
         action_id: str,
         actor_user_id: str | None,
+        outbox_context: dict[str, Any] | None = None,
     ) -> NotificationActionResult:
         """Commit one prepared canonical result together with token consumption."""
         if self._reviews is None:
@@ -178,6 +179,7 @@ class NotificationInteractionService:
             action_id=action_id,
             actor_user_id=actor_user_id,
             action_at_utc=self._utc_iso("action_at", self._clock.now()),
+            outbox_context=outbox_context,
         )
         disposition = NotificationActionDisposition(claimed.disposition)
         return NotificationActionResult(

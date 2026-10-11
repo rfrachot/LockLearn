@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
 from ..core.clock import Clock, SystemClock
@@ -24,9 +26,11 @@ from .interactions import (
     NotificationActionDisposition,
     NotificationInteractionService,
 )
+from .outbox import NotificationEventOutbox
 from .renderers import decode_action_id
 from .reveal import NotificationRevealService
 
+_LOGGER = logging.getLogger(__name__)
 EventEmitter = Callable[[str, dict[str, Any]], None]
 
 _POSITIVE_RESULTS = frozenset({"correct", "known", "knew", "easy", "hard"})
@@ -69,6 +73,7 @@ class NotificationActionProcessor:
         clock: Clock | None = None,
         mastery_threshold: float = 0.75,
         reveal_service: NotificationRevealService | None = None,
+        event_outbox: NotificationEventOutbox | None = None,
     ) -> None:
         self._interactions = interactions
         self._profiles = profiles
@@ -87,6 +92,7 @@ class NotificationActionProcessor:
         self._learning = LearningStateMachine(clock=self._clock)
         self._mastery_threshold = mastery_threshold
         self._reveal_service = reveal_service
+        self._event_outbox = event_outbox
 
     async def async_handle_mobile_action(
         self,
@@ -291,6 +297,11 @@ class NotificationActionProcessor:
             verified=verified,
             short_step=short_step,
         )
+        delivery_context = (
+            await self._notification_delivery_context(identity, before_stats)
+            if self._event_outbox is not None
+            else None
+        )
 
         event = await self._reviews.async_record(
             profile_id=identity["profile_id"],
@@ -322,6 +333,15 @@ class NotificationActionProcessor:
                 token=atomic_token,
                 action_id=semantic,
                 actor_user_id=actor_user_id,
+                outbox_context={
+                    "identity": identity,
+                    "interaction_id": str(interaction["interaction_id"]),
+                    "before_stats": before_stats,
+                    "before_profile_stats": before_profile_stats,
+                    "delivery": delivery_context,
+                }
+                if self._event_outbox is not None
+                else None,
             )
             if result_claim.disposition is not NotificationActionDisposition.CONSUMED:
                 return None
@@ -342,6 +362,7 @@ class NotificationActionProcessor:
             after_profile_stats=after_profile_stats,
             answer_id=answer_id,
             expected_answer_id=expected_answer_id,
+            delivery_context=delivery_context,
         )
         return event
 
@@ -523,6 +544,36 @@ class NotificationActionProcessor:
             "updated_at_utc": now,
         }
 
+    async def _notification_delivery_context(
+        self,
+        identity: dict[str, str],
+        before_stats: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Capture content metadata before the answer transaction commits."""
+        track = await self._tracks.async_get(identity["track_id"])
+        candidates = await self._tracks.async_session_candidates(
+            profile_id=identity["profile_id"],
+            track_id=identity["track_id"],
+        )
+        streak = dict(before_stats.get("streak") or {})
+        return {
+            "content_type": next(
+                (
+                    str(item["content_type"])
+                    for item in candidates
+                    if str(item["card_key"]) == identity["card_key"]
+                ),
+                "unknown",
+            ),
+            "source_language": None if track is None else track.get("source_language"),
+            "target_language": None if track is None else track.get("target_language"),
+            "goal_settings": {
+                "goal_fraction": streak.get("goal_fraction"),
+                "goal_minimum": streak.get("goal_minimum_cards"),
+                "grace_days": streak.get("grace_days"),
+            },
+        }
+
     async def _emit_committed_events(
         self,
         *,
@@ -535,26 +586,98 @@ class NotificationActionProcessor:
         after_profile_stats: dict[str, Any],
         answer_id: str | None,
         expected_answer_id: str | None,
+        delivery_context: dict[str, Any] | None = None,
     ) -> None:
+        goal_settings = (
+            delivery_context.get("goal_settings") if isinstance(delivery_context, dict) else None
+        )
+        goal_fraction = (
+            float(goal_settings["goal_fraction"])
+            if isinstance(goal_settings, dict) and goal_settings.get("goal_fraction") is not None
+            else None
+        )
+        goal_minimum = (
+            int(goal_settings["goal_minimum"])
+            if isinstance(goal_settings, dict) and goal_settings.get("goal_minimum") is not None
+            else None
+        )
+        grace_days = (
+            int(goal_settings["grace_days"])
+            if isinstance(goal_settings, dict) and goal_settings.get("grace_days") is not None
+            else None
+        )
+        if self._event_outbox is not None:
+            before_stats = {
+                "streak": await self._stats.async_notification_streak_at_event(
+                    profile_id=identity["profile_id"],
+                    track_id=identity["track_id"],
+                    event_id=str(event.id),
+                    include_event=False,
+                    goal_fraction=goal_fraction,
+                    goal_minimum=goal_minimum,
+                    grace_days=grace_days,
+                )
+            }
+            after_stats = {
+                "streak": await self._stats.async_notification_streak_at_event(
+                    profile_id=identity["profile_id"],
+                    track_id=identity["track_id"],
+                    event_id=str(event.id),
+                    include_event=True,
+                    goal_fraction=goal_fraction,
+                    goal_minimum=goal_minimum,
+                    grace_days=grace_days,
+                )
+            }
+            before_profile_stats = {
+                "streak": await self._stats.async_notification_streak_at_event(
+                    profile_id=identity["profile_id"],
+                    track_id=None,
+                    event_id=str(event.id),
+                    include_event=False,
+                    goal_fraction=goal_fraction,
+                    goal_minimum=goal_minimum,
+                    grace_days=grace_days,
+                )
+            }
+            after_profile_stats = {
+                "streak": await self._stats.async_notification_streak_at_event(
+                    profile_id=identity["profile_id"],
+                    track_id=None,
+                    event_id=str(event.id),
+                    include_event=True,
+                    goal_fraction=goal_fraction,
+                    goal_minimum=goal_minimum,
+                    grace_days=grace_days,
+                )
+            }
         counters = await self._result_counters(
             profile_id=identity["profile_id"],
             track_id=identity["track_id"],
             session_id=event.session_id,
             stats=after_stats,
+            event=event if self._event_outbox is not None else None,
         )
-        track = await self._tracks.async_get(identity["track_id"])
-        candidates = await self._tracks.async_session_candidates(
-            profile_id=identity["profile_id"],
-            track_id=identity["track_id"],
-        )
-        content_type = next(
-            (
-                str(item["content_type"])
-                for item in candidates
-                if str(item["card_key"]) == identity["card_key"]
-            ),
-            "unknown",
-        )
+        if delivery_context is None:
+            track = await self._tracks.async_get(identity["track_id"])
+            candidates = await self._tracks.async_session_candidates(
+                profile_id=identity["profile_id"],
+                track_id=identity["track_id"],
+            )
+            content_type = next(
+                (
+                    str(item["content_type"])
+                    for item in candidates
+                    if str(item["card_key"]) == identity["card_key"]
+                ),
+                "unknown",
+            )
+            source_language = None if track is None else track.get("source_language")
+            target_language = None if track is None else track.get("target_language")
+        else:
+            content_type = str(delivery_context.get("content_type", "unknown"))
+            source_language = delivery_context.get("source_language")
+            target_language = delivery_context.get("target_language")
         payload = {
             "event_id": event.id,
             "interaction_id": str(interaction["interaction_id"]),
@@ -570,10 +693,15 @@ class NotificationActionProcessor:
             "session_accuracy": counters["session_accuracy"],
             "daily_goal_progress": counters["daily_goal_progress"],
             "content_type": content_type,
-            "source_language": None if track is None else track.get("source_language"),
-            "target_language": None if track is None else track.get("target_language"),
+            "source_language": source_language,
+            "target_language": target_language,
         }
-        self._event_emitter("locklearn_answered", payload)
+        events: list[tuple[str, dict[str, Any]]] = []
+
+        def emit(name: str, data: dict[str, Any]) -> None:
+            events.append((name, data))
+
+        emit("locklearn_answered", payload)
 
         if event.mode == SignalMode.VERIFIED_MCQ.value:
             event_name = {
@@ -582,19 +710,19 @@ class NotificationActionProcessor:
                 "idk": "locklearn_quiz_idk",
             }.get(event.result)
             if event_name is not None:
-                self._event_emitter(event_name, payload)
+                emit(event_name, payload)
 
         pre_state = str(event.pre_state_snapshot.get("state"))
         post_state = str(event.post_state_snapshot.get("state"))
         if pre_state != "relearning" and post_state == "relearning":
-            self._event_emitter("locklearn_card_entered_relearning", payload)
+            emit("locklearn_card_entered_relearning", payload)
         if pre_state != "leech" and post_state == "leech":
-            self._event_emitter("locklearn_leech_detected", payload)
+            emit("locklearn_leech_detected", payload)
 
         pre_mastery = float(event.pre_state_snapshot.get("mastery", 0.0))
         post_mastery = float(event.post_state_snapshot.get("mastery", 0.0))
         if pre_mastery < self._mastery_threshold <= post_mastery:
-            self._event_emitter("locklearn_card_mastery_threshold_reached", payload)
+            emit("locklearn_card_mastery_threshold_reached", payload)
 
         if (
             event.mode == SignalMode.VERIFIED_MCQ.value
@@ -603,16 +731,74 @@ class NotificationActionProcessor:
             and expected_answer_id is not None
             and answer_id != expected_answer_id
         ):
-            self._event_emitter("locklearn_confusion_detected", payload)
+            emit("locklearn_confusion_detected", payload)
 
         before_status = str(before_stats["streak"]["today"]["status"])
         after_status = str(after_stats["streak"]["today"]["status"])
         if before_status != "success" and after_status == "success":
-            self._event_emitter("locklearn_track_goal_reached", payload)
+            emit("locklearn_track_goal_reached", payload)
         before_profile_status = str(before_profile_stats["streak"]["today"]["status"])
         after_profile_status = str(after_profile_stats["streak"]["today"]["status"])
         if before_profile_status != "success" and after_profile_status == "success":
-            self._event_emitter("locklearn_daily_goal_reached", payload)
+            emit("locklearn_daily_goal_reached", payload)
+        if self._event_outbox is not None:
+            await self._event_outbox.async_publish(str(event.id), tuple(events))
+        else:
+            for name, data in events:
+                self._event_emitter(name, data)
+
+    async def async_recover_outbox(self) -> None:
+        """Rebuild unfinalized notifications from durable review intent on startup."""
+        if self._event_outbox is None:
+            return
+        cursor: tuple[str, str] | None = None
+        while True:
+            pending_batch = await self._event_outbox.async_unfinalized(after=cursor)
+            if not pending_batch:
+                break
+            for pending in pending_batch:
+                cursor = (str(pending["created_at_utc"]), str(pending["event_id"]))
+                context = pending.get("context")
+                if not isinstance(context, dict):
+                    _LOGGER.error(
+                        "LockLearn outbox event %s has invalid recovery context",
+                        pending["event_id"],
+                    )
+                    continue
+                identity = context.get("identity")
+                interaction_id = context.get("interaction_id")
+                if not isinstance(identity, dict) or not isinstance(interaction_id, str):
+                    _LOGGER.error(
+                        "LockLearn outbox event %s cannot be reconstructed from its context",
+                        pending["event_id"],
+                    )
+                    continue
+                event = SimpleNamespace(
+                    id=pending["event_id"],
+                    session_id=pending["session_id"],
+                    mode=pending["mode"],
+                    result=pending["result"],
+                    created_at_utc=pending["created_at_utc"],
+                    pre_state_snapshot=pending["pre_state_snapshot"],
+                    post_state_snapshot=pending["post_state_snapshot"],
+                )
+                await self._emit_committed_events(
+                    interaction={"interaction_id": interaction_id},
+                    identity={str(k): str(v) for k, v in identity.items()},
+                    event=event,
+                    before_stats={},
+                    after_stats={},
+                    before_profile_stats={},
+                    after_profile_stats={},
+                    answer_id=pending["answer_id"],
+                    expected_answer_id=pending["expected_answer_id"],
+                    delivery_context=(
+                        context.get("delivery")
+                        if isinstance(context.get("delivery"), dict)
+                        else None
+                    ),
+                )
+        await self._event_outbox.async_drain()
 
     async def _result_counters(
         self,
@@ -621,11 +807,14 @@ class NotificationActionProcessor:
         track_id: str,
         session_id: str | None,
         stats: dict[str, Any],
+        event: Any | None = None,
     ) -> dict[str, Any]:
         result_counters = await self._review_events.async_notification_result_counters(
             profile_id=profile_id,
             track_id=track_id,
             session_id=session_id,
+            as_of_created_at_utc=(None if event is None else str(event.created_at_utc)),
+            as_of_event_id=(None if event is None else str(event.id)),
         )
 
         today = stats["streak"]["today"]
