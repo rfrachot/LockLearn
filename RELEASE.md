@@ -10,7 +10,8 @@ published.
 - `custom_components/locklearn/manifest.json` is the Home Assistant/HACS release
   version and is mirrored by `INTEGRATION_VERSION` in
   `custom_components/locklearn/const.py`; CI requires them to match.
-- The current field-validation prerelease is `1.0.0-beta.3`; the stable target remains `1.0.0`.
+- The latest published prerelease is `1.0.0-beta.3`; the current unpublished
+  field-validation candidate is `1.0.0-beta.4`; the stable target remains `1.0.0`.
 - `frontend/package.json` is private npm toolchain metadata and is not the LockLearn product version.
   The shipped frontend identity comes from the integration version plus the committed bundle hash.
 - Dataset/package versions are independent of the LockLearn software version.
@@ -22,10 +23,13 @@ the Home Assistant beta field-validation cycle below is explicitly accepted.
 
 ## Beta field-validation sequence
 
-`1.0.0-beta.3` is the current field-validation candidate. `1.0.0-beta.1` remains immutable and field-blocked by missing target configuration. `1.0.0-beta.2` remains immutable and validated the notification-target path, but real-user review found remaining pre-stable UX issues around Track readability/destructive actions, language labels and Learn/Quiz availability explanations.
+`1.0.0-beta.4` is the next field-validation candidate prepared locally from the
+merged P7.1 branch. `1.0.0-beta.3` is the latest published prerelease;
+`1.0.0-beta.1` remains immutable and field-blocked by missing target
+configuration, while beta.2 and beta.3 remain immutable published artifacts.
 
 1. start from the qualified P6 exit-gate baseline;
-2. bump only release/version/docs contracts to `1.0.0-beta.1`;
+2. bump only release/version/docs contracts to the next beta number;
 3. require the complete CI release matrix on the exact beta commit;
 4. create tag `v1.0.0-beta.1` and a GitHub Release marked **Pre-release**;
 5. create a Home Assistant backup/snapshot before installation;
@@ -34,7 +38,7 @@ the Home Assistant beta field-validation cycle below is explicitly accepted.
    Companion notifications, reload/restart, backup/restore and dataset update/
    rollback on the test instance;
 8. record every beta defect. Runtime defects require a new beta commit/tag
-   (`beta.2`, `beta.3`, ...), never mutation of an already published tag;
+   (`beta.2`, `beta.3`, `beta.4`, ...), never mutation of an already published tag;
 9. promote to stable `1.0.0` only after explicit field-validation acceptance.
 
 Do not downgrade a database already migrated by beta code. Restore a pre-beta
@@ -82,7 +86,7 @@ imports the integration in a fresh subprocess with the repository root absent fr
 checks the compiled frontend and rejects repository-only imports or private-key
 material.
 
-## Supported upgrade path for 1.0.0-beta.3 and 1.0.0
+## Supported upgrade path for 1.0.0-beta.4 and 1.0.0
 
 The latest real published predecessor is `v0.0.2`. It shipped `state.db` schema v1
 and Config Entry schema v1. P6.10 freezes that exact released state schema as an
@@ -90,8 +94,9 @@ upgrade fixture and verifies:
 
 ```text
 v0.0.2 / state schema v1
-        -> sequential v1 -> v2 -> v3 -> v4 -> v5 migrations
-        -> 1.0.0-beta.3 field candidate
+        -> sequential v1 -> v2 -> v3 -> v4 -> v5 -> v6 migrations
+        -> 1.0.0-beta.3 published prerelease
+        -> 1.0.0-beta.4 field candidate
         -> future 1.0.0 stable
 ```
 

@@ -59,7 +59,9 @@ truth.
 
 The P2 state foundation already reserved the complete
 `notification_interactions` table required by P4.6, so P4.6 adds repository
-and service behavior without changing state schema version 5.
+and service behavior without changing state schema version 5. The later F04
+outbox migration advances the active state schema to version 6 without changing
+the notification interaction contract.
 
 
 ## P4.7 capability-aware rendering and delivery
