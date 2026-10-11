@@ -8,11 +8,13 @@ from collections import defaultdict
 from .clock import Clock, SystemClock
 from typing import Any
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from .quiz import QuizConstructionError
 from .quiz_sessions import QuizSessionService
 from .sessions import SessionQuestion, SessionService
 from ..storage.database import SQLiteStorage, StaleSessionError
+from ..storage.repositories import ReviewEventsRepository
 
 
 class ExamError(ValueError):
@@ -205,7 +207,9 @@ class ExamService:
                     raise StaleSessionError(session_id)
                 expected = json.loads(str(exam[0]))["expected"]
                 rows = connection.execute(
-                    """SELECT item.question_id, item.payload_json, answer.answer_json
+                    """SELECT item.question_id, item.payload_json, answer.answer_json,
+                              item.card_key, item.learning_item_id, item.prompt_facet_id,
+                              item.answer_facet_id
                        FROM session_items AS item
                        JOIN session_answers AS answer
                          ON answer.session_id = item.session_id
@@ -215,9 +219,21 @@ class ExamService:
                 ).fetchall()
                 if len(rows) != int(session[4]):
                     raise ExamError("exam is not fully answered")
+                profile_row = connection.execute(
+                    "SELECT timezone FROM profiles WHERE profile_id = ?",
+                    (session[0],),
+                ).fetchone()
+                if profile_row is None:
+                    raise ExamError("exam profile no longer exists")
+                localized = self._clock.now().astimezone(ZoneInfo(str(profile_row[0])))
+                offset = localized.utcoffset()
+                offset_minutes = 0 if offset is None else int(offset.total_seconds() // 60)
                 results = []
                 correct_count = 0
-                for question_id, payload_json, answer_json in rows:
+                for (
+                    question_id, payload_json, answer_json, card_key, item_id,
+                    prompt_id, answer_facet_id,
+                ) in rows:
                     item = json.loads(str(payload_json))["quiz"]
                     chosen = json.loads(str(answer_json)).get("selected_answer_id")
                     key = expected[str(question_id)]
