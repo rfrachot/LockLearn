@@ -245,6 +245,50 @@ class ExamService:
                             if option["answer_id"] == chosen
                         ), None,
                     )
+                    progress_cols = ReviewEventsRepository._PROGRESS_COLUMNS
+                    progress_row = connection.execute(
+                        "SELECT " + ",".join(progress_cols) +
+                        " FROM progress WHERE profile_id = ? AND track_id = ? AND card_key = ?",
+                        (session[0], session[1], card_key),
+                    ).fetchone()
+                    if progress_row is None:
+                        raise ExamError("introduced exam card has no progress")
+                    snapshot = dict(zip(progress_cols, progress_row, strict=True))
+                    if (
+                        str(snapshot["learning_item_id"]) != str(item_id)
+                        or str(snapshot["prompt_facet_id"]) != str(prompt_id)
+                        or str(snapshot["answer_facet_id"]) != str(answer_facet_id)
+                    ):
+                        raise ExamError("exam card identity changed")
+                    audit_columns = (
+                        "id", "profile_id", "track_id", "learning_item_id",
+                        "prompt_facet_id", "answer_facet_id", "card_key", "mode",
+                        "question_type", "result", "answer_id", "expected_answer_id",
+                        "hint_used", "retrieval_occurred", "scheduled_interval_days",
+                        "elapsed_days", "grading_result", "signal_quality",
+                        "policy_version", "dataset_generation", "normalization_version",
+                        "pre_state_snapshot", "post_state_snapshot",
+                        "presentation_to_answer_ms", "delivery_to_action_ms",
+                        "session_id", "notification_id", "created_at_utc", "local_date",
+                        "timezone_name", "utc_offset_minutes",
+                    )
+                    frozen = json.dumps(snapshot, sort_keys=True)
+                    audit_values = (
+                        str(uuid4()), str(session[0]), str(session[1]), str(item_id),
+                        str(prompt_id), str(answer_facet_id), str(card_key),
+                        "exam_retrieval", "mcq",
+                        "correct" if correct else ("idk" if chosen is None else "wrong"),
+                        chosen, key["answer_id"], 0, 1, None, None, None, "none",
+                        int(snapshot["policy_version"]), str(snapshot["dataset_generation"]),
+                        snapshot["normalization_version"], frozen, frozen,
+                        None, None, session_id, None, now, localized.date().isoformat(),
+                        str(profile_row[0]), offset_minutes,
+                    )
+                    connection.execute(
+                        "INSERT INTO review_events (" + ",".join(audit_columns) +
+                        ") VALUES (" + ",".join("?" for _ in audit_columns) + ")",
+                        audit_values,
+                    )
                     results.append({
                         "question_id": question_id,
                         "prompt": item["prompt_text"],
