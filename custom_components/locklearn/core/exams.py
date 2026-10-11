@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections import defaultdict
-from datetime import UTC, datetime
+from .clock import Clock, SystemClock
 from typing import Any
 from uuid import uuid4
 
@@ -24,11 +24,12 @@ class ExamService:
 
     def __init__(
         self, storage: SQLiteStorage, sessions: SessionService,
-        quiz_sessions: QuizSessionService,
+        quiz_sessions: QuizSessionService, *, clock: Clock | None = None,
     ) -> None:
         self._storage = storage
         self._sessions = sessions
         self._quiz_sessions = quiz_sessions
+        self._clock = clock or SystemClock()
 
     async def async_start(
         self, *, profile_id: str, track_id: str,
@@ -134,7 +135,7 @@ class ExamService:
                 "content_types": content_types,
             }, questions=tuple(questions),
         )
-        now = datetime.now(UTC).isoformat()
+        now = self._clock.now().isoformat()
         def insert(connection: sqlite3.Connection) -> None:
             connection.execute(
                 """INSERT INTO exam_attempts (
@@ -181,7 +182,7 @@ class ExamService:
 
     async def async_finish(self, session_id: str, expected_version: int) -> dict[str, Any]:
         """Commit final score and status together; nothing is graded during answering."""
-        now = datetime.now(UTC).isoformat()
+        now = self._clock.now().isoformat()
         def finish(connection: sqlite3.Connection) -> dict[str, Any]:
             connection.execute("BEGIN IMMEDIATE")
             try:
